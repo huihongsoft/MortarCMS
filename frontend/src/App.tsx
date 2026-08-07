@@ -10,8 +10,7 @@ import Register from './pages/Register';
 import Login from './pages/Login';
 import Install from './pages/Install';
 import { Routes, Route } from 'react-router-dom';
-import Header from './components/Header';
-import Footer from './components/Footer';
+import { getTheme } from './themes';
 import Home from './pages/Home';
 import PostPage from './pages/Post';
 import PageView from './pages/Page';
@@ -60,7 +59,7 @@ export default function App() {
 
   return React.createElement('div', { className: 'min-h-screen flex flex-col' },
     React.createElement(ReadingProgress),
-    React.createElement(Header, { settings }),
+    React.createElement(getTheme(settings.theme_name).Header, { settings }),
     React.createElement('main', { className: 'flex-1' },
       React.createElement(Routes, null,
         React.createElement(Route, { path: '/install', element: React.createElement(Install) }),
@@ -79,6 +78,6 @@ export default function App() {
     ),
     React.createElement(ScrollToTop),
     React.createElement(CookieConsent),
-    React.createElement(Footer, { settings })
+    React.createElement(getTheme(settings.theme_name).Footer, { settings })
   );
 }
