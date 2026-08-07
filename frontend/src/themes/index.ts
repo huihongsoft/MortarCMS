@@ -5,6 +5,8 @@
 import DefaultHeader from './default/Header';
 import DefaultFooter from './default/Footer';
 import DefaultHomeLayout from './default/HomeLayout';
+import DefaultCategoryLayout from './default/CategoryLayout';
+import DefaultTagLayout from './default/TagLayout';
 import DefaultPostLayout from './default/PostLayout';
 import DefaultPageLayout from './default/PageLayout';
 import DefaultArchiveLayout from './default/ArchiveLayout';
@@ -25,6 +27,8 @@ export interface Theme {
   ArchiveLayout: React.ComponentType<any>;
   SearchLayout: React.ComponentType<any>;
   AuthorLayout: React.ComponentType<any>;
+  CategoryLayout: React.ComponentType<any>;
+  TagLayout: React.ComponentType<any>;
 }
 
 const themes: Record<string, Partial<Theme>> = {
@@ -38,6 +42,8 @@ const themes: Record<string, Partial<Theme>> = {
     ArchiveLayout: DefaultArchiveLayout,
     SearchLayout: DefaultSearchLayout,
     AuthorLayout: DefaultAuthorLayout,
+    CategoryLayout: DefaultCategoryLayout,
+    TagLayout: DefaultTagLayout,
   },
   magazine: {
     name: 'magazine',
@@ -61,6 +67,8 @@ export function getTheme(name?: string): Theme {
     ArchiveLayout: t.ArchiveLayout || base.ArchiveLayout,
     SearchLayout: t.SearchLayout || base.SearchLayout,
     AuthorLayout: t.AuthorLayout || base.AuthorLayout,
+    CategoryLayout: t.CategoryLayout || base.CategoryLayout,
+    TagLayout: t.TagLayout || base.TagLayout,
   };
 }
 

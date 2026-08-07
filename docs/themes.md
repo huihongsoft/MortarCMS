@@ -67,11 +67,16 @@ components:
 
 ```
 frontend/src/themes/<name>/
-├── Header.tsx      # site header template
-├── Footer.tsx      # site footer template
-├── HomeLayout.tsx  # homepage template (list + sidebar)
-├── PostLayout.tsx  # single post template (title, meta, content, comments)
-└── PageLayout.tsx  # static page template
+├── Header.tsx        # site header template
+├── Footer.tsx        # site footer template
+├── HomeLayout.tsx    # homepage list template        (WP home.php)
+├── CategoryLayout.tsx# category list template        (WP category.php)
+├── TagLayout.tsx     # tag list template             (WP tag.php)
+├── ArchiveLayout.tsx # monthly archive template      (WP archive.php)
+├── SearchLayout.tsx  # search results template       (WP search.php)
+├── AuthorLayout.tsx  # author archive template       (WP author.php)
+├── PostLayout.tsx    # single post template          (WP single.php)
+└── PageLayout.tsx    # static page template          (WP page.php)
 ```
 
 Layouts receive props from the page controllers, e.g. `HomeLayout` gets
