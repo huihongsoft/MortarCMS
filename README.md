@@ -15,6 +15,25 @@
 
 **Mortar** is a self-hosted content management system inspired by WordPress and Halo. It ships with a full-featured admin panel, a plugin system with a market, a theme system, multi-site support, and modern tooling — all in TypeScript.
 
+## 📸 Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" alt="Admin Dashboard" width="640" />
+  <br /><em>Dashboard — stats, PV/UV chart, quick draft</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/posts.png" alt="Posts List" width="640" />
+  <br /><em>Posts management — bulk actions, filters, quick edit</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/editor.png" alt="Post Editor" width="640" />
+  <br /><em>Three-mode editor — Rich text (TipTap) / Markdown / HTML</em>
+</p>
+
+---
+
 ## ✨ Features
 
 ### Content
