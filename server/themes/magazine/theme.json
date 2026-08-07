@@ -1,0 +1,17 @@
+{
+  "name": "magazine",
+  "version": "0.1.0",
+  "description": "Magazine-style theme — bolder colors, serif headings, left sidebar.",
+  "author": "Mortar Team",
+  "settings": {
+    "primary_color": "#dc2626",
+    "background": "#fafaf9",
+    "text_color": "#1c1917",
+    "link_color": "#dc2626",
+    "heading_font": "serif",
+    "body_font": "system",
+    "sidebar_position": "left",
+    "posts_per_row": "1"
+  },
+  "custom_css": "article { border-radius: 12px; } .widget-title { letter-spacing: 0.05em; }"
+}

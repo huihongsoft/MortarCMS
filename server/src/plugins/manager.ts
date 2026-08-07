@@ -1,0 +1,234 @@
+import fs from 'fs';
+import path from 'path';
+import https from 'https';
+import http from 'http';
+import { execFileSync } from 'child_process';
+import { tmpdir as osTmpDir } from 'os';
+import db from '../utils/db';
+
+export interface PluginMeta {
+  name: string;
+  version: string;
+  description: string;
+  author?: string;
+  active: boolean;
+  builtin: boolean;
+  error?: string;
+}
+
+const pluginsDir = path.join(__dirname, '..', '..', 'plugins');
+const marketDir = path.join(__dirname, '..', '..', 'market');
+const loaded: Record<string, { meta: PluginMeta; register?: () => void }> = {};
+
+function activePlugins(): string[] {
+  const row = db.prepare("SELECT value FROM Setting WHERE key = 'active_plugins'").get() as any;
+  try { return row ? JSON.parse(row.value) : []; } catch { return []; }
+}
+
+function setActive(names: string[]): void {
+  db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, 'active_plugins', ?) ON CONFLICT(key) DO UPDATE SET value = ?").run(
+    'active_plugins', JSON.stringify(names), JSON.stringify(names)
+  );
+}
+
+// Scan plugin directories and read metadata
+export function listPlugins(): PluginMeta[] {
+  const active = activePlugins();
+  const result: PluginMeta[] = [];
+  try {
+    const dirs = fs.readdirSync(pluginsDir).filter(d => {
+      const p = path.join(pluginsDir, d);
+      return fs.statSync(p).isDirectory() && fs.existsSync(path.join(p, 'plugin.json'));
+    });
+    for (const dir of dirs) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(path.join(pluginsDir, dir, 'plugin.json'), 'utf8'));
+        result.push({
+          name: meta.name || dir,
+          version: meta.version || '0.0.0',
+          description: meta.description || '',
+          author: meta.author || '',
+          active: active.includes(meta.name || dir),
+          builtin: true,
+        });
+      } catch (err: any) {
+        result.push({ name: dir, version: '?', description: '', active: false, builtin: true, error: err.message });
+      }
+    }
+  } catch {}
+  return result;
+}
+
+// Dynamically load a plugin's register() and execute it
+export async function loadPlugin(name: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const dir = path.join(pluginsDir, name);
+    const entry = path.join(dir, 'index.ts');
+    if (!fs.existsSync(entry)) return { ok: false, error: 'Plugin entry not found' };
+    const mod = await import('file://' + entry);
+    if (typeof mod.register === 'function') mod.register();
+    loaded[name] = { meta: listPlugins().find((p: any) => p.name === name) as PluginMeta, register: mod.register };
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  }
+}
+
+// Lifecycle hook helpers (WordPress-style): plugin index.ts may export
+// activate() / deactivate() / uninstall() functions
+async function runLifecycle(name: string, hook: 'activate' | 'deactivate' | 'uninstall'): Promise<void> {
+  try {
+    const dir = path.join(pluginsDir, name);
+    const entry = path.join(dir, 'index.ts');
+    if (!fs.existsSync(entry)) return;
+    const mod = await import('file://' + entry);
+    if (typeof mod[hook] === 'function') await mod[hook]();
+  } catch (err: any) {
+    console.log('[Plugins] ' + hook + ' failed for ' + name + ': ' + err.message);
+  }
+}
+
+export { runLifecycle };
+
+// Load all active plugins at startup
+export async function loadActivePlugins(): Promise<void> {
+  const active = activePlugins();
+  for (const name of active) {
+    const r = await loadPlugin(name);
+    if (!r.ok) console.log('[Plugins] Failed to load ' + name + ': ' + r.error);
+    else console.log('[Plugins] Loaded ' + name);
+  }
+}
+
+// Market: list available packages (server/market/*) with install status
+export function listMarket(): PluginMeta[] {
+  const installed = listPlugins().map((p: any) => p.name);
+  const result: PluginMeta[] = [];
+  try {
+    const dirs = fs.readdirSync(marketDir).filter(d => {
+      const p = path.join(marketDir, d);
+      return fs.statSync(p).isDirectory() && fs.existsSync(path.join(p, 'plugin.json'));
+    });
+    for (const dir of dirs) {
+      try {
+        const meta = JSON.parse(fs.readFileSync(path.join(marketDir, dir, 'plugin.json'), 'utf8'));
+        result.push({
+          name: meta.name || dir,
+          version: meta.version || '0.0.0',
+          description: meta.description || '',
+          author: meta.author || '',
+          active: installed.includes(meta.name || dir),
+          builtin: true,
+        });
+      } catch (err: any) {
+        result.push({ name: dir, version: '?', description: '', active: false, builtin: true, error: err.message });
+      }
+    }
+  } catch {}
+  return result;
+}
+
+// Download a remote plugin archive (zip or tar.gz) and install it
+export async function installFromUrl(url: string): Promise<{ ok: boolean; error?: string; name?: string }> {
+  const tmpDir = path.join(osTmpDir(), 'mortar-plugin-' + Date.now());
+  let archivePath: string | null = null;
+  try {
+    if (!/^https?:\/\//.test(url)) return { ok: false, error: 'Invalid URL' };
+    fs.mkdirSync(tmpDir, { recursive: true });
+    const isGz = /\.(tar\.gz|tgz)$/i.test(url);
+    const ext = isGz ? 'tar.gz' : 'zip';
+    archivePath = path.join(tmpDir, 'pkg.' + ext);
+
+    // Download
+    await new Promise<void>((resolve, reject) => {
+      const mod = url.startsWith('https') ? https : http;
+      const req = mod.get(url, { headers: { 'User-Agent': 'Mortar-CMS/0.1' } }, (res) => {
+        if (res.statusCode !== 200) { reject(new Error('Download failed: HTTP ' + res.statusCode)); res.resume(); return; }
+        const out = fs.createWriteStream(archivePath!);
+        res.pipe(out);
+        out.on('finish', () => { out.close(); resolve(); });
+        out.on('error', reject);
+      });
+      req.on('error', reject);
+      req.setTimeout(30000, () => req.destroy(new Error('Download timed out')));
+    });
+
+    // Extract into tmpDir/extracted (zip-slip guard below)
+    const extractDir = path.join(tmpDir, 'extracted');
+    fs.mkdirSync(extractDir, { recursive: true });
+    if (isGz) execFileSync('tar', ['-xzf', archivePath, '-C', extractDir]);
+    else execFileSync('unzip', ['-q', archivePath, '-d', extractDir]);
+
+    // Find plugin root (dir containing plugin.json, one level deep max)
+    let pluginRoot: string | null = null;
+    if (fs.existsSync(path.join(extractDir, 'plugin.json'))) pluginRoot = extractDir;
+    else {
+      const entries = fs.readdirSync(extractDir).filter(e => fs.statSync(path.join(extractDir, e)).isDirectory());
+      for (const e of entries) {
+        if (fs.existsSync(path.join(extractDir, e, 'plugin.json'))) { pluginRoot = path.join(extractDir, e); break; }
+      }
+    }
+    if (!pluginRoot) return { ok: false, error: 'No plugin.json found in archive' };
+    // Zip-slip guard: ensure the plugin root stays inside the extraction dir
+    const resolvedRoot = fs.realpathSync(pluginRoot);
+    const resolvedExtract = fs.realpathSync(extractDir);
+    if (!resolvedRoot.startsWith(resolvedExtract + path.sep)) return { ok: false, error: 'Archive path traversal detected' };
+    const meta = JSON.parse(fs.readFileSync(path.join(pluginRoot, 'plugin.json'), 'utf8'));
+    const name = meta.name;
+    if (!name) return { ok: false, error: 'plugin.json missing name' };
+    const dest = path.join(pluginsDir, name);
+    if (fs.existsSync(dest)) return { ok: false, error: 'Plugin already installed: ' + name };
+    fs.cpSync(pluginRoot, dest, { recursive: true });
+    return { ok: true, name };
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  } finally {
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+  }
+}
+
+// Install: copy a market package into the plugins directory
+export async function installPlugin(name: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const src = path.join(marketDir, name);
+    const dest = path.join(pluginsDir, name);
+    if (!fs.existsSync(path.join(src, 'plugin.json'))) return { ok: false, error: 'Package not found in market' };
+    if (fs.existsSync(dest)) return { ok: false, error: 'Plugin already installed' };
+    fs.cpSync(src, dest, { recursive: true });
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  }
+}
+
+// Uninstall: remove a plugin directory (must be inactive first)
+export async function uninstallPlugin(name: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const dest = path.join(pluginsDir, name);
+    if (!fs.existsSync(dest)) return { ok: false, error: 'Plugin not installed' };
+    const active = activePlugins();
+    if (active.includes(name)) return { ok: false, error: 'Deactivate the plugin before uninstalling' };
+    await runLifecycle(name, 'uninstall');
+    fs.rmSync(dest, { recursive: true, force: true });
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err.message };
+  }
+}
+
+export async function setPluginActive(name: string, active: boolean): Promise<{ ok: boolean; error?: string }> {
+  const metas = listPlugins();
+  if (!metas.find((m: any) => m.name === name)) return { ok: false, error: 'Plugin not found' };
+  const current = activePlugins();
+  const idx = current.indexOf(name);
+  if (active && idx === -1) current.push(name);
+  if (!active && idx !== -1) current.splice(idx, 1);
+  setActive(current);
+  if (active) {
+    const r = await loadPlugin(name);
+    if (r.ok) await runLifecycle(name, 'activate');
+    return r;
+  }
+  await runLifecycle(name, 'deactivate');
+  return { ok: true };
+}

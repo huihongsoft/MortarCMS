@@ -1,0 +1,17 @@
+{
+  "name": "dark",
+  "version": "1.0.0",
+  "description": "A sleek dark theme for tech blogs and night reading.",
+  "author": "Mortar Team",
+  "settings": {
+    "primary_color": "#38bdf8",
+    "background": "#0f172a",
+    "text_color": "#e2e8f0",
+    "link_color": "#38bdf8",
+    "heading_font": "system",
+    "body_font": "system",
+    "sidebar_position": "right",
+    "posts_per_row": "1"
+  },
+  "custom_css": "body { background: #0f172a; color: #e2e8f0; } header, footer { background: #0f172a !important; border-color: #1e293b !important; } article h2, article p, aside h3, aside a, .widget-title { color: #e2e8f0 !important; } article { border-color: #1e293b !important; } aside .rounded-lg { background: #1e293b; border-color: #334155 !important; } input, textarea, select { background: #1e293b !important; border-color: #334155 !important; color: #e2e8f0 !important; } .text-gray-500, .text-gray-600, .text-gray-400 { color: #94a3b8 !important; }"
+}

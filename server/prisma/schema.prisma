@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./data/mortar.db"
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  email     String   @unique
+  password  String
+  role      String   @default("author") // admin, editor, author, contributor, subscriber
+  avatar    String?
+  bio       String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  posts    Post[]
+  comments Comment[]
+  media    Media[]
+}
+
+model Post {
+  id        String   @id @default(cuid())
+  title     String
+  slug      String   @unique
+  content   String   @default("")
+  excerpt   String   @default("")
+  status    String   @default("draft") // draft, published, private, trash
+  type      String   @default("post")  // post, page
+  featured  String?                     // featured image URL
+  authorId  String
+  parentId  String?
+  menuOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  publishedAt DateTime?
+
+  author   User      @relation(fields: [authorId], references: [id])
+  parent   Post?     @relation("PostHierarchy", fields: [parentId], references: [id])
+  children Post[]    @relation("PostHierarchy")
+  comments Comment[]
+
+  categories PostCategory[]
+  tags       PostTag[]
+  metas      PostMeta[]
+}
+
+model Category {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  description String   @default("")
+  parentId    String?
+  createdAt   DateTime @default(now())
+
+  parent   Category?     @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[]    @relation("CategoryHierarchy")
+  posts    PostCategory[]
+}
+
+model PostCategory {
+  postId     String
+  categoryId String
+
+  post     Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  category Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([postId, categoryId])
+}
+
+model Tag {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  slug      String   @unique
+  createdAt DateTime @default(now())
+
+  posts PostTag[]
+}
+
+model PostTag {
+  postId String
+  tagId  String
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([postId, tagId])
+}
+
+model PostMeta {
+  id      String @id @default(cuid())
+  postId  String
+  key     String
+  value   String
+
+  post Post @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, key])
+}
+
+model Comment {
+  id        String   @id @default(cuid())
+  content   String
+  author    String   @default("Anonymous")
+  email     String   @default("")
+  website   String   @default("")
+  status    String   @default("pending") // pending, approved, spam, trash
+  postId    String
+  parentId  String?
+  userId    String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  post     Post      @relation(fields: [postId], references: [id], onDelete: Cascade)
+  parent   Comment?  @relation("CommentThread", fields: [parentId], references: [id])
+  children Comment[] @relation("CommentThread")
+  user     User?     @relation(fields: [userId], references: [id])
+}
+
+model Media {
+  id        String   @id @default(cuid())
+  filename  String
+  original  String
+  mimeType  String
+  size      Int
+  url       String
+  alt       String   @default("")
+  title     String   @default("")
+  width     Int?
+  height    Int?
+  userId    String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+
+}

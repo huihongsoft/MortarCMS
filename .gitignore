@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.env
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+uploads/**
+!uploads/.gitkeep
+server/uploads/**
+!server/uploads/.gitkeep
+
+docs/superpowers/
+.DS_Store
+
+*.tsbuildinfo

@@ -1,0 +1,104 @@
+// Frontend i18n: language follows the site setting (site_lang), default English.
+// Visitors can override per-browser via localStorage (mortar_lang).
+
+const zh: Record<string, string> = {
+  home: '首页',
+  search: '搜索',
+  about: '关于',
+  register: '注册',
+  admin: '管理后台',
+  'site title': '站点标题',
+  'search posts': '搜索文章',
+  'search placeholder': '搜索文章...',
+  'recent posts': '最近文章',
+  'popular posts': '热门文章',
+  'tag cloud': '标签云',
+  archives: '归档',
+  categories: '分类',
+  'no categories yet': '暂无分类',
+  'no posts yet': '暂无文章',
+  'check back later for new content': '请稍后再来查看新内容',
+  'read more': '阅读更多 →',
+  'page not found': '页面未找到',
+  'the page you are looking for might have been removed or is temporarily unavailable': '您访问的页面可能已被移除或暂时不可用',
+  'back to home': '返回首页',
+  'search results': '搜索结果',
+  'showing results for': '正在显示',
+  'enter a search term': '输入搜索词',
+  searching: '搜索中...',
+  'no results for': '没有找到',
+  'try different keywords': '尝试其他关键词',
+  'browse all posts': '浏览全部文章',
+  'related posts': '相关文章',
+  'no related posts': '暂无相关文章',
+  comments: '评论',
+  'no comments yet': '暂无评论',
+  'be the first to share your thoughts': '成为第一个评论的人',
+  'leave a comment': '发表评论',
+  name: '姓名',
+  email: '邮箱',
+  'your comment': '你的评论',
+  'submit comment': '提交评论',
+  'comment submitted and pending review': '评论已提交,等待审核',
+  'password protected': '密码保护',
+  'enter the password to view this post': '输入密码查看这篇文章',
+  'enter password': '输入密码',
+  'all posts': '全部文章',
+  'back': '返回',
+  'read in': '阅读',
+  'words': '字',
+  'min read': '分钟阅读',
+  'written by': '作者',
+  'share': '分享',
+  'copy link': '复制链接',
+  'link copied to clipboard': '链接已复制',
+  'view all posts': '查看全部文章',
+  'posts': '文章',
+  'navigate': '导航',
+  'rss feed': 'RSS 订阅',
+  'powered by': '由',
+  'all rights reserved': '版权所有',
+  'this site uses cookies to improve your experience': '本站使用 Cookie 以改善体验',
+  accept: '接受',
+  'privacy policy': '隐私政策',
+  'archive': '归档',
+  'no posts in this month': '该月暂无文章',
+  'author': '作者',
+  'no results': '无结果',
+  'created': '创建于',
+  'updated': '更新于',
+  'back to top': '回到顶部',
+  'continue reading': '继续阅读',
+  'recent posts widget': '最近文章',
+  'previous': '上一页',
+  'next': '下一页',
+  'page': '第',
+  'of': '页,共',
+  'loading': '加载中...',
+  'failed to load posts': '文章加载失败',
+  'failed to load archive': '归档加载失败',
+  'failed to load': '加载失败',
+  'please try again later': '请稍后再试',
+  'views': '次浏览',
+  'sticky': '置顶',
+  'all': '全部',
+  'tag': '标签',
+  'category': '分类',
+  'links': '友情链接',
+  'featured': '精选',
+};
+
+export function t(key: string, settings?: Record<string, string>): string {
+  const lang = settings?.site_lang || localStorage.getItem('mortar_site_lang') || localStorage.getItem('mortar_lang') || 'en';
+  if (lang === 'zh') return zh[key] || key;
+  return key;
+}
+
+export function getSiteLang(settings?: Record<string, string>): string {
+  return settings?.site_lang || localStorage.getItem('mortar_lang') || 'en';
+}
+
+export function setLang(lang: string): void {
+  localStorage.setItem('mortar_lang', lang);
+  window.location.reload();
+}

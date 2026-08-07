@@ -1,0 +1,75 @@
+import { Router, Response } from 'express';
+import db, { cuid } from '../utils/db';
+import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+
+const router = Router();
+
+function loadTemplates(): any[] {
+  const row = db.prepare("SELECT value FROM Setting WHERE key = 'custom_templates'").get() as any;
+  try { return row ? JSON.parse(row.value) : []; } catch { return []; }
+}
+
+function saveTemplates(templates: any[]): void {
+  db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, 'custom_templates', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(
+    'custom_templates', JSON.stringify(templates)
+  );
+}
+
+// Public: custom block templates (used by the editor)
+router.get('/templates', (_req: AuthRequest, res: Response) => {
+  try {
+    res.json({ templates: loadTemplates() });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: save a new custom template
+router.post('/templates', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
+  try {
+    const { name, html } = req.body || {};
+    if (!name || !html) { res.status(400).json({ error: 'name and html required' }); return; }
+    const templates = loadTemplates();
+    const tpl = { id: cuid(), name: String(name).slice(0, 50), html: String(html), createdAt: new Date().toISOString() };
+    templates.push(tpl);
+    saveTemplates(templates);
+    res.status(201).json(tpl);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: delete a custom template
+router.delete('/templates/:id', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
+  try {
+    const templates = loadTemplates().filter((t: any) => t.id !== req.params.id);
+    saveTemplates(templates);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: export custom templates as JSON download
+router.get('/templates/export', authenticate, requireCap('edit_posts'), (_req: AuthRequest, res: Response) => {
+  try {
+    const templates = loadTemplates().map(({ id, createdAt, ...rest }: any) => rest);
+    res.setHeader('Content-Disposition', 'attachment; filename="mortar-templates.json"');
+    res.type('application/json');
+    res.send(JSON.stringify({ version: 1, templates }, null, 2));
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: import custom templates from JSON (merges by name, skips duplicates)
+router.post('/templates/import', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
+  try {
+    const incoming = req.body?.templates as any[];
+    if (!Array.isArray(incoming) || incoming.length === 0) { res.status(400).json({ error: 'templates array required' }); return; }
+    const existing = loadTemplates();
+    let added = 0;
+    for (const t of incoming) {
+      if (!t || typeof t.name !== 'string' || typeof t.html !== 'string') continue;
+      if (existing.some((e: any) => e.name === t.name)) continue; // skip duplicates by name
+      existing.push({ id: cuid(), name: t.name.slice(0, 50), html: t.html, createdAt: new Date().toISOString() });
+      added++;
+    }
+    saveTemplates(existing);
+    res.json({ success: true, imported: added, total: existing.length });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+export default router;

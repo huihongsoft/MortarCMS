@@ -1,0 +1,17 @@
+{
+  "name": "default",
+  "version": "1.0.0",
+  "description": "The default Mortar theme — clean, minimal, content-focused.",
+  "author": "Mortar Team",
+  "settings": {
+    "primary_color": "#6366f1",
+    "background": "#ffffff",
+    "text_color": "#111827",
+    "link_color": "#6366f1",
+    "heading_font": "system",
+    "body_font": "system",
+    "sidebar_position": "right",
+    "posts_per_row": "1"
+  },
+  "custom_css": ""
+}

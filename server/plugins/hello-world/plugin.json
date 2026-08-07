@@ -1,0 +1,6 @@
+{
+  "name": "hello-world",
+  "version": "1.0.0",
+  "description": "Adds a small greeting banner to the top of every post via the post_content filter.",
+  "author": "Mortar Team"
+}

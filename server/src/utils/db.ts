@@ -1,0 +1,341 @@
+import Database from 'better-sqlite3';
+import path from 'path';
+import fs from 'fs';
+import { Worker } from 'worker_threads';
+
+// Driver selection: DATABASE_URL=mysql://... or postgres://... switches backends.
+// SQLite stays the default (sync, direct); MySQL/PostgreSQL run on a worker
+// thread bridged with Atomics so the existing sync call sites keep working.
+const DB_PATH = path.join(__dirname, '../../data/mortar.db');
+const dataDir = path.dirname(DB_PATH);
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+
+const DATABASE_URL = process.env.DATABASE_URL || '';
+let driver: 'sqlite' | 'mysql' | 'postgres' = 'sqlite';
+let worker: Worker | null = null;
+let workerSeq = 0;
+const workerPending = new Map<number, { resolve: (v: any) => void; flag: Int32Array }>();
+
+function parseUrl(url: string) {
+  const m = url.match(/^(mysql|postgres):\/\/([^:]+):([^@]+)@([^:\/]+)(?::(\d+))?\/([^\/?]+)/);
+  if (!m) throw new Error('Invalid DATABASE_URL: expected mysql://user:pass@host:port/db or postgres://...');
+  return { driver: m[1] as 'mysql' | 'postgres', user: m[2], password: m[3], host: m[4], port: parseInt(m[5] || (m[1] === 'mysql' ? '3306' : '5432')), database: m[6] };
+}
+
+// Sync bridge: block the main thread until the worker replies (Atomics.wait)
+function workerCall(op: string, payload: any = {}): any {
+  if (!worker) throw new Error('Database worker not initialized');
+  const id = ++workerSeq;
+  const sab = new SharedArrayBuffer(4);
+  const flag = new Int32Array(sab);
+  let result: any;
+  workerPending.set(id, { resolve: (v) => { result = v; }, flag });
+  worker.postMessage({ id, op, ...payload });
+  const wait = Atomics.wait(flag, 0, 0, 20000); // block up to 20s
+  if (wait === 'timed-out') {
+    workerPending.delete(id);
+    throw new Error('Database operation timed out');
+  }
+  workerPending.delete(id);
+  if (!result.ok) throw new Error(result.error || 'Database error');
+  return result;
+}
+
+interface Statement {
+  run: (...args: any[]) => any;
+  get: (...args: any[]) => any;
+  all: (...args: any[]) => any;
+}
+
+function prepareSqlite(sql: string): Statement {
+  const stmt = db.raw.prepare(sql);
+  return {
+    run: (...args: any[]) => stmt.run(...args),
+    get: (...args: any[]) => stmt.get(...args),
+    all: (...args: any[]) => stmt.all(...args),
+  };
+}
+
+function prepareRemote(sql: string): Statement {
+  return {
+    run: (...args: any[]) => workerCall('run', { sql, args }),
+    get: (...args: any[]) => workerCall('get', { sql, args }).row,
+    all: (...args: any[]) => workerCall('all', { sql, args }).rows,
+  };
+}
+
+const db: any = {
+  prepare(sql: string): Statement { return driver === 'sqlite' ? prepareSqlite(sql) : prepareRemote(sql); },
+  exec(sql: string): void {
+    if (driver === 'sqlite') { db.execSqlite(sql); return; }
+    workerCall('exec', { sql });
+  },
+  execSqlite(sql: string): void { db.raw.exec(sql); },
+  pragma(_p: string): void { /* SQLite-only; no-op for remote drivers */ },
+  get driver() { return driver; },
+};
+
+if (DATABASE_URL) {
+  const cfg = parseUrl(DATABASE_URL);
+  driver = cfg.driver;
+  worker = new Worker(path.join(__dirname, 'dbWorker.js'));
+  worker.on('message', (msg) => {
+    const p = workerPending.get(msg.id);
+    if (p) { p.resolve(msg.result); Atomics.store(p.flag, 0, 1); Atomics.notify(p.flag, 0); }
+  });
+  worker.on('error', (e) => console.error('[DB Worker]', e.message));
+  const init = workerCall('init', { conn: cfg });
+  console.log('[DB] Using ' + cfg.driver + ' at ' + cfg.host + ':' + cfg.port + '/' + cfg.database);
+} else {
+  db.raw = new Database(DB_PATH);
+  db.raw.pragma('journal_mode = WAL');
+  db.raw.pragma('foreign_keys = ON');
+  console.log('[DB] Using SQLite at ' + DB_PATH);
+}
+
+export function initDB(): void {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS User (
+      id TEXT PRIMARY KEY,
+      username TEXT UNIQUE NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      password TEXT NOT NULL,
+      role TEXT NOT NULL DEFAULT 'author',
+      avatar TEXT,
+      bio TEXT,
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+      updatedAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    CREATE TABLE IF NOT EXISTS Post (
+      id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      content TEXT NOT NULL DEFAULT '',
+      excerpt TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'draft',
+      type TEXT NOT NULL DEFAULT 'post',
+      featured TEXT,
+      authorId TEXT NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+      parentId TEXT REFERENCES Post(id) ON DELETE SET NULL,
+      menuOrder INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+      updatedAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+      publishedAt TEXT
+    );
+
+    CREATE TABLE IF NOT EXISTS Category (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      description TEXT NOT NULL DEFAULT '',
+      parentId TEXT REFERENCES Category(id) ON DELETE SET NULL,
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    CREATE TABLE IF NOT EXISTS PostCategory (
+      postId TEXT NOT NULL REFERENCES Post(id) ON DELETE CASCADE,
+      categoryId TEXT NOT NULL REFERENCES Category(id) ON DELETE CASCADE,
+      PRIMARY KEY (postId, categoryId)
+    );
+
+    CREATE TABLE IF NOT EXISTS Tag (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    CREATE TABLE IF NOT EXISTS PostTag (
+      postId TEXT NOT NULL REFERENCES Post(id) ON DELETE CASCADE,
+      tagId TEXT NOT NULL REFERENCES Tag(id) ON DELETE CASCADE,
+      PRIMARY KEY (postId, tagId)
+    );
+
+    CREATE TABLE IF NOT EXISTS PostMeta (
+      id TEXT PRIMARY KEY,
+      postId TEXT NOT NULL REFERENCES Post(id) ON DELETE CASCADE,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      UNIQUE(postId, key)
+    );
+
+    CREATE TABLE IF NOT EXISTS Comment (
+      id TEXT PRIMARY KEY,
+      content TEXT NOT NULL,
+      author TEXT NOT NULL DEFAULT 'Anonymous',
+      email TEXT NOT NULL DEFAULT '',
+      website TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      postId TEXT NOT NULL REFERENCES Post(id) ON DELETE CASCADE,
+      parentId TEXT REFERENCES Comment(id) ON DELETE CASCADE,
+      userId TEXT REFERENCES User(id) ON DELETE SET NULL,
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+      updatedAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    CREATE TABLE IF NOT EXISTS Media (
+      id TEXT PRIMARY KEY,
+      filename TEXT NOT NULL,
+      original TEXT NOT NULL,
+      mimeType TEXT NOT NULL,
+      size INTEGER NOT NULL,
+      url TEXT NOT NULL,
+      alt TEXT NOT NULL DEFAULT '',
+      title TEXT NOT NULL DEFAULT '',
+      width INTEGER,
+      height INTEGER,
+      userId TEXT REFERENCES User(id) ON DELETE SET NULL,
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    
+    CREATE TABLE IF NOT EXISTS Menu (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      location TEXT NOT NULL DEFAULT 'primary',
+      items TEXT NOT NULL DEFAULT '[]',
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    CREATE TABLE IF NOT EXISTS Setting (
+      id TEXT PRIMARY KEY,
+      key TEXT UNIQUE NOT NULL,
+      value TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS Revision (
+      id TEXT PRIMARY KEY,
+      postId TEXT NOT NULL REFERENCES Post(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      excerpt TEXT NOT NULL DEFAULT '',
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    CREATE TABLE IF NOT EXISTS Activity (
+      id TEXT PRIMARY KEY,
+      userId TEXT,
+      action TEXT NOT NULL,
+      detail TEXT DEFAULT '',
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    CREATE TABLE IF NOT EXISTS AppPassword (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      name TEXT NOT NULL,
+      hash TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    CREATE TABLE IF NOT EXISTS Visit (
+      id TEXT PRIMARY KEY,
+      date TEXT NOT NULL,
+      ip TEXT NOT NULL,
+      path TEXT DEFAULT '',
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+    CREATE INDEX IF NOT EXISTS idx_visit_date ON Visit (date);
+
+    CREATE TABLE IF NOT EXISTS Link (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      avatar TEXT DEFAULT '',
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    CREATE TABLE IF NOT EXISTS Site (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      domain TEXT UNIQUE NOT NULL,
+      description TEXT DEFAULT '',
+      active INTEGER DEFAULT 1,
+      isPrimary INTEGER DEFAULT 0,
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    CREATE TABLE IF NOT EXISTS SiteSetting (
+      siteId TEXT NOT NULL REFERENCES Site(id) ON DELETE CASCADE,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      PRIMARY KEY (siteId, key)
+    );
+
+    -- Performance indexes for hot queries
+    CREATE INDEX IF NOT EXISTS idx_post_status_type ON Post (status, type, publishedAt);
+    CREATE INDEX IF NOT EXISTS idx_post_slug ON Post (slug);
+    CREATE INDEX IF NOT EXISTS idx_post_views ON Post (views DESC);
+    CREATE INDEX IF NOT EXISTS idx_post_author ON Post (authorId);
+    CREATE INDEX IF NOT EXISTS idx_comment_post_status ON Comment (postId, status);
+    CREATE INDEX IF NOT EXISTS idx_comment_parent ON Comment (parentId);
+    CREATE INDEX IF NOT EXISTS idx_postcat_post ON PostCategory (postId);
+    CREATE INDEX IF NOT EXISTS idx_postcat_cat ON PostCategory (categoryId);
+    CREATE INDEX IF NOT EXISTS idx_posttag_post ON PostTag (postId);
+    CREATE INDEX IF NOT EXISTS idx_posttag_tag ON PostTag (tagId);
+    CREATE INDEX IF NOT EXISTS idx_media_user ON Media (userId);
+    CREATE INDEX IF NOT EXISTS idx_revision_post ON Revision (postId, createdAt);
+  `);
+
+  // Multi-site content isolation: NULL siteId = global content visible on every site
+  try { db.exec("ALTER TABLE Post ADD COLUMN siteId TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Post ADD COLUMN views INTEGER DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE Post ADD COLUMN sticky INTEGER DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE Post ADD COLUMN format TEXT DEFAULT 'standard'"); } catch {}
+  try { db.exec("ALTER TABLE Post ADD COLUMN lockedAt TEXT DEFAULT ''"); } catch {}
+  try { db.exec("ALTER TABLE Post ADD COLUMN lockedBy TEXT DEFAULT ''"); } catch {}
+  try { db.exec("ALTER TABLE User ADD COLUMN reset_token TEXT DEFAULT ''"); } catch {}
+  try { db.exec("ALTER TABLE User ADD COLUMN reset_expires TEXT DEFAULT ''"); } catch {}
+  try { db.exec("ALTER TABLE User ADD COLUMN two_factor_secret TEXT DEFAULT ''"); } catch {}
+  try { db.exec("ALTER TABLE User ADD COLUMN two_factor_enabled INTEGER DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE Activity ADD COLUMN ip TEXT DEFAULT ''"); } catch {}
+  try { db.exec("ALTER TABLE Activity ADD COLUMN meta TEXT DEFAULT ''"); } catch {}
+  try { db.exec("ALTER TABLE Menu ADD COLUMN siteId TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Media ADD COLUMN thumbnail TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Media ADD COLUMN width INTEGER"); } catch {}
+  try { db.exec("ALTER TABLE Media ADD COLUMN height INTEGER"); } catch {}
+  try { db.exec("ALTER TABLE Media ADD COLUMN srcset TEXT"); } catch {}
+}
+
+// Runtime driver reconfiguration (install wizard): switch SQLite <-> MySQL/PG
+export function reconfigureDb(url: string): void {
+  if (driver === 'sqlite' && db.raw) { try { db.raw.close(); } catch {} db.raw = null; }
+  if (worker) { try { worker.terminate(); } catch {} worker = null; }
+  if (!url) {
+    driver = 'sqlite';
+    db.raw = new Database(DB_PATH);
+    db.raw.pragma('journal_mode = WAL');
+    db.raw.pragma('foreign_keys = ON');
+    return;
+  }
+  const cfg = parseUrl(url);
+  driver = cfg.driver;
+  worker = new Worker(path.join(__dirname, 'dbWorker.js'));
+  worker.on('message', (msg) => {
+    const p = workerPending.get(msg.id);
+    if (p) { p.resolve(msg.result); Atomics.store(p.flag, 0, 1); Atomics.notify(p.flag, 0); }
+  });
+  worker.on('error', (e) => console.error('[DB Worker]', e.message));
+  const init = workerCall('init', { conn: cfg });
+  if (!init.ok) throw new Error(init.error || 'Database connection failed');
+  // Persist for future restarts
+  const envPath = path.join(__dirname, '../..', '.env');
+  const existing = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+  const line = 'DATABASE_URL=' + url;
+  if (existing.includes('DATABASE_URL=')) {
+    fs.writeFileSync(envPath, existing.replace(/DATABASE_URL=.*/g, line));
+  } else {
+    fs.writeFileSync(envPath, existing.trimEnd() + '\n' + line + '\n');
+  }
+}
+
+export function cuid(): string {
+  const t = Date.now().toString(36);
+  const r = Math.random().toString(36).substring(2, 10);
+  return t + r;
+}
+
+export default db;

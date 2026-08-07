@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+::selection { background: color-mix(in srgb, var(--admin-primary, #2563eb) 25%, transparent); }
+
+/* --- Sidebar links (WP-style active indicator bar) --- */
+/* Light mode (default): light sidebar */
+.sidebar-link { @apply relative flex items-center gap-3 px-4 py-2.5 text-sm text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-all duration-150; }
+.sidebar-link svg { transition: transform 0.2s ease, color 0.15s ease; }
+.sidebar-link:hover svg { transform: translateX(1px); }
+.sidebar-link.active { color: var(--admin-primary, #2563eb); background: color-mix(in srgb, var(--admin-primary, #2563eb) 8%, transparent); font-weight: 500; }
+.sidebar-link.active svg { color: var(--admin-primary, #2563eb); }
+.sidebar-link.active::before { content: ''; position: absolute; left: -12px; top: 18%; bottom: 18%; width: 3px; border-radius: 0 3px 3px 0; background: var(--admin-primary, #2563eb); }
+/* Dark mode: deep sidebar with light text */
+.dark .sidebar-link { color: #9ca3af; }
+.dark .sidebar-link:hover { color: #fff; background: rgba(255,255,255,0.1); }
+.dark .sidebar-link.active { @apply text-white; background: linear-gradient(90deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06)); font-weight: 500; }
+.dark .sidebar-link.active svg { color: #fff; }
+.dark .sidebar-link.active::before { background: #fff; }
+
+/* --- Buttons (gradient, modern) --- */
+.btn-primary, .btn-secondary, .btn-danger { white-space: nowrap; flex-shrink: 0; }
+.btn-primary svg, .btn-secondary svg, .btn-danger svg { flex-shrink: 0; }
+.btn-primary { @apply inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed; }
+.btn-primary:not(:disabled) {
+  background-image: linear-gradient(135deg, var(--admin-primary, #2563eb), color-mix(in srgb, var(--admin-primary, #2563eb) 75%, #1d4ed8));
+  box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--admin-primary, #2563eb) 55%, transparent), 0 1px 2px rgba(0,0,0,0.08);
+}
+.btn-primary:not(:disabled):hover { box-shadow: 0 4px 14px -2px color-mix(in srgb, var(--admin-primary, #2563eb) 60%, transparent), 0 2px 4px rgba(0,0,0,0.1); filter: brightness(1.05); }
+.btn-primary:active:not(:disabled) { transform: scale(0.97); }
+.btn-primary:focus-visible { outline: 2px solid color-mix(in srgb, var(--admin-primary, #2563eb) 60%, transparent); outline-offset: 2px; }
+.btn-secondary { @apply inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-xl transition-all duration-200 disabled:opacity-50; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+.btn-secondary:hover { background: #f9fafb; border-color: #d1d5db; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
+.btn-secondary:active:not(:disabled) { transform: scale(0.97); }
+.btn-secondary:focus-visible { outline: 2px solid color-mix(in srgb, var(--admin-primary, #2563eb) 50%, transparent); outline-offset: 2px; }
+.btn-danger { @apply inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-xl transition-all duration-200 disabled:opacity-50; background-image: linear-gradient(135deg, #ef4444, #dc2626); box-shadow: 0 2px 8px -2px rgba(239,68,68,0.5); }
+.btn-danger:hover { filter: brightness(1.05); box-shadow: 0 4px 12px -2px rgba(239,68,68,0.55); }
+.btn-danger:active:not(:disabled) { transform: scale(0.97); }
+
+/* --- Inputs (soft focus glow) --- */
+.input-field { @apply w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm outline-none transition-all duration-200 placeholder-gray-400 bg-white; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03); }
+.input-field:hover { border-color: #d1d5db; }
+.input-field:focus { border-color: var(--admin-primary, #2563eb); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02), 0 0 0 4px color-mix(in srgb, var(--admin-primary, #2563eb) 12%, transparent); }
+.dark .input-field { background: #1f2937; }
+
+/* --- Cards (softer, airy) --- */
+.card { @apply bg-white rounded-2xl border border-gray-100 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_4px_12px_-4px_rgba(0,0,0,0.05)]; transition: box-shadow 0.25s ease, border-color 0.25s ease, transform 0.25s ease; }
+.card:hover { border-color: #e5e7eb; box-shadow: 0 2px 6px rgba(0,0,0,0.05), 0 10px 24px -8px rgba(0,0,0,0.1); }
+
+/* --- Tables --- */
+table thead th { @apply text-[11px] font-semibold uppercase tracking-wider text-gray-500; }
+table tbody tr { transition: background-color 0.12s ease; }
+
+/* --- Scrollbars --- */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; border: 2px solid transparent; background-clip: content-box; }
+.dark ::-webkit-scrollbar-thumb { background: #4b5563; border: 2px solid transparent; background-clip: content-box; }
+
+
+/* Admin theme color: driven by the active site theme (--admin-primary) */
+.bg-primary-50 { background-color: color-mix(in srgb, var(--admin-primary, #2563eb) 8%, transparent) !important; }
+.bg-primary-100 { background-color: color-mix(in srgb, var(--admin-primary, #2563eb) 15%, transparent) !important; }
+.text-primary-500 { color: var(--admin-primary, #2563eb) !important; }
+.text-primary-600 { color: var(--admin-primary, #2563eb) !important; }
+.text-primary-700 { color: var(--admin-primary, #2563eb) !important; }
+.bg-primary-600 { background-color: var(--admin-primary, #2563eb) !important; }
+.hover\:bg-primary-700:hover { background-color: color-mix(in srgb, var(--admin-primary, #2563eb) 88%, black) !important; }
+.hover\:bg-primary-600:hover { background-color: color-mix(in srgb, var(--admin-primary, #2563eb) 92%, black) !important; }
+.hover\:text-primary-600:hover { color: var(--admin-primary, #2563eb) !important; }
+.hover\:text-primary-700:hover { color: var(--admin-primary, #2563eb) !important; }
+.hover\:bg-primary-100:hover { background-color: color-mix(in srgb, var(--admin-primary, #2563eb) 15%, transparent) !important; }
+.hover\:border-primary-500:hover { border-color: var(--admin-primary, #2563eb) !important; }
+.hover\:border-primary-300:hover { border-color: color-mix(in srgb, var(--admin-primary, #2563eb) 50%, transparent) !important; }
+.hover\:border-primary-400:hover { border-color: color-mix(in srgb, var(--admin-primary, #2563eb) 60%, transparent) !important; }
+.border-primary-500 { border-color: var(--admin-primary, #2563eb) !important; }
+.border-primary-400 { border-color: color-mix(in srgb, var(--admin-primary, #2563eb) 60%, transparent) !important; }
+.focus\:ring-primary-500:focus { --tw-ring-color: var(--admin-primary, #2563eb) !important; }
+.focus\:border-primary-500:focus { border-color: var(--admin-primary, #2563eb) !important; }
+.focus\:border-primary-400:focus { border-color: var(--admin-primary, #2563eb) !important; }
+
+/* Dark mode */
+.dark body, body.dark { @apply bg-gray-900 text-gray-100; }
+.dark main { @apply bg-gray-900; }
+.dark .card { @apply bg-gray-800 border-gray-700; }
+.dark .sidebar { background: #030712 !important; }
+.dark .input-field { @apply bg-gray-800 border-gray-600 text-gray-100; }
+.dark .btn-secondary { @apply bg-gray-700 border-gray-600 text-gray-200 hover:bg-gray-600; }
+.dark .btn-primary { @apply bg-primary-700 hover:bg-primary-600; }
+
+/* Text hierarchy */
+.dark .text-gray-900 { color: #f9fafb !important; }
+.dark .text-gray-800 { color: #f3f4f6 !important; }
+.dark .text-gray-700 { color: #e5e7eb !important; }
+.dark .text-gray-600 { color: #d1d5db !important; }
+.dark .text-gray-500 { color: #9ca3af !important; }
+.dark .text-gray-400 { color: #9ca3af !important; }
+.dark .text-gray-300 { color: #9ca3af !important; }
+
+/* Surfaces */
+.dark .bg-white:not(.sidebar) { background-color: #1f2937 !important; }
+.dark .bg-gray-50 { background-color: #111827 !important; }
+.dark .bg-gray-100 { background-color: #1f2937 !important; }
+.dark .hover\:bg-gray-50:hover { background-color: #1f2937 !important; }
+.dark .hover\:bg-gray-100:hover { background-color: #374151 !important; }
+.dark .hover\:bg-white\/10:hover { background-color: rgba(255,255,255,0.1) !important; }
+
+/* Borders */
+.dark .border-gray-200 { border-color: #374151 !important; }
+.dark .border-gray-100 { border-color: #1f2937 !important; }
+.dark .border-gray-300 { border-color: #4b5563 !important; }
+.dark .border-gray-400 { border-color: #6b7280 !important; }
+.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #374151 !important; }
+
+/* Tables */
+.dark thead { @apply bg-gray-800; }
+.dark tbody tr:hover { @apply bg-gray-700/40; }
+
+/* Status chips keep their colors */
+.dark .bg-green-100, .dark .bg-red-100, .dark .bg-yellow-100, .dark .bg-blue-100, .dark .bg-purple-100, .dark .bg-orange-100, .dark .bg-teal-100, .dark .bg-pink-100, .dark .bg-amber-100 {
+  background-color: rgba(255,255,255,0.08) !important;
+}
