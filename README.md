@@ -3,7 +3,7 @@
   <h1 align="center">Mortar</h1>
   <p align="center">A modern, WordPress-style CMS built with TypeScript — content, plugins, themes, and multi-site in one box.</p>
   <p align="center">
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-GPL--3.0-blue.svg" alt="License" /></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-orange.svg" alt="License" /></a>
     <img src="https://img.shields.io/badge/TypeScript-5.x-3178c6.svg" alt="TypeScript" />
     <img src="https://img.shields.io/badge/Express-4.x-259dff.svg" alt="Express" />
     <img src="https://img.shields.io/badge/React-18-61dafb.svg" alt="React" />
@@ -123,4 +123,11 @@ Found a vulnerability? See [SECURITY.md](SECURITY.md) for the responsible disclo
 
 ## 📄 License
 
-[Mortar](LICENSE) is licensed under the **GNU General Public License v3.0 (GPL-3.0)** — the same family of licenses used by WordPress and Halo.
+[Mortar](LICENSE) is licensed under the **Creative Commons Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0)**.
+
+- **NonCommercial**: this project may not be used for commercial purposes.
+  Commercial use requires a separate license — contact the maintainers.
+- **ShareAlike**: derivatives must be distributed under the same license.
+- **Attribution**: credit the original authors when sharing or adapting.
+
+For commercial licensing inquiries, please open an issue on GitHub.
