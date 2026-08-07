@@ -61,14 +61,16 @@ export default function Appearance() {
               ),
               React.createElement('div', { className: 'flex items-center gap-2 shrink-0' },
                 !th.active && React.createElement('button', { onClick: () => activate(th.name), className: 'btn-secondary text-xs' }, t('activate', getLang())),
-                th.name !== 'default' && React.createElement('button', {
+                React.createElement('button', {
                   onClick: async () => {
+                    if (th.name === 'default') return;
                     if (!confirm(t('delete theme', getLang()) + ' "' + th.name + '"?')) return;
                     try { await api.delete('/themes/' + th.name); window.location.reload(); }
                     catch (e: any) { alert(e.response?.data?.error || t('delete failed', getLang())); }
                   },
-                  className: 'p-1.5 text-gray-400 hover:text-red-600',
-                  title: t('delete', getLang()),
+                  disabled: th.name === 'default',
+                  className: 'p-1.5 ' + (th.name === 'default' ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600'),
+                  title: th.name === 'default' ? t('default theme protected', getLang()) : t('delete', getLang()),
                 }, React.createElement(Trash2, { size: 14 })),
               )
             )

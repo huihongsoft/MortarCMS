@@ -501,6 +501,8 @@ const zh: Record<string, string> = {
   'install theme hint': '上传包含 theme.json 的主题 zip 包安装(配置型主题,即装即用)。',
   'theme custom settings': '主题自定义设置',
   'delete theme': '删除主题',
+
+'default theme protected': '默认主题受保护,不可删除',
 };
 const en: Record<string, string> = {};
 

@@ -1,0 +1,22 @@
+{
+  "name": "twentytwentyfour",
+  "version": "1.0.0",
+  "description": "Inspired by the WordPress Twenty Twenty-Four default theme — clean, spacious, typography-first with a wide content area.",
+  "author": "Mortar Team",
+  "settings": {
+    "primary_color": "#111111",
+    "background": "#ffffff",
+    "text_color": "#111111",
+    "link_color": "#111111",
+    "heading_font": "system",
+    "body_font": "system",
+    "sidebar_position": "none",
+    "posts_per_row": "2"
+  },
+  "settingsSchema": [
+    { "key": "show_hero", "label": "Show homepage hero", "type": "checkbox", "default": "1" },
+    { "key": "hero_title", "label": "Hero title", "type": "text", "default": "" },
+    { "key": "footer_about", "label": "Footer about text", "type": "textarea", "default": "" }
+  ],
+  "custom_css": "body { letter-spacing: -0.011em; } article h2 { letter-spacing: -0.02em; font-weight: 600; } .wp-style-btn { border-bottom: 1.5px solid #111; }"
+}
