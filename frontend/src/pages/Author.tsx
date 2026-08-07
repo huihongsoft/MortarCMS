@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom';
 import useSEO from '../hooks/useSEO';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
-import { getTheme } from '../themes';
+import { useTheme } from '../themes';
 
 export default function AuthorPage({ settings }: { settings: Record<string, string> }) {
   const { username } = useParams();
@@ -16,6 +16,6 @@ export default function AuthorPage({ settings }: { settings: Record<string, stri
 
   useSEO({ title: username || t('author'), url: window.location.origin + '/author/' + username });
 
-  const Layout = getTheme(settings.theme_name).AuthorLayout;
+  const Layout = useTheme().AuthorLayout;
   return React.createElement(Layout, { username, posts, loading });
 }

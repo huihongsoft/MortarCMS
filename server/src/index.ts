@@ -120,6 +120,11 @@ const cacheControl = (maxAge: string, immutable = false) => (_req: any, res: any
 // Versioned build assets can be cached forever
 app.use('/assets', cacheControl('31536000', true), express.static(path.join(__dirname, '../../frontend/dist/assets')));
 app.use('/admin/assets', cacheControl('31536000', true), express.static(path.join(__dirname, '../../admin/dist/assets')));
+// Theme bundles: served for runtime loading of theme layout components
+app.use('/themes', (_req: any, res: any, next: any) => {
+  res.setHeader('Cache-Control', 'public, max-age=300');
+  next();
+}, express.static(path.join(__dirname, '..', 'themes')));
 // Uploads: cache 1 day; CSP locks down script execution (e.g. uploaded SVGs)
 app.use('/uploads', cacheControl('86400'), (_req: any, res: any, next: any) => {
   res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'");

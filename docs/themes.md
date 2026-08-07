@@ -90,9 +90,35 @@ Themes can be **partial**: any layout they do not export falls back to the
 `default` theme automatically. Add a theme with just `Header.tsx` +
 `HomeLayout.tsx` and the rest keeps working.
 
-### Registration
+### Self-contained themes (runtime loading)
 
-Themes register in `frontend/src/themes/index.ts`:
+Since the theme refactor, a theme is **one directory with everything**:
+
+```
+server/themes/<name>/
+├── theme.json     # metadata, settings, settingsSchema, custom_css
+└── theme.js       # layout components bundle (built once by the theme author)
+```
+
+- The frontend loads the active theme's `theme.js` **at runtime**
+  (`import('/themes/<name>/theme.js')`) — no rebuild needed after installing
+- React/ReactDOM/react-router-dom are shared with the main app through an
+  importmap, so themes compose with the rest of the app safely
+- **Zip-installed themes** ship their own `theme.js` — fully self-contained
+- Missing layouts fall back to the default theme
+
+To build a theme bundle from source:
+
+```bash
+cd frontend
+THEME_NAME=mytheme npx vite build --config vite.themes.config.ts
+# output: dist/themes/mytheme.js  ->  server/themes/mytheme/theme.js
+```
+
+### Registration (built-in themes)
+
+Built-in themes register in `frontend/src/themes/index.ts` (source) and are
+bundled by the build:
 
 ```ts
 import MyHeader from './mytheme/Header';

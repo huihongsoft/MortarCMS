@@ -5,7 +5,7 @@ import { cdnUrl } from '../lib/cdn';
 import api from '../lib/api';
 import { initLightbox } from '../lib/lightbox';
 import { t } from '../lib/i18n';
-import { getTheme } from '../themes';
+import { useTheme } from '../themes';
 
 export default function PostPage({ settings }: { settings: Record<string, string> }) {
   const { slug } = useParams();
@@ -78,6 +78,6 @@ export default function PostPage({ settings }: { settings: Record<string, string
       React.createElement('input', { id: 'post-pwd', type: 'password', placeholder: t('enter password', settings), className: 'input-field text-center', required: true }),
       React.createElement('button', { type: 'submit', className: 'btn-primary w-full justify-center' }, t('submit', settings))));
 
-  const Layout = getTheme(settings.theme_name).PostLayout;
+  const Layout = useTheme().PostLayout;
   return React.createElement(Layout, { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, slug });
 }

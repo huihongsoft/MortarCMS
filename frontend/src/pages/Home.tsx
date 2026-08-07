@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useLocation } from 'react-router-dom';
 import api from '../lib/api';
 import useSEO from '../hooks/useSEO';
-import { getTheme } from '../themes';
+import { useTheme } from '../themes';
 import { t } from '../lib/i18n';
 
 export default function Home({ settings }: { settings: Record<string, string> }) {
@@ -25,7 +25,7 @@ export default function Home({ settings }: { settings: Record<string, string> })
   }, [page, catSlug, settings.posts_per_page]);
   useSEO({ title: catSlug ? (isTagPage ? t('tag', settings) + ': ' : '') + catSlug.replace(/-/g, ' ') : settings.site_title || undefined, description: settings.site_description || '', url: (settings.site_url || window.location.origin) + '/' + (catSlug ? (isTagPage ? 'tag/' : 'category/') + catSlug : '') });
 
-  const theme = getTheme(settings.theme_name);
+  const theme = useTheme();
   const Layout = catSlug ? (isTagPage ? theme.TagLayout : theme.CategoryLayout) : theme.HomeLayout;
   return React.createElement(Layout, { settings, posts, total, page, setPage, loadError, catSlug, isTagPage, categories });
 }

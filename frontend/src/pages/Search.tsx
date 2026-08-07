@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import useSEO from '../hooks/useSEO';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
-import { getTheme } from '../themes';
+import { useTheme } from '../themes';
 
 export default function SearchPage({ settings }: { settings: Record<string, string> }) {
   const [sp] = useSearchParams();
@@ -18,6 +18,6 @@ export default function SearchPage({ settings }: { settings: Record<string, stri
 
   useSEO({ title: query ? t('search') + ': ' + query : t('search'), url: window.location.origin + '/search' });
 
-  const Layout = getTheme(settings.theme_name).SearchLayout;
+  const Layout = useTheme().SearchLayout;
   return React.createElement(Layout, { query, posts, loading });
 }

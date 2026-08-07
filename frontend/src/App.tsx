@@ -10,11 +10,38 @@ import Register from './pages/Register';
 import Login from './pages/Login';
 import Install from './pages/Install';
 import { Routes, Route } from 'react-router-dom';
-import { getTheme } from './themes';
+import { ThemeProvider, useTheme } from './themes';
 import Home from './pages/Home';
 import PostPage from './pages/Post';
 import PageView from './pages/Page';
 import api from './lib/api';
+
+function SiteLayout({ settings }: { settings: Record<string, string> }) {
+  const theme = useTheme();
+  return React.createElement('div', { className: 'min-h-screen flex flex-col' },
+    React.createElement(ReadingProgress),
+    React.createElement(theme.Header, { settings }),
+    React.createElement('main', { className: 'flex-1' },
+      React.createElement(Routes, null,
+        React.createElement(Route, { path: '/install', element: React.createElement(Install) }),
+        React.createElement(Route, { path: '/', element: React.createElement(Home, { settings }) }),
+        React.createElement(Route, { path: '/post/:slug', element: React.createElement(PostPage, { settings }) }),
+        React.createElement(Route, { path: '/page/:slug', element: React.createElement(PageView, { settings }) }),
+        React.createElement(Route, { path: '/archive/:year/:month', element: React.createElement(ArchivePage, { settings }) }),
+        React.createElement(Route, { path: '/author/:username', element: React.createElement(AuthorPage, { settings }) }),
+        React.createElement(Route, { path: '/search', element: React.createElement(SearchPage, { settings }) }),
+        React.createElement(Route, { path: '/register', element: React.createElement(Register) }),
+        React.createElement(Route, { path: '/login', element: React.createElement(Login) }),
+        React.createElement(Route, { path: '/tag/:slug', element: React.createElement(Home, { settings }) }),
+        React.createElement(Route, { path: '/category/:slug', element: React.createElement(Home, { settings }) }),
+        React.createElement(Route, { path: '*', element: React.createElement(NotFound) }),
+      )
+    ),
+    React.createElement(ScrollToTop),
+    React.createElement(CookieConsent),
+    React.createElement(theme.Footer, { settings })
+  );
+}
 
 export default function App() {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -57,27 +84,5 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
-  return React.createElement('div', { className: 'min-h-screen flex flex-col' },
-    React.createElement(ReadingProgress),
-    React.createElement(getTheme(settings.theme_name).Header, { settings }),
-    React.createElement('main', { className: 'flex-1' },
-      React.createElement(Routes, null,
-        React.createElement(Route, { path: '/install', element: React.createElement(Install) }),
-        React.createElement(Route, { path: '/', element: React.createElement(Home, { settings }) }),
-        React.createElement(Route, { path: '/post/:slug', element: React.createElement(PostPage, { settings }) }),
-        React.createElement(Route, { path: '/page/:slug', element: React.createElement(PageView, { settings }) }),
-        React.createElement(Route, { path: '/archive/:year/:month', element: React.createElement(ArchivePage, { settings }) }),
-        React.createElement(Route, { path: '/author/:username', element: React.createElement(AuthorPage, { settings }) }),
-        React.createElement(Route, { path: '/search', element: React.createElement(SearchPage, { settings }) }),
-        React.createElement(Route, { path: '/register', element: React.createElement(Register) }),
-        React.createElement(Route, { path: '/login', element: React.createElement(Login) }),
-        React.createElement(Route, { path: '/tag/:slug', element: React.createElement(Home, { settings }) }),
-        React.createElement(Route, { path: '/category/:slug', element: React.createElement(Home, { settings }) }),
-        React.createElement(Route, { path: '*', element: React.createElement(NotFound) }),
-      )
-    ),
-    React.createElement(ScrollToTop),
-    React.createElement(CookieConsent),
-    React.createElement(getTheme(settings.theme_name).Footer, { settings })
-  );
+  return React.createElement(ThemeProvider, { themeName: settings.theme_name, children: React.createElement(SiteLayout, { settings }) });
 }
