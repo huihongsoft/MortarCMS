@@ -59,6 +59,49 @@ restores each theme's own values.
 typography tweaks, component styling, and responsive adjustments. It applies
 regardless of light/dark mode unless scoped.
 
+## Template system (WordPress-style)
+
+A theme is more than colors — it can override **layout templates**. Each
+theme lives in `frontend/src/themes/<name>/` and provides React layout
+components:
+
+```
+frontend/src/themes/<name>/
+├── Header.tsx      # site header template
+├── Footer.tsx      # site footer template
+├── HomeLayout.tsx  # homepage template (list + sidebar)
+├── PostLayout.tsx  # single post template (title, meta, content, comments)
+└── PageLayout.tsx  # static page template
+```
+
+Layouts receive props from the page controllers, e.g. `HomeLayout` gets
+`{ settings, posts, total, page, setPage, ... }`, `PostLayout` gets
+`{ settings, post, comments, submitComment, ... }` — so themes fully control
+the rendered structure while the system handles data, SEO and auth.
+
+### Fallback
+
+Themes can be **partial**: any layout they do not export falls back to the
+`default` theme automatically. Add a theme with just `Header.tsx` +
+`HomeLayout.tsx` and the rest keeps working.
+
+### Registration
+
+Themes register in `frontend/src/themes/index.ts`:
+
+```ts
+import MyHeader from './mytheme/Header';
+import MyHomeLayout from './mytheme/HomeLayout';
+
+const themes = {
+  default: { ... },
+  mytheme: { name: 'mytheme', Header: MyHeader, HomeLayout: MyHomeLayout },
+};
+```
+
+Activation is instant: switch the active theme in the admin (Appearance →
+Themes) and the frontend renders the new templates on the next load.
+
 ## How it reaches the frontend
 
 1. `GET /api/themes` — theme list with effective settings
