@@ -1,0 +1,21 @@
+{
+  "name": "twentytwentyone",
+  "version": "1.0.0",
+  "description": "WordPress Twenty Twenty-One (2021): black & white with a warm orange accent, rounded cards.",
+  "author": "Mortar Team",
+  "settings": {
+    "primary_color": "#d96c2c",
+    "background": "#ffffff",
+    "text_color": "#28303d",
+    "link_color": "#28303d",
+    "heading_font": "system",
+    "body_font": "system",
+    "sidebar_position": "right",
+    "posts_per_row": "1"
+  },
+  "settingsSchema": [
+    { "key": "accent_style", "label": "Accent style", "type": "select", "options": ["orange", "blue", "green"], "default": "orange" },
+    { "key": "show_logo_border", "label": "Logo border", "type": "checkbox", "default": "1" }
+  ],
+  "custom_css": "article { border-radius: 24px; border: 1px solid #f0f0f0; padding: 32px; } article h2 { font-weight: 500; }"
+}

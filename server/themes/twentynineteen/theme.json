@@ -1,0 +1,20 @@
+{
+  "name": "twentynineteen",
+  "version": "1.0.0",
+  "description": "WordPress Twenty Nineteen (2019): typography-first, bold black headlines, single centered column.",
+  "author": "Mortar Team",
+  "settings": {
+    "primary_color": "#0073aa",
+    "background": "#ffffff",
+    "text_color": "#111111",
+    "link_color": "#0073aa",
+    "heading_font": "system",
+    "body_font": "system",
+    "sidebar_position": "none",
+    "posts_per_row": "1"
+  },
+  "settingsSchema": [
+    { "key": "hero_heading", "label": "Hero heading", "type": "text", "default": "" }
+  ],
+  "custom_css": "article h2 { font-weight: 800; letter-spacing: -0.03em; } body { letter-spacing: -0.01em; }"
+}
