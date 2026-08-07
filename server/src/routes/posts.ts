@@ -5,10 +5,10 @@ import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { slugify, uniqueSlug } from '../utils/slug';
 import { applyFilters, doAction } from '../utils/hooks';
-import { applyShortcodes } from '../utils/shortcodes';
+import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 
 const router = Router();
-const postSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional() });
+const postSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), meta: z.record(z.string(), z.string()).optional() });
 
 function enrichPost(p: any) {
   if (!p) return p;
@@ -17,6 +17,10 @@ function enrichPost(p: any) {
   p.tags = db.prepare('SELECT t.id as tagId, t.name, t.slug FROM PostTag pt JOIN Tag t ON t.id = pt.tagId WHERE pt.postId = ?').all(p.id);
   p.commentCount = (db.prepare('SELECT COUNT(*) as cnt FROM Comment WHERE postId = ?').get(p.id) as any)?.cnt || 0;
   p.revisionCount = (db.prepare('SELECT COUNT(*) as cnt FROM Revision WHERE postId = ?').get(p.id) as any)?.cnt || 0;
+  // Load meta fields
+  const metaRows = db.prepare('SELECT key, value FROM PostMeta WHERE postId = ?').all(p.id) as any[];
+  p.meta = {};
+  metaRows.forEach((r: any) => { p.meta[r.key] = r.value; });
   if (p.featured && p.featured.startsWith('/uploads/')) {
     const media = db.prepare('SELECT srcset FROM Media WHERE url = ?').get(p.featured) as any;
     if (media?.srcset) { try { p.srcset = JSON.parse(media.srcset); } catch {} }
@@ -53,7 +57,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     if (tag) countParams.push(tag);
     const total = (db.prepare(countSql).get(...countParams) as any)?.cnt || 0;
     const posts = postsData.map(enrichPost);
-    posts.forEach((p: any) => { p.content = applyShortcodes(applyFilters('post_content', p.content || '', p), p); });
+    posts.forEach((p: any) => { p.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', p.content || '', p), p)); });
     res.json({ posts, total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -77,7 +81,7 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
     }
     db.prepare('UPDATE Post SET views = views + 1 WHERE id = ?').run(post.id);
     const enriched = enrichPost(post);
-    enriched.content = applyShortcodes(applyFilters('post_content', enriched.content || '', enriched), enriched);
+    enriched.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', enriched.content || '', enriched), enriched));
     res.json(enriched);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -172,6 +176,11 @@ router.post('/', authenticate, authorize('admin', 'editor', 'author'), (req: Aut
       if (!tag) { const tid = cuid(); db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tid, name, tagSlug); tag = { id: tid }; }
       db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tag.id);
     }
+    if (data.meta) {
+      for (const [key, value] of Object.entries(data.meta)) {
+        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, value);
+      }
+    }
     const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(id) as any;
     doAction('post_created', id, data.status || 'draft');
     if ((data.status || 'draft') === 'published') doAction('post_published', id);
@@ -196,6 +205,12 @@ router.put('/:id', authenticate, authorize('admin', 'editor', 'author'), (req: A
     if (data.siteId !== undefined) { sets.push('siteId = ?'); vals.push(data.siteId || null); }
     if (data.categoryIds) { db.prepare('DELETE FROM PostCategory WHERE postId = ?').run(req.params.id); for (const cid of data.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(req.params.id, cid); }
     if (data.tagIds) { db.prepare('DELETE FROM PostTag WHERE postId = ?').run(req.params.id); for (const tid of data.tagIds) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(req.params.id, tid); }
+    if (data.meta) {
+      db.prepare('DELETE FROM PostMeta WHERE postId = ?').run(req.params.id);
+      for (const [key, value] of Object.entries(data.meta)) {
+        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, value);
+      }
+    }
     if (sets.length > 0) {
       const changed = (data.title !== undefined && data.title !== existing.title) || (data.content !== undefined && (data.content || '') !== (existing.content || '')) || (data.excerpt !== undefined && data.excerpt !== (existing.excerpt || ''));
       if (changed) {

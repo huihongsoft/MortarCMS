@@ -146,5 +146,33 @@ router.delete('/:name', authenticate, requireCap('manage_options'), (req: AuthRe
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Public: get all theme sections (HTML+CSS for hook locations)
+router.get('/sections', (_req: AuthRequest, res: Response) => {
+  try {
+    const rows = db.prepare("SELECT key, value FROM Setting WHERE key LIKE 'theme_section_%'").all() as any[];
+    const sections: Record<string, { html: string; css: string }> = {};
+    rows.forEach((r: any) => {
+      try { sections[r.key.replace('theme_section_', '')] = JSON.parse(r.value); } catch {}
+    });
+    res.json(sections);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: save a theme section for a hook location
+router.put('/sections/:location', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    const { location } = req.params;
+    const { html, css } = req.body || {};
+    if (!['before_header', 'after_header', 'before_content', 'after_content', 'before_footer', 'after_footer'].includes(location)) {
+      res.status(400).json({ error: 'Invalid hook location' }); return;
+    }
+    const key = 'theme_section_' + location;
+    const value = JSON.stringify({ html: html || '', css: css || '' });
+    db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      .run(cuid(), key, value);
+    res.json({ success: true, location });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 export { readTheme, activeThemeName, themeOverrides };
 export default router;

@@ -31,6 +31,7 @@ export default function PostLayout(props: any) {
         post.tags?.length > 0 && React.createElement('span', { className: 'flex items-center gap-1 flex-wrap' }, React.createElement(Tag, { size: 14 }),
           post.tags.map((tg: any) => React.createElement(Link, { key: tg.tagId, to: '/tag/' + tg.slug, className: 'px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600 hover:bg-primary-100 hover:text-primary-700' }, tg.name))))),
     post.featured && React.createElement('img', { src: cdnUrl(post.featured, settings), alt: post.title, className: 'w-full max-h-96 object-cover rounded-lg mb-8', loading: 'lazy', srcSet: post.srcset ? Object.entries(post.srcset).map(([w, u]) => (cdnUrl(u as string, settings) as string) + ' ' + w + 'w').join(', ') : undefined }),
+    post.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: post.meta._visual_css } }),
     React.createElement('div', { className: 'prose prose-gray max-w-none mb-12', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(post.content)), settings) } }),
     post?.author && React.createElement('div', { className: 'flex items-start gap-4 mt-12 pt-6 border-t border-gray-200' },
       React.createElement('img', { src: gravatarUrl(post.author?.email || ''), alt: '', className: 'w-12 h-12 rounded-full' }),

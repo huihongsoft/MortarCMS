@@ -4,6 +4,7 @@ import ArchivePage from './pages/Archive';
 import AuthorPage from './pages/Author';
 import NotFound from './pages/NotFound';
 import ReadingProgress from './components/ReadingProgress';
+import ThemeSection from './components/ThemeSection';
 import CookieConsent from './components/CookieConsent';
 import ScrollToTop from './components/ScrollToTop';
 import Register from './pages/Register';
@@ -15,31 +16,38 @@ import Home from './pages/Home';
 import PostPage from './pages/Post';
 import PageView from './pages/Page';
 import api from './lib/api';
+import { initLightbox } from './lib/lightbox';
 
 function SiteLayout({ settings }: { settings: Record<string, string> }) {
   const theme = useTheme();
   return React.createElement('div', { className: 'min-h-screen flex flex-col' },
-    React.createElement(ReadingProgress),
-    React.createElement(theme.Header, { settings }),
-    React.createElement('main', { className: 'flex-1' },
-      React.createElement(Routes, null,
-        React.createElement(Route, { path: '/install', element: React.createElement(Install) }),
-        React.createElement(Route, { path: '/', element: React.createElement(Home, { settings }) }),
-        React.createElement(Route, { path: '/post/:slug', element: React.createElement(PostPage, { settings }) }),
-        React.createElement(Route, { path: '/page/:slug', element: React.createElement(PageView, { settings }) }),
-        React.createElement(Route, { path: '/archive/:year/:month', element: React.createElement(ArchivePage, { settings }) }),
-        React.createElement(Route, { path: '/author/:username', element: React.createElement(AuthorPage, { settings }) }),
-        React.createElement(Route, { path: '/search', element: React.createElement(SearchPage, { settings }) }),
-        React.createElement(Route, { path: '/register', element: React.createElement(Register) }),
-        React.createElement(Route, { path: '/login', element: React.createElement(Login) }),
-        React.createElement(Route, { path: '/tag/:slug', element: React.createElement(Home, { settings }) }),
-        React.createElement(Route, { path: '/category/:slug', element: React.createElement(Home, { settings }) }),
-        React.createElement(Route, { path: '*', element: React.createElement(NotFound) }),
-      )
-    ),
-    React.createElement(ScrollToTop),
-    React.createElement(CookieConsent),
-    React.createElement(theme.Footer, { settings })
+      React.createElement(ReadingProgress),
+      React.createElement(ThemeSection, { settings, location: 'before_header' }),
+      React.createElement(theme.Header, { settings }),
+      React.createElement(ThemeSection, { settings, location: 'after_header' }),
+      React.createElement('main', { className: 'flex-1' },
+        React.createElement(ThemeSection, { settings, location: 'before_content' }),
+        React.createElement(Routes, null,
+          React.createElement(Route, { path: '/install', element: React.createElement(Install) }),
+          React.createElement(Route, { path: '/', element: React.createElement(Home, { settings }) }),
+          React.createElement(Route, { path: '/post/:slug', element: React.createElement(PostPage, { settings }) }),
+          React.createElement(Route, { path: '/page/:slug', element: React.createElement(PageView, { settings }) }),
+          React.createElement(Route, { path: '/archive/:year/:month', element: React.createElement(ArchivePage, { settings }) }),
+          React.createElement(Route, { path: '/author/:username', element: React.createElement(AuthorPage, { settings }) }),
+          React.createElement(Route, { path: '/search', element: React.createElement(SearchPage, { settings }) }),
+          React.createElement(Route, { path: '/register', element: React.createElement(Register) }),
+          React.createElement(Route, { path: '/login', element: React.createElement(Login) }),
+          React.createElement(Route, { path: '/tag/:slug', element: React.createElement(Home, { settings }) }),
+          React.createElement(Route, { path: '/category/:slug', element: React.createElement(Home, { settings }) }),
+          React.createElement(Route, { path: '*', element: React.createElement(NotFound) }),
+        ),
+        React.createElement(ThemeSection, { settings, location: 'after_content' }),
+      ),
+      React.createElement(ThemeSection, { settings, location: 'before_footer' }),
+      React.createElement(ScrollToTop),
+      React.createElement(CookieConsent),
+      React.createElement(theme.Footer, { settings }),
+      React.createElement(ThemeSection, { settings, location: 'after_footer' })
   );
 }
 
@@ -47,6 +55,7 @@ export default function App() {
   const [settings, setSettings] = useState<Record<string, string>>({});
 
   useEffect(() => {
+    initLightbox();
     api.get('/settings').then(r => {
       setSettings(r.data);
       if (r.data.site_lang) localStorage.setItem('mortar_site_lang', r.data.site_lang);

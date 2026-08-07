@@ -49,7 +49,7 @@ function parseAttrs(raw: string): Record<string, string> {
 
 // ---- Built-in shortcodes ----
 
-// [gallery ids="1,2,3" columns="3" size="thumb"] -> responsive image grid
+// [gallery ids="1,2,3" columns="3" size="thumb"] -> responsive image grid (lightbox-ready)
 addShortcode('gallery', (attrs, _content, ctx) => {
   const ids = (attrs.ids || '').split(',').map(s => s.trim()).filter(Boolean);
   const columns = Math.min(parseInt(attrs.columns || '3') || 3, 6);
@@ -58,10 +58,13 @@ addShortcode('gallery', (attrs, _content, ctx) => {
     ? db.prepare('SELECT id, url, thumbnail, alt, title FROM Media WHERE id IN (' + ids.map(() => '?').join(',') + ')').all(...ids) as any[]
     : [];
   if (media.length === 0) return '';
-  const items = media.map((m: any) =>
-    '<a href="' + m.url + '" target="_blank" class="gallery-item"><img loading="lazy" src="' + (useThumb && m.thumbnail ? m.thumbnail : m.url) + '" alt="' + (m.alt || m.title || '') + '"></a>'
-  ).join('');
-  return '<div class="gallery" style="display:grid;grid-template-columns:repeat(' + columns + ',1fr);gap:8px;">' + items + '</div>';
+  const gid = 'g-' + ids.join('-');
+  const items = media.map((m: any) => {
+    const caption = m.alt || m.title || '';
+    const displayUrl = useThumb && m.thumbnail ? m.thumbnail : m.url;
+    return '<div class="gallery-item"><img loading="lazy" src="' + displayUrl + '" alt="' + caption + '" data-src="' + m.url + '" data-caption="' + caption.replace(/"/g, '&quot;') + '"></div>';
+  }).join('');
+  return '<div class="gallery" data-gallery-id="' + gid + '" style="display:grid;grid-template-columns:repeat(' + columns + ',1fr);gap:8px;">' + items + '</div>';
 });
 
 // [audio src="url"] -> audio player
@@ -77,3 +80,113 @@ addShortcode('video', (attrs) => {
   if (!src) return '';
   return '<video controls preload="metadata" style="width:100%;border-radius:8px;"><source src="' + src + '"></video>';
 });
+
+// ---- CMS Data shortcodes (used by VisualEditor dynamic blocks) ----
+
+addShortcode('post-list', (attrs) => {
+  const limit = Math.min(parseInt(attrs.limit || '5') || 5, 20);
+  const posts = db.prepare("SELECT id, title, slug, excerpt, featured, publishedAt FROM Post WHERE type = 'post' AND status = 'published' ORDER BY publishedAt DESC LIMIT ?").all(limit) as any[];
+  if (posts.length === 0) return '<p class="text-gray-400 text-sm italic">No posts yet.</p>';
+  const items = posts.map((p: any) => {
+    const img = p.featured ? '<img src="' + p.featured + '" alt="' + (p.title || '') + '" loading="lazy" style="width:80px;height:80px;object-fit:cover;border-radius:8px;flex-shrink:0;">' : '';
+    return '<a href="/post/' + p.slug + '" style="display:flex;gap:16px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #e5e7eb;text-decoration:none;color:inherit;">' + img + '<div><h4 style="margin:0 0 4px;font-size:15px;color:#111827;">' + (p.title || '') + '</h4><p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">' + (p.excerpt || '').substring(0, 120) + '</p></div></a>';
+  }).join('');
+  return '<div class="cms-rendered-post-list">' + items + '</div>';
+});
+
+addShortcode('categories', () => {
+  const cats = db.prepare('SELECT c.name, c.slug, COUNT(pc.postId) as cnt FROM Category c LEFT JOIN PostCategory pc ON pc.categoryId = c.id GROUP BY c.id ORDER BY c.name').all() as any[];
+  if (cats.length === 0) return '<p class="text-gray-400 text-sm italic">No categories yet.</p>';
+  const items = cats.map((c: any) => '<a href="/category/' + c.slug + '" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6;text-decoration:none;color:#374151;font-size:14px;"><span>' + c.name + '</span><span style="color:#9ca3af;">' + (c.cnt || 0) + '</span></a>').join('');
+  return '<div class="cms-rendered-categories">' + items + '</div>';
+});
+
+addShortcode('comments', (attrs) => {
+  const limit = Math.min(parseInt(attrs.limit || '5') || 5, 20);
+  const comments = db.prepare("SELECT c.author, c.content, c.createdAt, p.title as postTitle, p.slug as postSlug FROM Comment c JOIN Post p ON p.id = c.postId WHERE c.status = 'approved' ORDER BY c.createdAt DESC LIMIT ?").all(limit) as any[];
+  if (comments.length === 0) return '<p class="text-gray-400 text-sm italic">No comments yet.</p>';
+  const items = comments.map((c: any) => '<div style="padding:10px 0;border-bottom:1px solid #f3f4f6;"><p style="margin:0;font-size:13px;color:#374151;">' + c.content.substring(0, 150) + '</p><p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">' + c.author + ' on <a href="/post/' + c.postSlug + '" style="color:#6b7280;text-decoration:none;">' + (c.postTitle || 'post') + '</a></p></div>').join('');
+  return '<div class="cms-rendered-comments">' + items + '</div>';
+});
+
+addShortcode('search', () => {
+  return '<form action="/search" method="get" style="display:flex;gap:8px;"><input type="text" name="q" placeholder="Search..." style="flex:1;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none;"><button type="submit" style="padding:10px 20px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">Search</button></form>';
+});
+
+addShortcode('archive', () => {
+  const months = db.prepare("SELECT strftime('%Y-%m', publishedAt) as month, COUNT(*) as cnt FROM Post WHERE type = 'post' AND status = 'published' AND publishedAt IS NOT NULL GROUP BY month ORDER BY month DESC LIMIT 12").all() as any[];
+  if (months.length === 0) return '<p class="text-gray-400 text-sm italic">No archives yet.</p>';
+  const items = months.map((m: any) => {
+    const [y, mo] = m.month.split('-');
+    const names = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return '<a href="/archive/' + y + '/' + mo + '" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6;text-decoration:none;color:#374151;font-size:14px;"><span>' + names[parseInt(mo)] + ' ' + y + '</span><span style="color:#9ca3af;">' + m.cnt + '</span></a>';
+  }).join('');
+  return '<div class="cms-rendered-archive">' + items + '</div>';
+});
+
+addShortcode('tag-cloud', () => {
+  const tags = db.prepare('SELECT t.name, t.slug, COUNT(pt.postId) as cnt FROM Tag t JOIN PostTag pt ON pt.tagId = t.id GROUP BY t.id ORDER BY cnt DESC LIMIT 30').all() as any[];
+  if (tags.length === 0) return '<p class="text-gray-400 text-sm italic">No tags yet.</p>';
+  const maxCnt = Math.max(...tags.map((t: any) => t.cnt || 1), 1);
+  const items = tags.map((t: any) => {
+    const ratio = (t.cnt || 1) / maxCnt;
+    const size = 12 + Math.round(ratio * 16); // 12px ~ 28px
+    return '<a href="/tag/' + t.slug + '" style="display:inline-block;margin:4px 8px 4px 0;font-size:' + size + 'px;color:#6b7280;text-decoration:none;transition:color .15s;" onmouseover="this.style.color=\'#3b82f6\'" onmouseout="this.style.color=\'#6b7280\'">' + t.name + '</a>';
+  }).join('');
+  return '<div class="cms-rendered-tag-cloud" style="line-height:2;">' + items + '</div>';
+});
+
+// Replace VisualEditor CMS placeholder blocks with rendered shortcodes.
+// Detects <div data-cms="xxx"> elements and replaces them entirely with
+// the corresponding shortcode output. Uses depth counting so nested divs
+// (e.g. blocks wrapped in sections/columns) are matched correctly.
+export function renderCmsBlocks(html: string): string {
+  if (!html) return html;
+  const cmsTypes = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud'];
+  let out = html;
+  for (const type of cmsTypes) {
+    const fn = shortcodes.get(type);
+    if (!fn) continue;
+    const marker = 'data-cms="' + type + '"';
+    const openRe = /<div[\s>]/gi;
+    const closeRe = /<\/div\s*>/gi;
+    let pos = 0;
+    let searchFrom = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const markerIdx = out.indexOf(marker, searchFrom);
+      if (markerIdx === -1) break;
+      // Find the opening <div ...> tag containing the marker
+      const openStart = out.lastIndexOf('<div', markerIdx);
+      if (openStart === -1) { searchFrom = markerIdx + marker.length; continue; }
+      const openEnd = out.indexOf('>', openStart);
+      if (openEnd === -1) { searchFrom = markerIdx + marker.length; continue; }
+      // Count matching closing </div>
+      let depth = 1;
+      let i = openEnd + 1;
+      let closeEnd = -1;
+      while (i < out.length && depth > 0) {
+        openRe.lastIndex = i;
+        closeRe.lastIndex = i;
+        const o = openRe.exec(out);
+        const c = closeRe.exec(out);
+        if (!o && !c) break;
+        if (c && (!o || c.index < o.index)) {
+          depth--;
+          i = c.index + c[0].length;
+          if (depth === 0) closeEnd = c.index;
+        } else if (o) {
+          depth++;
+          i = o.index + o[0].length;
+        }
+      }
+      if (closeEnd === -1) { searchFrom = markerIdx + marker.length; continue; }
+      let rendered = '';
+      try { rendered = fn({}, '', {}); } catch { rendered = ''; }
+      out = out.slice(0, openStart) + rendered + out.slice(closeEnd + '</div>'.length);
+      pos = openStart + rendered.length;
+      searchFrom = pos;
+    }
+  }
+  return out;
+}

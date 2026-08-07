@@ -12,6 +12,7 @@ export default function PageLayout(props: any) {
   return React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-8' },
     React.createElement(Breadcrumbs, { items: [{ label: t('home', settings), to: '/' }, { label: page.title }] }),
     React.createElement('h1', { className: 'text-3xl font-bold text-gray-900 my-6' }, page.title),
+    page.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: page.meta._visual_css } }),
     React.createElement('div', { className: 'prose prose-gray max-w-none', dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(page.content || '') } }),
     page.parent && React.createElement(Link, { to: '/page/' + page.parent.slug, className: 'inline-block mt-8 text-sm text-gray-500 hover:text-primary-600' }, '\u2190 ' + page.parent.title)
   );

@@ -78,6 +78,19 @@ router.post('/upload', authenticate, authorize('admin', 'editor', 'author'), upl
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Public: single media item detail (for attachment pages / preview)
+router.get('/:id', (req: AuthRequest, res: Response) => {
+  try {
+    const media = db.prepare('SELECT m.*, u.username FROM Media m LEFT JOIN User u ON u.id = m.userId WHERE m.id = ?').get(req.params.id) as any;
+    if (!media) { res.status(404).json({ error: 'Media not found' }); return; }
+    // Parse srcset JSON for the client
+    if (media.srcset) {
+      try { media.srcset = JSON.parse(media.srcset); } catch { media.srcset = null; }
+    }
+    res.json(media);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // Responsive image endpoint: GET /api/media/:id/img?w=640&fmt=webp -> resized (disk-cached)
 router.get('/:id/img', async (req: AuthRequest, res: Response) => {
   try {

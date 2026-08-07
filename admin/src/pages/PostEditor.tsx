@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, ArrowLeft } from 'lucide-react';
+import { Save, ArrowLeft, Palette, FileText } from 'lucide-react';
 import { useToast } from '../lib/toast';
 import RichEditor from '../components/RichEditor';
+import VisualEditor from '../components/VisualEditor';
 import RevisionsPanel from '../components/RevisionsPanel';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
@@ -24,6 +25,10 @@ export default function PostEditor() {
   const [format, setFormat] = useState('standard');
   const [authorId, setAuthorId] = useState('');
   const [users, setUsers] = useState<any[]>([]);
+  const [visualMode, setVisualMode] = useState(false);
+  const [visualCss, setVisualCss] = useState('');
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [templateName, setTemplateName] = useState('');
   const [saving, setSaving] = useState(false);
   const [featured, setFeatured] = useState('');
   const [mediaItems, setMediaItems] = useState<any[]>([]);
@@ -37,7 +42,8 @@ export default function PostEditor() {
     if (!title) return;
     const timer = setInterval(async () => {
       try {
-        const payload = { title, content, excerpt, status: 'draft', siteId: siteId || null };
+        const payload: any = { title, content, excerpt, status: 'draft', siteId: siteId || null };
+        if (visualCss) payload.meta = { _visual_css: visualCss };
         if (id) await api.put('/posts/' + id, payload);
         else {
           const r = await api.post('/posts', { ...payload, categoryIds, tagNames, featured: featured || undefined });
@@ -46,7 +52,7 @@ export default function PostEditor() {
       } catch {}
     }, 30000);
     return () => clearInterval(timer);
-  }, [title, content, excerpt, categoryIds, tagNames, featured, siteId, id]);
+  }, [title, content, excerpt, categoryIds, tagNames, featured, siteId, id, visualCss]);
 
   
   // Keyboard shortcut: Ctrl+S to save draft
@@ -63,13 +69,15 @@ export default function PostEditor() {
 
   useEffect(() => { api.get('/sites').then(r => setSites(r.data || [])).catch(() => {}); api.get('/users').then(r => setUsers(r.data)).catch(() => {});
     api.get('/categories').then(r => setCategories(r.data)); api.get('/media').then(r => setMediaItems(r.data.media || []));
-    if (id) { api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.category.id) || []); setTagNames(p.tags?.map((t: any) => t.tag.name) || []); if (p.featured) setFeatured(p.featured); if (p.siteId) setSiteId(p.siteId); } }); } }, [id]);
+    api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])).catch(() => {});
+    if (id) { api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.category.id) || []); setTagNames(p.tags?.map((t: any) => t.tag.name) || []); if (p.featured) setFeatured(p.featured); if (p.siteId) setSiteId(p.siteId); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } }); } }, [id]);
 
   async function handleSave(s: string) {
     setSaving(true);
     try {
       const schedDate = (document.getElementById('scheduled-date') as HTMLInputElement)?.value || null;
-    const payload = { title, slug: slug || undefined, content, excerpt, status: s, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: s === 'scheduled' && schedDate ? new Date(schedDate).toISOString() : undefined, siteId: siteId || null };
+      const payload: any = { title, slug: slug || undefined, content, excerpt, status: s, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: s === 'scheduled' && schedDate ? new Date(schedDate).toISOString() : undefined, siteId: siteId || null };
+      if (visualCss) payload.meta = { _visual_css: visualCss };
       if (id) await api.put(`/posts/${id}`, payload); else await api.post('/posts', payload);
       toast.toast(id ? t('post updated', getLang()) : t('post created', getLang()));
       navigate('/posts');
@@ -77,6 +85,8 @@ export default function PostEditor() {
   }
 
   function addTag() { if (tagInput.trim() && !tagNames.includes(tagInput.trim())) { setTagNames([...tagNames, tagInput.trim()]); setTagInput(''); } }
+  async function saveTemplate() { if (!templateName.trim() || !content) return; await api.post('/editor/templates', { name: templateName, html: content, css: visualCss }); toast.toast(t('template saved', getLang())); setTemplateName(''); api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])); }
+  function loadTemplate(tpl: any) { setContent(tpl.html); setVisualCss(tpl.css || ''); toast.toast(t('template loaded', getLang())); }
 
   return React.createElement('div', null,
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
@@ -95,7 +105,26 @@ export default function PostEditor() {
           React.createElement('input', { value: title, onChange: e => setTitle(e.target.value), placeholder: t('post title', getLang()), className: 'input-field text-lg font-semibold pr-20' }),
           React.createElement('span', { id: 'post-word-count', className: 'absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400' }, (content || '').replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length + ' ' + t('words', getLang()))
         ),
-        React.createElement(RichEditor, { value: content, onChange: setContent, placeholder: t('write your post content', getLang()) }),
+        // Editor mode tabs
+        React.createElement('div', { className: 'flex items-center border-b border-gray-200 mb-0' },
+          React.createElement('button', {
+            onClick: () => setVisualMode(false),
+            className: 'flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 transition-colors ' +
+              (!visualMode ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'),
+          }, React.createElement(FileText, { size: 14 }), t('rich text', getLang())),
+          React.createElement('button', {
+            onClick: () => setVisualMode(true),
+            className: 'flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 transition-colors ' +
+              (visualMode ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'),
+          }, React.createElement(Palette, { size: 14 }), t('visual design', getLang())),
+        ),
+        visualMode
+          ? React.createElement(VisualEditor, {
+              content, css: visualCss,
+              onChange: (html: string, css: string) => { setContent(html); setVisualCss(css); },
+              height: 'calc(100vh - 280px)',
+            })
+          : React.createElement(RichEditor, { value: content, onChange: setContent, placeholder: t('write your post content', getLang()) }),
         React.createElement('textarea', { value: excerpt, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setExcerpt(e.target.value), placeholder: t('excerpt (optional)', getLang()), className: 'input-field', rows: 3 })
       ),
       React.createElement('div', { className: 'space-y-4' },
@@ -116,6 +145,21 @@ export default function PostEditor() {
                     )
                   )
             )
+          )
+        ),
+        visualMode && React.createElement('div', { className: 'card p-4' },
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, 'Templates'),
+          React.createElement('div', { className: 'flex gap-1 mb-3' },
+            React.createElement('input', { value: templateName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setTemplateName(e.target.value), placeholder: 'Template name...', className: 'input-field flex-1 text-xs', onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter') saveTemplate(); } }),
+            React.createElement('button', { onClick: saveTemplate, disabled: !templateName.trim(), className: 'btn-secondary text-xs flex-shrink-0' }, 'Save')
+          ),
+          templates.length > 0 && React.createElement('div', { className: 'max-h-40 overflow-y-auto space-y-1' },
+            templates.map((t: any) => React.createElement('button', {
+              key: t.id,
+              onClick: () => loadTemplate(t),
+              className: 'w-full text-left text-xs px-2 py-1.5 rounded hover:bg-gray-50 text-gray-600 hover:text-gray-900 truncate block',
+              title: t.name,
+            }, t.name))
           )
         ),
         id && React.createElement(RevisionsPanel, { postId: id, onRestore: (post: any) => { setTitle(post.title); setContent(post.content || ''); setExcerpt(post.excerpt || ''); } }),

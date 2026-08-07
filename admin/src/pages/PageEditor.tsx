@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, ArrowLeft } from 'lucide-react';
+import { Save, ArrowLeft, Palette, FileText } from 'lucide-react';
 import { useToast } from '../lib/toast';
 import RichEditor from '../components/RichEditor';
+import VisualEditor from '../components/VisualEditor';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -16,13 +17,15 @@ export default function PageEditor() {
   const [parentPages, setParentPages] = useState<any[]>([]);
   const [menuOrder, setMenuOrder] = useState(0);
   const toast = useToast();
+  const [visualMode, setVisualMode] = useState(false);
+  const [visualCss, setVisualCss] = useState('');
   const [saving, setSaving] = useState(false);
 
-  useEffect(() => { api.get('/pages').then(r => { const all = r.data; setParentPages(all.filter((p: any) => p.id !== id)); if (id) { const p = all.find((x: any) => x.id === id); if (p) { setTitle(p.title); setContent(p.content); setStatus(p.status); setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); } } }); }, [id]);
+  useEffect(() => { api.get('/pages').then(r => { const all = r.data; setParentPages(all.filter((p: any) => p.id !== id)); if (id) { const p = all.find((x: any) => x.id === id); if (p) { setTitle(p.title); setContent(p.content); setStatus(p.status); setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } } }); }, [id]);
 
   async function handleSave(s: string) {
     setSaving(true);
-    try { if (id) await api.put(`/pages/${id}`, { title, content, status: s, menuOrder, parentId: parentId || null }); else await api.post('/pages', { title, content, status: s, menuOrder, parentId: parentId || null }); navigate('/pages'); } catch { toast.toast(t('save failed', getLang()), 'error'); } finally { setSaving(false); }
+    try { const payload: any = { title, content, status: s, menuOrder, parentId: parentId || null }; if (visualCss) payload.meta = { _visual_css: visualCss }; if (id) await api.put(`/pages/${id}`, payload); else await api.post('/pages', payload); navigate('/pages'); } catch { toast.toast(t('save failed', getLang()), 'error'); } finally { setSaving(false); }
   }
 
   return React.createElement('div', null,
@@ -39,7 +42,26 @@ export default function PageEditor() {
     React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
       React.createElement('div', { className: 'lg:col-span-2 space-y-4' },
         React.createElement('input', { value: title, onChange: e => setTitle(e.target.value), placeholder: t('page title', getLang()), className: 'input-field text-lg font-semibold' }),
-        React.createElement(RichEditor, { value: content, onChange: setContent, placeholder: t('write page content', getLang()) })
+        // Editor mode tabs
+        React.createElement('div', { className: 'flex items-center border-b border-gray-200 mb-0' },
+          React.createElement('button', {
+            onClick: () => setVisualMode(false),
+            className: 'flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 transition-colors ' +
+              (!visualMode ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'),
+          }, React.createElement(FileText, { size: 14 }), t('rich text', getLang())),
+          React.createElement('button', {
+            onClick: () => setVisualMode(true),
+            className: 'flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 transition-colors ' +
+              (visualMode ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'),
+          }, React.createElement(Palette, { size: 14 }), t('visual design', getLang())),
+        ),
+        visualMode
+          ? React.createElement(VisualEditor, {
+              content, css: visualCss,
+              onChange: (html: string, css: string) => { setContent(html); setVisualCss(css); },
+              height: 'calc(100vh - 280px)',
+            })
+          : React.createElement(RichEditor, { value: content, onChange: setContent, placeholder: t('write page content', getLang()) })
       ),
       React.createElement('div', { className: 'space-y-4' },
         React.createElement('div', { className: 'card p-4' },

@@ -29,17 +29,24 @@ router.get('/', (req: SiteRequest, res: Response) => {
     const theme = readTheme(tname);
     if (theme) {
       map.theme_name = theme.name;
-      map.theme_custom_css = theme.custom_css || '';
-      const effective = { ...theme.settings, ...themeOverrides(tname) };
+      const overrides = themeOverrides(tname);
+      // custom_css: prefer DB override, fall back to theme.json
+      map.theme_custom_css = overrides['custom_css'] || theme.custom_css || '';
+      const effective = { ...theme.settings, ...overrides };
       // Merge theme settings into the settings payload (primary_color etc.)
       for (const [k, v] of Object.entries(effective)) {
-        if (k === 'custom_css') continue;
+        if (k === 'custom_css') continue; // handled above as theme_custom_css
         map['theme_' + k] = v;
       }
       // Expose schema defaults so themes can read them before any override is saved
       for (const f of theme.settingsSchema || []) {
         if (map['theme_' + f.key] === undefined && f.default !== undefined) map['theme_' + f.key] = String(f.default);
       }
+      // Theme hook sections: load from DB so the frontend can inject them
+      const sectionRows = db.prepare("SELECT key, value FROM Setting WHERE key LIKE 'theme_section_%'").all() as any[];
+      sectionRows.forEach((r: any) => {
+        map[r.key] = r.value;
+      });
     }
     res.json(map);
   } catch (err: any) { res.status(500).json({ error: err.message }); }

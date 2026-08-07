@@ -3,7 +3,6 @@ import { useParams, Link } from 'react-router-dom';
 import useSEO from '../hooks/useSEO';
 import { cdnUrl } from '../lib/cdn';
 import api from '../lib/api';
-import { initLightbox } from '../lib/lightbox';
 import { t } from '../lib/i18n';
 import { useTheme } from '../themes';
 
@@ -16,7 +15,6 @@ export default function PostPage({ settings }: { settings: Record<string, string
 
   useEffect(() => {
     let cancelled = false;
-    setTimeout(initLightbox, 100);
     api.get('/posts/slug/' + slug).then(r => {
       if (cancelled) return;
       setPost(r.data);

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Save, CheckCircle2, Upload, Trash2 } from 'lucide-react';
+import { Save, CheckCircle2, Upload, Trash2, Palette, X } from 'lucide-react';
+import VisualEditor from '../components/VisualEditor';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -7,12 +8,19 @@ export default function Appearance() {
   const [themes, setThemes] = useState<any[]>([]);
   const [activeTheme, setActiveTheme] = useState('');
   const [settings, setSettings] = useState<Record<string, string>>({});
-  const [saved, setSaved] = useState(false);
+	const [saved, setSaved] = useState(false);
+	const [customCss, setCustomCss] = useState('');
+	const [editingSection, setEditingSection] = useState<string | null>(null);
+	const [sectionHtml, setSectionHtml] = useState('');
+	const [sectionCss, setSectionCss] = useState('');
 
-  useEffect(() => {
-    api.get('/themes').then(r => { setThemes(r.data.themes || []); setActiveTheme(r.data.active || 'default'); }).catch(() => {});
-    api.get('/settings').then(r => setSettings(r.data)).catch(() => {});
-  }, []);
+	useEffect(() => {
+		api.get('/themes').then(r => { setThemes(r.data.themes || []); setActiveTheme(r.data.active || 'default'); }).catch(() => {});
+		api.get('/settings').then(r => {
+			setSettings(r.data);
+			if (r.data.theme_custom_css) setCustomCss(r.data.theme_custom_css);
+		}).catch(() => {});
+	}, []);
 
   async function activate(name: string) {
     await api.post('/themes/' + name + '/activate');
@@ -30,7 +38,10 @@ export default function Appearance() {
       const v = settings['theme_' + k];
       if (v !== undefined) themeSettings[k] = v;
     }
-    if (activeTheme) await api.put('/themes/' + activeTheme + '/settings', themeSettings);
+	    if (activeTheme) {
+	      themeSettings.custom_css = customCss;
+	      await api.put('/themes/' + activeTheme + '/settings', themeSettings);
+	    }
     // Site identity stays global
     const identity: Record<string, string> = {};
     if (settings.site_logo !== undefined) identity.site_logo = settings.site_logo;
@@ -38,6 +49,46 @@ export default function Appearance() {
     if (Object.keys(identity).length > 0) await api.put('/settings', identity);
     setSaved(true); setTimeout(() => setSaved(false), 2000);
   }
+
+  function openSectionEditor(location: string) {
+    const key = 'theme_section_' + location;
+    const raw = settings[key];
+    let data = { html: '', css: '' };
+    try { if (raw) data = JSON.parse(raw); } catch {}
+
+    setEditingSection(location);
+    setSectionHtml(data.html || '');
+    setSectionCss(data.css || '');
+  }
+
+  async function saveSection() {
+    if (!editingSection) return;
+    await api.put('/themes/sections/' + editingSection, { html: sectionHtml, css: sectionCss });
+    const r = await api.get('/settings');
+    setSettings(r.data);
+    setEditingSection(null);
+  }
+
+  function closeSectionEditor() { setEditingSection(null); }
+
+  const HOOK_LOCATIONS = [
+    { id: 'before_header', label: 'Before Header' },
+    { id: 'after_header', label: 'After Header' },
+    { id: 'before_content', label: 'Before Content' },
+    { id: 'after_content', label: 'After Content' },
+    { id: 'before_footer', label: 'Before Footer' },
+    { id: 'after_footer', label: 'After Footer' },
+  ];
+
+  // Keyboard: Ctrl+S to save in section editor
+  useEffect(() => {
+    if (!editingSection) return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveSection(); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [editingSection, sectionHtml, sectionCss]);
 
   return React.createElement('div', null,
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
@@ -146,22 +197,78 @@ export default function Appearance() {
           selectField(t('posts per row', getLang()), 'theme_posts_per_row', ['1', '2', '3'], settings, setSettings),
         )
       ),
-      React.createElement('div', { className: 'card p-6' },
-        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('site identity', getLang())),
-        React.createElement('div', { className: 'space-y-4' },
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('site logo url', getLang())),
-            React.createElement('input', { value: settings.site_logo || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, site_logo: e.target.value }), className: 'input-field', placeholder: 'https://...' }),
-            settings.site_logo && React.createElement('img', { src: settings.site_logo, alt: t('logo', getLang()), className: 'mt-2 h-8' })
+        React.createElement('div', { className: 'card p-6' },
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('site identity', getLang())),
+          React.createElement('div', { className: 'space-y-4' },
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('site logo url', getLang())),
+              React.createElement('input', { value: settings.site_logo || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, site_logo: e.target.value }), className: 'input-field', placeholder: 'https://...' }),
+              settings.site_logo && React.createElement('img', { src: settings.site_logo, alt: t('logo', getLang()), className: 'mt-2 h-8' })
+            ),
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('favicon url', getLang())),
+              React.createElement('input', { value: settings.favicon || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, favicon: e.target.value }), className: 'input-field', placeholder: 'https://...' })
+            ),
+          )
+        ),
+      ),
+      // Custom CSS
+      React.createElement('div', { className: 'card p-6 mb-6' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('custom css', getLang())),
+        React.createElement('p', { className: 'text-xs text-gray-400 mb-2' }, t('custom css hint', getLang())),
+        React.createElement('textarea', {
+          value: customCss,
+          onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setCustomCss(e.target.value),
+          className: 'input-field font-mono text-xs',
+          rows: 12,
+          placeholder: '/* Custom CSS for the active theme */\nbody { }\n',
+          spellCheck: false,
+        }),
+      ),
+      // Theme Sections (visual hook editor)
+      React.createElement('div', { className: 'card p-6 mb-6' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, 'Theme Sections'),
+        React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, 'Visually design custom sections injected at key theme locations.'),
+        React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3' },
+          HOOK_LOCATIONS.map(loc => {
+            const hasContent = (() => {
+              try { const d = JSON.parse(settings['theme_section_' + loc.id] || '{}'); return !!(d.html || d.css); }
+              catch { return false; }
+            })();
+            return React.createElement('button', {
+              key: loc.id,
+              onClick: () => openSectionEditor(loc.id),
+              className: 'flex items-center gap-2 p-3 rounded-lg border text-left text-sm transition-colors ' +
+                (hasContent ? 'border-primary-300 bg-primary-50 text-primary-700 hover:bg-primary-100' : 'border-gray-200 text-gray-600 hover:border-gray-300 hover:bg-gray-50'),
+            }, React.createElement(Palette, { size: 14 }), loc.label, hasContent && React.createElement('span', { className: 'ml-auto w-2 h-2 rounded-full bg-primary-500' }));
+          })
+        ),
+      ),
+      // Section Editor Modal
+      editingSection && React.createElement('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-black/60', onClick: closeSectionEditor },
+        React.createElement('div', {
+          className: 'bg-white rounded-lg shadow-2xl w-full mx-4 flex flex-col',
+          style: { maxWidth: 'calc(100vw - 48px)', height: 'calc(100vh - 80px)' },
+          onClick: (e: React.MouseEvent) => e.stopPropagation(),
+        },
+          React.createElement('div', { className: 'flex items-center justify-between p-3 border-b border-gray-200 flex-shrink-0' },
+            React.createElement('h3', { className: 'text-base font-semibold text-gray-900' }, 'Design: ' + HOOK_LOCATIONS.find(l => l.id === editingSection)?.label),
+            React.createElement('div', { className: 'flex items-center gap-2' },
+              React.createElement('button', { onClick: saveSection, className: 'btn-primary text-xs' }, React.createElement(Save, { size: 14 }), t('save', getLang())),
+              React.createElement('button', { onClick: closeSectionEditor, className: 'p-1.5 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 18 })),
+            ),
           ),
-          React.createElement('div', null,
-            React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('favicon url', getLang())),
-            React.createElement('input', { value: settings.favicon || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, favicon: e.target.value }), className: 'input-field', placeholder: 'https://...' })
+          React.createElement('div', { className: 'flex-1 overflow-hidden' },
+            React.createElement(VisualEditor, {
+              content: sectionHtml,
+              css: sectionCss,
+              onChange: (html: string, css: string) => { setSectionHtml(html); setSectionCss(css); },
+              height: '100%',
+            })
           ),
         )
-      )
-    )
-  );
+      ),
+    );
 }
 
 function colorField(label: string, key: string, settings: Record<string, string>, setSettings: any) {

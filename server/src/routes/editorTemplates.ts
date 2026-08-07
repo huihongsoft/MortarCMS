@@ -27,8 +27,9 @@ router.post('/templates', authenticate, requireCap('edit_posts'), (req: AuthRequ
   try {
     const { name, html } = req.body || {};
     if (!name || !html) { res.status(400).json({ error: 'name and html required' }); return; }
+    const css = String(req.body.css || '');
     const templates = loadTemplates();
-    const tpl = { id: cuid(), name: String(name).slice(0, 50), html: String(html), createdAt: new Date().toISOString() };
+    const tpl = { id: cuid(), name: String(name).slice(0, 50), html: String(html), css, createdAt: new Date().toISOString() };
     templates.push(tpl);
     saveTemplates(templates);
     res.status(201).json(tpl);

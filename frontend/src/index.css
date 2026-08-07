@@ -19,5 +19,6 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 .comment-reply .comment-reply { margin-left: 1.5rem; }
 
 /* Accessibility */
-a:focus, button:focus, input:focus, select:focus, textarea:focus { outline: 2px solid #3b82f6; outline-offset: 2px; }
+input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid #3b82f6; outline-offset: 2px; }
+a:focus-visible, button:focus-visible { outline: none; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0; }
