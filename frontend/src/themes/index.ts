@@ -7,6 +7,9 @@ import DefaultFooter from './default/Footer';
 import DefaultHomeLayout from './default/HomeLayout';
 import DefaultPostLayout from './default/PostLayout';
 import DefaultPageLayout from './default/PageLayout';
+import DefaultArchiveLayout from './default/ArchiveLayout';
+import DefaultSearchLayout from './default/SearchLayout';
+import DefaultAuthorLayout from './default/AuthorLayout';
 
 import MagazineHeader from './magazine/Header';
 import MagazineFooter from './magazine/Footer';
@@ -19,6 +22,9 @@ export interface Theme {
   HomeLayout: React.ComponentType<any>;
   PostLayout: React.ComponentType<any>;
   PageLayout: React.ComponentType<any>;
+  ArchiveLayout: React.ComponentType<any>;
+  SearchLayout: React.ComponentType<any>;
+  AuthorLayout: React.ComponentType<any>;
 }
 
 const themes: Record<string, Partial<Theme>> = {
@@ -29,6 +35,9 @@ const themes: Record<string, Partial<Theme>> = {
     HomeLayout: DefaultHomeLayout,
     PostLayout: DefaultPostLayout,
     PageLayout: DefaultPageLayout,
+    ArchiveLayout: DefaultArchiveLayout,
+    SearchLayout: DefaultSearchLayout,
+    AuthorLayout: DefaultAuthorLayout,
   },
   magazine: {
     name: 'magazine',
@@ -49,6 +58,9 @@ export function getTheme(name?: string): Theme {
     HomeLayout: t.HomeLayout || base.HomeLayout,
     PostLayout: t.PostLayout || base.PostLayout,
     PageLayout: t.PageLayout || base.PageLayout,
+    ArchiveLayout: t.ArchiveLayout || base.ArchiveLayout,
+    SearchLayout: t.SearchLayout || base.SearchLayout,
+    AuthorLayout: t.AuthorLayout || base.AuthorLayout,
   };
 }
 
