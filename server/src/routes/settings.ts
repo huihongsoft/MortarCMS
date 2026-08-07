@@ -36,6 +36,10 @@ router.get('/', (req: SiteRequest, res: Response) => {
         if (k === 'custom_css') continue;
         map['theme_' + k] = v;
       }
+      // Expose schema defaults so themes can read them before any override is saved
+      for (const f of theme.settingsSchema || []) {
+        if (map['theme_' + f.key] === undefined && f.default !== undefined) map['theme_' + f.key] = String(f.default);
+      }
     }
     res.json(map);
   } catch (err: any) { res.status(500).json({ error: err.message }); }

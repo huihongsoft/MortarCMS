@@ -13,5 +13,35 @@
     "sidebar_position": "left",
     "posts_per_row": "1"
   },
-  "custom_css": "article { border-radius: 12px; } .widget-title { letter-spacing: 0.05em; }"
+  "custom_css": "article { border-radius: 12px; } .widget-title { letter-spacing: 0.05em; }",
+  "settingsSchema": [
+    {
+      "key": "header_layout",
+      "label": "Header Layout",
+      "type": "select",
+      "options": [
+        "centered",
+        "left"
+      ],
+      "default": "centered"
+    },
+    {
+      "key": "show_lead_story",
+      "label": "Show lead story card",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "banner_text",
+      "label": "Masthead banner text",
+      "type": "text",
+      "default": ""
+    },
+    {
+      "key": "footer_note",
+      "label": "Footer note",
+      "type": "textarea",
+      "default": "Thank you for reading."
+    }
+  ]
 }

@@ -3,9 +3,19 @@ import fs from 'fs';
 import path from 'path';
 import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { upload } from '../middleware/upload';
+import { execFileSync } from 'child_process';
 
 const router = Router();
 const themesDir = path.join(__dirname, '..', '..', 'themes');
+
+export interface SettingField {
+  key: string;
+  label: string;
+  type: 'text' | 'textarea' | 'checkbox' | 'select' | 'color' | 'number';
+  options?: string[];
+  default?: string;
+}
 
 export interface ThemeMeta {
   name: string;
@@ -14,6 +24,7 @@ export interface ThemeMeta {
   author: string;
   active: boolean;
   settings: Record<string, string>;
+  settingsSchema: SettingField[];
   custom_css: string;
 }
 
@@ -29,6 +40,7 @@ function readTheme(name: string): ThemeMeta | null {
       author: meta.author || '',
       active: false,
       settings: meta.settings || {},
+      settingsSchema: Array.isArray(meta.settingsSchema) ? meta.settingsSchema : [],
       custom_css: meta.custom_css || '',
     };
   } catch { return null; }
@@ -82,6 +94,54 @@ router.put('/:name/settings', authenticate, requireCap('manage_options'), (req: 
     const entries = req.body as Record<string, string>;
     const upsert = db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
     for (const [k, v] of Object.entries(entries)) upsert.run(cuid(), 'theme_' + t.name + '_' + k, String(v));
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: install a theme from a zip (theme.json + optional screenshot.css etc.)
+router.post('/install', authenticate, requireCap('manage_options'), upload.single('file'), (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) { res.status(400).json({ error: 'No theme zip uploaded' }); return; }
+    const tmpDir = path.join(require('os').tmpdir(), 'mortar-theme-' + Date.now());
+    fs.mkdirSync(tmpDir, { recursive: true });
+    execFileSync('unzip', ['-q', req.file.path, '-d', tmpDir]);
+    // Find the theme root (dir containing theme.json)
+    let root: string | null = null;
+    if (fs.existsSync(path.join(tmpDir, 'theme.json'))) root = tmpDir;
+    else {
+      for (const e of fs.readdirSync(tmpDir)) {
+        const p = path.join(tmpDir, e);
+        if (fs.statSync(p).isDirectory() && fs.existsSync(path.join(p, 'theme.json'))) { root = p; break; }
+      }
+    }
+    if (!root) { res.status(400).json({ error: 'theme.json not found in archive' }); return; }
+    // Zip-slip guard
+    const resolvedRoot = fs.realpathSync(root);
+    const resolvedTmp = fs.realpathSync(tmpDir);
+    if (!resolvedRoot.startsWith(resolvedTmp + path.sep)) { res.status(400).json({ error: 'Invalid archive structure' }); return; }
+    const meta = JSON.parse(fs.readFileSync(path.join(root, 'theme.json'), 'utf8'));
+    const name = meta.name;
+    if (!name) { res.status(400).json({ error: 'theme.json missing name' }); return; }
+    const dest = path.join(themesDir, name);
+    if (fs.existsSync(dest)) { res.status(400).json({ error: 'Theme already exists: ' + name }); return; }
+    fs.cpSync(root, dest, { recursive: true });
+    try { fs.unlinkSync(req.file.path); } catch {}
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    res.status(201).json({ success: true, name, message: 'Theme installed. Activate it from the list above.' });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: delete a theme (cannot delete the active theme or the default)
+router.delete('/:name', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    const name = req.params.name;
+    if (name === 'default') { res.status(400).json({ error: 'Cannot delete the default theme' }); return; }
+    if (activeThemeName() === name) { res.status(400).json({ error: 'Activate another theme before deleting this one' }); return; }
+    const dest = path.join(themesDir, name);
+    if (!fs.existsSync(dest)) { res.status(404).json({ error: 'Theme not found' }); return; }
+    fs.rmSync(dest, { recursive: true, force: true });
+    // Clean overrides
+    db.prepare("DELETE FROM Setting WHERE key LIKE 'theme_" + name + "_%'").run();
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

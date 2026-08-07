@@ -23,13 +23,17 @@ export default function MagazineHeader({ settings }: { settings: Record<string, 
     window.location.href = '/';
   }
 
+  const headerLayout = settings.theme_header_layout || 'centered';
+  const bannerText = settings.theme_banner_text || '';
+
   return React.createElement('header', { className: 'bg-white border-b-4 border-red-700 sticky top-0 z-40 shadow-sm' },
     // Masthead
-    React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-5 text-center' },
+    React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-5 ' + (headerLayout === 'centered' ? 'text-center' : 'flex items-end justify-between') },
       React.createElement(Link, { to: '/', className: 'inline-block' },
         React.createElement('h1', { className: 'text-3xl md:text-4xl font-bold tracking-tight text-gray-900', style: { fontFamily: 'Georgia, serif' } }, settings.site_title || 'Mortar'),
         settings.site_description && React.createElement('p', { className: 'text-xs uppercase tracking-[0.3em] text-red-700 mt-1' }, settings.site_description)
-      )
+      ),
+      bannerText && React.createElement('p', { className: 'text-sm italic text-gray-500 hidden md:block' }, bannerText)
     ),
     // Nav bar
     React.createElement('div', { className: 'border-t border-gray-200' },

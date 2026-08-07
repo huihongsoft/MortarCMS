@@ -496,6 +496,11 @@ const zh: Record<string, string> = {
   'security score': '安全评分',
   'security summary hint': '80+ 良好 · 60-79 需改进 · <60 存在风险',
   'audit generated at': '检测时间',
+
+'install theme': '安装主题',
+  'install theme hint': '上传包含 theme.json 的主题 zip 包安装(配置型主题,即装即用)。',
+  'theme custom settings': '主题自定义设置',
+  'delete theme': '删除主题',
 };
 const en: Record<string, string> = {};
 

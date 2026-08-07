@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Save, CheckCircle2 } from 'lucide-react';
+import { Save, CheckCircle2, Upload, Trash2 } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -22,7 +22,10 @@ export default function Appearance() {
   async function save() {
     // Persist theme settings to the active theme's overrides
     const themeSettings: Record<string, string> = {};
-    const themeKeys = ['primary_color', 'background', 'text_color', 'link_color', 'heading_font', 'body_font', 'sidebar_position', 'posts_per_row'];
+    // Fixed core keys + schema-declared custom keys (theme_<key> from the active theme)
+    const activeMeta = themes.find((x: any) => x.name === activeTheme);
+    const schemaKeys = (activeMeta?.settingsSchema || []).map((f: any) => f.key);
+    const themeKeys = ['primary_color', 'background', 'text_color', 'link_color', 'heading_font', 'body_font', 'sidebar_position', 'posts_per_row', ...schemaKeys];
     for (const k of themeKeys) {
       const v = settings['theme_' + k];
       if (v !== undefined) themeSettings[k] = v;
@@ -56,13 +59,67 @@ export default function Appearance() {
                 React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, th.description),
                 React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, t('by', getLang()) + ' ' + th.author),
               ),
-              !th.active && React.createElement('button', { onClick: () => activate(th.name), className: 'btn-secondary text-xs shrink-0' }, t('activate', getLang()))
+              React.createElement('div', { className: 'flex items-center gap-2 shrink-0' },
+                !th.active && React.createElement('button', { onClick: () => activate(th.name), className: 'btn-secondary text-xs' }, t('activate', getLang())),
+                th.name !== 'default' && React.createElement('button', {
+                  onClick: async () => {
+                    if (!confirm(t('delete theme', getLang()) + ' "' + th.name + '"?')) return;
+                    try { await api.delete('/themes/' + th.name); window.location.reload(); }
+                    catch (e: any) { alert(e.response?.data?.error || t('delete failed', getLang())); }
+                  },
+                  className: 'p-1.5 text-gray-400 hover:text-red-600',
+                  title: t('delete', getLang()),
+                }, React.createElement(Trash2, { size: 14 })),
+              )
             )
           )
         )
       ),
-      themes.length === 0 && React.createElement('p', { className: 'text-xs text-gray-400' }, 'No themes found in server/themes/.')
+      themes.length === 0 && React.createElement('p', { className: 'text-xs text-gray-400' }, 'No themes found in server/themes/.'),
+      // Install theme from zip (Halo-style upload)
+      React.createElement('div', { className: 'mt-4 pt-4 border-t border-gray-100' },
+        React.createElement('label', { className: 'btn-secondary text-xs cursor-pointer inline-flex' },
+          React.createElement(Upload, { size: 14 }), t('install theme', getLang()),
+          React.createElement('input', {
+            type: 'file', accept: '.zip', className: 'hidden',
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+              const f = e.target.files?.[0];
+              if (!f) return;
+              const fd = new FormData();
+              fd.append('file', f);
+              api.post('/themes/install', fd).then((r: any) => { alert(r.data.message); window.location.reload(); }).catch((err: any) => alert(err.response?.data?.error || t('install failed', getLang())));
+              e.target.value = '';
+            },
+          }),
+        ),
+        React.createElement('p', { className: 'text-xs text-gray-400 mt-2' }, t('install theme hint', getLang()))
+      )
     ),
+    (() => {
+      const activeMeta = themes.find((x: any) => x.name === activeTheme);
+      const schema = activeMeta?.settingsSchema || [];
+      if (schema.length === 0) return null;
+      return React.createElement('div', { className: 'card p-6 mb-6' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('theme custom settings', getLang())),
+        React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4' },
+          schema.map((f: any) =>
+            React.createElement('div', { key: f.key },
+              React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, f.label),
+              f.type === 'checkbox'
+                ? React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer mt-1' },
+                    React.createElement('input', { type: 'checkbox', checked: (settings['theme_' + f.key] || f.default || '') === '1', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.checked ? '1' : '0' }), className: 'rounded border-gray-300 text-primary-600' }),
+                    React.createElement('span', { className: 'text-sm text-gray-600' }, f.label))
+                : f.type === 'select'
+                  ? React.createElement('select', { value: settings['theme_' + f.key] || f.default || '', onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.value }), className: 'input-field' },
+                      (f.options || []).map((o: string) => React.createElement('option', { key: o, value: o }, o)))
+                  : f.type === 'textarea'
+                    ? React.createElement('textarea', { value: settings['theme_' + f.key] || f.default || '', onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.value }), rows: 3, className: 'input-field' })
+                    : React.createElement('input', { type: f.type === 'color' ? 'color' : 'text', value: settings['theme_' + f.key] || f.default || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.value }), className: 'input-field' })
+            )
+          )
+        )
+      );
+    })(),
     React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-2 gap-6' },
       React.createElement('div', { className: 'card p-6' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('theme colors', getLang())),
