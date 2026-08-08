@@ -169,9 +169,38 @@ table tbody tr { transition: background-color 0.12s ease; }
 /* ============================================================
    GrapesJS skin — match the admin's modern look
    ============================================================ */
-/* Selection outline, handles and other GrapesJS accents follow the
-   admin theme color instead of GrapesJS's default blue */
-.visual-editor-container { --gjs-color-blue: var(--admin-primary, #2563eb); }
+/* GrapesJS theme variables — panels, buttons, sectors and fields are all
+   driven by these (via .gjs-one-bg/.gjs-two-color/.gjs-four-color classes);
+   overriding the variables on the container guarantees they apply
+   regardless of CSS cascade order */
+.visual-editor-container {
+  --gjs-primary-color: #ffffff;                 /* panel backgrounds (one-bg) */
+  --gjs-secondary-color: #374151;               /* panel text (two-color) */
+  --gjs-tertiary-color: #f9fafb;                /* hover/secondary bg (three-bg) */
+  --gjs-quaternary-color: var(--admin-primary, #2563eb); /* accent (four-color) */
+  --gjs-main-color: #374151;
+  --gjs-main-dark-color: rgba(0, 0, 0, 0.05);   /* field/input backgrounds */
+  --gjs-font-color: #374151;                    /* buttons text */
+  --gjs-main-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --gjs-font-size: 14px;
+  /* Selection outline, handles and other accents follow the admin theme color */
+  --gjs-color-blue: var(--admin-primary, #2563eb);
+  --gjs-color-light-blue: color-mix(in srgb, var(--admin-primary, #2563eb) 30%, transparent);
+  --gjs-color-yellow: #f59e0b;
+  --gjs-color-red: #ef4444;
+  --gjs-color-green: #10b981;
+}
+.dark .visual-editor-container {
+  --gjs-primary-color: #1f2937;                 /* panels = admin card color */
+  --gjs-secondary-color: #e5e7eb;               /* light text */
+  --gjs-tertiary-color: #374151;                /* hover bg */
+  --gjs-quaternary-color: #ffffff;              /* active accent */
+  --gjs-main-color: #e5e7eb;
+  --gjs-main-dark-color: rgba(255, 255, 255, 0.08);
+  --gjs-font-color: #d1d5db;
+  --gjs-color-blue: #60a5fa;
+  --gjs-color-light-blue: rgba(96,165,250,0.3);
+}
 .visual-editor-container .gjs-editor {
   border: 1px solid #e5e7eb;
   border-radius: 12px;
