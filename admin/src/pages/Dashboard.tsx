@@ -9,8 +9,8 @@ import { useToast } from '../lib/toast';
 export default function Dashboard() {
   const toast = useToast();
   const [stats, setStats] = useState({ posts: 0, pages: 0, comments: 0, users: 0, media: 0, tags: 0 });
-  const [todayPosts, setTodayPosts] = useState(0);
   const [recent, setRecent] = useState<any[]>([]);
+  const [recentComments, setRecentComments] = useState<any[]>([]);
   const [statsData, setStatsData] = useState<any>(null);
   const [quickTitle, setQuickTitle] = useState('');
   const [quickContent, setQuickContent] = useState('');
@@ -28,13 +28,15 @@ export default function Dashboard() {
 
   useEffect(() => {
     api.get('/posts/admin?limit=5').then(r => setRecent(r.data.posts)).catch(() => {});
+    api.get('/comments/admin?limit=5&status=approved').then(r => setRecentComments(r.data.comments)).catch(() => {});
     Promise.all([
       api.get('/posts/admin?limit=1').then(r => r.data.total),
       api.get('/pages').then(r => r.data.length),
       api.get('/comments/admin?limit=1').then(r => r.data.total),
       api.get('/users').then(r => r.data.length),
       api.get('/media?limit=1').then(r => r.data.total),
-    ]).then(([p, pg, c, u, m]) => setStats({ posts: p, pages: pg, comments: c, users: u, media: m, tags: 0 }));
+      api.get('/tags').then(r => r.data.length),
+    ]).then(([p, pg, c, u, m, tg]) => setStats({ posts: p, pages: pg, comments: c, users: u, media: m, tags: tg }));
     api.get('/stats?days=14').then(r => setStatsData(r.data)).catch(() => {});
   }, []);
 
@@ -127,7 +129,14 @@ export default function Dashboard() {
       ),
       React.createElement('div', { className: 'card p-5' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('recent comments', getLang())),
-        React.createElement('p', { className: 'text-sm text-gray-500' }, t('no recent comments', getLang()))
+        recentComments.length === 0
+          ? React.createElement('p', { className: 'text-sm text-gray-500' }, t('no recent comments', getLang()))
+          : React.createElement('div', { className: 'space-y-2' }, recentComments.map((c: any) =>
+              React.createElement('div', { key: c.id, className: 'p-3 rounded-lg bg-gray-50' },
+                React.createElement('p', { className: 'text-sm text-gray-700 line-clamp-2' }, c.content),
+                React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, `${c.author} · ${new Date(c.createdAt).toLocaleDateString()}`)
+              )
+            ))
       )
     )
   );
