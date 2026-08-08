@@ -180,7 +180,7 @@ router.post('/generate', authenticate, async (req: AuthRequest, res: Response) =
       : style === 'marketing' ? '使用有感染力、营销风格的语言，突出价值。'
       : style === 'concise' ? '使用简洁精炼的语言，去掉废话。'
       : '';
-    if (!['generate', 'polish', 'continue', 'translate', 'summarize', 'seo', 'tags'].includes(action)) {
+    if (!['generate', 'polish', 'continue', 'translate', 'summarize', 'seo', 'tags', 'topics'].includes(action)) {
       res.status(400).json({ error: '未知操作' }); return;
     }
 
@@ -201,6 +201,10 @@ router.post('/generate', authenticate, async (req: AuthRequest, res: Response) =
       prompt = '请为文章「' + String(title || '') + '」生成 SEO 元数据，严格按此格式输出两行：\nSEO标题：xxx\nSEO描述：xxx';
     } else if (action === 'tags') {
       prompt = '请为文章「' + String(title || '') + '」（内容节选如下）推荐 3-6 个标签，只输出标签名，用逗号分隔，不要序号。\n\n' + String(content || '').replace(/<[^>]*>/g, '').slice(0, 1500);
+    } else if (action === 'topics') {
+      const recent = (db.prepare("SELECT title FROM Post WHERE type = 'post' AND status = 'published' ORDER BY publishedAt DESC LIMIT 10").all() as any[]).map((p: any) => p.title).join('、');
+      const cats = (db.prepare('SELECT name FROM Category ORDER BY name').all() as any[]).map((c: any) => c.name).join('、');
+      prompt = '结合站点已有内容（最近文章: ' + recent + '；分类: ' + cats + '），推荐 5 个适合本博客的新选题。每个选题输出格式：\n## 选题标题\n- 切入角度：...\n- 目标读者：...\n- 建议分类：...';
     }
 
     const result = await chatComplete(provider, [

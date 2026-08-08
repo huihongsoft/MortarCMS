@@ -151,6 +151,7 @@ export default function PostEditor() {
     { key: 'translate', label: t('ai translate', getLang()), icon: '🌐' },
     { key: 'summarize', label: t('ai summarize', getLang()), icon: '📝' },
     { key: 'tags', label: t('ai suggest tags', getLang()), icon: '🏷️' },
+    { key: 'topics', label: t('ai topics', getLang()), icon: '💡' },
     { key: 'seo', label: t('ai seo', getLang()), icon: '🔍' },
   ];
 

@@ -433,6 +433,7 @@ const zh: Record<string, string> = {
   'site context': '站点上下文',
   'context on': '上下文',
   'context off': '关闭上下文',
+  'ai topics': '选题建议',
   'seo': 'SEO 优化',
   'seo title': 'SEO 标题',
   'seo description': 'SEO 描述',
