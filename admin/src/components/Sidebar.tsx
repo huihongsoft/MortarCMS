@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck } from 'lucide-react';
+import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, Bot, Cpu, MessageCircle } from 'lucide-react';
 import CommentBadge from './CommentBadge';
 import { useAuth } from '../lib/auth';
 import { t, getLang } from '../lib/i18n';
@@ -30,6 +30,14 @@ const groups: { title: string; items: { to: string; icon: any; label: string; ro
       { to: '/appearance', icon: Palette, label: t('appearance', getLang()) },
       { to: '/menus', icon: Menu, label: t('menus', getLang()) },
       { to: '/widgets', icon: Shapes, label: t('widgets', getLang()) },
+    ],
+  },
+  {
+    title: t('ai assistant', getLang()),
+    items: [
+      { to: '/ai', icon: Bot, label: t('ai chat', getLang()) },
+      { to: '/ai/bindings', icon: MessageCircle, label: t('ai bindings', getLang()) },
+      { to: '/ai/settings', icon: Cpu, label: t('ai settings', getLang()), role: 'admin' },
     ],
   },
   {

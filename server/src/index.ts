@@ -35,6 +35,7 @@ import statsRoutes from './routes/stats';
 import installRoutes, { installed as isInstalled } from './routes/install';
 import securityRoutes from './routes/security';
 import editorTemplatesRoutes from './routes/editorTemplates';
+import aiRoutes from './routes/ai';
 import { loadActivePlugins } from './plugins/manager';
 import { resolveSite } from './middleware/site';
 
@@ -157,6 +158,7 @@ app.use('/api/install', installRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/editor', editorTemplatesRoutes);
+app.use('/api/ai', aiRoutes);
 app.use('/api', sitemapRoutes);
 app.use('/api/feed', cacheControl('600'), feedRoutes);
 app.use('/api/sitemap.xml', cacheControl('600'));

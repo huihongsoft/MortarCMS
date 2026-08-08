@@ -9,7 +9,7 @@ const router = Router();
 router.get('/', (req: SiteRequest, res: Response) => {
   try {
     // Only expose non-sensitive keys to the public
-    const SENSITIVE_PREFIXES = ['smtp_', 'jwt_', 'market_', 'active_plugins', 'custom_templates', 'maintenance_'];
+    const SENSITIVE_PREFIXES = ['smtp_', 'jwt_', 'market_', 'active_plugins', 'custom_templates', 'maintenance_', 'ai_'];
     const settings = db.prepare('SELECT key, value FROM Setting').all() as any[];
     const map: Record<string, string> = {};
     settings.forEach((s: any) => {
