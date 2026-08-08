@@ -397,6 +397,7 @@ const zh: Record<string, string> = {
   'stop': '停止',
   'generation stopped': '已停止生成',
   'new chat': '新建对话',
+  'retry': '重试',
   'seo': 'SEO 优化',
   'seo title': 'SEO 标题',
   'seo description': 'SEO 描述',

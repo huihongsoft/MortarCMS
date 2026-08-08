@@ -310,7 +310,7 @@ export default function AIChat() {
 
   return React.createElement('div', { className: 'flex gap-4 h-[calc(100vh-140px)]' },
     // ---- Sessions sidebar ----
-    React.createElement('div', { className: 'w-56 flex-shrink-0 flex flex-col bg-white border border-gray-100 rounded-2xl overflow-hidden' },
+    React.createElement('div', { className: 'w-56 flex-shrink-0 flex flex-col bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl overflow-hidden' },
       React.createElement('div', { className: 'p-2 border-b border-gray-100' },
         React.createElement('button', { onClick: newSession, className: 'w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg bg-primary-50 text-primary-600 hover:bg-primary-100 transition-colors' },
           React.createElement('Plus', { size: 13 }), t('new chat', getLang()))),
@@ -319,7 +319,7 @@ export default function AIChat() {
           key: sess.id,
           onClick: () => setSessionId(sess.id),
           className: 'group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ' +
-            (sess.id === sessionId ? 'bg-primary-50 text-primary-700' : 'text-gray-600 hover:bg-gray-50'),
+            (sess.id === sessionId ? 'bg-primary-50 dark:bg-primary-500/20 text-primary-700 dark:text-primary-300' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'),
         },
           React.createElement(MessageSquare, { size: 13, className: 'flex-shrink-0 opacity-60' }),
           React.createElement('span', { className: 'flex-1 text-xs truncate' }, sess.title),
@@ -341,7 +341,13 @@ export default function AIChat() {
           React.createElement('p', { className: 'text-xs text-gray-400' }, t('ai assistant subtitle', getLang()))),
       ),
       React.createElement('div', { className: 'flex items-center gap-2' },
-        error && React.createElement('p', { className: 'text-xs text-red-600' }, error),
+        error && React.createElement(React.Fragment, null,
+          React.createElement('p', { className: 'text-xs text-red-600' }, error),
+          React.createElement('button', {
+            onClick: () => { const last = [...messages].filter(m => m.role === 'user').pop(); if (last) send(last.content); },
+            className: 'text-xs px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-300 hover:border-primary-400 hover:text-primary-600',
+          }, React.createElement(RotateCcw, { size: 11 }), ' ' + t('retry', getLang())),
+        ),
         active?.messages.length ? React.createElement('button', {
           onClick: () => updateSession(active.id, x => ({ ...x, messages: [] })),
           className: 'text-xs text-gray-400 hover:text-red-600',
@@ -369,9 +375,9 @@ export default function AIChat() {
         return React.createElement('div', { key: i, className: 'flex gap-3 ' + (m.role === 'user' ? 'justify-end' : '') },
           m.role === 'assistant' && React.createElement('div', { className: 'w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0' },
             React.createElement(Bot, { size: 15, className: 'text-white' })),
-          React.createElement('div', { className: 'max-w-[75%] ' + (m.role === 'user' ? 'bg-primary-600 text-white rounded-2xl rounded-br-md px-4 py-2.5' : 'bg-white border border-gray-100 rounded-2xl rounded-tl-md px-4 py-2.5 shadow-sm group') },
+          React.createElement('div', { className: 'max-w-[75%] ' + (m.role === 'user' ? 'bg-primary-600 text-white rounded-2xl rounded-br-md px-4 py-2.5' : 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700 rounded-2xl rounded-tl-md px-4 py-2.5 shadow-sm group') },
             m.tools && m.tools.length > 0 && React.createElement('div', { className: 'mb-2 flex flex-wrap gap-1' },
-              m.tools.map((tool, j) => React.createElement('span', { key: j, className: 'text-[10px] px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-100' }, '⚡ ' + tool))),
+              m.tools.map((tool, j) => React.createElement('span', { key: j, className: 'text-[10px] px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-100 dark:border-purple-500/30' }, '⚡ ' + tool))),
             m.role === 'assistant' && !m.content && busy
               ? React.createElement('div', { className: 'flex gap-1 py-1' },
                   [0, 1, 2].map(d => React.createElement('span', { key: d, className: 'w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce', style: { animationDelay: d * 0.15 + 's' } })))
@@ -384,9 +390,9 @@ export default function AIChat() {
               canRegen && React.createElement('button', { onClick: () => regenerate(messages[lastUserIdx]?.content || ''), title: t('regenerate', getLang()), className: 'p-1 text-gray-400 hover:text-primary-600' },
                 React.createElement(RotateCcw, { size: 13 })),
             ),
-            m.ts && React.createElement('p', { className: 'text-[10px] text-gray-300 mt-1' }, new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
+            m.ts && React.createElement('p', { className: 'text-[10px] text-gray-300 dark:text-gray-600 mt-1' }, new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
           ),
-          m.role === 'user' && React.createElement('div', { className: 'w-8 h-8 rounded-lg bg-gray-200 flex items-center justify-center flex-shrink-0' },
+          m.role === 'user' && React.createElement('div', { className: 'w-8 h-8 rounded-lg bg-gray-200 dark:bg-gray-700 flex items-center justify-center flex-shrink-0' },
             React.createElement(User, { size: 15, className: 'text-gray-500' })),
         );
       }),
