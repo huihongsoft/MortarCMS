@@ -270,29 +270,26 @@ export default function Appearance() {
           })
         ),
       ),
-      // Section Editor Modal
-      editingSection && React.createElement('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-black/60', onClick: closeSectionEditor },
-        React.createElement('div', {
-          className: 'bg-white rounded-lg shadow-2xl w-full mx-4 flex flex-col',
-          style: { maxWidth: 'calc(100vw - 48px)', height: 'calc(100vh - 80px)' },
-          onClick: (e: React.MouseEvent) => e.stopPropagation(),
-        },
-          React.createElement('div', { className: 'flex items-center justify-between p-3 border-b border-gray-200 flex-shrink-0' },
+      // Section Editor — full-screen builder (same as post/page visual mode)
+      editingSection && React.createElement('div', { className: 'fixed inset-0 z-50 bg-white flex flex-col' },
+        React.createElement('div', { className: 'flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white shrink-0' },
+          React.createElement('div', { className: 'flex items-center gap-2' },
+            React.createElement('button', { onClick: closeSectionEditor, className: 'p-1.5 text-gray-500 hover:text-gray-900 rounded-lg hover:bg-gray-100' }, React.createElement(X, { size: 18 })),
             React.createElement('h3', { className: 'text-base font-semibold text-gray-900' }, 'Design: ' + HOOK_LOCATIONS.find(l => l.id === editingSection)?.label),
-            React.createElement('div', { className: 'flex items-center gap-2' },
-              React.createElement('button', { onClick: saveSection, className: 'btn-primary text-xs' }, React.createElement(Save, { size: 14 }), t('save', getLang())),
-              React.createElement('button', { onClick: closeSectionEditor, className: 'p-1.5 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 18 })),
-            ),
           ),
-          React.createElement('div', { className: 'flex-1 overflow-hidden' },
-            React.createElement(VisualEditor, {
-              content: sectionHtml,
-              css: sectionCss,
-              onChange: (html: string, css: string) => { setSectionHtml(html); setSectionCss(css); },
-              height: '100%',
-            })
+          React.createElement('div', { className: 'flex items-center gap-2' },
+            React.createElement('button', { onClick: closeSectionEditor, className: 'btn-secondary text-xs' }, 'Cancel'),
+            React.createElement('button', { onClick: saveSection, className: 'btn-primary text-xs' }, React.createElement(Save, { size: 14 }), t('save', getLang())),
           ),
-        )
+        ),
+        React.createElement('div', { className: 'flex-1 relative overflow-hidden' },
+          React.createElement(VisualEditor, {
+            content: sectionHtml,
+            css: sectionCss,
+            onChange: (html: string, css: string) => { setSectionHtml(html); setSectionCss(css); },
+            height: '100%',
+          })
+        ),
       ),
     );
 }

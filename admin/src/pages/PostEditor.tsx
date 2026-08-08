@@ -119,10 +119,10 @@ export default function PostEditor() {
         )
       ),
       visualMode && React.createElement('div', { className: 'card p-4' },
-        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, 'Templates'),
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('templates', getLang())),
         React.createElement('div', { className: 'flex gap-1 mb-3' },
-          React.createElement('input', { value: templateName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setTemplateName(e.target.value), placeholder: 'Template name...', className: 'input-field flex-1 text-xs', onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter') saveTemplate(); } }),
-          React.createElement('button', { onClick: saveTemplate, disabled: !templateName.trim(), className: 'btn-secondary text-xs flex-shrink-0' }, 'Save')
+          React.createElement('input', { value: templateName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setTemplateName(e.target.value), placeholder: t('template name', getLang()), className: 'input-field flex-1 text-xs', onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter') saveTemplate(); } }),
+          React.createElement('button', { onClick: saveTemplate, disabled: !templateName.trim(), className: 'btn-secondary text-xs flex-shrink-0' }, t('save', getLang()))
         ),
         templates.length > 0 && React.createElement('div', { className: 'max-h-40 overflow-y-auto space-y-1' },
           templates.map((t: any) => React.createElement('button', {

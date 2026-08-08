@@ -577,8 +577,46 @@ export default function VisualEditor({ content, css, onChange, height }: VisualE
     editor.on('styleable:change', notifyChange);
     editor.on('change:device', notifyChange);
 
+    // ---- Canvas zoom controls (floating bar + Ctrl/Cmd + wheel) ----
+    const zoomBar = document.createElement('div');
+    zoomBar.className = 've-zoom-bar';
+    zoomBar.innerHTML =
+      '<button data-zoom="out" title="Zoom out">−</button>' +
+      '<span class="ve-zoom-value">100%</span>' +
+      '<button data-zoom="in" title="Zoom in">+</button>' +
+      '<button data-zoom="fit" title="Reset zoom (100%)">⤢</button>';
+    containerRef.current.appendChild(zoomBar);
+
+    const updateZoomLabel = () => {
+      const v = zoomBar.querySelector('.ve-zoom-value') as HTMLElement;
+      if (v) v.textContent = Math.round(editor.Canvas.getZoom()) + '%';
+    };
+    zoomBar.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('button');
+      if (!btn) return;
+      const cur = editor.Canvas.getZoom();
+      const d = btn.dataset.zoom;
+      if (d === 'in') editor.Canvas.setZoom(Math.min(300, cur + 10));
+      else if (d === 'out') editor.Canvas.setZoom(Math.max(30, cur - 10));
+      else editor.Canvas.setZoom(100);
+      updateZoomLabel();
+    });
+    editor.on('canvas:zoom', updateZoomLabel);
+
+    // Ctrl/Cmd + wheel zoom
+    const wheelHandler = (e: WheelEvent) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      const cur = editor.Canvas.getZoom();
+      const next = e.deltaY < 0 ? Math.min(300, cur + 10) : Math.max(30, cur - 10);
+      editor.Canvas.setZoom(next);
+    };
+    containerRef.current.addEventListener('wheel', wheelHandler, { passive: false });
+
     return () => {
       clearTimeout(changeTimer);
+      zoomBar.remove();
+      containerRef.current?.removeEventListener('wheel', wheelHandler);
       editor.destroy();
       editorRef.current = null;
     };
