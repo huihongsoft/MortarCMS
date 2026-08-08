@@ -169,6 +169,9 @@ table tbody tr { transition: background-color 0.12s ease; }
 /* ============================================================
    GrapesJS skin — match the admin's modern look
    ============================================================ */
+/* Selection outline, handles and other GrapesJS accents follow the
+   admin theme color instead of GrapesJS's default blue */
+.visual-editor-container { --gjs-color-blue: var(--admin-primary, #2563eb); }
 .visual-editor-container .gjs-editor {
   border: 1px solid #e5e7eb;
   border-radius: 12px;

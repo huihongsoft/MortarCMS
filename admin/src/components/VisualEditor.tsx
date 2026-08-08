@@ -374,7 +374,13 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
             '--body-font': s.theme_body_font || 'inherit',
           };
           const vStyle = canvas.createElement('style');
-          vStyle.textContent = ':root{' + Object.entries(vars).map(([k, v]) => k + ':' + v + ';').join('') + '}';
+          // The admin's theme accent color (read from the parent document,
+          // CSS vars don't cross iframe boundaries)
+          const adminPrimary = getComputedStyle(document.documentElement).getPropertyValue('--admin-primary').trim() || '#3b82f6';
+          vStyle.textContent = ':root{' + Object.entries(vars).map(([k, v]) => k + ':' + v + ';').join('') +
+            '--primary:' + adminPrimary + ';' +
+            '--primary-soft:' + adminPrimary + '22;' +
+            '}';
           canvas.head.appendChild(vStyle);
           // Theme custom CSS (same styles the live site injects via App.tsx)
           const themeCss = s.theme_custom_css as string | undefined;
