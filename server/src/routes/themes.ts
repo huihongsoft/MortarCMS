@@ -4,7 +4,7 @@ import path from 'path';
 import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
-import { execFileSync } from 'child_process';
+import { execFileSync, execSync } from 'child_process';
 
 const router = Router();
 const themesDir = path.join(__dirname, '..', '..', 'themes');
@@ -129,6 +129,43 @@ router.post('/install', authenticate, requireCap('manage_options'), upload.singl
     fs.rmSync(tmpDir, { recursive: true, force: true });
     res.status(201).json({ success: true, name, message: 'Theme installed. Activate it from the list above.' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: rebuild built-in theme bundles from frontend source
+// (frontend/src/themes/<name>/ -> vite build -> server/themes/<name>/theme.js)
+router.post('/rebuild', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    const frontendDir = path.join(__dirname, '..', '..', '..', 'frontend');
+    if (!fs.existsSync(path.join(frontendDir, 'package.json'))) {
+      res.status(400).json({ error: 'Frontend source not found on this server (' + frontendDir + ')' });
+      return;
+    }
+    const builtin = ['default', 'magazine', 'twentytwentyfour', 'twentytwentyone', 'twentynineteen', 'twentyseventeen'];
+    const results: string[] = [];
+    for (const t of builtin) {
+      // Skip themes that aren't installed on this server (user may have deleted them)
+      if (!fs.existsSync(path.join(themesDir, t))) continue;
+      const cmd = 'npx vite build --config vite.themes.config.ts';
+      try {
+        execSync(cmd, {
+          cwd: frontendDir,
+          timeout: 180000,
+          encoding: 'utf8',
+          env: { ...process.env, THEME_NAME: t },
+        });
+        const src = path.join(frontendDir, 'dist', 'themes', t + '.js');
+        if (!fs.existsSync(src)) { results.push(t + ': build OK but output missing'); continue; }
+        fs.copyFileSync(src, path.join(themesDir, t, 'theme.js'));
+        results.push(t + ': rebuilt');
+      } catch (err: any) {
+        results.push(t + ': FAILED (' + (err.message || err).toString().split('\n')[0].slice(0, 120) + ')');
+      }
+    }
+    const failed = results.filter(r => r.includes('FAILED'));
+    res.json({ success: failed.length === 0, results, error: failed.length > 0 ? failed.join('; ') : null });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Theme rebuild failed: ' + err.message });
+  }
 });
 
 // Admin: delete a theme (cannot delete the active theme or the default)

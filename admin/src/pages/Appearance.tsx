@@ -13,6 +13,7 @@ export default function Appearance() {
 	const [editingSection, setEditingSection] = useState<string | null>(null);
 	const [sectionHtml, setSectionHtml] = useState('');
 	const [sectionCss, setSectionCss] = useState('');
+	const [rebuilding, setRebuilding] = useState(false);
 
 	useEffect(() => {
 		api.get('/themes').then(r => { setThemes(r.data.themes || []); setActiveTheme(r.data.active || 'default'); }).catch(() => {});
@@ -25,6 +26,23 @@ export default function Appearance() {
   async function activate(name: string) {
     await api.post('/themes/' + name + '/activate');
     window.location.reload();
+  }
+
+  // One-click rebuild of built-in theme bundles from frontend source
+  async function rebuildThemes() {
+    setRebuilding(true);
+    try {
+      const r = await api.post('/themes/rebuild');
+      if (r.data?.success) {
+        alert('Theme bundles rebuilt:\n' + (r.data.results || []).join('\n'));
+      } else {
+        alert('Some themes failed:\n' + (r.data?.results || []).join('\n') + '\n\n' + (r.data?.error || ''));
+      }
+    } catch (e: any) {
+      alert(e.response?.data?.error || 'Theme rebuild failed');
+    } finally {
+      setRebuilding(false);
+    }
   }
 
   async function save() {
@@ -129,21 +147,29 @@ export default function Appearance() {
         )
       ),
       themes.length === 0 && React.createElement('p', { className: 'text-xs text-gray-400' }, 'No themes found in server/themes/.'),
-      // Install theme from zip (Halo-style upload)
+      // Install theme from zip (Halo-style upload) + rebuild built-in theme bundles
       React.createElement('div', { className: 'mt-4 pt-4 border-t border-gray-100' },
-        React.createElement('label', { className: 'btn-secondary text-xs cursor-pointer inline-flex' },
-          React.createElement(Upload, { size: 14 }), t('install theme', getLang()),
-          React.createElement('input', {
-            type: 'file', accept: '.zip', className: 'hidden',
-            onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
-              const f = e.target.files?.[0];
-              if (!f) return;
-              const fd = new FormData();
-              fd.append('file', f);
-              api.post('/themes/install', fd).then((r: any) => { alert(r.data.message); window.location.reload(); }).catch((err: any) => alert(err.response?.data?.error || t('install failed', getLang())));
-              e.target.value = '';
-            },
-          }),
+        React.createElement('div', { className: 'flex items-center gap-2 flex-wrap' },
+          React.createElement('label', { className: 'btn-secondary text-xs cursor-pointer inline-flex' },
+            React.createElement(Upload, { size: 14 }), t('install theme', getLang()),
+            React.createElement('input', {
+              type: 'file', accept: '.zip', className: 'hidden',
+              onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+                const f = e.target.files?.[0];
+                if (!f) return;
+                const fd = new FormData();
+                fd.append('file', f);
+                api.post('/themes/install', fd).then((r: any) => { alert(r.data.message); window.location.reload(); }).catch((err: any) => alert(err.response?.data?.error || t('install failed', getLang())));
+                e.target.value = '';
+              },
+            }),
+          ),
+          React.createElement('button', {
+            onClick: rebuildThemes,
+            disabled: rebuilding,
+            className: 'btn-secondary text-xs',
+            title: 'Rebuilds theme.js bundles from frontend/src/themes source (takes a few seconds)',
+          }, rebuilding ? 'Rebuilding...' : 'Rebuild Theme Bundles'),
         ),
         React.createElement('p', { className: 'text-xs text-gray-400 mt-2' }, t('install theme hint', getLang()))
       )
