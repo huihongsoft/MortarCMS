@@ -13,6 +13,13 @@ export function listShortcodes(): string[] {
   return [...shortcodes.keys()];
 }
 
+// Render a single shortcode by name with attrs (used for live previews)
+export function renderShortcode(name: string, attrs: Record<string, string> = {}): string {
+  const fn = shortcodes.get(name);
+  if (!fn) return '';
+  try { return fn(attrs, '', {}); } catch { return ''; }
+}
+
 // Parse and render all shortcodes in an HTML string (server-side, like WP do_shortcode)
 export function applyShortcodes(html: string, ctx: any = {}): string {
   if (!html || shortcodes.size === 0) return html;

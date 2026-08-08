@@ -1,6 +1,9 @@
 import { Router, Response } from 'express';
 import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { renderShortcode } from '../utils/shortcodes';
+
+const CMS_TYPES = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud'];
 
 const router = Router();
 
@@ -14,6 +17,16 @@ function saveTemplates(templates: any[]): void {
     'custom_templates', JSON.stringify(templates)
   );
 }
+
+// Public: live preview HTML for a CMS data block (used by the visual editor canvas)
+router.get('/preview-cms/:type', (req: AuthRequest, res: Response) => {
+  const type = req.params.type;
+  if (!CMS_TYPES.includes(type)) { res.status(400).json({ error: 'Unknown CMS block type' }); return; }
+  try {
+    const html = renderShortcode(type, { limit: String(req.query.limit || 5) });
+    res.json({ html });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
 
 // Public: custom block templates (used by the editor)
 router.get('/templates', (_req: AuthRequest, res: Response) => {

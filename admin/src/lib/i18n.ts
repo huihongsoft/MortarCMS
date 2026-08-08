@@ -338,6 +338,8 @@ const zh: Record<string, string> = {
   'save template': '保存模板',
   'saved': '已保存',
   'saved!': '已保存!',
+  'saving...': '保存中...',
+  'unsaved changes': '有未保存的更改',
   'scheduled': '定时',
   'scroll to top': '回到顶部',
   'search': '搜索',

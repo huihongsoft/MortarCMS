@@ -159,7 +159,9 @@ export default function VisualEditor({ content, css, onChange, height }: VisualE
 
   // Custom GrapesJS plugin that adds CMS blocks and customizations
   const cmsPlugin = useCallback((editor: Editor) => {
-    // Register CMS data block component types
+    // Register CMS data block component types with LIVE preview views.
+    // The view fetches real data and renders it into the canvas only;
+    // the model stays a placeholder, so the saved HTML keeps data-cms markers.
     CMS_BLOCKS.forEach(block => {
       editor.DomComponents.addType(`cms-${block.id}`, {
         model: {
@@ -173,9 +175,52 @@ export default function VisualEditor({ content, css, onChange, height }: VisualE
           },
         },
         view: {
-          // Keep the placeholder look
+          init() {
+            this.previewHtml = '';
+            this.fetchPreview();
+            // Re-apply the live preview when GrapesJS re-renders the component
+            // (e.g. after editing styles), so it doesn't flash back to the placeholder.
+            this.model.on('change', () => this.applyPreview());
+          },
+          fetchPreview() {
+            const el = this.el as HTMLElement | undefined;
+            if (!el) return;
+            fetch('/api/editor/preview-cms/' + block.id)
+              .then(r => r.json())
+              .then((d: any) => {
+                if (d.html && this.el && (this.el as HTMLElement).isConnected) {
+                  this.previewHtml = d.html;
+                  this.applyPreview();
+                }
+              })
+              .catch(() => {});
+          },
+          applyPreview() {
+            if (this.previewHtml && this.el) {
+              (this.el as HTMLElement).innerHTML = this.previewHtml;
+            }
+          },
         },
       });
+    });
+
+    // Block search filter in the blocks panel
+    editor.on('load', () => {
+      const blocksEl = (containerRef.current as HTMLElement)?.querySelector('.gjs-blocks-c');
+      if (!blocksEl || blocksEl.querySelector('.gjs-blocks-search')) return;
+      const search = document.createElement('input');
+      search.type = 'text';
+      search.placeholder = 'Search blocks...';
+      search.className = 'gjs-blocks-search';
+      search.style.cssText = 'width:100%;margin:0 0 10px;padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:12px;outline:none;background:#fff;color:#374151;';
+      search.addEventListener('input', () => {
+        const q = search.value.toLowerCase().trim();
+        blocksEl.querySelectorAll('.gjs-block').forEach((b: Element) => {
+          const label = (b as HTMLElement).textContent?.toLowerCase() || '';
+          (b as HTMLElement).style.display = !q || label.includes(q) ? '' : 'none';
+        });
+      });
+      blocksEl.prepend(search);
     });
 
     // Add custom blocks to the block manager

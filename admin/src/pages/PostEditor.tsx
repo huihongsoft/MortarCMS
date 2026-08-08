@@ -27,6 +27,7 @@ export default function PostEditor() {
   const [users, setUsers] = useState<any[]>([]);
   const [visualMode, setVisualMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
   const [visualCss, setVisualCss] = useState('');
   const [templates, setTemplates] = useState<any[]>([]);
   const [templateName, setTemplateName] = useState('');
@@ -75,14 +76,17 @@ export default function PostEditor() {
 
   async function handleSave(s: string) {
     setSaving(true);
+    setSaveState('saving');
     try {
       const schedDate = (document.getElementById('scheduled-date') as HTMLInputElement)?.value || null;
       const payload: any = { title, slug: slug || undefined, content, excerpt, status: s, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: s === 'scheduled' && schedDate ? new Date(schedDate).toISOString() : undefined, siteId: siteId || null };
       if (visualCss) payload.meta = { _visual_css: visualCss };
       if (id) await api.put(`/posts/${id}`, payload); else await api.post('/posts', payload);
+      setSaveState('saved');
       toast.toast(id ? t('post updated', getLang()) : t('post created', getLang()));
       navigate('/posts');
     } catch (e: any) {
+      setSaveState('dirty');
       const msg = e?.response?.data?.error || e?.response?.data?.message || t('save failed', getLang());
       toast.toast(typeof msg === 'string' ? msg : t('save failed', getLang()), 'error');
     } finally { setSaving(false); }
@@ -227,6 +231,14 @@ export default function PostEditor() {
           React.createElement('span', { className: 'absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400' }, (content || '').replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length + ' ' + t('words', getLang()))
         ),
         React.createElement('div', { className: 'flex-1' }),
+        // Save status indicator
+        React.createElement('span', {
+          className: 'flex items-center gap-1.5 text-[11px] ' +
+            (saveState === 'saved' ? 'text-green-600' : saveState === 'saving' ? 'text-blue-600' : 'text-amber-600'),
+        },
+          React.createElement('span', { className: 'inline-block w-2 h-2 rounded-full ' + (saveState === 'saved' ? 'bg-green-500' : saveState === 'saving' ? 'bg-blue-500 animate-pulse' : 'bg-amber-500') }),
+          saveState === 'saved' ? t('saved', getLang()) : saveState === 'saving' ? t('saving...', getLang()) : t('unsaved changes', getLang())
+        ),
         React.createElement('button', {
           onClick: () => setShowSettings(!showSettings),
           className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border ' +
@@ -239,7 +251,7 @@ export default function PostEditor() {
       React.createElement('div', { className: 'flex-1 relative overflow-hidden' },
         React.createElement(VisualEditor, {
           content, css: visualCss,
-          onChange: (html: string, css: string) => { setContent(html); setVisualCss(css); },
+          onChange: (html: string, css: string) => { setContent(html); setVisualCss(css); setSaveState('dirty'); },
           height: '100%',
         }),
         showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },

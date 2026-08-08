@@ -19,6 +19,7 @@ export default function PageEditor() {
   const toast = useToast();
   const [visualMode, setVisualMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
   const [visualCss, setVisualCss] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -26,7 +27,8 @@ export default function PageEditor() {
 
   async function handleSave(s: string) {
     setSaving(true);
-    try { const payload: any = { title, content, status: s, menuOrder, parentId: parentId || null }; if (visualCss) payload.meta = { _visual_css: visualCss }; if (id) await api.put(`/pages/${id}`, payload); else await api.post('/pages', payload); navigate('/pages'); } catch (e: any) { const msg = e?.response?.data?.error || e?.response?.data?.message || t('save failed', getLang()); toast.toast(typeof msg === 'string' ? msg : t('save failed', getLang()), 'error'); } finally { setSaving(false); }
+    setSaveState('saving');
+    try { const payload: any = { title, content, status: s, menuOrder, parentId: parentId || null }; if (visualCss) payload.meta = { _visual_css: visualCss }; if (id) await api.put(`/pages/${id}`, payload); else await api.post('/pages', payload); setSaveState('saved'); navigate('/pages'); } catch (e: any) { setSaveState('dirty'); const msg = e?.response?.data?.error || e?.response?.data?.message || t('save failed', getLang()); toast.toast(typeof msg === 'string' ? msg : t('save failed', getLang()), 'error'); } finally { setSaving(false); }
   }
 
   return React.createElement('div', null,
@@ -53,6 +55,14 @@ export default function PageEditor() {
           React.createElement('input', { value: title, onChange: e => setTitle(e.target.value), placeholder: t('page title', getLang()), className: 'input-field text-sm font-semibold pr-16' })
         ),
         React.createElement('div', { className: 'flex-1' }),
+        // Save status indicator
+        React.createElement('span', {
+          className: 'flex items-center gap-1.5 text-[11px] ' +
+            (saveState === 'saved' ? 'text-green-600' : saveState === 'saving' ? 'text-blue-600' : 'text-amber-600'),
+        },
+          React.createElement('span', { className: 'inline-block w-2 h-2 rounded-full ' + (saveState === 'saved' ? 'bg-green-500' : saveState === 'saving' ? 'bg-blue-500 animate-pulse' : 'bg-amber-500') }),
+          saveState === 'saved' ? t('saved', getLang()) : saveState === 'saving' ? t('saving...', getLang()) : t('unsaved changes', getLang())
+        ),
         React.createElement('button', {
           onClick: () => setShowSettings(!showSettings),
           className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border ' +
@@ -65,7 +75,7 @@ export default function PageEditor() {
       React.createElement('div', { className: 'flex-1 relative overflow-hidden' },
         React.createElement(VisualEditor, {
           content, css: visualCss,
-          onChange: (html: string, css: string) => { setContent(html); setVisualCss(css); },
+          onChange: (html: string, css: string) => { setContent(html); setVisualCss(css); setSaveState('dirty'); },
           height: '100%',
         }),
         showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },
