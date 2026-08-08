@@ -200,6 +200,14 @@ export default function VisualEditor({ content, css, onChange, height }: VisualE
     });
   }, []);
 
+  // Always-最新 onChange，避免 effect 依赖导致重建
+  const onChangeRef = useRef(onChange);
+  onChangeRef.current = onChange;
+  // Editor 当前已加载内容的镜像，用于区分「内部编辑回传」与「外部加载」
+  const lastContentRef = useRef(content);
+
+  // Initialize the editor ONCE on mount. Re-init on every prop change would
+  // destroy the instance mid-edit (the property panel flashing bug).
   useEffect(() => {
     if (!containerRef.current || editorRef.current) return;
 
@@ -328,17 +336,21 @@ export default function VisualEditor({ content, css, onChange, height }: VisualE
         editor.setStyle(css);
       } catch { /* ignore invalid CSS */ }
     }
+    lastContentRef.current = content;
 
-    // Notify parent of changes on key events
+    // Notify parent of changes on key events (debounced)
     let changeTimer: ReturnType<typeof setTimeout>;
     const notifyChange = () => {
       clearTimeout(changeTimer);
       changeTimer = setTimeout(() => {
-        if (editorRef.current) {
-          const html = editorRef.current.getHtml();
-          const styles = editorRef.current.getCss();
-          onChange(html, styles || '');
-        }
+        const ed = editorRef.current;
+        if (!ed) return;
+        const html = ed.getHtml();
+        const styles = ed.getCss();
+        // Mark as internally-produced BEFORE notifying so the watch effect
+        // below doesn't reload the editor with the same content.
+        lastContentRef.current = html;
+        onChangeRef.current(html, styles || '');
       }, 500);
     };
 
@@ -353,7 +365,21 @@ export default function VisualEditor({ content, css, onChange, height }: VisualE
       editor.destroy();
       editorRef.current = null;
     };
-  }, [content, css, onChange, height, cmsPlugin]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Watch for EXTERNAL content changes (e.g. template load from the parent).
+  // Skips reload when the change originated from the editor itself.
+  useEffect(() => {
+    const ed = editorRef.current;
+    if (!ed) return;
+    if (content !== lastContentRef.current) {
+      lastContentRef.current = content;
+      try { ed.setComponents(content || ''); } catch { /* ignore */ }
+      try { ed.setStyle(css || ''); } catch { /* ignore invalid CSS */ }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content, css]);
 
   return React.createElement('div', {
     ref: containerRef,
