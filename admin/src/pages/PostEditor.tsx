@@ -29,6 +29,8 @@ export default function PostEditor() {
   const [showSettings, setShowSettings] = useState(false);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
   const [visualCss, setVisualCss] = useState('');
+  const [seoTitle, setSeoTitle] = useState('');
+  const [seoDesc, setSeoDesc] = useState('');
   const [templates, setTemplates] = useState<any[]>([]);
   const [templateName, setTemplateName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -48,7 +50,7 @@ export default function PostEditor() {
     const timer = setInterval(async () => {
       try {
         const payload: any = { title, content, excerpt, status: 'draft', siteId: siteId || null };
-        if (visualCss) payload.meta = { _visual_css: visualCss };
+        payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc };
         const postId = id || createdIdRef.current;
         if (postId) await api.put('/posts/' + postId, payload);
         else {
@@ -76,7 +78,7 @@ export default function PostEditor() {
   useEffect(() => { api.get('/sites').then(r => setSites(r.data || [])).catch(() => {}); api.get('/users').then(r => setUsers(r.data)).catch(() => {});
     api.get('/categories').then(r => setCategories(r.data)); api.get('/media').then(r => setMediaItems(r.data.media || []));
     api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])).catch(() => {});
-    if (id) { api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.category.id) || []); setTagNames(p.tags?.map((t: any) => t.tag.name) || []); if (p.featured) setFeatured(p.featured); if (p.siteId) setSiteId(p.siteId); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } }); } }, [id]);
+    if (id) { api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.category.id) || []); setTagNames(p.tags?.map((t: any) => t.tag.name) || []); if (p.featured) setFeatured(p.featured); if (p.siteId) setSiteId(p.siteId); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); if (p.meta?._seo_title) setSeoTitle(p.meta._seo_title); if (p.meta?._seo_desc) setSeoDesc(p.meta._seo_desc); } }); } }, [id]);
 
   // stay=false (publish): navigate to the post list; stay=true (draft from the
   // builder): keep editing in place, like WordPress
@@ -86,7 +88,7 @@ export default function PostEditor() {
     try {
       const schedDate = (document.getElementById('scheduled-date') as HTMLInputElement)?.value || null;
       const payload: any = { title, slug: slug || undefined, content, excerpt, status: s, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: s === 'scheduled' && schedDate ? new Date(schedDate).toISOString() : undefined, siteId: siteId || null };
-      if (visualCss) payload.meta = { _visual_css: visualCss };
+      payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc };
       const postId = id || createdIdRef.current;
       if (postId) await api.put(`/posts/${postId}`, payload);
       else {
@@ -127,6 +129,26 @@ export default function PostEditor() {
                   )
                 )
           )
+        )
+      ),
+      // SEO panel with Google search preview
+      React.createElement('div', { className: 'card p-4' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('seo', getLang())),
+        React.createElement('div', { className: 'mb-3' },
+          React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('seo title', getLang())),
+          React.createElement('input', { value: seoTitle, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSeoTitle(e.target.value), placeholder: title || t('post title', getLang()), maxLength: 70, className: 'input-field text-xs' }),
+          React.createElement('p', { className: 'text-[10px] text-gray-400 mt-1' }, seoTitle.length + '/70')
+        ),
+        React.createElement('div', { className: 'mb-3' },
+          React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('seo description', getLang())),
+          React.createElement('textarea', { value: seoDesc, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setSeoDesc(e.target.value), placeholder: excerpt || t('excerpt (optional)', getLang()), maxLength: 160, rows: 3, className: 'input-field text-xs' }),
+          React.createElement('p', { className: 'text-[10px] text-gray-400 mt-1' }, seoDesc.length + '/160')
+        ),
+        // Google-style search preview
+        React.createElement('div', { className: 'rounded-lg border border-gray-200 bg-white p-3' },
+          React.createElement('p', { className: 'text-sm text-blue-700 hover:underline truncate' }, seoTitle || title || 'Post title'),
+          React.createElement('p', { className: 'text-xs text-green-700 truncate' }, window.location.origin + '/post/' + (slug || 'post-slug')),
+          React.createElement('p', { className: 'text-xs text-gray-600 line-clamp-2 mt-0.5' }, seoDesc || excerpt || 'Post description appears here...')
         )
       ),
       visualMode && React.createElement('div', { className: 'card p-4' },

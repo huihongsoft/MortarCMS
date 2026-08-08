@@ -34,9 +34,11 @@ export default function PostPage({ settings }: { settings: Record<string, string
     setCommentForm({ author: '', email: '', content: '' });
   }
 
+  const seoTitle = post?.meta?._seo_title || post?.title;
+  const seoDesc = post?.meta?._seo_desc || post?.excerpt || '';
   useSEO(post ? {
-    title: post.title,
-    description: post.excerpt || '',
+    title: seoTitle,
+    description: seoDesc,
     image: cdnUrl(post.featured, settings),
     url: (settings.site_url || window.location.origin) + '/post/' + post.slug,
     type: 'article',
@@ -44,8 +46,8 @@ export default function PostPage({ settings }: { settings: Record<string, string
       {
         '@context': 'https://schema.org',
         '@type': 'Article',
-        headline: post.title,
-        description: post.excerpt || undefined,
+        headline: seoTitle,
+        description: seoDesc || undefined,
         image: cdnUrl(post.featured, settings),
         datePublished: post.publishedAt || post.createdAt,
         dateModified: post.updatedAt || post.createdAt,
