@@ -137,6 +137,50 @@ register('list_posts', '列出文章，可按状态/关键词过滤，返回标�
   return db.prepare(sql).all(...params);
 });
 
+// --- Full-site content search (lightweight RAG): keyword search over
+// posts/pages with snippet extraction so the AI can cite site content ---
+register('search_site_content', '在全站文章中检索内容，返回匹配文章和关键片段。适合回答"我的站里有没有写过XX"、引用站内观点等。', {
+  type: 'object',
+  properties: {
+    query: { type: 'string', description: '检索关键词或短语（必填）' },
+    limit: { type: 'number', description: '返回条数，默认 3，最大 8' },
+  },
+  required: ['query'],
+}, async (args) => {
+  const q = String(args.query || '').trim();
+  if (!q) return { error: '查询词不能为空' };
+  const limit = Math.min(parseInt(args.limit) || 3, 8);
+  const terms = q.split(/\s+/).filter(Boolean).map((t: string) => t.replace(/[%_]/g, ''));
+  const rows = db.prepare("SELECT id, title, slug, content, excerpt, status FROM Post WHERE type IN ('post','page') ORDER BY createdAt DESC LIMIT 200").all() as any[];
+
+  // Score by term hits in title/content/excerpt
+  const scored = rows.map((p: any) => {
+    const text = ((p.title || '') + ' ' + (p.excerpt || '') + ' ' + (p.content || '')).toLowerCase();
+    let score = 0;
+    for (const term of terms) {
+      const t = term.toLowerCase();
+      if (p.title?.toLowerCase().includes(t)) score += 10;
+      if (p.excerpt?.toLowerCase().includes(t)) score += 3;
+      const cnt = (text.match(new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')) || []).length;
+      score += Math.min(cnt, 5);
+    }
+    return { p, score };
+  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+
+  return scored.map(({ p, score }) => {
+    // Extract a snippet around the first match
+    let snippet = '';
+    const lower = (p.content || '').toLowerCase();
+    const idx = terms.map(t => lower.indexOf(t.toLowerCase())).filter(i => i >= 0).sort((a, b) => a - b)[0];
+    if (idx !== undefined && p.content) {
+      snippet = p.content.slice(Math.max(0, idx - 60), idx + 180).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
+    } else {
+      snippet = (p.excerpt || '').slice(0, 200);
+    }
+    return { title: p.title, url: '/post/' + p.slug, status: p.status, relevance: score, snippet: snippet + (snippet.length >= 180 ? '…' : '') };
+  });
+});
+
 // --- Get single post ---
 register('get_post', '获取单篇文章的完整内容，通过 id 或 slug', {
   type: 'object',
