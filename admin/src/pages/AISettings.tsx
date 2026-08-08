@@ -173,7 +173,7 @@ export default function AISettings() {
               React.createElement('td', { className: 'py-1.5 text-xs text-gray-500' }, new Date(r.createdAt).toLocaleString()),
               React.createElement('td', { className: 'py-1.5 text-xs text-gray-700 dark:text-gray-200' }, r.username || '-'),
               React.createElement('td', { className: 'py-1.5 text-xs text-gray-500' }, r.kind),
-              React.createElement('td', { className: 'py-1.5 text-xs text-gray-500 text-right' }, r.tokens))))))),
+              React.createElement('td', { className: 'py-1.5 text-xs text-gray-500 text-right' }, r.tokens))))))
     ),
 
     // ---- Permissions ----
