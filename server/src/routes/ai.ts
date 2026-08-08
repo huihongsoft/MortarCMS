@@ -6,7 +6,7 @@ import {
   setDefaultProvider, chatComplete, pushAssistantWithTools, pushToolResults, testProvider,
 } from '../utils/ai';
 import {
-  getAiAllowedRoles, getToolPermissions, isRoleAllowed, listToolSchemas, toolCallToResult, executeTool, guardUserMessage, memoryPrompt,
+  getAiAllowedRoles, getToolPermissions, isRoleAllowed, listToolSchemas, toolCallToResult, executeTool, guardUserMessage, memoryPrompt, mdToHtml,
 } from '../utils/aiTools';
 
 const router = Router();
@@ -168,38 +168,6 @@ router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) 
     res.end();
   }
 });
-
-// ---- Editor assistant: generate / polish / continue / translate / summarize / seo ----
-
-function inlineMd(s: string): string {
-  return s
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>')
-    .replace(/`(.*?)`/g, '<code>$1</code>');
-}
-
-// Minimal Markdown → HTML converter (headings, lists, paragraphs, emphasis)
-export function mdToHtml(md: string): string {
-  const lines = md.split('\n');
-  const out: string[] = [];
-  let inList = false;
-  for (const raw of lines) {
-    const line = raw.trimEnd();
-    const h1 = line.match(/^# (.*)/);
-    const h2 = line.match(/^## (.*)/);
-    const h3 = line.match(/^### (.*)/);
-    const li = line.match(/^[-*] (.*)/);
-    if (h1) { if (inList) { out.push('</ul>'); inList = false; } out.push('<h1>' + inlineMd(h1[1]) + '</h1>'); }
-    else if (h2) { if (inList) { out.push('</ul>'); inList = false; } out.push('<h2>' + inlineMd(h2[1]) + '</h2>'); }
-    else if (h3) { if (inList) { out.push('</ul>'); inList = false; } out.push('<h3>' + inlineMd(h3[1]) + '</h3>'); }
-    else if (li) { if (!inList) { out.push('<ul>'); inList = true; } out.push('<li>' + inlineMd(li[1]) + '</li>'); }
-    else if (!line.trim()) { if (inList) { out.push('</ul>'); inList = false; } }
-    else { if (inList) { out.push('</ul>'); inList = false; } out.push('<p>' + inlineMd(line) + '</p>'); }
-  }
-  if (inList) out.push('</ul>');
-  return out.join('');
-}
 
 router.post('/generate', authenticate, async (req: AuthRequest, res: Response) => {
   try {

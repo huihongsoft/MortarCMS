@@ -57,6 +57,36 @@ export function sanitizeHtml(input: string): string {
   return html;
 }
 
+// Markdown → HTML for AI-written content
+function inlineMd(s: string): string {
+  return s
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>')
+    .replace(/`(.*?)`/g, '<code>$1</code>');
+}
+
+export function mdToHtml(md: string): string {
+  const lines = md.split('\n');
+  const out: string[] = [];
+  let inList = false;
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const h1 = line.match(/^# (.*)/);
+    const h2 = line.match(/^## (.*)/);
+    const h3 = line.match(/^### (.*)/);
+    const li = line.match(/^[-*] (.*)/);
+    if (h1) { if (inList) { out.push('</ul>'); inList = false; } out.push('<h1>' + inlineMd(h1[1]) + '</h1>'); }
+    else if (h2) { if (inList) { out.push('</ul>'); inList = false; } out.push('<h2>' + inlineMd(h2[1]) + '</h2>'); }
+    else if (h3) { if (inList) { out.push('</ul>'); inList = false; } out.push('<h3>' + inlineMd(h3[1]) + '</h3>'); }
+    else if (li) { if (!inList) { out.push('<ul>'); inList = true; } out.push('<li>' + inlineMd(li[1]) + '</li>'); }
+    else if (!line.trim()) { if (inList) { out.push('</ul>'); inList = false; } }
+    else { if (inList) { out.push('</ul>'); inList = false; } out.push('<p>' + inlineMd(line) + '</p>'); }
+  }
+  if (inList) out.push('</ul>');
+  return out.join('');
+}
+
 // Wrap user-supplied text so prompt-injection instructions are inert
 export function guardUserMessage(msg: string): string {
   return '[用户消息开始]\n' + String(msg) + '\n[用户消息结束]\n' +
@@ -450,6 +480,49 @@ register('recall', '回忆关于用户的长期记忆', {
   const mems = getMemories(ctx.userId);
   if (args.key) return mems.filter(m => m.key === args.key);
   return mems;
+});
+
+// ---- Translate an existing post into another language (creates a new post) ----
+
+register('translate_post', '将站内一篇文章翻译成指定语言并创建为新文章（标题带语言标记）。', {
+  type: 'object',
+  properties: {
+    id: { type: 'string', description: '源文章 id（必填）' },
+    language: { type: 'string', description: '目标语言，如 English、日本語、한국어、Français（默认 English）' },
+  },
+  required: ['id'],
+}, async (args, ctx) => {
+  const post = db.prepare("SELECT * FROM Post WHERE id = ? AND type = 'post'").get(args.id) as any;
+  if (!post) return { error: '文章未找到' };
+  const lang = String(args.language || 'English');
+  const provider = getDefaultProvider();
+  if (!provider) return { error: '未配置 AI 服务商' };
+
+  const plain = (post.content || '').replace(/<[^>]*>/g, '');
+  const res = await fetch(provider.baseUrl.replace(/\/$/, '') + '/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + provider.apiKey },
+    body: JSON.stringify({
+      model: provider.model,
+      messages: [
+        { role: 'system', content: '你是专业译者。把文章翻译成 ' + lang + '，输出 Markdown 格式，标题单独一行用 # 开头。' },
+        { role: 'user', content: guardUserMessage('标题: ' + post.title + '\n\n' + plain.slice(0, 6000)) },
+      ],
+    }),
+  });
+  if (!res.ok) { const t = await res.text().catch(() => ''); return { error: '翻译失败 (' + res.status + '): ' + t.slice(0, 200) }; }
+  const j: any = await res.json();
+  const out = j.choices?.[0]?.message?.content || '';
+  const lines = out.split('\n');
+  const newTitle = (lines.find((l: string) => l.startsWith('# ')) || '').replace(/^#\s*/, '').trim() || post.title + ' (' + lang + ')';
+  const body = lines.filter((l: string) => !l.startsWith('# ')).join('\n');
+
+  const allSlugs = (db.prepare("SELECT slug FROM Post WHERE type = 'post'").all() as any[]).map((s: any) => s.slug);
+  const slug = uniqueSlug(newTitle, allSlugs);
+  const id = cuid();
+  db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, newTitle, slug, sanitizeHtml(mdToHtml(body)), (post.excerpt || '').slice(0, 300), 'draft', 'post', ctx.userId);
+  return { id, title: newTitle, slug, status: 'draft', message: '已创建翻译草稿: ' + newTitle };
 });
 
 // ---- Image understanding (vision): analyze a media-library image ----

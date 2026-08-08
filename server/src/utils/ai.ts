@@ -139,7 +139,7 @@ async function openaiChat(provider: AIProvider, messages: AIMessage[], tools: AI
   if (maxTokens !== undefined) body.max_tokens = maxTokens;
   if (tools && tools.length) body.tools = tools;
 
-  const res = await fetch(buildOpenAIUrl(provider), {
+  const res = await fetchWithRetry(buildOpenAIUrl(provider), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + provider.apiKey },
     body: JSON.stringify(body),
@@ -181,7 +181,7 @@ async function anthropicChat(provider: AIProvider, messages: AIMessage[], tools:
   if (tools && tools.length) body.tools = tools.map(t => t.function);
   body.stream = !!onDelta;
 
-  const res = await fetch(provider.baseUrl.replace(/\/$/, '') + '/v1/messages', {
+  const res = await fetchWithRetry(provider.baseUrl.replace(/\/$/, '') + '/v1/messages', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -226,6 +226,32 @@ async function anthropicChat(provider: AIProvider, messages: AIMessage[], tools:
     .filter((b: any) => b.type === 'tool_use')
     .map((b: any) => ({ id: b.id, name: b.name, args: b.input || {} }));
   return { content, toolCalls };
+}
+
+// Fetch with timeout (AbortController) so a hung provider can't block requests
+async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 90000): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } catch (e: any) {
+    if (e.name === 'AbortError') throw new Error('AI 请求超时（' + Math.round(timeoutMs / 1000) + 's）');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Retry once on transient failures (network / 5xx), not on 4xx
+async function fetchWithRetry(url: string, init: RequestInit, timeoutMs = 90000): Promise<Response> {
+  try {
+    return await fetchWithTimeout(url, init, timeoutMs);
+  } catch (e: any) {
+    // retry only on network-level errors
+    const res = await fetchWithTimeout(url, init, timeoutMs).catch(() => null);
+    if (!res) throw e;
+    return res;
+  }
 }
 
 // Unified chat completion across providers
