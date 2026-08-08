@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye } from 'lucide-react';
+import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye, Sparkles } from 'lucide-react';
 import { useToast } from '../lib/toast';
 import RichEditor from '../components/RichEditor';
 import VisualEditor from '../components/VisualEditor';
@@ -29,6 +29,10 @@ export default function PostEditor() {
   const [showSettings, setShowSettings] = useState(false);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
   const [visualCss, setVisualCss] = useState('');
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState('');
+  const [aiError, setAiError] = useState('');
   const [seoTitle, setSeoTitle] = useState('');
   const [seoDesc, setSeoDesc] = useState('');
   const [templates, setTemplates] = useState<any[]>([]);
@@ -105,6 +109,81 @@ export default function PostEditor() {
   }
 
   function addTag() { if (tagInput.trim() && !tagNames.includes(tagInput.trim())) { setTagNames([...tagNames, tagInput.trim()]); setTagInput(''); } }
+
+  // ---- AI assistant for the editor ----
+  async function runAi(action: string) {
+    if (aiLoading) return;
+    setAiLoading(true); setAiError(''); setAiResult('');
+    try {
+      const r = await api.post('/ai/generate', { action, title, content, excerpt });
+      setAiResult(r.data.content || '');
+    } catch (e: any) {
+      setAiError(e.response?.data?.error || t('save failed', getLang()));
+    } finally { setAiLoading(false); }
+  }
+
+  function applyAiResult(mode: 'append' | 'replace') {
+    if (!aiResult) return;
+    if (mode === 'replace') setContent(aiResult);
+    else setContent((content || '') + aiResult);
+    setSaveState('dirty');
+  }
+
+  function applySeoResult() {
+    const tMatch = aiResult.match(/SEO标题[:：]\s*(.+)/);
+    const dMatch = aiResult.match(/SEO描述[:：]\s*(.+)/);
+    if (tMatch) setSeoTitle(tMatch[1].trim());
+    if (dMatch) setSeoDesc(dMatch[1].trim());
+    setSaveState('dirty');
+  }
+
+  function applySummary() {
+    const clean = aiResult.replace(/^摘要[:：]\s*/i, '').trim();
+    if (clean) { setExcerpt(clean); setSaveState('dirty'); }
+  }
+
+  const AI_ACTIONS = [
+    { key: 'generate', label: t('ai generate', getLang()), icon: '✍️' },
+    { key: 'polish', label: t('ai polish', getLang()), icon: '✨' },
+    { key: 'continue', label: t('ai continue', getLang()), icon: '➡️' },
+    { key: 'translate', label: t('ai translate', getLang()), icon: '🌐' },
+    { key: 'summarize', label: t('ai summarize', getLang()), icon: '📝' },
+    { key: 'seo', label: t('ai seo', getLang()), icon: '🔍' },
+  ];
+
+  // AI panel (shared between text mode and the visual-mode drawer)
+  function renderAiPanel() {
+    return React.createElement('div', { className: 'card p-4' },
+      React.createElement('div', { className: 'flex items-center justify-between mb-3' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 flex items-center gap-1.5' },
+          React.createElement(Sparkles, { size: 14, className: 'text-primary-600' }), t('ai assistant', getLang())),
+        React.createElement('button', { onClick: () => setAiOpen(!aiOpen), className: 'text-xs text-gray-400 hover:text-gray-600' }, aiOpen ? t('collapse', getLang()) : t('expand', getLang())),
+      ),
+      aiOpen && React.createElement('div', null,
+        React.createElement('div', { className: 'flex flex-wrap gap-1.5 mb-3' },
+          AI_ACTIONS.map(a => React.createElement('button', {
+            key: a.key,
+            onClick: () => runAi(a.key),
+            disabled: aiLoading || (a.key === 'generate' && !title),
+            className: 'flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 disabled:opacity-40 transition-colors',
+          }, React.createElement('span', null, a.icon), a.label))
+        ),
+        aiLoading && React.createElement('p', { className: 'text-xs text-gray-400 mb-2' }, t('ai working', getLang()) + '...'),
+        aiError && React.createElement('p', { className: 'text-xs text-red-600 mb-2' }, aiError),
+        aiResult && React.createElement('div', null,
+          React.createElement('div', { className: 'max-h-48 overflow-y-auto bg-gray-50 rounded-lg p-3 text-xs text-gray-700 prose prose-sm max-w-none' },
+            React.createElement('div', { dangerouslySetInnerHTML: { __html: aiResult } })),
+          React.createElement('div', { className: 'flex flex-wrap gap-1.5 mt-2' },
+            aiResult.startsWith('SEO') ? React.createElement('button', { onClick: applySeoResult, className: 'btn-primary text-xs' }, t('apply seo', getLang()))
+            : React.createElement(React.Fragment, null,
+                React.createElement('button', { onClick: () => applyAiResult('append'), className: 'btn-secondary text-xs' }, t('insert to end', getLang())),
+                React.createElement('button', { onClick: () => applyAiResult('replace'), className: 'btn-primary text-xs' }, t('replace content', getLang()))),
+            (aiResult.startsWith('SEO') || /摘要/.test(aiResult)) && !aiResult.startsWith('SEO') && React.createElement('button', { onClick: applySummary, className: 'btn-secondary text-xs' }, t('apply as excerpt', getLang())),
+          )
+        )
+      )
+    );
+  }
 
   function describeSaveError(e: any, lang: string): string {
     if (!e?.response) return t('network error - check your connection and try again', lang);
@@ -318,6 +397,7 @@ export default function PostEditor() {
                 React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('excerpt (optional)', getLang())),
                 React.createElement('textarea', { value: excerpt, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setExcerpt(e.target.value), placeholder: t('excerpt (optional)', getLang()), className: 'input-field', rows: 3 })
               ),
+              renderAiPanel(),
               renderSidebar()
             )
           )
@@ -343,6 +423,7 @@ export default function PostEditor() {
               (visualMode ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'),
           }, React.createElement(Palette, { size: 14 }), t('visual design', getLang())),
         ),
+        renderAiPanel(),
         React.createElement(RichEditor, { value: content, onChange: setContent, placeholder: t('write your post content', getLang()) }),
         React.createElement('textarea', { value: excerpt, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setExcerpt(e.target.value), placeholder: t('excerpt (optional)', getLang()), className: 'input-field', rows: 3 })
       ),

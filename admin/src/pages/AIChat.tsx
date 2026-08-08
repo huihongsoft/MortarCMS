@@ -16,16 +16,29 @@ const SUGGESTIONS = [
   { icon: MessageSquare, text: '查看待审核的评论' },
 ];
 
+const HISTORY_KEY = 'mortar_ai_chat_history';
+
 export default function AIChat() {
-  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [messages, setMessages] = useState<ChatMsg[]>(() => {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+  });
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(messages.slice(-30))); } catch {}
+  }, [messages]);
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, busy]);
+
+  function clearHistory() {
+    setMessages([]);
+    try { localStorage.removeItem(HISTORY_KEY); } catch {}
+  }
 
   async function send(text?: string) {
     const msg = (text ?? input).trim();
@@ -111,7 +124,10 @@ export default function AIChat() {
           React.createElement('h2', { className: 'text-xl font-bold text-gray-900' }, t('ai assistant', getLang())),
           React.createElement('p', { className: 'text-xs text-gray-400' }, t('ai assistant subtitle', getLang()))),
       ),
-      error && React.createElement('p', { className: 'text-xs text-red-600' }, error),
+      React.createElement('div', { className: 'flex items-center gap-2' },
+        error && React.createElement('p', { className: 'text-xs text-red-600' }, error),
+        messages.length > 0 && React.createElement('button', { onClick: clearHistory, className: 'text-xs text-gray-400 hover:text-red-600' }, t('clear history', getLang())),
+      ),
     ),
 
     // Messages

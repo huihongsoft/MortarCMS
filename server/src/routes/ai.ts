@@ -141,6 +141,77 @@ router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) 
   }
 });
 
+// ---- Editor assistant: generate / polish / continue / translate / summarize / seo ----
+
+function inlineMd(s: string): string {
+  return s
+    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+    .replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2">$1</a>')
+    .replace(/`(.*?)`/g, '<code>$1</code>');
+}
+
+// Minimal Markdown → HTML converter (headings, lists, paragraphs, emphasis)
+export function mdToHtml(md: string): string {
+  const lines = md.split('\n');
+  const out: string[] = [];
+  let inList = false;
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    const h1 = line.match(/^# (.*)/);
+    const h2 = line.match(/^## (.*)/);
+    const h3 = line.match(/^### (.*)/);
+    const li = line.match(/^[-*] (.*)/);
+    if (h1) { if (inList) { out.push('</ul>'); inList = false; } out.push('<h1>' + inlineMd(h1[1]) + '</h1>'); }
+    else if (h2) { if (inList) { out.push('</ul>'); inList = false; } out.push('<h2>' + inlineMd(h2[1]) + '</h2>'); }
+    else if (h3) { if (inList) { out.push('</ul>'); inList = false; } out.push('<h3>' + inlineMd(h3[1]) + '</h3>'); }
+    else if (li) { if (!inList) { out.push('<ul>'); inList = true; } out.push('<li>' + inlineMd(li[1]) + '</li>'); }
+    else if (!line.trim()) { if (inList) { out.push('</ul>'); inList = false; } }
+    else { if (inList) { out.push('</ul>'); inList = false; } out.push('<p>' + inlineMd(line) + '</p>'); }
+  }
+  if (inList) out.push('</ul>');
+  return out.join('');
+}
+
+router.post('/generate', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
+    const provider = getDefaultProvider();
+    if (!provider) { res.status(400).json({ error: '尚未配置 AI 服务商，请先在 AI 设置中配置' }); return; }
+    const { action, title, content } = req.body || {};
+    if (!['generate', 'polish', 'continue', 'translate', 'summarize', 'seo'].includes(action)) {
+      res.status(400).json({ error: '未知操作' }); return;
+    }
+
+    const WRITER = '你是专业的文章写作助手。只输出要求的内容本身，不要任何解释、前言或 Markdown 代码块标记。';
+    let prompt = '';
+    if (action === 'generate') {
+      prompt = '请撰写一篇关于「' + String(title || '') + '」的文章，使用 Markdown 格式（## 分节、- 列表、**加粗**），不少于 600 字，结构清晰有深度。';
+    } else if (action === 'polish') {
+      prompt = '请润色以下文章：提升语言流畅度与文采，保持原有结构和信息，输出 Markdown 格式。\n\n' + String(content || '');
+    } else if (action === 'continue') {
+      prompt = '请续写以下文章，接着末尾继续写，不要重复已有内容，输出 Markdown 格式。\n\n' + String(content || '');
+    } else if (action === 'translate') {
+      prompt = '请将以下文章翻译成简体中文，保留 Markdown 格式。\n\n' + String(content || '');
+    } else if (action === 'summarize') {
+      prompt = '请为以下文章写一段摘要，150 字以内，一句话概括核心观点。\n\n' + String(content || '');
+    } else if (action === 'seo') {
+      prompt = '请为文章「' + String(title || '') + '」生成 SEO 元数据，严格按此格式输出两行：\nSEO标题：xxx\nSEO描述：xxx';
+    }
+
+    const result = await chatComplete(provider, [
+      { role: 'system', content: WRITER },
+      { role: 'user', content: prompt },
+    ]);
+
+    if (action === 'generate' || action === 'polish' || action === 'continue' || action === 'translate') {
+      res.json({ content: mdToHtml(result.content) });
+    } else {
+      res.json({ content: result.content });
+    }
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // ---- Bindings (WeChat / DingTalk) ----
 
 interface Binding {
