@@ -355,12 +355,13 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
 
       const style = canvas.createElement('style');
       style.textContent = `
-        html, body { background: #ffffff !important; color-scheme: light; min-height: 100%; }
+        html, body { color-scheme: light; min-height: 100%; }
         body { margin:0; }
         .cms-post-list, .cms-categories, .cms-comments, .cms-search, .cms-archive, .cms-tag-cloud { min-height: 40px; }
       `;
       canvas.head.appendChild(style);
-      // Inject active theme color variables so the preview matches the real site
+      // Inject active theme color variables AND the theme's custom CSS so the
+      // canvas preview matches the real site (typography, spacing, borders…)
       fetch('/api/settings')
         .then(r => r.json())
         .then(s => {
@@ -375,6 +376,13 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           const vStyle = canvas.createElement('style');
           vStyle.textContent = ':root{' + Object.entries(vars).map(([k, v]) => k + ':' + v + ';').join('') + '}';
           canvas.head.appendChild(vStyle);
+          // Theme custom CSS (same styles the live site injects via App.tsx)
+          const themeCss = s.theme_custom_css as string | undefined;
+          if (themeCss) {
+            const tStyle = canvas.createElement('style');
+            tStyle.textContent = themeCss;
+            canvas.head.appendChild(tStyle);
+          }
         })
         .catch(() => {});
     });
@@ -460,28 +468,26 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       storageManager: false,
       autorender: true,
       noticeOnUnload: false,
-      showOffsets: true,
-      showOffsetsSelected: true,
       forceClass: false,
       // Canvas configuration — smooth drag, snap guides, responsive breakpoints
       canvas: {
         styles: [], // real site CSS is injected on load (see below); CDN used as fallback
         frameStyle: `
           :root { --primary: #3b82f6; --primary-soft: rgba(59,130,246,0.08); }
-          /* Force a light canvas regardless of the OS/browser dark scheme,
-             otherwise an empty document renders as a dark void */
+          /* Light canvas by default; theme CSS loaded later may override it */
           html, body {
-            background: #ffffff !important;
+            background: #ffffff;
             color-scheme: light;
             min-height: 100%;
           }
           body {
             -webkit-font-smoothing: antialiased;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            font-family: var(--body-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
             color: #111827;
           }
-          /* Smooth drag transitions */
-          .gjs-dashed * { transition: none !important; }
+          h1, h2, h3 { font-family: var(--heading-font, inherit); line-height: 1.3; }
+          /* Only the selected component gets an outline; no constant wireframes */
+          .gjs-com-dashed * { outline: none !important; }
           [data-gjs-highlightable] { transition: box-shadow 0.15s ease; }
           /* Drop indicator — magnetic snap visual */
           .gjs-placeholder,
@@ -494,14 +500,8 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           }
           /* Drop above/below guide line */
           .gjs-placeholder-int { height: 4px !important; }
-          /* Hover highlight on components */
-          [data-gjs-highlightable]:hover {
-            outline: 1px dashed rgba(59,130,246,0.35) !important;
-            outline-offset: 2px;
-          }
           /* Rich text defaults inside the canvas */
           .gjs-text { line-height: 1.7; }
-          h1, h2, h3 { line-height: 1.3; }
         `,
       },
       // Plugin options
