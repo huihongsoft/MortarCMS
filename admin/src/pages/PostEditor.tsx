@@ -148,8 +148,18 @@ export default function PostEditor() {
     { key: 'continue', label: t('ai continue', getLang()), icon: '➡️' },
     { key: 'translate', label: t('ai translate', getLang()), icon: '🌐' },
     { key: 'summarize', label: t('ai summarize', getLang()), icon: '📝' },
+    { key: 'tags', label: t('ai suggest tags', getLang()), icon: '🏷️' },
     { key: 'seo', label: t('ai seo', getLang()), icon: '🔍' },
   ];
+
+  function applyTags() {
+    const tags = aiResult.split(/[,，、\n]/).map((x: string) => x.trim().replace(/^\d+[.、)]\s*/, '')).filter(Boolean);
+    if (tags.length) {
+      const merged = [...new Set([...tagNames, ...tags.slice(0, 8)])];
+      setTagNames(merged);
+      setSaveState('dirty');
+    }
+  }
 
   // AI panel (shared between text mode and the visual-mode drawer)
   function renderAiPanel() {
@@ -175,10 +185,11 @@ export default function PostEditor() {
             React.createElement('div', { dangerouslySetInnerHTML: { __html: aiResult } })),
           React.createElement('div', { className: 'flex flex-wrap gap-1.5 mt-2' },
             aiResult.startsWith('SEO') ? React.createElement('button', { onClick: applySeoResult, className: 'btn-primary text-xs' }, t('apply seo', getLang()))
+            : /摘要/.test(aiResult) && aiResult.length < 400 ? React.createElement('button', { onClick: applySummary, className: 'btn-primary text-xs' }, t('apply as excerpt', getLang()))
+            : aiResult.split(/[,，、\n]/).length > 2 && aiResult.length < 200 ? React.createElement('button', { onClick: applyTags, className: 'btn-primary text-xs' }, t('apply tags', getLang()))
             : React.createElement(React.Fragment, null,
                 React.createElement('button', { onClick: () => applyAiResult('append'), className: 'btn-secondary text-xs' }, t('insert to end', getLang())),
                 React.createElement('button', { onClick: () => applyAiResult('replace'), className: 'btn-primary text-xs' }, t('replace content', getLang()))),
-            (aiResult.startsWith('SEO') || /摘要/.test(aiResult)) && !aiResult.startsWith('SEO') && React.createElement('button', { onClick: applySummary, className: 'btn-secondary text-xs' }, t('apply as excerpt', getLang())),
           )
         )
       )

@@ -207,7 +207,7 @@ router.post('/generate', authenticate, async (req: AuthRequest, res: Response) =
     const provider = getDefaultProvider();
     if (!provider) { res.status(400).json({ error: '尚未配置 AI 服务商，请先在 AI 设置中配置' }); return; }
     const { action, title, content } = req.body || {};
-    if (!['generate', 'polish', 'continue', 'translate', 'summarize', 'seo'].includes(action)) {
+    if (!['generate', 'polish', 'continue', 'translate', 'summarize', 'seo', 'tags'].includes(action)) {
       res.status(400).json({ error: '未知操作' }); return;
     }
 
@@ -225,6 +225,8 @@ router.post('/generate', authenticate, async (req: AuthRequest, res: Response) =
       prompt = '请为以下文章写一段摘要，150 字以内，一句话概括核心观点。\n\n' + String(content || '');
     } else if (action === 'seo') {
       prompt = '请为文章「' + String(title || '') + '」生成 SEO 元数据，严格按此格式输出两行：\nSEO标题：xxx\nSEO描述：xxx';
+    } else if (action === 'tags') {
+      prompt = '请为文章「' + String(title || '') + '」（内容节选如下）推荐 3-6 个标签，只输出标签名，用逗号分隔，不要序号。\n\n' + String(content || '').replace(/<[^>]*>/g, '').slice(0, 1500);
     }
 
     const result = await chatComplete(provider, [
@@ -487,6 +489,32 @@ router.delete('/schedules/:id', authenticate, (req: AuthRequest, res: Response) 
     else list = list.filter(x => x.id !== req.params.id);
     saveSchedules(list);
     res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// AI review of pending comments (spam detection suggestion)
+router.post('/review-comments', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
+    const provider = getDefaultProvider();
+    if (!provider) { res.status(400).json({ error: '尚未配置 AI 服务商' }); return; }
+    const comments = db.prepare("SELECT id, author, content FROM Comment WHERE status = 'pending' ORDER BY createdAt DESC LIMIT 10").all() as any[];
+    if (!comments.length) { res.json({ verdicts: [] }); return; }
+
+    const list = comments.map((c: any) => c.id + '|' + c.author + '|' + c.content.slice(0, 200)).join('\n');
+    const result = await chatComplete(provider, [
+      { role: 'system', content: '你是评论审核员。对每条评论判断 spam（垃圾/广告/恶意）或 approved（正常）。严格按格式逐行输出：评论ID|spam或approved|一句话理由。' },
+      { role: 'user', content: guardUserMessage(list) },
+    ]);
+    // Parse verdicts
+    const verdicts: any[] = [];
+    for (const line of result.content.split('\n')) {
+      const m = line.match(/^([\w-]+)\|(spam|approved)(\|.*)?$/);
+      if (m && comments.some((c: any) => c.id === m[1])) {
+        verdicts.push({ id: m[1], verdict: m[2], reason: (m[3] || '').replace(/^\|/, '') });
+      }
+    }
+    res.json({ verdicts, raw: result.content });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
