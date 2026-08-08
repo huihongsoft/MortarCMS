@@ -26,7 +26,7 @@ export default function PageEditor() {
 
   async function handleSave(s: string) {
     setSaving(true);
-    try { const payload: any = { title, content, status: s, menuOrder, parentId: parentId || null }; if (visualCss) payload.meta = { _visual_css: visualCss }; if (id) await api.put(`/pages/${id}`, payload); else await api.post('/pages', payload); navigate('/pages'); } catch { toast.toast(t('save failed', getLang()), 'error'); } finally { setSaving(false); }
+    try { const payload: any = { title, content, status: s, menuOrder, parentId: parentId || null }; if (visualCss) payload.meta = { _visual_css: visualCss }; if (id) await api.put(`/pages/${id}`, payload); else await api.post('/pages', payload); navigate('/pages'); } catch (e: any) { const msg = e?.response?.data?.error || e?.response?.data?.message || t('save failed', getLang()); toast.toast(typeof msg === 'string' ? msg : t('save failed', getLang()), 'error'); } finally { setSaving(false); }
   }
 
   return React.createElement('div', null,

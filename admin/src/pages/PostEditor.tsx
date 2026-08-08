@@ -82,7 +82,10 @@ export default function PostEditor() {
       if (id) await api.put(`/posts/${id}`, payload); else await api.post('/posts', payload);
       toast.toast(id ? t('post updated', getLang()) : t('post created', getLang()));
       navigate('/posts');
-    } catch { toast.toast(t('save failed', getLang()), 'error'); } finally { setSaving(false); }
+    } catch (e: any) {
+      const msg = e?.response?.data?.error || e?.response?.data?.message || t('save failed', getLang());
+      toast.toast(typeof msg === 'string' ? msg : t('save failed', getLang()), 'error');
+    } finally { setSaving(false); }
   }
 
   function addTag() { if (tagInput.trim() && !tagNames.includes(tagInput.trim())) { setTagNames([...tagNames, tagInput.trim()]); setTagInput(''); } }
