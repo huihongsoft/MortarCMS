@@ -6,7 +6,7 @@ import { uniqueSlug } from '../utils/slug';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 
 const router = Router();
-const pageSchema = z.object({ title: z.string().min(1), content: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'trash']).optional(), parentId: z.string().optional(), menuOrder: z.number().int().optional(), meta: z.record(z.string(), z.string()).optional() });
+const pageSchema = z.object({ title: z.string().min(1), content: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'trash']).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), meta: z.record(z.string(), z.string()).optional() });
 
 
 router.get('/public', (req: AuthRequest, res: Response) => {
