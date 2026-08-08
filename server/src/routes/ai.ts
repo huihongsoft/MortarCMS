@@ -338,6 +338,101 @@ router.get('/tasks/:id', authenticate, (req: AuthRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// ---- Scheduled AI tasks (auto-run agent jobs) ----
+
+interface AiSchedule {
+  id: string;
+  name: string;
+  prompt: string;
+  type: 'interval' | 'daily' | 'weekly';
+  intervalMinutes?: number;
+  time?: string;         // HH:MM for daily/weekly
+  weekday?: number;      // 0-6 for weekly
+  enabled: boolean;
+  userId: string;
+  username: string;
+  lastRun: string | null;
+  createdAt: string;
+}
+
+function getSchedules(): AiSchedule[] {
+  const row = db.prepare("SELECT value FROM Setting WHERE key = 'ai_schedules'").get() as any;
+  if (!row?.value) return [];
+  try { return JSON.parse(row.value); } catch { return []; }
+}
+
+function saveSchedules(list: AiSchedule[]): void {
+  db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, 'ai_schedules', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+    .run('ai_schedules', JSON.stringify(list));
+}
+
+function scheduleShouldRun(s: AiSchedule, now: Date): boolean {
+  if (!s.enabled) return false;
+  const last = s.lastRun ? new Date(s.lastRun) : null;
+  if (s.type === 'interval') {
+    const mins = s.intervalMinutes || 60;
+    return !last || (now.getTime() - last.getTime() >= mins * 60000);
+  }
+  const [h, m] = (s.time || '09:00').split(':').map(Number);
+  if (now.getHours() !== h || now.getMinutes() !== m) return false;
+  if (s.type === 'weekly' && now.getDay() !== (s.weekday ?? 1)) return false;
+  if (last && last.toDateString() === now.toDateString()) return false;
+  return true;
+}
+
+// Scheduler tick: check every minute
+setInterval(() => {
+  try {
+    const now = new Date();
+    for (const s of getSchedules()) {
+      if (!scheduleShouldRun(s, now)) continue;
+      const updated = getSchedules().map(x => x.id === s.id ? { ...x, lastRun: now.toISOString() } : x);
+      saveSchedules(updated); // claim the run to avoid double execution
+      const user = db.prepare('SELECT id, role, username FROM User WHERE id = ?').get(s.userId) as any;
+      if (!user || !isRoleAllowed(user.role)) continue;
+      const taskId = createTask(user.id, user.username, '[定时] ' + s.name + ': ' + s.prompt);
+      setImmediate(() => { runTask(taskId, user.id, user.role, user.username, s.prompt); });
+    }
+  } catch { /* scheduler must never crash */ }
+}, 60000);
+
+router.get('/schedules', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const list = req.user!.role === 'admin' ? getSchedules() : getSchedules().filter(x => x.userId === req.user!.userId);
+    res.json({ schedules: list });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/schedules', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const { name, prompt, type, intervalMinutes, time, weekday } = req.body || {};
+    if (!name || !prompt || !['interval', 'daily', 'weekly'].includes(type)) { res.status(400).json({ error: 'name, prompt and type required' }); return; }
+    const user = db.prepare('SELECT id, username FROM User WHERE id = ?').get(req.user!.userId) as any;
+    const s: AiSchedule = {
+      id: cuid(), name: String(name).slice(0, 50), prompt: String(prompt), type,
+      intervalMinutes: type === 'interval' ? Math.max(5, parseInt(intervalMinutes) || 60) : undefined,
+      time: type !== 'interval' ? (time || '09:00') : undefined,
+      weekday: type === 'weekly' ? (parseInt(weekday) || 1) : undefined,
+      enabled: true, userId: req.user!.userId, username: user?.username || 'user',
+      lastRun: null, createdAt: new Date().toISOString(),
+    };
+    const list = getSchedules();
+    list.push(s);
+    saveSchedules(list);
+    res.status(201).json(s);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/schedules/:id', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    let list = getSchedules();
+    if (req.user!.role !== 'admin') list = list.filter(x => !(x.id === req.params.id && x.userId === req.user!.userId));
+    else list = list.filter(x => x.id !== req.params.id);
+    saveSchedules(list);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // Admin: AI operation audit log (sandbox traceability)
 router.get('/audit', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {

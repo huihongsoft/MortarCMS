@@ -184,6 +184,37 @@ register('search_site_content', '在全站文章中检索内容，返回匹配�
   });
 });
 
+// --- Web search: research current info via DuckDuckGo HTML (no key needed) ---
+register('web_search', '搜索互联网获取最新信息（标题、链接、摘要）。适合收集资料、调研时事、查证事实。', {
+  type: 'object',
+  properties: {
+    query: { type: 'string', description: '搜索关键词（必填）' },
+    limit: { type: 'number', description: '返回条数，默认 5，最大 8' },
+  },
+  required: ['query'],
+}, async (args) => {
+  const q = String(args.query || '').trim();
+  if (!q) return { error: '搜索词不能为空' };
+  const limit = Math.min(parseInt(args.limit) || 5, 8);
+  const url = 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(q);
+  const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' } });
+  if (!res.ok) return { error: '搜索服务暂不可用 (' + res.status + ')' };
+  const html = await res.text();
+  const results: any[] = [];
+  const re = /<a[^>]*class="result__a"[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]*class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+  let m;
+  while ((m = re.exec(html)) !== null && results.length < limit) {
+    const uddg = m[1].match(/uddg=([^&]+)/);
+    const link = uddg ? decodeURIComponent(uddg[1]) : m[1];
+    results.push({
+      title: m[2].replace(/<[^>]*>/g, '').trim(),
+      url: link,
+      snippet: m[3].replace(/<[^>]*>/g, '').replace(/&quot;/g, '"').replace(/&amp;/g, '&').trim(),
+    });
+  }
+  return results.length ? results : { error: '没有找到相关结果' };
+});
+
 // --- Image generation: AI creates a banner/cover and saves it to the
 // media library (OpenAI-compatible /images/generations endpoints) ---
 register('generate_image', '生成一张配图（如文章封面、插画）并保存到媒体库，返回图片 URL。', {

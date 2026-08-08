@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, MessageCircle, Bell, Copy, KeyRound, Send, Clock } from 'lucide-react';
+import { Plus, Trash2, MessageCircle, Bell, Copy, KeyRound, Send, Clock, CalendarClock } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
@@ -25,10 +25,19 @@ export default function AIBindings() {
   const [testMsg, setTestMsg] = useState('');
   const [testReply, setTestReply] = useState('');
   const [testing, setTesting] = useState<string | null>(null);
+  // Schedules
+  const [schedules, setSchedules] = useState<any[]>([]);
+  const [schName, setSchName] = useState('');
+  const [schPrompt, setSchPrompt] = useState('');
+  const [schType, setSchType] = useState('interval');
+  const [schInterval, setSchInterval] = useState(60);
+  const [schTime, setSchTime] = useState('09:00');
+  const [schWeekday, setSchWeekday] = useState(1);
 
   useEffect(() => {
     api.get('/ai/bindings').then(r => setBindings(r.data.bindings || [])).catch(() => {});
     api.get('/users').then(r => setUsers(r.data || [])).catch(() => {});
+    api.get('/ai/schedules').then(r => setSchedules(r.data.schedules || [])).catch(() => {});
   }, []);
 
   async function create() {
@@ -55,6 +64,20 @@ export default function AIBindings() {
     } catch (e: any) {
       setTestReply(e.response?.data?.error || 'error');
     } finally { setTesting(null); }
+  }
+
+  async function addSchedule() {
+    if (!schName.trim() || !schPrompt.trim()) return;
+    try {
+      await api.post('/ai/schedules', { name: schName, prompt: schPrompt, type: schType, intervalMinutes: schInterval, time: schTime, weekday: schWeekday });
+      setSchName(''); setSchPrompt('');
+      api.get('/ai/schedules').then(r => setSchedules(r.data.schedules || [])).catch(() => {});
+    } catch (e: any) { alert(e.response?.data?.error || '创建失败'); }
+  }
+
+  async function delSchedule(id: string) {
+    await api.delete('/ai/schedules/' + id);
+    setSchedules(schedules.filter(x => x.id !== id));
   }
 
   function copy(text: string) {
@@ -115,6 +138,41 @@ export default function AIBindings() {
               React.createElement('p', { className: 'text-[10px] text-gray-400 mb-1 uppercase' }, t('ai reply', getLang())),
               testReply)
           )
-        ))
+        )),
+
+    // ---- Scheduled AI tasks ----
+    React.createElement('div', { className: 'card p-6 mt-6' },
+      React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-1 flex items-center gap-1.5' },
+        React.createElement(CalendarClock, { size: 15, className: 'text-primary-600' }), t('scheduled ai tasks', getLang())),
+      React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t('schedules hint', getLang())),
+      React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3 mb-4' },
+        React.createElement('input', { value: schName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSchName(e.target.value), placeholder: t('schedule name', getLang()), className: 'input-field text-sm' }),
+        React.createElement('input', { value: schPrompt, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSchPrompt(e.target.value), placeholder: t('schedule prompt', getLang()), className: 'input-field text-sm' })),
+      React.createElement('div', { className: 'flex flex-wrap gap-2 mb-4' },
+        React.createElement('select', { value: schType, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSchType(e.target.value), className: 'input-field w-32 text-sm' },
+          React.createElement('option', { value: 'interval' }, t('every n minutes', getLang())),
+          React.createElement('option', { value: 'daily' }, t('daily at', getLang())),
+          React.createElement('option', { value: 'weekly' }, t('weekly on', getLang()))),
+        schType === 'interval'
+          ? React.createElement('input', { type: 'number', min: 5, value: schInterval, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSchInterval(parseInt(e.target.value) || 60), className: 'input-field w-24 text-sm' }, null)
+          : React.createElement('input', { type: 'time', value: schTime, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSchTime(e.target.value), className: 'input-field w-32 text-sm' }, null),
+        schType === 'weekly' && React.createElement('select', { value: schWeekday, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSchWeekday(parseInt(e.target.value)), className: 'input-field w-32 text-sm' },
+          [['1', '周一'], ['2', '周二'], ['3', '周三'], ['4', '周四'], ['5', '周五'], ['6', '周六'], ['0', '周日']].map(([v, l]) => React.createElement('option', { key: v, value: v }, l))),
+        React.createElement('button', { onClick: addSchedule, disabled: !schName.trim() || !schPrompt.trim(), className: 'btn-primary text-sm' }, React.createElement(Plus, { size: 15 }), t('create', getLang()))),
+      schedules.length === 0
+        ? React.createElement('p', { className: 'text-sm text-gray-400' }, t('no schedules yet', getLang()))
+        : React.createElement('div', { className: 'space-y-2' },
+            schedules.map(sch => React.createElement('div', { key: sch.id, className: 'flex items-center gap-3 p-3 rounded-lg border border-gray-100' },
+              React.createElement('div', { className: 'flex-1 min-w-0' },
+                React.createElement('p', { className: 'text-sm text-gray-800 font-medium truncate' }, sch.name),
+                React.createElement('p', { className: 'text-[11px] text-gray-400 truncate' }, sch.prompt),
+                React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' },
+                  sch.type === 'interval' ? t('every n minutes', getLang()) + ': ' + sch.intervalMinutes
+                    : sch.type === 'weekly' ? t('weekly on', getLang()) + ' ' + ['日', '一', '二', '三', '四', '五', '六'][sch.weekday] + ' ' + sch.time
+                    : t('daily at', getLang()) + ' ' + sch.time,
+                  sch.lastRun ? ' · ' + t('last run', getLang()) + ': ' + new Date(sch.lastRun).toLocaleString() : '')),
+              React.createElement('button', { onClick: () => delSchedule(sch.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 })))
+            ))
+    )
   );
 }
