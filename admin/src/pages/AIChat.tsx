@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell, Download } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -243,6 +243,35 @@ export default function AIChat() {
     setSessions(sessions.map(x => x.id === id ? { ...x, title } : x));
   }
 
+  function downloadFile(name: string, content: string) {
+    const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = name;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportSession() {
+    if (!active?.messages.length) return;
+    const md = active.messages.map(m =>
+      (m.role === 'user' ? '## 👤 我\n' : '## 🤖 AI' + (m.tools?.length ? '（调用了: ' + m.tools.join(', ') + '）' : '') + '\n') + '\n' + m.content + '\n'
+    ).join('\n---\n\n');
+    downloadFile('AI对话-' + active.title + '.md', '# ' + active.title + '\n\n' + md);
+  }
+
+  function exportTask(task: any) {
+    let md = '# AI 任务: ' + task.prompt + '\n\n- 状态: ' + task.status + '\n- 用户: ' + task.username + '\n- 创建: ' + new Date(task.createdAt).toLocaleString() + '\n\n';
+    if (task.steps) {
+      md += '## 执行步骤\n\n' + task.steps.map((st: any, i: number) =>
+        '### 步骤 ' + (i + 1) + '\n' + (st.type === 'think' ? st.content : '工具 `' + st.name + '`\n```json\n' + JSON.stringify(st.output, null, 1) + '\n```')
+      ).join('\n\n');
+    }
+    if (task.result) md += '\n\n## 结果\n\n' + task.result;
+    if (task.error) md += '\n\n## 错误\n\n' + task.error;
+    downloadFile('AI任务-' + task.prompt.slice(0, 20) + '.md', md);
+  }
+
   function copy(text: string) {
     navigator.clipboard.writeText(text);
     setCopied(text.slice(0, 20));
@@ -440,10 +469,13 @@ export default function AIChat() {
             className: 'text-xs px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-300 hover:border-primary-400 hover:text-primary-600',
           }, React.createElement(RotateCcw, { size: 11 }), ' ' + t('retry', getLang())),
         ),
-        active?.messages.length ? React.createElement('button', {
-          onClick: () => updateSession(active.id, x => ({ ...x, messages: [] })),
-          className: 'text-xs text-gray-400 hover:text-red-600',
-        }, t('clear history', getLang())) : null,
+        active?.messages.length ? React.createElement(React.Fragment, null,
+          React.createElement('button', { onClick: exportSession, className: 'text-xs text-gray-400 hover:text-primary-600 flex items-center gap-1' },
+            React.createElement(Download, { size: 12 }), t('export', getLang())),
+          React.createElement('button', {
+            onClick: () => updateSession(active.id, x => ({ ...x, messages: [] })),
+            className: 'text-xs text-gray-400 hover:text-red-600',
+          }, t('clear history', getLang()))) : null,
         React.createElement('div', { ref: notifRef, className: 'relative' },
           React.createElement('button', { onClick: () => setNotifOpen(!notifOpen), className: 'relative p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' },
             React.createElement(Bell, { size: 16 }),
