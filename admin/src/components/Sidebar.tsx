@@ -44,6 +44,7 @@ const groups: { title: string; items: { to: string; icon: any; label: string; ro
     title: t('system', getLang()),
     items: [
       { to: '/users', icon: Users, label: t('users', getLang()), role: 'admin' },
+      { to: '/roles', icon: ShieldCheck, label: t('roles & permissions', getLang()), role: 'admin' },
       { to: '/plugins', icon: Puzzle, label: t('plugins', getLang()), role: 'admin' },
       { to: '/sites', icon: Network, label: t('sites', getLang()), role: 'admin' },
       { to: '/import', icon: UploadCloud, label: t('import', getLang()), role: 'admin' },

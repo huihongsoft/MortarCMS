@@ -223,6 +223,22 @@ export function initDB(): void {
       createdAt TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS Role (
+      id TEXT PRIMARY KEY,
+      slug TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      capabilities TEXT NOT NULL DEFAULT '[]',
+      isSystem INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL
+    );
+
+    -- Seed system roles with their default capability sets
+    INSERT OR IGNORE INTO Role (id, slug, name, capabilities, isSystem, createdAt) VALUES
+      ('role-admin', 'admin', '管理员', '["*"]', 1, '2024-01-01'),
+      ('role-editor', 'editor', '编辑', '["edit_posts","edit_others_posts","publish_posts","delete_posts","delete_others_posts","moderate_comments","manage_categories","manage_tags","manage_links","upload_files","edit_media","delete_media","edit_pages","publish_pages","delete_pages","manage_options","ai_use","ai_review","ai_tasks","view_system_info"]', 1, '2024-01-01'),
+      ('role-author', 'author', '作者', '["edit_posts","publish_posts","delete_posts","upload_files","edit_media","ai_use"]', 1, '2024-01-01'),
+      ('role-subscriber', 'subscriber', '订阅者', '[]', 1, '2024-01-01');
+
     CREATE TABLE IF NOT EXISTS AiMemory (
       id TEXT PRIMARY KEY,
       userId TEXT NOT NULL,

@@ -29,6 +29,7 @@ const Security = React.lazy(() => import('./pages/Security'));
 const AIChat = React.lazy(() => import('./pages/AIChat'));
 const AISettings = React.lazy(() => import('./pages/AISettings'));
 const AIBindings = React.lazy(() => import('./pages/AIBindings'));
+const Roles = React.lazy(() => import('./pages/Roles'));
 
 
 
@@ -85,6 +86,7 @@ function AnimatedRoutes() {
       React.createElement(Route, { path: '/ai', element: React.createElement(AIChat) }),
       React.createElement(Route, { path: '/ai/bindings', element: React.createElement(AIBindings) }),
       React.createElement(Route, { path: '/ai/settings', element: React.createElement(AISettings) }),
+      React.createElement(Route, { path: '/roles', element: React.createElement(Roles) }),
     ),
     React.createElement(Route, { path: '*', element: React.createElement(Navigate, { to: '/', replace: true }) })
   );

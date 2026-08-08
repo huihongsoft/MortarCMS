@@ -58,8 +58,8 @@ export function authorize(...roles: string[]) {
   };
 }
 
-// WordPress-style capability map
-const CAPABILITIES: Record<string, string[]> = {
+// Fallback capability map (used only if a role row is missing from the DB)
+const FALLBACK_CAPABILITIES: Record<string, string[]> = {
   admin: ['*'],
   editor: ['edit_posts', 'edit_others_posts', 'publish_posts', 'delete_posts', 'delete_others_posts', 'moderate_comments', 'manage_categories', 'upload_files', 'edit_pages', 'publish_pages', 'manage_options'],
   author: ['edit_posts', 'edit_others_posts', 'publish_posts', 'delete_posts', 'upload_files'],
@@ -67,9 +67,44 @@ const CAPABILITIES: Record<string, string[]> = {
   subscriber: [],
 };
 
+// Role → capabilities, cached briefly to avoid DB hits on every request.
+// Invalidated by the roles admin routes via invalidateRoleCache().
+let roleCache: { time: number; roles: Record<string, string[]> } = { time: 0, roles: {} };
+
+export function invalidateRoleCache(): void {
+  roleCache = { time: 0, roles: {} };
+}
+
+export function getRoleCapabilities(slug: string): string[] {
+  const now = Date.now();
+  if (now - roleCache.time > 3000) {
+    roleCache = { time: now, roles: {} };
+    try {
+      const rows = db.prepare('SELECT slug, capabilities FROM Role').all() as any[];
+      for (const r of rows) {
+        try { roleCache.roles[r.slug] = JSON.parse(r.capabilities); } catch { roleCache.roles[r.slug] = []; }
+      }
+    } catch { /* DB not ready */ }
+  }
+  return roleCache.roles[slug] || FALLBACK_CAPABILITIES[slug] || [];
+}
+
+export function getAllRoles(): { slug: string; name: string; capabilities: string[]; isSystem: boolean }[] {
+  try {
+    const rows = db.prepare('SELECT slug, name, capabilities, isSystem FROM Role ORDER BY isSystem DESC, name').all() as any[];
+    return rows.map((r: any) => {
+      let caps: string[] = [];
+      try { caps = JSON.parse(r.capabilities); } catch {}
+      return { slug: r.slug, name: r.name, capabilities: caps, isSystem: !!r.isSystem };
+    });
+  } catch {
+    return Object.keys(FALLBACK_CAPABILITIES).map(slug => ({ slug, name: slug, capabilities: FALLBACK_CAPABILITIES[slug], isSystem: true }));
+  }
+}
+
 export function userCan(user: { userId: string; role: string } | undefined, cap: string): boolean {
   if (!user) return false;
-  const caps = CAPABILITIES[user.role] || [];
+  const caps = getRoleCapabilities(user.role);
   return caps.includes('*') || caps.includes(cap);
 }
 

@@ -3,6 +3,7 @@ import path from 'path';
 import db, { cuid } from './db';
 import { slugify, uniqueSlug } from './slug';
 import { getDefaultProvider } from './ai';
+import { userCan } from '../middleware/auth';
 import type { AIToolFunction, AIToolCall } from './ai';
 
 export interface ToolContext {
@@ -103,6 +104,9 @@ export function getAiAllowedRoles(): string[] {
 
 export function isRoleAllowed(role: string): boolean {
   if (role === 'admin') return true; // admin always allowed
+  // RBAC: allow via the ai_use capability
+  if (userCan({ userId: '', role }, 'ai_use')) return true;
+  // Legacy fallback: the ai_allowed_roles list
   return getAiAllowedRoles().includes(role);
 }
 

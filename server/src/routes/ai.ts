@@ -44,7 +44,7 @@ const SYSTEM_PROMPT =
 // ---- Provider settings (admin only) ----
 
 // Get providers (mask API keys) + permission config
-router.get('/settings', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.get('/settings', authenticate, requireCap('ai_manage', 'manage_options'), (req: AuthRequest, res: Response) => {
   try {
     const providers = getProviders().map((p: AIProvider) => ({
       ...p,
@@ -64,7 +64,7 @@ router.get('/settings', authenticate, requireCap('manage_options'), (req: AuthRe
 });
 
 // Save providers (apiKey kept if masked)
-router.put('/settings', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.put('/settings', authenticate, requireCap('ai_manage', 'manage_options'), (req: AuthRequest, res: Response) => {
   try {
     const incoming = req.body?.providers as AIProvider[];
     if (!Array.isArray(incoming)) { res.status(400).json({ error: 'providers array required' }); return; }
@@ -91,7 +91,7 @@ router.put('/settings', authenticate, requireCap('manage_options'), (req: AuthRe
 });
 
 // Test a provider connection
-router.post('/test', authenticate, requireCap('manage_options'), async (req: AuthRequest, res: Response) => {
+router.post('/test', authenticate, requireCap('ai_manage', 'manage_options'), async (req: AuthRequest, res: Response) => {
   try {
     const p = req.body?.provider as AIProvider;
     if (!p?.apiKey || !p?.model) { res.status(400).json({ error: 'provider, apiKey and model required' }); return; }
@@ -232,7 +232,7 @@ function recordUsage(userId: string, kind: string, text: string, model?: string)
   } catch {}
 }
 
-router.get('/usage', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.get('/usage', authenticate, requireCap('ai_manage'), (req: AuthRequest, res: Response) => {
   try {
     const total = (db.prepare('SELECT COUNT(*) as c, COALESCE(SUM(tokens),0) as t FROM AiUsage').get() as any);
     const today = (db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(tokens),0) as t FROM AiUsage WHERE date(createdAt) = date('now')").get() as any);
@@ -613,7 +613,7 @@ router.post('/image-gen', authenticate, async (req: AuthRequest, res: Response) 
 });
 
 // Admin: AI operation audit log (sandbox traceability)
-router.get('/audit', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.get('/audit', authenticate, requireCap('ai_manage'), (req: AuthRequest, res: Response) => {
   try {
     const logs = db.prepare('SELECT * FROM AiAudit ORDER BY createdAt DESC LIMIT 100').all();
     res.json({ logs });
