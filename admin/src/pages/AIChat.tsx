@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2 } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -8,6 +8,18 @@ interface ChatMsg {
   content: string;
   tools?: string[];
   ts?: number;
+}
+
+interface AiTask {
+  id: string;
+  username: string;
+  prompt: string;
+  status: string;
+  steps?: any[];
+  result?: string;
+  error?: string;
+  createdAt: string;
+  finishedAt?: string | null;
 }
 
 interface Session {
@@ -101,6 +113,10 @@ export default function AIChat() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
+  const [tab, setTab] = useState<'chat' | 'tasks'>('chat');
+  const [tasks, setTasks] = useState<AiTask[]>([]);
+  const [taskDetail, setTaskDetail] = useState<AiTask | null>(null);
+  const [tasksLoading, setTasksLoading] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -127,6 +143,45 @@ export default function AIChat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, busy]);
+
+  async function fetchTasks() {
+    try {
+      const r = await api.get('/ai/tasks');
+      setTasks(r.data.tasks || []);
+    } catch {}
+  }
+
+  useEffect(() => {
+    if (tab !== 'tasks') return;
+    setTasksLoading(true);
+    fetchTasks().finally(() => setTasksLoading(false));
+    const iv = setInterval(fetchTasks, 3000);
+    return () => clearInterval(iv);
+  }, [tab]);
+
+  async function startTask() {
+    const msg = input.trim();
+    if (!msg || busy) return;
+    setInput('');
+    try {
+      await api.post('/ai/task', { message: msg });
+      setTab('tasks');
+      setTimeout(fetchTasks, 500);
+    } catch (e: any) { setError(e.response?.data?.error || '任务创建失败'); }
+  }
+
+  async function openTask(id: string) {
+    try {
+      const r = await api.get('/ai/tasks/' + id);
+      setTaskDetail(r.data);
+    } catch {}
+  }
+
+  async function cancelTask(id: string) {
+    await api.post('/ai/tasks/' + id + '/cancel');
+    fetchTasks();
+    if (taskDetail?.id === id) setTaskDetail({ ...taskDetail, status: 'cancelled' });
+  }
 
   function newSession() {
     const s: Session = { id: 's' + Date.now(), title: t('new chat', getLang()), messages: [], ts: Date.now() };

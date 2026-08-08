@@ -213,6 +213,29 @@ export function initDB(): void {
       createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
     );
 
+    CREATE TABLE IF NOT EXISTS AiAudit (
+      id TEXT PRIMARY KEY,
+      userId TEXT,
+      role TEXT,
+      tool TEXT NOT NULL,
+      args TEXT,
+      output TEXT,
+      createdAt TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS AiTask (
+      id TEXT PRIMARY KEY,
+      userId TEXT,
+      username TEXT,
+      prompt TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running',
+      steps TEXT NOT NULL DEFAULT '[]',
+      result TEXT,
+      error TEXT,
+      createdAt TEXT NOT NULL,
+      finishedAt TEXT
+    );
+
     CREATE TABLE IF NOT EXISTS Activity (
       id TEXT PRIMARY KEY,
       userId TEXT,

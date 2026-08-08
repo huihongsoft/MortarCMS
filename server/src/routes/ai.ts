@@ -6,7 +6,7 @@ import {
   setDefaultProvider, chatComplete, pushAssistantWithTools, pushToolResults, testProvider,
 } from '../utils/ai';
 import {
-  getAiAllowedRoles, getToolPermissions, isRoleAllowed, listToolSchemas, toolCallToResult,
+  getAiAllowedRoles, getToolPermissions, isRoleAllowed, listToolSchemas, toolCallToResult, executeTool, guardUserMessage,
 } from '../utils/aiTools';
 
 const router = Router();
@@ -110,7 +110,7 @@ router.post('/chat', authenticate, async (req: AuthRequest, res: Response) => {
     if (!Array.isArray(messages) || messages.length === 0) { res.status(400).json({ error: 'messages required' }); return; }
     const result = await chatComplete(provider, [
       { role: 'system', content: SYSTEM_PROMPT },
-      ...messages,
+      ...messages.map((m: any) => m.role === 'user' ? { ...m, content: guardUserMessage(m.content) } : m),
     ]);
     res.json({ content: result.content });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -129,7 +129,7 @@ router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) 
     const tools = listToolSchemas(req.user!.role);
     const msgs: any[] = [
       { role: 'system', content: SYSTEM_PROMPT + '\n\n' + buildSiteContext() + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
-      { role: 'user', content: String(message) },
+      { role: 'user', content: guardUserMessage(String(message)) },
     ];
     const ctx = { userId: req.user!.userId, role: req.user!.role };
 
@@ -224,7 +224,7 @@ router.post('/generate', authenticate, async (req: AuthRequest, res: Response) =
 
     const result = await chatComplete(provider, [
       { role: 'system', content: WRITER },
-      { role: 'user', content: prompt },
+      { role: 'user', content: guardUserMessage(prompt) },
     ]);
 
     if (action === 'generate' || action === 'polish' || action === 'continue' || action === 'translate') {
@@ -232,6 +232,129 @@ router.post('/generate', authenticate, async (req: AuthRequest, res: Response) =
     } else {
       res.json({ content: result.content });
     }
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// ---- Async task mode: long-running agent operations with step tracking ----
+
+interface TaskStep {
+  type: 'think' | 'tool';
+  content?: string;
+  name?: string;
+  args?: any;
+  output?: any;
+  ts: number;
+}
+
+function createTask(userId: string, username: string, prompt: string): string {
+  const id = cuid();
+  db.prepare("INSERT INTO AiTask (id, userId, username, prompt, status, createdAt) VALUES (?, ?, ?, ?, 'running', ?)")
+    .run(id, userId, username, prompt, new Date().toISOString());
+  return id;
+}
+
+function updateTask(id: string, patch: Record<string, any>): void {
+  const sets = Object.keys(patch).map(k => k + ' = ?').join(', ');
+  db.prepare('UPDATE AiTask SET ' + sets + ' WHERE id = ?').run(...Object.values(patch), id);
+}
+
+function getTask(id: string): any {
+  const t = db.prepare('SELECT * FROM AiTask WHERE id = ?').get(id) as any;
+  if (t) { try { t.steps = JSON.parse(t.steps); } catch { t.steps = []; } }
+  return t;
+}
+
+async function runTask(taskId: string, userId: string, role: string, username: string, message: string): Promise<void> {
+  try {
+    const provider = getDefaultProvider();
+    if (!provider) { updateTask(taskId, { status: 'failed', error: '尚未配置 AI 服务商', finishedAt: new Date().toISOString() }); return; }
+    const tools = listToolSchemas(role);
+    const msgs: any[] = [
+      { role: 'system', content: SYSTEM_PROMPT + '\n\n' + buildSiteContext() + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
+      { role: 'user', content: guardUserMessage(message) },
+    ];
+    const ctx = { userId, role };
+    const steps: TaskStep[] = [];
+    let finalText = '';
+
+    const MAX_ITER = 10;
+    for (let i = 0; i < MAX_ITER; i++) {
+      // Cancellation check
+      const cur = db.prepare('SELECT status FROM AiTask WHERE id = ?').get(taskId) as any;
+      if (cur?.status === 'cancelled') return;
+
+      const result = await chatComplete(provider, msgs, { tools });
+      finalText = result.content;
+      if (result.content) steps.push({ type: 'think', content: result.content.slice(0, 500), ts: Date.now() });
+      updateTask(taskId, { steps: JSON.stringify(steps) });
+
+      if (!result.toolCalls.length) break;
+
+      pushAssistantWithTools(msgs, result.content, result.toolCalls, provider.type);
+      const outputs = await Promise.all(result.toolCalls.map(async (tc) => {
+        const output = await executeTool(tc.name, tc.args, ctx);
+        steps.push({ type: 'tool', name: tc.name, args: tc.args, output, ts: Date.now() });
+        updateTask(taskId, { steps: JSON.stringify(steps) });
+        return { id: tc.id, output: JSON.stringify(output) };
+      }));
+      pushToolResults(msgs, outputs, provider.type);
+      if (i === MAX_ITER - 1) finalText = '已达到工具调用次数上限。';
+    }
+
+    updateTask(taskId, { status: 'done', result: finalText, steps: JSON.stringify(steps), finishedAt: new Date().toISOString() });
+  } catch (e: any) {
+    updateTask(taskId, { status: 'failed', error: e.message || String(e), finishedAt: new Date().toISOString() });
+  }
+}
+
+router.post('/task', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
+    const { message } = req.body;
+    if (!message) { res.status(400).json({ error: 'message required' }); return; }
+    const user = db.prepare('SELECT id, username FROM User WHERE id = ?').get(req.user!.userId) as any;
+    const taskId = createTask(req.user!.userId, user?.username || 'user', String(message));
+    // Run in background without blocking the response
+    setImmediate(() => { runTask(taskId, req.user!.userId, req.user!.role, user?.username || 'user', String(message)); });
+    res.status(201).json({ id: taskId });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/tasks', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const tasks = req.user!.role === 'admin'
+      ? db.prepare('SELECT id, username, prompt, status, createdAt, finishedAt FROM AiTask ORDER BY createdAt DESC LIMIT 50').all()
+      : db.prepare('SELECT id, username, prompt, status, createdAt, finishedAt FROM AiTask WHERE userId = ? ORDER BY createdAt DESC LIMIT 50').all(req.user!.userId);
+    res.json({ tasks });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/tasks/:id', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const task = getTask(req.params.id);
+    if (!task) { res.status(404).json({ error: '任务不存在' }); return; }
+    if (req.user!.role !== 'admin' && task.userId !== req.user!.userId) { res.status(403).json({ error: '无权查看该任务' }); return; }
+    res.json(task);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: AI operation audit log (sandbox traceability)
+router.get('/audit', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+  try {
+    const logs = db.prepare('SELECT * FROM AiAudit ORDER BY createdAt DESC LIMIT 100').all();
+    res.json({ logs });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/tasks/:id/cancel', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const task = getTask(req.params.id);
+    if (!task) { res.status(404).json({ error: '任务不存在' }); return; }
+    if (req.user!.role !== 'admin' && task.userId !== req.user!.userId) { res.status(403).json({ error: '无权操作该任务' }); return; }
+    if (task.status === 'running') {
+      updateTask(req.params.id, { status: 'cancelled', finishedAt: new Date().toISOString() });
+    }
+    res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -328,7 +451,7 @@ router.post('/webhook/:token', async (req: AuthRequest, res: Response) => {
     const tools = listToolSchemas(user.role);
     const msgs: any[] = [
       { role: 'system', content: SYSTEM_PROMPT + ' 当前用户: ' + binding.username + '。\n' + buildSiteContext() + (tools.length ? '\n可用的工具: ' + tools.map(t => t.function.name).join(', ') : '') },
-      { role: 'user', content: message },
+      { role: 'user', content: guardUserMessage(message) },
     ];
     const ctx = { userId: user.id, role: user.role };
 
