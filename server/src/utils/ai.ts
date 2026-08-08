@@ -125,7 +125,7 @@ async function readOpenAIStream(res: Response, onDelta: (text: string) => void):
   return { content: full, toolCalls };
 }
 
-async function openaiChat(provider: AIProvider, messages: AIMessage[], tools: AIToolFunction[] | undefined, onDelta?: (t: string) => void): Promise<ChatResult> {
+async function openaiChat(provider: AIProvider, messages: AIMessage[], tools: AIToolFunction[] | undefined, onDelta?: (t: string) => void, temperature?: number, maxTokens?: number): Promise<ChatResult> {
   const body: any = {
     model: provider.model,
     messages: messages.map(m => {
@@ -135,6 +135,8 @@ async function openaiChat(provider: AIProvider, messages: AIMessage[], tools: AI
     }),
     stream: !!onDelta,
   };
+  if (temperature !== undefined) body.temperature = temperature;
+  if (maxTokens !== undefined) body.max_tokens = maxTokens;
   if (tools && tools.length) body.tools = tools;
 
   const res = await fetch(buildOpenAIUrl(provider), {
@@ -160,7 +162,7 @@ async function openaiChat(provider: AIProvider, messages: AIMessage[], tools: AI
   return { content: msg.content || '', toolCalls };
 }
 
-async function anthropicChat(provider: AIProvider, messages: AIMessage[], tools: AIToolFunction[] | undefined, onDelta?: (t: string) => void): Promise<ChatResult> {
+async function anthropicChat(provider: AIProvider, messages: AIMessage[], tools: AIToolFunction[] | undefined, onDelta?: (t: string) => void, temperature?: number, maxTokens?: number): Promise<ChatResult> {
   // Split system message (Anthropic uses a top-level system param)
   const system = messages.filter(m => m.role === 'system').map(m => m.content).join('\n\n');
   const rest = messages.filter(m => m.role !== 'system').map(m => ({
@@ -171,10 +173,11 @@ async function anthropicChat(provider: AIProvider, messages: AIMessage[], tools:
 
   const body: any = {
     model: provider.model,
-    max_tokens: 4096,
+    max_tokens: maxTokens || 4096,
     messages: rest,
   };
   if (system) body.system = system;
+  if (temperature !== undefined) body.temperature = temperature;
   if (tools && tools.length) body.tools = tools.map(t => t.function);
   body.stream = !!onDelta;
 
@@ -229,12 +232,12 @@ async function anthropicChat(provider: AIProvider, messages: AIMessage[], tools:
 export async function chatComplete(
   provider: AIProvider,
   messages: AIMessage[],
-  opts: { tools?: AIToolFunction[]; temperature?: number; onDelta?: (text: string) => void } = {}
+  opts: { tools?: AIToolFunction[]; temperature?: number; maxTokens?: number; onDelta?: (text: string) => void } = {}
 ): Promise<ChatResult> {
   if (provider.type === 'anthropic') {
-    return anthropicChat(provider, messages, opts.tools, opts.onDelta);
+    return anthropicChat(provider, messages, opts.tools, opts.onDelta, opts.temperature, opts.maxTokens);
   }
-  return openaiChat(provider, messages, opts.tools, opts.onDelta);
+  return openaiChat(provider, messages, opts.tools, opts.onDelta, opts.temperature, opts.maxTokens);
 }
 
 // Append a tool-call round-trip to the message list (provider-agnostic)

@@ -123,7 +123,7 @@ router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) 
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     const provider = getDefaultProvider();
     if (!provider) { res.status(400).json({ error: '尚未配置 AI 服务商，请先在 AI 设置中配置' }); return; }
-    const { message } = req.body;
+    const { message, temperature, maxTokens } = req.body;
     if (!message) { res.status(400).json({ error: 'message required' }); return; }
 
     const tools = listToolSchemas(req.user!.role);
@@ -132,6 +132,9 @@ router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) 
       { role: 'user', content: guardUserMessage(String(message)) },
     ];
     const ctx = { userId: req.user!.userId, role: req.user!.role };
+    const opts: any = { tools };
+    if (temperature !== undefined) opts.temperature = Math.min(2, Math.max(0, Number(temperature)));
+    if (maxTokens !== undefined) opts.maxTokens = Math.min(16384, Math.max(64, Number(maxTokens)));
 
     res.writeHead(200, {
       'Content-Type': 'text/event-stream; charset=utf-8',
@@ -145,7 +148,7 @@ router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) 
 
     const MAX_ITER = 6;
     for (let i = 0; i < MAX_ITER; i++) {
-      const result = await chatComplete(provider, msgs, { tools, onDelta: i === 0 ? onDelta : undefined });
+      const result = await chatComplete(provider, msgs, { ...opts, onDelta: i === 0 ? onDelta : undefined });
       finalText = result.content;
       if (!result.toolCalls.length) break;
       send({ type: 'tools', tools: result.toolCalls.map(t => t.name) });

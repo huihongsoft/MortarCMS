@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell, Download } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell, Download, Settings2 } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -113,6 +113,16 @@ export default function AIChat() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
+  const [paramsOpen, setParamsOpen] = useState(false);
+  const [temperature, setTemperature] = useState(0.7);
+  const [maxTokens, setMaxTokens] = useState(4096);
+  const paramsRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => { if (paramsRef.current && !paramsRef.current.contains(e.target as Node)) setParamsOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
   const [tab, setTab] = useState<'chat' | 'tasks'>('chat');
   const [tasks, setTasks] = useState<AiTask[]>([]);
   const [taskDetail, setTaskDetail] = useState<AiTask | null>(null);
@@ -328,7 +338,7 @@ export default function AIChat() {
       const res = await fetch('/api/ai/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('mortar_token') || '') },
-        body: JSON.stringify({ message: msg }),
+        body: JSON.stringify({ message: msg, temperature, maxTokens }),
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -398,7 +408,7 @@ export default function AIChat() {
       const res = await fetch('/api/ai/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('mortar_token') || '') },
-        body: JSON.stringify({ message: msg }),
+        body: JSON.stringify({ message: msg, temperature, maxTokens }),
         signal: controller.signal,
       });
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '请求失败'); }
@@ -476,6 +486,19 @@ export default function AIChat() {
             onClick: () => updateSession(active.id, x => ({ ...x, messages: [] })),
             className: 'text-xs text-gray-400 hover:text-red-600',
           }, t('clear history', getLang()))) : null,
+        React.createElement('div', { ref: paramsRef, className: 'relative' },
+          React.createElement('button', { onClick: () => setParamsOpen(!paramsOpen), className: 'p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700', title: t('generation params', getLang()) },
+            React.createElement(Settings2, { size: 16 })),
+          paramsOpen && React.createElement('div', { className: 'absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 p-3 space-y-3' },
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-[11px] text-gray-500 mb-1' }, t('temperature', getLang()) + ': ' + temperature.toFixed(1)),
+              React.createElement('input', { type: 'range', min: 0, max: 2, step: 0.1, value: temperature, onChange: e => setTemperature(parseFloat(e.target.value)), className: 'w-full' })),
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-[11px] text-gray-500 mb-1' }, t('max tokens', getLang())),
+              React.createElement('select', { value: maxTokens, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setMaxTokens(parseInt(e.target.value)), className: 'input-field text-xs' },
+                [512, 1024, 2048, 4096, 8192, 16384].map(v => React.createElement('option', { key: v, value: v }, v))))
+          ),
+        ),
         React.createElement('div', { ref: notifRef, className: 'relative' },
           React.createElement('button', { onClick: () => setNotifOpen(!notifOpen), className: 'relative p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' },
             React.createElement(Bell, { size: 16 }),
