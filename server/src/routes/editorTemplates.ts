@@ -1,4 +1,6 @@
 import { Router, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { renderShortcode } from '../utils/shortcodes';
@@ -17,6 +19,18 @@ function saveTemplates(templates: any[]): void {
     'custom_templates', JSON.stringify(templates)
   );
 }
+
+// Public: the real site's built CSS bundle URLs, so the visual editor canvas
+// preview matches the live frontend (typography, theme CSS, components).
+router.get('/canvas-css', (_req: AuthRequest, res: Response) => {
+  try {
+    const indexHtml = path.join(__dirname, '..', '..', '..', 'frontend', 'dist', 'index.html');
+    if (!fs.existsSync(indexHtml)) { res.json({ styles: [] }); return; }
+    const html = fs.readFileSync(indexHtml, 'utf8');
+    const styles = [...html.matchAll(/href="([^"]*\.css)"/g)].map(m => m[1]);
+    res.json({ styles });
+  } catch (err: any) { res.json({ styles: [] }); }
+});
 
 // Public: live preview HTML for a CMS data block (used by the visual editor canvas)
 router.get('/preview-cms/:type', (req: AuthRequest, res: Response) => {

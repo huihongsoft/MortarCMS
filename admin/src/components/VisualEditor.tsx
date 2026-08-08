@@ -150,8 +150,89 @@ const CONTENT_BLOCKS = [
   },
 ];
 
+// Pre-built page sections: complete units you can drop in and customize
+const SECTIONS_BLOCKS = [
+  {
+    id: 'sec-pricing',
+    label: 'Pricing Table',
+    category: 'Sections',
+    media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="5" height="16" rx="1"/><rect x="9.5" y="4" width="5" height="16" rx="1"/><rect x="17" y="4" width="5" height="16" rx="1"/></svg>',
+    content: '<div style="display:flex;gap:24px;flex-wrap:wrap;padding:40px 24px;">' +
+      ['Basic', 'Pro', 'Premium'].map((name, i) => {
+        const featured = i === 1;
+        return '<div style="flex:1;min-width:200px;border:2px solid ' + (featured ? '#3b82f6' : '#e5e7eb') + ';border-radius:16px;padding:28px 20px;text-align:center;' + (featured ? 'background:#eff6ff;' : '') + '">' +
+          '<p style="font-size:13px;font-weight:600;color:#6b7280;margin:0 0 8px;text-transform:uppercase;letter-spacing:.05em;">' + name + '</p>' +
+          '<p style="font-size:36px;font-weight:800;color:#111827;margin:0 0 16px;">$' + (9 + i * 10) + '<span style="font-size:14px;color:#9ca3af;font-weight:400;">/mo</span></p>' +
+          '<p style="font-size:13px;color:#6b7280;line-height:2;margin:0 0 20px;">Feature one<br>Feature two<br>Feature three</p>' +
+          '<div style="display:inline-block;padding:10px 28px;border-radius:8px;background:' + (featured ? '#3b82f6' : '#f3f4f6') + ';color:' + (featured ? '#fff' : '#374151') + ';font-size:14px;font-weight:600;">Choose ' + name + '</div>' +
+          '</div>';
+      }).join('') + '</div>',
+  },
+  {
+    id: 'sec-team',
+    label: 'Team',
+    category: 'Sections',
+    media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><circle cx="17" cy="9" r="2.5"/><path d="M16 14.5a4.5 4.5 0 0 1 5.5 4.5"/></svg>',
+    content: '<div style="padding:48px 24px;text-align:center;"><h2 style="margin:0 0 8px;font-size:28px;color:#111827;">Meet the Team</h2><p style="margin:0 0 32px;color:#6b7280;font-size:15px;">The people behind the product</p><div style="display:flex;gap:32px;flex-wrap:wrap;justify-content:center;">' +
+      ['Jane Doe', 'John Smith', 'Ana Liu'].map((n, i) =>
+        '<div style="width:180px;text-align:center;">' +
+        '<div style="width:96px;height:96px;margin:0 auto 12px;border-radius:50%;background:linear-gradient(135deg,#c7d2fe,#a5b4fc);display:flex;align-items:center;justify-content:center;font-size:32px;color:#4f46e5;font-weight:700;">' + n[0] + '</div>' +
+        '<p style="margin:0;font-size:15px;font-weight:600;color:#111827;">' + n + '</p>' +
+        '<p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">' + ['Founder', 'Engineer', 'Designer'][i] + '</p>' +
+        '</div>'
+      ).join('') + '</div></div>',
+  },
+  {
+    id: 'sec-stats',
+    label: 'Stats Bar',
+    category: 'Sections',
+    media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3v18h18"/><path d="m7 14 4-5 3 3 5-7"/></svg>',
+    content: '<div style="display:flex;gap:16px;flex-wrap:wrap;padding:40px 24px;background:#111827;border-radius:16px;justify-content:space-around;">' +
+      [['10K+', 'Users'], ['120+', 'Countries'], ['99.9%', 'Uptime'], ['4.9★', 'Rating']].map(([v, l]) =>
+        '<div style="text-align:center;"><p style="margin:0;font-size:32px;font-weight:800;color:#fff;">' + v + '</p><p style="margin:4px 0 0;font-size:13px;color:#9ca3af;">' + l + '</p></div>'
+      ).join('') + '</div>',
+  },
+  {
+    id: 'sec-testimonial',
+    label: 'Testimonial',
+    category: 'Sections',
+    media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21c3-5 4-9 4-13H3a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2c0 6-2 10-8 13z"/><path d="M13 21c3-5 4-9 4-13h-4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2c0 6-2 10-8 13z"/></svg>',
+    content: '<div style="padding:48px 24px;text-align:center;background:#f9fafb;"><p style="font-size:48px;line-height:1;margin:0 0 16px;color:#c7d2fe;">&ldquo;</p><p style="max-width:640px;margin:0 auto 24px;font-size:18px;line-height:1.8;color:#374151;font-style:italic;">This product completely changed how we work. Highly recommended!</p><div style="width:56px;height:56px;margin:0 auto 8px;border-radius:50%;background:linear-gradient(135deg,#a5b4fc,#818cf8);display:flex;align-items:center;justify-content:center;font-size:22px;color:#fff;font-weight:700;">J</div><p style="margin:0;font-size:14px;font-weight:600;color:#111827;">Jane Doe</p><p style="margin:2px 0 0;font-size:12px;color:#9ca3af;">CEO, Acme Inc.</p></div>',
+  },
+  {
+    id: 'sec-cta',
+    label: 'CTA Banner',
+    category: 'Sections',
+    media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 3v4M3 5h4M6 17v4m-2-2h4m5-16 2.3 5.3L21 11l-5.7 2.7L13 19l-2.3-5.3L5 11l5.7-2.7z"/></svg>',
+    content: '<div style="padding:64px 24px;background:linear-gradient(135deg,#2563eb,#7c3aed);border-radius:16px;text-align:center;color:#fff;"><h2 style="margin:0 0 12px;font-size:30px;color:#fff;">Ready to get started?</h2><p style="margin:0 0 28px;font-size:16px;color:rgba(255,255,255,0.85);">Join thousands of happy customers today</p><div style="display:inline-block;padding:14px 40px;background:#fff;color:#2563eb;border-radius:10px;font-size:16px;font-weight:700;">Get Started Free</div></div>',
+  },
+  {
+    id: 'sec-newsletter',
+    label: 'Newsletter',
+    category: 'Sections',
+    media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="m22 6-10 7L2 6"/></svg>',
+    content: '<div style="padding:48px 24px;text-align:center;"><h2 style="margin:0 0 8px;font-size:26px;color:#111827;">Stay in the loop</h2><p style="margin:0 0 24px;font-size:14px;color:#6b7280;">Subscribe to our newsletter for the latest updates</p><form style="display:flex;gap:8px;max-width:420px;margin:0 auto;justify-content:center;"><input type="email" placeholder="Your email" style="flex:1;padding:12px 16px;border:1px solid #d1d5db;border-radius:10px;font-size:14px;outline:none;"><button style="padding:12px 24px;background:#3b82f6;color:#fff;border:none;border-radius:10px;font-size:14px;font-weight:600;cursor:pointer;">Subscribe</button></form></div>',
+  },
+  {
+    id: 'sec-video',
+    label: 'Video Embed',
+    category: 'Sections',
+    media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><circle cx="12" cy="12" r="4" fill="currentColor" stroke="none"/></svg>',
+    content: '<div style="position:relative;padding-top:56.25%;border-radius:12px;overflow:hidden;background:#111827;margin:16px 0;"><div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;"><div style="width:72px;height:72px;border-radius:50%;background:rgba(255,255,255,0.9);display:flex;align-items:center;justify-content:center;font-size:28px;color:#111827;">&#9654;</div></div></div>',
+  },
+  {
+    id: 'sec-gallery',
+    label: 'Image Gallery',
+    category: 'Sections',
+    media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
+    content: '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;padding:16px 0;">' +
+      Array.from({ length: 6 }, () => '<img src="https://placehold.co/400x300/e2e8f0/64748b?text=Gallery" alt="Gallery" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:8px;display:block;">').join('') +
+      '</div>',
+  },
+];
+
 // All blocks merged
-const ALL_BLOCKS = [...LAYOUT_BLOCKS, ...CONTENT_BLOCKS, ...CMS_BLOCKS];
+const ALL_BLOCKS = [...LAYOUT_BLOCKS, ...CONTENT_BLOCKS, ...SECTIONS_BLOCKS, ...CMS_BLOCKS];
 
 export default function VisualEditor({ content, css, onChange, height }: VisualEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -242,9 +323,38 @@ export default function VisualEditor({ content, css, onChange, height }: VisualE
     editor.on('load', () => {
       const canvas = editor.Canvas.getDocument();
       if (!canvas) return;
+
+      // Load the REAL site CSS bundle so the preview matches the live frontend
+      const loadSiteStyles = () => {
+        fetch('/api/editor/canvas-css')
+          .then(r => r.json())
+          .then((d: any) => {
+            const urls = (d?.styles || []) as string[];
+            if (urls.length === 0) {
+              // Fallback: Tailwind CDN so utility classes still work
+              const link = canvas.createElement('link');
+              link.rel = 'stylesheet';
+              link.href = 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css';
+              canvas.head.appendChild(link);
+              return;
+            }
+            urls.forEach((href: string) => {
+              const existing = canvas.querySelector('link[href="' + href + '"]');
+              if (!existing) {
+                const link = canvas.createElement('link');
+                link.rel = 'stylesheet';
+                link.href = href;
+                canvas.head.appendChild(link);
+              }
+            });
+          })
+          .catch(() => {});
+      };
+      loadSiteStyles();
+
       const style = canvas.createElement('style');
       style.textContent = `
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin:0; }
+        body { margin:0; }
         .cms-post-list, .cms-categories, .cms-comments, .cms-search, .cms-archive, .cms-tag-cloud { min-height: 40px; }
       `;
       canvas.head.appendChild(style);
@@ -291,9 +401,7 @@ export default function VisualEditor({ content, css, onChange, height }: VisualE
       forceClass: false,
       // Canvas configuration — smooth drag, snap guides, responsive breakpoints
       canvas: {
-        styles: [
-          'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css',
-        ],
+        styles: [], // real site CSS is injected on load (see below); CDN used as fallback
         frameStyle: `
           :root { --primary: #3b82f6; --primary-soft: rgba(59,130,246,0.08); }
           body {
