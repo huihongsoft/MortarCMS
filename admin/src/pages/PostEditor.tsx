@@ -30,6 +30,8 @@ export default function PostEditor() {
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
   const [visualCss, setVisualCss] = useState('');
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiStyle, setAiStyle] = useState('formal');
+  const [aiLang, setAiLang] = useState('简体中文');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiResult, setAiResult] = useState('');
   const [aiError, setAiError] = useState('');
@@ -115,7 +117,7 @@ export default function PostEditor() {
     if (aiLoading) return;
     setAiLoading(true); setAiError(''); setAiResult('');
     try {
-      const r = await api.post('/ai/generate', { action, title, content, excerpt });
+      const r = await api.post('/ai/generate', { action, title, content, excerpt, style: aiStyle, language: aiLang });
       setAiResult(r.data.content || '');
     } catch (e: any) {
       setAiError(e.response?.data?.error || t('save failed', getLang()));
@@ -171,6 +173,10 @@ export default function PostEditor() {
       ),
       aiOpen && React.createElement('div', null,
         React.createElement('div', { className: 'flex flex-wrap gap-1.5 mb-3' },
+          React.createElement('select', { value: aiStyle, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setAiStyle(e.target.value), className: 'input-field w-28 text-xs' },
+            [['formal', '正式'], ['casual', '口语化'], ['marketing', '营销'], ['concise', '简洁']].map(([v, l]) => React.createElement('option', { key: v, value: v }, l))),
+          React.createElement('select', { value: aiLang, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setAiLang(e.target.value), className: 'input-field w-28 text-xs' },
+            ['简体中文', 'English', '日本語', '한국어', 'Français', 'Deutsch', 'Español'].map(l => React.createElement('option', { key: l, value: l }, l))),
           AI_ACTIONS.map(a => React.createElement('button', {
             key: a.key,
             onClick: () => runAi(a.key),

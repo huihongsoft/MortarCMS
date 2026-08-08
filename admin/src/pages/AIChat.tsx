@@ -116,6 +116,7 @@ export default function AIChat() {
   const [paramsOpen, setParamsOpen] = useState(false);
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(4096);
+  const [includeContext, setIncludeContext] = useState(true);
   const paramsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -338,7 +339,7 @@ export default function AIChat() {
       const res = await fetch('/api/ai/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('mortar_token') || '') },
-        body: JSON.stringify({ message: msg, temperature, maxTokens }),
+        body: JSON.stringify({ message: msg, temperature, maxTokens, includeContext }),
         signal: controller.signal,
       });
       if (!res.ok) {
@@ -408,7 +409,7 @@ export default function AIChat() {
       const res = await fetch('/api/ai/assistant', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('mortar_token') || '') },
-        body: JSON.stringify({ message: msg, temperature, maxTokens }),
+        body: JSON.stringify({ message: msg, temperature, maxTokens, includeContext }),
         signal: controller.signal,
       });
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '请求失败'); }
@@ -486,6 +487,11 @@ export default function AIChat() {
             onClick: () => updateSession(active.id, x => ({ ...x, messages: [] })),
             className: 'text-xs text-gray-400 hover:text-red-600',
           }, t('clear history', getLang()))) : null,
+        React.createElement('button', {
+          onClick: () => setIncludeContext(!includeContext),
+          title: t('site context', getLang()),
+          className: 'text-[11px] px-2 py-1 rounded-lg border ' + (includeContext ? 'border-primary-300 bg-primary-50 text-primary-600' : 'border-gray-200 dark:border-gray-700 text-gray-400'),
+        }, includeContext ? '🧠 ' + t('context on', getLang()) : t('context off', getLang())),
         React.createElement('div', { ref: paramsRef, className: 'relative' },
           React.createElement('button', { onClick: () => setParamsOpen(!paramsOpen), className: 'p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700', title: t('generation params', getLang()) },
             React.createElement(Settings2, { size: 16 })),

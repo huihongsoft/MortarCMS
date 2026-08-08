@@ -124,12 +124,12 @@ router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) 
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     const provider = getDefaultProvider();
     if (!provider) { res.status(400).json({ error: '尚未配置 AI 服务商，请先在 AI 设置中配置' }); return; }
-    const { message, temperature, maxTokens } = req.body;
+    const { message, temperature, maxTokens, includeContext } = req.body;
     if (!message) { res.status(400).json({ error: 'message required' }); return; }
 
     const tools = listToolSchemas(req.user!.role);
     const msgs: any[] = [
-      { role: 'system', content: SYSTEM_PROMPT + '\n\n' + buildSiteContext() + memoryPrompt(req.user!.userId) + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
+      { role: 'system', content: SYSTEM_PROMPT + (includeContext === false ? '' : '\n\n' + buildSiteContext() + memoryPrompt(req.user!.userId)) + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
       { role: 'user', content: guardUserMessage(String(message)) },
     ];
     const ctx = { userId: req.user!.userId, role: req.user!.role };
@@ -174,7 +174,12 @@ router.post('/generate', authenticate, async (req: AuthRequest, res: Response) =
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     const provider = getDefaultProvider();
     if (!provider) { res.status(400).json({ error: '尚未配置 AI 服务商，请先在 AI 设置中配置' }); return; }
-    const { action, title, content } = req.body || {};
+    const { action, title, content, style, language } = req.body || {};
+    const styleHint = style === 'formal' ? '使用正式、书面化的语言。'
+      : style === 'casual' ? '使用轻松、口语化的语言。'
+      : style === 'marketing' ? '使用有感染力、营销风格的语言，突出价值。'
+      : style === 'concise' ? '使用简洁精炼的语言，去掉废话。'
+      : '';
     if (!['generate', 'polish', 'continue', 'translate', 'summarize', 'seo', 'tags'].includes(action)) {
       res.status(400).json({ error: '未知操作' }); return;
     }
@@ -182,13 +187,14 @@ router.post('/generate', authenticate, async (req: AuthRequest, res: Response) =
     const WRITER = '你是专业的文章写作助手。只输出要求的内容本身，不要任何解释、前言或 Markdown 代码块标记。';
     let prompt = '';
     if (action === 'generate') {
-      prompt = '请撰写一篇关于「' + String(title || '') + '」的文章，使用 Markdown 格式（## 分节、- 列表、**加粗**），不少于 600 字，结构清晰有深度。';
+      prompt = styleHint + '请撰写一篇关于「' + String(title || '') + '」的文章，使用 Markdown 格式（## 分节、- 列表、**加粗**），不少于 600 字，结构清晰有深度。';
     } else if (action === 'polish') {
-      prompt = '请润色以下文章：提升语言流畅度与文采，保持原有结构和信息，输出 Markdown 格式。\n\n' + String(content || '');
+      prompt = styleHint + '请润色以下文章：提升语言流畅度与文采，保持原有结构和信息，输出 Markdown 格式。\n\n' + String(content || '');
     } else if (action === 'continue') {
-      prompt = '请续写以下文章，接着末尾继续写，不要重复已有内容，输出 Markdown 格式。\n\n' + String(content || '');
+      prompt = styleHint + '请续写以下文章，接着末尾继续写，不要重复已有内容，输出 Markdown 格式。\n\n' + String(content || '');
     } else if (action === 'translate') {
-      prompt = '请将以下文章翻译成简体中文，保留 Markdown 格式。\n\n' + String(content || '');
+      const target = String(language || '简体中文');
+      prompt = '请将以下文章翻译成' + target + '，保留 Markdown 格式。\n\n' + String(content || '');
     } else if (action === 'summarize') {
       prompt = '请为以下文章写一段摘要，150 字以内，一句话概括核心观点。\n\n' + String(content || '');
     } else if (action === 'seo') {
