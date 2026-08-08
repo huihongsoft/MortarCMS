@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2 } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -10,6 +10,13 @@ interface ChatMsg {
   ts?: number;
 }
 
+interface Session {
+  id: string;
+  title: string;
+  messages: ChatMsg[];
+  ts: number;
+}
+
 const SUGGESTIONS = [
   { icon: BarChart3, text: '查看一下站点的统计数据' },
   { icon: FileText, text: '帮我列出最近发布的 5 篇文章' },
@@ -17,7 +24,8 @@ const SUGGESTIONS = [
   { icon: MessageSquare, text: '查看待审核的评论' },
 ];
 
-const HISTORY_KEY = 'mortar_ai_chat_history';
+const HISTORY_KEY = 'mortar_ai_sessions';
+const LAST_KEY = 'mortar_ai_last_session';
 
 // Lightweight Markdown renderer for assistant replies
 function renderMd(text: string): React.ReactNode[] {
@@ -75,8 +83,11 @@ function inlineMd(s: string): React.ReactNode[] {
 }
 
 export default function AIChat() {
-  const [messages, setMessages] = useState<ChatMsg[]>(() => {
+  const [sessions, setSessions] = useState<Session[]>(() => {
     try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
+  });
+  const [sessionId, setSessionId] = useState<string>(() => {
+    try { return localStorage.getItem(LAST_KEY) || ''; } catch { return ''; }
   });
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
@@ -85,17 +96,51 @@ export default function AIChat() {
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
+  // Ensure at least one session exists
   useEffect(() => {
-    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(messages.slice(-30))); } catch {}
-  }, [messages]);
+    if (sessions.length === 0) {
+      const s: Session = { id: 's' + Date.now(), title: t('new chat', getLang()), messages: [], ts: Date.now() };
+      setSessions([s]);
+      setSessionId(s.id);
+    }
+  }, []);
+
+  useEffect(() => {
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(sessions)); } catch {}
+  }, [sessions]);
+
+  useEffect(() => {
+    try { localStorage.setItem(LAST_KEY, sessionId); } catch {}
+  }, [sessionId]);
+
+  const active = sessions.find(s => s.id === sessionId) || sessions[sessions.length - 1];
+  const messages = active?.messages || [];
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, busy]);
 
-  function clearHistory() {
-    setMessages([]);
-    try { localStorage.removeItem(HISTORY_KEY); } catch {}
+  function newSession() {
+    const s: Session = { id: 's' + Date.now(), title: t('new chat', getLang()), messages: [], ts: Date.now() };
+    setSessions([s, ...sessions]);
+    setSessionId(s.id);
+  }
+
+  function deleteSession(id: string) {
+    const rest = sessions.filter(x => x.id !== id);
+    setSessions(rest);
+    if (sessionId === id) {
+      if (rest.length > 0) setSessionId(rest[0].id);
+      else {
+        const s: Session = { id: 's' + Date.now(), title: t('new chat', getLang()), messages: [], ts: Date.now() };
+        setSessions([s]);
+        setSessionId(s.id);
+      }
+    }
+  }
+
+  function renameSession(id: string, title: string) {
+    setSessions(sessions.map(x => x.id === id ? { ...x, title } : x));
   }
 
   function copy(text: string) {
@@ -108,13 +153,22 @@ export default function AIChat() {
     abortRef.current?.abort();
   }
 
+  function updateSession(id: string, updater: (s: Session) => Session) {
+    setSessions(prev => prev.map(x => x.id === id ? updater(x) : x));
+  }
+
   async function send(text?: string) {
     const msg = (text ?? input).trim();
     if (!msg || busy) return;
     setInput('');
     setError('');
+    const sid = active?.id || '';
     const history = [...messages, { role: 'user' as const, content: msg, ts: Date.now() }];
-    setMessages(history);
+    updateSession(sid, x => ({
+      ...x,
+      title: x.title === t('new chat', getLang()) ? msg.slice(0, 24) : x.title,
+      messages: history,
+    }));
     setBusy(true);
 
     const controller = new AbortController();
@@ -149,10 +203,10 @@ export default function AIChat() {
             const j = JSON.parse(line.slice(5).trim());
             if (j.type === 'delta') {
               full += j.text;
-              setMessages([...history, { role: 'assistant', content: full, tools: lastTools, ts: Date.now() }]);
+              updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, ts: Date.now() }] }));
             } else if (j.type === 'tools') {
               lastTools = j.tools || [];
-              setMessages([...history, { role: 'assistant', content: full, tools: lastTools, ts: Date.now() }]);
+              updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, ts: Date.now() }] }));
             } else if (j.type === 'done') {
               full = j.content || full;
             } else if (j.type === 'error') {
@@ -161,14 +215,14 @@ export default function AIChat() {
           } catch {}
         }
       }
-      setMessages([...history, { role: 'assistant', content: full, tools: lastTools, ts: Date.now() }]);
+      updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, ts: Date.now() }] }));
     } catch (e: any) {
       if (e.name === 'AbortError') {
-        setMessages(history);
+        updateSession(sid, x => ({ ...x, messages: history }));
         setError(t('generation stopped', getLang()));
       } else {
         setError(e.message || '请求失败');
-        setMessages(history);
+        updateSession(sid, x => ({ ...x, messages: history }));
       }
     } finally {
       setBusy(false);
@@ -177,15 +231,14 @@ export default function AIChat() {
   }
 
   async function regenerate(lastUserMsg: string) {
-    if (busy) return;
-    // Remove trailing assistant replies after the last user message
+    if (busy || !active) return;
     const idx = [...messages].map(m => m.role).lastIndexOf('user');
     const trimmed = messages.slice(0, idx);
-    setMessages(trimmed);
-    await sendFrom(lastUserMsg, trimmed);
+    updateSession(active.id, x => ({ ...x, messages: trimmed }));
+    await sendFrom(lastUserMsg, active.id, trimmed);
   }
 
-  async function sendFrom(msg: string, history: ChatMsg[]) {
+  async function sendFrom(msg: string, sid: string, history: ChatMsg[]) {
     if (!msg || busy) return;
     setError('');
     setBusy(true);
@@ -212,21 +265,44 @@ export default function AIChat() {
           if (!line.startsWith('data:')) continue;
           try {
             const j = JSON.parse(line.slice(5).trim());
-            if (j.type === 'delta') { full += j.text; setMessages([...history, { role: 'assistant', content: full, tools: lastTools }]); }
-            else if (j.type === 'tools') { lastTools = j.tools || []; setMessages([...history, { role: 'assistant', content: full, tools: lastTools }]); }
+            if (j.type === 'delta') { full += j.text; updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools }] })); }
+            else if (j.type === 'tools') { lastTools = j.tools || []; updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools }] })); }
             else if (j.type === 'done') { full = j.content || full; }
             else if (j.type === 'error') throw new Error(j.error || 'AI 错误');
           } catch {}
         }
       }
-      setMessages([...history, { role: 'assistant', content: full, tools: lastTools }]);
+      updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools }] }));
     } catch (e: any) {
       if (e.name !== 'AbortError') setError(e.message || '请求失败');
-      setMessages(history);
+      updateSession(sid, x => ({ ...x, messages: history }));
     } finally { setBusy(false); abortRef.current = null; }
   }
 
-  return React.createElement('div', { className: 'flex flex-col h-[calc(100vh-140px)]' },
+  return React.createElement('div', { className: 'flex gap-4 h-[calc(100vh-140px)]' },
+    // ---- Sessions sidebar ----
+    React.createElement('div', { className: 'w-56 flex-shrink-0 flex flex-col bg-white border border-gray-100 rounded-2xl overflow-hidden' },
+      React.createElement('div', { className: 'p-2 border-b border-gray-100' },
+        React.createElement('button', { onClick: newSession, className: 'w-full flex items-center justify-center gap-1.5 py-2 text-xs font-medium rounded-lg bg-primary-50 text-primary-600 hover:bg-primary-100 transition-colors' },
+          React.createElement('Plus', { size: 13 }), t('new chat', getLang()))),
+      React.createElement('div', { className: 'flex-1 overflow-y-auto p-2 space-y-1' },
+        sessions.map(sess => React.createElement('div', {
+          key: sess.id,
+          onClick: () => setSessionId(sess.id),
+          className: 'group flex items-center gap-2 px-2.5 py-2 rounded-lg cursor-pointer transition-colors ' +
+            (sess.id === sessionId ? 'bg-primary-50 text-primary-700' : 'text-gray-600 hover:bg-gray-50'),
+        },
+          React.createElement(MessageSquare, { size: 13, className: 'flex-shrink-0 opacity-60' }),
+          React.createElement('span', { className: 'flex-1 text-xs truncate' }, sess.title),
+          React.createElement('button', {
+            onClick: (e: React.MouseEvent) => { e.stopPropagation(); deleteSession(sess.id); },
+            className: 'opacity-0 group-hover:opacity-100 p-0.5 text-gray-300 hover:text-red-500 flex-shrink-0',
+          }, React.createElement(Trash2, { size: 12 }))
+        ))
+      ),
+    ),
+    // ---- Chat column ----
+    React.createElement('div', { className: 'flex-1 flex flex-col min-w-0' },
     React.createElement('div', { className: 'flex items-center justify-between mb-4' },
       React.createElement('div', { className: 'flex items-center gap-2' },
         React.createElement('div', { className: 'w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center' },
@@ -237,7 +313,10 @@ export default function AIChat() {
       ),
       React.createElement('div', { className: 'flex items-center gap-2' },
         error && React.createElement('p', { className: 'text-xs text-red-600' }, error),
-        messages.length > 0 && React.createElement('button', { onClick: clearHistory, className: 'text-xs text-gray-400 hover:text-red-600' }, t('clear history', getLang())),
+        active?.messages.length ? React.createElement('button', {
+          onClick: () => updateSession(active.id, x => ({ ...x, messages: [] })),
+          className: 'text-xs text-gray-400 hover:text-red-600',
+        }, t('clear history', getLang())) : null,
       ),
     ),
 
@@ -298,6 +377,7 @@ export default function AIChat() {
         ? React.createElement('button', { onClick: stop, className: 'btn-danger' }, React.createElement(Square, { size: 16 }), t('stop', getLang()))
         : React.createElement('button', { onClick: () => send(), disabled: !input.trim(), className: 'btn-primary' },
             React.createElement(Send, { size: 16 }), t('send', getLang()))
+    )
     )
   );
 }
