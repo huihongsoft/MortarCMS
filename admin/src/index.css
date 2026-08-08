@@ -177,9 +177,9 @@ table tbody tr { transition: background-color 0.12s ease; }
   border-radius: 12px;
   overflow: hidden;
 }
-/* Top command bar */
+/* Top command bar — white, matching the admin surfaces */
 .visual-editor-container .gjs-pn-panels {
-  background: #f9fafb;
+  background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
   padding: 4px 8px;
   min-height: 42px;
@@ -192,11 +192,16 @@ table tbody tr { transition: background-color 0.12s ease; }
   margin: 0 2px;
   transition: color .15s, background .15s;
 }
-.visual-editor-container .gjs-pn-btn:hover { color: #111827; background: #e5e7eb; }
-.visual-editor-container .gjs-pn-btn.gjs-pn-active { color: var(--admin-primary, #2563eb); background: color-mix(in srgb, var(--admin-primary, #2563eb) 10%, transparent); }
-/* Panels: blocks left, views right */
+.visual-editor-container .gjs-pn-btn:hover { color: #111827; background: #f3f4f6; }
+/* Active view button: theme-color tint + underline indicator (admin tab style) */
+.visual-editor-container .gjs-pn-btn.gjs-pn-active {
+  color: var(--admin-primary, #2563eb);
+  background: color-mix(in srgb, var(--admin-primary, #2563eb) 8%, transparent);
+  box-shadow: inset 0 -2px 0 0 var(--admin-primary, #2563eb);
+}
+/* Panels: blocks left, views right — white surfaces */
 .visual-editor-container .gjs-pn-views-container { border-left: 1px solid #e5e7eb; }
-.visual-editor-container .gjs-blocks-c { padding: 10px; background: #f9fafb; }
+.visual-editor-container .gjs-blocks-c { padding: 10px; background: #ffffff; }
 /* Block cards */
 .visual-editor-container .gjs-block {
   border-radius: 10px;
@@ -222,7 +227,7 @@ table tbody tr { transition: background-color 0.12s ease; }
 }
 .visual-editor-container .gjs-block-label { color: #4b5563; font-size: 11px; line-height: 1.3; margin-top: 4px; }
 .visual-editor-container .gjs-category-title {
-  background: #f3f4f6;
+  background: #f9fafb;
   border-radius: 8px;
   margin: 8px 0 6px;
   padding: 7px 10px;
@@ -231,10 +236,10 @@ table tbody tr { transition: background-color 0.12s ease; }
   color: #374151;
 }
 .visual-editor-container .gjs-category-title .gjs-caret { font-size: 10px; }
-/* Right-side style manager */
+/* Right-side style manager — white surfaces */
 .visual-editor-container .gjs-sm-sectors { background: #fff; }
 .visual-editor-container .gjs-sm-sector .gjs-sm-sector-title {
-  background: #f9fafb;
+  background: #ffffff;
   border-bottom: 1px solid #f3f4f6;
   color: #374151;
   font-size: 12px;
