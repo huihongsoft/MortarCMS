@@ -426,6 +426,17 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         })
         .catch(() => {});
     });
+
+    // One-time usage hint toast (fades out automatically)
+    if (!sessionStorage.getItem('mortar_builder_hint')) {
+      sessionStorage.setItem('mortar_builder_hint', '1');
+      const hint = document.createElement('div');
+      hint.className = 've-hint';
+      hint.textContent = 'Drag blocks from the left panel · Double-click any element to edit its content';
+      (containerRef.current as HTMLElement).appendChild(hint);
+      setTimeout(() => hint.classList.add('ve-hint-out'), 4500);
+      setTimeout(() => hint.remove(), 5600);
+    }
   }, []);
 
   // Always-最新 onChange，避免 effect 依赖导致重建
@@ -665,12 +676,40 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     };
     containerRef.current.addEventListener('wheel', wheelHandler, { passive: false });
 
-    // Ctrl/Cmd + S inside the canvas iframe -> save draft
+    // Canvas keyboard shortcuts:
+    //  Ctrl/Cmd+S -> save draft, Ctrl/Cmd+D -> duplicate, Alt+Up/Down -> move
     const canvasDoc = editor.Canvas.getDocument();
     const canvasKeyHandler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
         e.preventDefault();
         onSaveRef.current?.();
+        return;
+      }
+      const comp = editor.getSelected() as any;
+      if (!comp) return;
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') {
+        e.preventDefault();
+        const parent = comp.parent();
+        if (!parent) return;
+        const siblings = parent.components();
+        const idx = siblings.indexOf(comp);
+        if (idx === -1) return;
+        const copy = comp.clone();
+        siblings.add(copy, { at: idx + 1 });
+        editor.select(copy);
+        return;
+      }
+      if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+        e.preventDefault();
+        const parent = comp.parent();
+        if (!parent) return;
+        const siblings = parent.components();
+        const idx = siblings.indexOf(comp);
+        const target = e.key === 'ArrowUp' ? idx - 1 : idx + 1;
+        if (idx === -1 || target < 0 || target >= siblings.length) return;
+        siblings.remove(comp);
+        siblings.add(comp, { at: target });
+        editor.select(comp);
       }
     };
     canvasDoc?.addEventListener('keydown', canvasKeyHandler);
