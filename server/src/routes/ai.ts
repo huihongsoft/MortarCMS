@@ -572,6 +572,25 @@ router.get('/share/:token', (req: AuthRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Long-term memory management
+router.get('/memories', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const rows = req.user!.role === 'admin'
+      ? db.prepare('SELECT m.*, u.username FROM AiMemory m LEFT JOIN User u ON u.id = m.userId ORDER BY m.updatedAt DESC').all()
+      : db.prepare('SELECT key, value, updatedAt FROM AiMemory WHERE userId = ? ORDER BY updatedAt DESC').all(req.user!.userId);
+    res.json({ memories: rows });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/memories/:key', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const key = req.params.key;
+    if (req.user!.role === 'admin') db.prepare('DELETE FROM AiMemory WHERE key = ?').run(key);
+    else db.prepare('DELETE FROM AiMemory WHERE userId = ? AND key = ?').run(req.user!.userId, key);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // Admin: AI operation audit log (sandbox traceability)
 router.get('/audit', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {

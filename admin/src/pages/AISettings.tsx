@@ -16,8 +16,14 @@ interface Provider {
 }
 
 const TOOL_NAMES = [
-  'get_site_stats', 'list_posts', 'get_post', 'search_site_content', 'write_post', 'update_post',
-  'list_comments', 'get_categories', 'list_tags', 'generate_image', 'web_search', 'get_site_settings', 'update_site_settings',
+  // 查询
+  'get_site_stats', 'list_posts', 'get_post', 'search_site_content', 'list_comments', 'get_categories', 'list_tags', 'get_site_settings',
+  // 创作
+  'write_post', 'update_post', 'complete_post', 'translate_post', 'generate_image',
+  // 智能
+  'web_search', 'analyze_image', 'remember', 'recall',
+  // 管理
+  'update_site_settings',
 ];
 
 export default function AISettings() {
@@ -36,6 +42,7 @@ export default function AISettings() {
   const [cmpPrompt, setCmpPrompt] = useState('');
   const [cmpResult, setCmpResult] = useState<any>(null);
   const [cmpLoading, setCmpLoading] = useState(false);
+  const [memories, setMemories] = useState<any[]>([]);
 
   useEffect(() => {
     api.get('/ai/settings').then(r => {
@@ -46,6 +53,7 @@ export default function AISettings() {
       setToolPermissions(r.data.toolPermissions || {});
       setRoles(r.data.roles || []);
       api.get('/ai/usage').then(r => setUsage(r.data)).catch(() => {});
+      api.get('/ai/memories').then(r => setMemories(r.data.memories || [])).catch(() => {});
     }).catch(() => {});
   }, []);
 
@@ -211,6 +219,26 @@ export default function AISettings() {
               React.createElement('td', { className: 'py-1.5 text-xs text-gray-700 dark:text-gray-200' }, r.username || '-'),
               React.createElement('td', { className: 'py-1.5 text-xs text-gray-500' }, r.kind),
               React.createElement('td', { className: 'py-1.5 text-xs text-gray-500 text-right' }, r.tokens))))))
+    ),
+
+    // ---- Long-term memory ----
+    React.createElement('div', { className: 'card p-6 mb-6' },
+      React.createElement('div', { className: 'flex items-center justify-between mb-1' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('ai memory', getLang())),
+        React.createElement('span', { className: 'text-xs text-gray-400' }, memories.length + ' ' + t('entries', getLang()))),
+      React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t('memory hint', getLang())),
+      memories.length === 0
+        ? React.createElement('p', { className: 'text-sm text-gray-400' }, t('no memory yet', getLang()))
+        : React.createElement('div', { className: 'space-y-1.5 max-h-56 overflow-y-auto' },
+            memories.map((m: any) => React.createElement('div', { key: m.key, className: 'flex items-center gap-2 p-2 rounded-lg border border-gray-100 dark:border-gray-700' },
+              React.createElement('div', { className: 'flex-1 min-w-0' },
+                React.createElement('p', { className: 'text-xs font-medium text-gray-700 dark:text-gray-200' }, m.key),
+                React.createElement('p', { className: 'text-[11px] text-gray-400 truncate' }, (m.value || '').slice(0, 120) + (m.username ? ' · ' + m.username : ''))),
+              React.createElement('button', {
+                onClick: async () => { await api.delete('/ai/memories/' + encodeURIComponent(m.key)); setMemories(memories.filter(x => x.key !== m.key)); },
+                className: 'p-1 text-gray-300 hover:text-red-500',
+              }, React.createElement(Trash2, { size: 13 }))
+            )))
     ),
 
     // ---- Permissions ----

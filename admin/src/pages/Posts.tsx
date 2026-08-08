@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Trash2, Eye, Pin, Trash, Copy, FileText } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, Pin, Trash, Copy, FileText, Languages } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { useToast } from '../lib/toast';
 import api from '../lib/api';
@@ -14,6 +14,9 @@ export default function Posts() {
   const [total, setTotal] = useState(0);
   const toast = useToast();
   const [quickEdit, setQuickEdit] = useState<any>(null);
+  const [batchLang, setBatchLang] = useState('English');
+  const [batchRunning, setBatchRunning] = useState(false);
+  const [batchResults, setBatchResults] = useState<any[] | null>(null);
   const [qeTitle, setQeTitle] = useState('');
   const [qeStatus, setQeStatus] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -57,6 +60,17 @@ export default function Posts() {
     fetchPosts();
   }
 
+  async function batchTranslate() {
+    if (selected.size === 0 || batchRunning) return;
+    setBatchRunning(true); setBatchResults(null);
+    try {
+      const r = await api.post('/ai/batch-translate', { ids: Array.from(selected), language: batchLang });
+      setBatchResults(r.data.results || []);
+      setSelected(new Set());
+    } catch (e: any) { alert(e.response?.data?.error || t('save failed', getLang())); }
+    finally { setBatchRunning(false); }
+  }
+
   async function bulkDelete() {
     if (selected.size === 0) return;
     if (!confirm(t('permanently delete', getLang()) + ' ' + selected.size + ' ' + t('posts', getLang()) + '?')) return;
@@ -98,8 +112,29 @@ export default function Posts() {
                 React.createElement('button', { onClick: bulkRestore, className: 'btn-secondary text-xs' }, t('restore selected', getLang()) + ' (' + selected.size + ')'),
                 React.createElement('button', { onClick: bulkDelete, className: 'btn-danger text-xs' }, t('delete permanently', getLang()) + ' (' + selected.size + ')'),
               )
-            : React.createElement('button', { onClick: bulkTrash, className: 'btn-danger text-xs' }, React.createElement(Trash, { size: 14 }), t('trash selected', getLang()) + ' (' + selected.size + ')')
+            : React.createElement(React.Fragment, null,
+                React.createElement('button', { onClick: bulkTrash, className: 'btn-danger text-xs' }, React.createElement(Trash, { size: 14 }), t('trash selected', getLang()) + ' (' + selected.size + ')'),
+                React.createElement('div', { className: 'flex items-center gap-1' },
+                  React.createElement('select', { value: batchLang, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setBatchLang(e.target.value), className: 'input-field w-28 text-xs' },
+                    ['English', '日本語', '한국어', 'Français', 'Deutsch', 'Español', '简体中文'].map(l => React.createElement('option', { key: l, value: l }, l))),
+                  React.createElement('button', { onClick: batchTranslate, disabled: batchRunning, className: 'btn-secondary text-xs' },
+                    React.createElement(Languages, { size: 13 }), batchRunning ? t('translating', getLang()) + '...' : t('ai translate selected', getLang())))
+              )
         )
+      ),
+      batchResults && React.createElement('div', { className: 'card p-4 mb-4 border-primary-200 dark:border-primary-800' },
+        React.createElement('p', { className: 'text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2' }, t('translation results', getLang())),
+        React.createElement('div', { className: 'space-y-1' },
+          batchResults.map((r: any, i: number) => React.createElement('div', { key: i, className: 'flex items-center gap-2 text-xs' },
+            r.status === 'ok'
+              ? React.createElement(React.Fragment, null,
+                  React.createElement('span', { className: 'text-green-600' }, '✓'),
+                  React.createElement('span', { className: 'flex-1 text-gray-600 dark:text-gray-300 truncate' }, r.title),
+                  React.createElement(Link, { to: '/posts/' + r.id + '/edit', className: 'text-primary-600 hover:text-primary-700' }, t('edit', getLang())))
+              : React.createElement(React.Fragment, null,
+                  React.createElement('span', { className: 'text-red-500' }, '✗'),
+                  React.createElement('span', { className: 'flex-1 text-gray-600 truncate' }, r.source || r.error))
+          )))
       ),
       React.createElement('div', { className: 'flex items-center gap-3 mb-4 flex-wrap' },
       ['all', 'published', 'draft', 'trash'].map(s =>
