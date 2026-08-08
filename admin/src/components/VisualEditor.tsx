@@ -493,6 +493,12 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           }
           h1, h2, h3 { font-family: var(--heading-font, inherit); line-height: 1.3; }
           [data-gjs-highlightable] { transition: box-shadow 0.15s ease; }
+          /* "View components" (boundaries) mode is off by default; when the
+             user re-enables it, keep the dashed outlines faint */
+          .gjs-dashed *[data-gjs-highlightable] {
+            outline: 1px dashed rgba(170, 170, 170, 0.35) !important;
+            outline-offset: -2px;
+          }
           /* Drop indicator — magnetic snap visual */
           .gjs-placeholder,
           .gjs-placeholder-int,
@@ -608,6 +614,12 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
 
     const editor = grapesjs.init(config);
     editorRef.current = editor;
+
+    // Turn off the "View components" (show boundaries) mode — it adds the
+    // gjs-dashed class to the canvas body, which outlines EVERY component
+    // with a dashed border (the wireframe look). Users can re-enable it
+    // from the toolbar toggle.
+    try { editor.stopCommand('core:component-outline'); } catch {}
 
     // Remove default blocks we don't need
     const bm = editor.BlockManager;
