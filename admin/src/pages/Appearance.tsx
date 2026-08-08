@@ -278,7 +278,7 @@ export default function Appearance() {
             React.createElement('h3', { className: 'text-base font-semibold text-gray-900' }, 'Design: ' + HOOK_LOCATIONS.find(l => l.id === editingSection)?.label),
           ),
           React.createElement('div', { className: 'flex items-center gap-2' },
-            React.createElement('button', { onClick: closeSectionEditor, className: 'btn-secondary text-xs' }, 'Cancel'),
+            React.createElement('button', { onClick: closeSectionEditor, className: 'btn-secondary text-xs' }, t('cancel', getLang())),
             React.createElement('button', { onClick: saveSection, className: 'btn-primary text-xs' }, React.createElement(Save, { size: 14 }), t('save', getLang())),
           ),
         ),

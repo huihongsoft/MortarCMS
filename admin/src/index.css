@@ -213,6 +213,49 @@ table tbody tr { transition: background-color 0.12s ease; }
 .visual-editor-container ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; border: none; }
 /* Canvas toolbar device buttons */
 .visual-editor-container .gjs-cv-canvas { border-top: 1px solid #e5e7eb; }
+/* Asset Manager (image picker) skin */
+.visual-editor-container .gjs-am-container {
+  background: #fff;
+  border: 1px solid #e5e7eb;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px -12px rgba(0,0,0,0.25);
+  padding: 20px;
+}
+.visual-editor-container .gjs-am-header { padding: 8px 4px 16px; }
+.visual-editor-container .gjs-am-title { font-size: 15px; font-weight: 600; color: #111827; }
+.visual-editor-container .gjs-am-close { color: #6b7280; font-size: 22px; }
+.visual-editor-container .gjs-am-close:hover { color: #111827; }
+.visual-editor-container .gjs-am-assets { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 10px 0; }
+.visual-editor-container .gjs-am-asset {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 4px;
+  background: #f9fafb;
+  transition: border-color .15s, transform .15s;
+}
+.visual-editor-container .gjs-am-asset:hover { border-color: var(--admin-primary, #2563eb); transform: translateY(-1px); }
+.visual-editor-container .gjs-am-asset-image { border-radius: 8px; }
+.visual-editor-container .gjs-am-add-asset {
+  border: 2px dashed #d1d5db;
+  border-radius: 10px;
+  background: #f9fafb;
+  color: #6b7280;
+  padding: 16px;
+}
+.visual-editor-container .gjs-am-add-asset:hover { border-color: var(--admin-primary, #2563eb); color: var(--admin-primary, #2563eb); }
+.visual-editor-container .gjs-am-add-field { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; font-size: 13px; }
+.visual-editor-container .gjs-am-file-uploader {
+  border: 2px dashed #d1d5db;
+  border-radius: 10px;
+  background: #f9fafb;
+  color: #6b7280;
+}
+.dark .visual-editor-container .gjs-am-container { background: #1f2937; border-color: #4b5563; }
+.dark .visual-editor-container .gjs-am-title { color: #e5e7eb; }
+.dark .visual-editor-container .gjs-am-asset { background: #111827; border-color: #4b5563; }
+.dark .visual-editor-container .gjs-am-add-asset { border-color: #4b5563; background: #111827; color: #9ca3af; }
+.dark .visual-editor-container .gjs-am-file-uploader { border-color: #4b5563; background: #111827; color: #9ca3af; }
+
 /* Canvas empty-state overlay */
 .visual-editor-container .ve-empty-state {
   position: absolute;

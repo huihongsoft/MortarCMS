@@ -220,7 +220,7 @@ export default function PostEditor() {
     // ---- VISUAL MODE: full-screen builder (Elementor/Fanke style) ----
     visualMode && React.createElement('div', { className: 'fixed inset-0 z-50 bg-white flex flex-col' },
       // Builder top bar
-      React.createElement('div', { className: 'flex items-center gap-3 px-4 py-2 border-b border-gray-200 bg-white shrink-0' },
+      React.createElement('div', { className: 'flex flex-wrap items-center gap-3 px-4 py-2 border-b border-gray-200 bg-white shrink-0' },
         React.createElement('button', {
           onClick: () => setVisualMode(false),
           className: 'flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-gray-500 hover:text-gray-900 rounded-lg hover:bg-gray-100',
