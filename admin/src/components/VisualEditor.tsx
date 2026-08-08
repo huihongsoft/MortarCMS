@@ -7,6 +7,7 @@ interface VisualEditorProps {
   css?: string;          // CSS styles to load
   onChange: (html: string, css: string) => void;  // Called when content changes
   height?: string;
+  onSaveShortcut?: () => void;  // Called on Ctrl/Cmd+S pressed inside the canvas
 }
 
 // CMS data block definitions: rendered as placeholder shortcodes in the editor,
@@ -234,7 +235,7 @@ const SECTIONS_BLOCKS = [
 // All blocks merged
 const ALL_BLOCKS = [...LAYOUT_BLOCKS, ...CONTENT_BLOCKS, ...SECTIONS_BLOCKS, ...CMS_BLOCKS];
 
-export default function VisualEditor({ content, css, onChange, height }: VisualEditorProps) {
+export default function VisualEditor({ content, css, onChange, height, onSaveShortcut }: VisualEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | null>(null);
 
@@ -376,11 +377,62 @@ export default function VisualEditor({ content, css, onChange, height }: VisualE
         })
         .catch(() => {});
     });
+
+    // Empty-state overlay with quick-start buttons
+    editor.on('load', () => {
+      const emptyState = document.createElement('div');
+      emptyState.className = 've-empty-state';
+      emptyState.innerHTML =
+        '<div class="ve-empty-card">' +
+        '<div class="ve-empty-icon">✦</div>' +
+        '<p class="ve-empty-title">Drag blocks from the left panel</p>' +
+        '<p class="ve-empty-sub">or start with a quick template:</p>' +
+        '<div class="ve-empty-actions">' +
+        '<button data-add="hero">Hero Banner</button>' +
+        '<button data-add="two-columns">2 Columns</button>' +
+        '<button data-add="sec-pricing">Pricing</button>' +
+        '<button data-add="post-list">Post List</button>' +
+        '</div></div>';
+      (containerRef.current as HTMLElement).appendChild(emptyState);
+
+      const updateEmptyState = () => {
+        let hasContent = false;
+        try { hasContent = editor.getComponents().length > 0; } catch {}
+        emptyState.style.display = hasContent ? 'none' : 'flex';
+      };
+      updateEmptyState();
+      editor.on('component:add', updateEmptyState);
+      editor.on('component:remove', updateEmptyState);
+      editor.on('component:reset', updateEmptyState);
+
+      emptyState.addEventListener('click', (e) => {
+        const btn = (e.target as HTMLElement).closest('button');
+        if (!btn?.dataset.add) return;
+        const block = ALL_BLOCKS.find(b => b.id === btn.dataset.add);
+        if (block) editor.addComponents(block.content);
+      });
+    });
+
+    // Pre-populate the Asset Manager with site media (double-click an image to pick)
+    editor.on('load', () => {
+      const token = localStorage.getItem('mortar_token') || '';
+      fetch('/api/media?limit=60', { headers: { Authorization: 'Bearer ' + token } })
+        .then(r => r.json())
+        .then((d: any) => {
+          const imgs = (d?.media || []).filter((m: any) => m.mimeType?.startsWith('image/'));
+          if (imgs.length === 0) return;
+          const assets = imgs.map((m: any) => ({ src: m.url, name: m.original, type: 'image' }));
+          editor.AssetManager.add(assets);
+        })
+        .catch(() => {});
+    });
   }, []);
 
   // Always-最新 onChange，避免 effect 依赖导致重建
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
+  const onSaveRef = useRef(onSaveShortcut);
+  onSaveRef.current = onSaveShortcut;
   // Editor 当前已加载内容的镜像，用于区分「内部编辑回传」与「外部加载」
   const lastContentRef = useRef(content);
 
@@ -613,10 +665,21 @@ export default function VisualEditor({ content, css, onChange, height }: VisualE
     };
     containerRef.current.addEventListener('wheel', wheelHandler, { passive: false });
 
+    // Ctrl/Cmd + S inside the canvas iframe -> save draft
+    const canvasDoc = editor.Canvas.getDocument();
+    const canvasKeyHandler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        onSaveRef.current?.();
+      }
+    };
+    canvasDoc?.addEventListener('keydown', canvasKeyHandler);
+
     return () => {
       clearTimeout(changeTimer);
       zoomBar.remove();
       containerRef.current?.removeEventListener('wheel', wheelHandler);
+      canvasDoc?.removeEventListener('keydown', canvasKeyHandler);
       editor.destroy();
       editorRef.current = null;
     };

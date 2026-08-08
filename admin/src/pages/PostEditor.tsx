@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, ArrowLeft, Palette, FileText, Settings2, X } from 'lucide-react';
+import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye } from 'lucide-react';
 import { useToast } from '../lib/toast';
 import RichEditor from '../components/RichEditor';
 import VisualEditor from '../components/VisualEditor';
@@ -244,6 +244,12 @@ export default function PostEditor() {
           className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border ' +
             (showSettings ? 'border-primary-400 bg-primary-50 text-primary-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'),
         }, React.createElement(Settings2, { size: 14 }), t('page settings', getLang())),
+        // Preview on the live site (only when a slug exists)
+        slug && React.createElement('a', {
+          href: window.location.origin + '/post/' + slug,
+          target: '_blank', rel: 'noopener',
+          className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50',
+        }, React.createElement(Eye, { size: 14 }), t('preview', getLang())),
         React.createElement('button', { onClick: () => handleSave('draft'), disabled: saving || !title, className: 'btn-secondary text-xs' }, React.createElement(Save, { size: 14 }), t('save draft', getLang())),
         React.createElement('button', { onClick: () => handleSave('published'), disabled: saving || !title, className: 'btn-primary text-xs' }, t('publish', getLang()))
       ),
@@ -253,6 +259,7 @@ export default function PostEditor() {
           content, css: visualCss,
           onChange: (html: string, css: string) => { setContent(html); setVisualCss(css); setSaveState('dirty'); },
           height: '100%',
+          onSaveShortcut: () => handleSave('draft'),
         }),
         showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },
           React.createElement('div', {

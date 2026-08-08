@@ -213,6 +213,65 @@ table tbody tr { transition: background-color 0.12s ease; }
 .visual-editor-container ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; border: none; }
 /* Canvas toolbar device buttons */
 .visual-editor-container .gjs-cv-canvas { border-top: 1px solid #e5e7eb; }
+/* Canvas empty-state overlay */
+.visual-editor-container .ve-empty-state {
+  position: absolute;
+  inset: 42px 0 0 0; /* below the GrapesJS top bar */
+  z-index: 15;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  background: radial-gradient(circle at 50% 40%, rgba(59,130,246,0.05), transparent 60%);
+}
+.visual-editor-container .ve-empty-card {
+  text-align: center;
+  padding: 36px 44px;
+  max-width: 420px;
+}
+.visual-editor-container .ve-empty-icon {
+  font-size: 34px;
+  color: var(--admin-primary, #3b82f6);
+  opacity: 0.7;
+  margin-bottom: 12px;
+}
+.visual-editor-container .ve-empty-title {
+  font-size: 17px;
+  font-weight: 600;
+  color: #374151;
+  margin: 0 0 6px;
+}
+.visual-editor-container .ve-empty-sub {
+  font-size: 13px;
+  color: #9ca3af;
+  margin: 0 0 20px;
+}
+.visual-editor-container .ve-empty-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+.visual-editor-container .ve-empty-actions button {
+  padding: 8px 18px;
+  border: 1px solid #e5e7eb;
+  background: #fff;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #4b5563;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+.visual-editor-container .ve-empty-actions button:hover {
+  border-color: var(--admin-primary, #3b82f6);
+  color: var(--admin-primary, #3b82f6);
+  background: color-mix(in srgb, var(--admin-primary, #3b82f6) 6%, transparent);
+  transform: translateY(-1px);
+}
+.dark .visual-editor-container .ve-empty-title { color: #e5e7eb; }
+.dark .visual-editor-container .ve-empty-actions button { background: #1f2937; border-color: #4b5563; color: #d1d5db; }
+
 /* Canvas zoom bar (floating bottom-right) */
 .visual-editor-container .ve-zoom-bar {
   position: absolute;
