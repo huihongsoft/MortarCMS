@@ -496,6 +496,24 @@ router.post('/review-comments', authenticate, async (req: AuthRequest, res: Resp
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Compare two providers with the same prompt (model evaluation)
+router.post('/compare', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
+    const { prompt, providerAId, providerBId } = req.body || {};
+    if (!prompt) { res.status(400).json({ error: 'prompt required' }); return; }
+    const providers = getProviders();
+    const a = providers.find((p: any) => p.id === providerAId && p.enabled);
+    const b = providers.find((p: any) => p.id === providerBId && p.enabled);
+    if (!a || !b) { res.status(400).json({ error: '请选择两个已启用的服务商' }); return; }
+    const [ra, rb] = await Promise.all([
+      chatComplete(a, [{ role: 'user', content: guardUserMessage(String(prompt)) }]).then(r => r.content).catch((e: any) => '❌ ' + e.message),
+      chatComplete(b, [{ role: 'user', content: guardUserMessage(String(prompt)) }]).then(r => r.content).catch((e: any) => '❌ ' + e.message),
+    ]);
+    res.json({ a: { name: a.name, model: a.model, content: ra }, b: { name: b.name, model: b.model, content: rb } });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // Admin: AI operation audit log (sandbox traceability)
 router.get('/audit', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {

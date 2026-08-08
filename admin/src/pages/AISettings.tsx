@@ -31,6 +31,11 @@ export default function AISettings() {
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
   const [usage, setUsage] = useState<any>(null);
+  const [cmpA, setCmpA] = useState('');
+  const [cmpB, setCmpB] = useState('');
+  const [cmpPrompt, setCmpPrompt] = useState('');
+  const [cmpResult, setCmpResult] = useState<any>(null);
+  const [cmpLoading, setCmpLoading] = useState(false);
 
   useEffect(() => {
     api.get('/ai/settings').then(r => {
@@ -58,6 +63,16 @@ export default function AISettings() {
       await api.put('/ai/settings', { providers, defaultProvider, allowedRoles, toolPermissions });
       toast.toast(t('saved', getLang()));
     } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+  }
+
+  async function runCompare() {
+    if (!cmpA || !cmpB || !cmpPrompt.trim() || cmpLoading) return;
+    setCmpLoading(true); setCmpResult(null);
+    try {
+      const r = await api.post('/ai/compare', { prompt: cmpPrompt, providerAId: cmpA, providerBId: cmpB });
+      setCmpResult(r.data);
+    } catch (e: any) { alert(e.response?.data?.error || '对比失败'); }
+    finally { setCmpLoading(false); }
   }
 
   async function test(id: string) {
@@ -134,6 +149,28 @@ export default function AISettings() {
               React.createElement('input', { value: p.model, onChange: e => updateProvider(p.id, { model: e.target.value }), className: 'input-field text-xs' })),
           )
         ))
+      )
+    ),
+
+    // ---- Model comparison ----
+    React.createElement('div', { className: 'card p-6 mb-6' },
+      React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-1 uppercase tracking-wider' }, t('model compare', getLang())),
+      React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t('compare hint', getLang())),
+      React.createElement('div', { className: 'flex flex-wrap gap-2 mb-3' },
+        React.createElement('select', { value: cmpA, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setCmpA(e.target.value), className: 'input-field w-44 text-sm' },
+          React.createElement('option', { value: '' }, t('select model a', getLang())),
+          providers.filter(p => p.enabled).map(p => React.createElement('option', { key: p.id, value: p.id }, p.name))),
+        React.createElement('span', { className: 'self-center text-gray-400 text-xs' }, 'vs'),
+        React.createElement('select', { value: cmpB, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setCmpB(e.target.value), className: 'input-field w-44 text-sm' },
+          React.createElement('option', { value: '' }, t('select model b', getLang())),
+          providers.filter(p => p.enabled).map(p => React.createElement('option', { key: p.id, value: p.id }, p.name))),
+        React.createElement('input', { value: cmpPrompt, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCmpPrompt(e.target.value), placeholder: t('compare prompt', getLang()), className: 'input-field flex-1 min-w-40 text-sm' }),
+        React.createElement('button', { onClick: runCompare, disabled: cmpLoading || !cmpA || !cmpB || !cmpPrompt.trim(), className: 'btn-secondary text-sm' }, cmpLoading ? t('testing', getLang()) + '...' : t('compare', getLang())),
+      ),
+      cmpResult && React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3' },
+        [cmpResult.a, cmpResult.b].map((r: any, i: number) => React.createElement('div', { key: i, className: 'border border-gray-100 dark:border-gray-700 rounded-xl p-3' },
+          React.createElement('p', { className: 'text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2' }, r.name + ' · ' + r.model),
+          React.createElement('p', { className: 'text-xs text-gray-600 dark:text-gray-300 whitespace-pre-wrap max-h-64 overflow-y-auto' }, r.content)))
       )
     ),
 

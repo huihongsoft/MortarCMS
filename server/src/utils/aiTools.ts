@@ -525,6 +525,55 @@ register('translate_post', '将站内一篇文章翻译成指定语言并创建�
   return { id, title: newTitle, slug, status: 'draft', message: '已创建翻译草稿: ' + newTitle };
 });
 
+// ---- Complete a draft: auto-generate excerpt, SEO fields and tags ----
+
+register('complete_post', '完善一篇文章：自动生成摘要、SEO 标题/描述、推荐标签并保存。写完整篇文章后调用它。', {
+  type: 'object',
+  properties: {
+    id: { type: 'string', description: '文章 id（必填）' },
+  },
+  required: ['id'],
+}, async (args, ctx) => {
+  const post = db.prepare("SELECT * FROM Post WHERE id = ?").get(args.id) as any;
+  if (!post) return { error: '文章未找到' };
+  const provider = getDefaultProvider();
+  if (!provider) return { error: '未配置 AI 服务商' };
+  const plain = (post.title || '') + '\n' + (post.content || '').replace(/<[^>]*>/g, '').slice(0, 2500);
+
+  const res = await fetch(provider.baseUrl.replace(/\/$/, '') + '/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + provider.apiKey },
+    body: JSON.stringify({
+      model: provider.model,
+      messages: [
+        { role: 'system', content: '为文章生成元数据，严格按此格式输出：\n摘要：xxx\nSEO标题：xxx\nSEO描述：xxx\n标签：a,b,c' },
+        { role: 'user', content: guardUserMessage(plain) },
+      ],
+    }),
+  });
+  if (!res.ok) return { error: '生成失败 (' + res.status + ')' };
+  const j: any = await res.json();
+  const out = j.choices?.[0]?.message?.content || '';
+  const grab = (re: RegExp) => { const m = out.match(re); return m ? m[1].trim() : ''; };
+  const excerpt = grab(/摘要[:：]\s*(.+)/);
+  const seoTitle = grab(/SEO标题[:：]\s*(.+)/);
+  const seoDesc = grab(/SEO描述[:：]\s*(.+)/);
+  const tags = grab(/标签[:：]\s*(.+)/).split(/[,，]/).map((x: string) => x.trim()).filter(Boolean);
+
+  if (excerpt) db.prepare('UPDATE Post SET excerpt = ?, updatedAt = ? WHERE id = ?').run(excerpt, new Date().toISOString(), post.id);
+  if (seoTitle || seoDesc) {
+    db.prepare("INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, '_seo_title', ?) ON CONFLICT(postId, key) DO UPDATE SET value = excluded.value").run(cuid(), post.id, seoTitle || '');
+    db.prepare("INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, '_seo_desc', ?) ON CONFLICT(postId, key) DO UPDATE SET value = excluded.value").run(cuid(), post.id, seoDesc || '');
+  }
+  for (const name of tags.slice(0, 6)) {
+    const tagSlug = slugify(name);
+    let tag: any = db.prepare('SELECT id FROM Tag WHERE slug = ?').get(tagSlug);
+    if (!tag) { const tid = cuid(); db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tid, name, tagSlug); tag = { id: tid }; }
+    db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(post.id, tag.id);
+  }
+  return { excerpt, seoTitle, seoDesc, tags, message: '文章已完善' };
+});
+
 // ---- Image understanding (vision): analyze a media-library image ----
 
 register('analyze_image', '分析媒体库中的一张图片：描述内容、识别文字、评估与主题的相关性。', {
