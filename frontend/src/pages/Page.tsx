@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import useSEO from '../hooks/useSEO';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
+import { ContentSkeleton } from '../components/Skeleton';
 import { useTheme } from '../themes';
 
 export default function PageView({ settings }: { settings: Record<string, string> }) {
@@ -13,7 +14,7 @@ export default function PageView({ settings }: { settings: Record<string, string
 
   useSEO(page ? { title: page.title, description: page.excerpt || '', image: page.featured || undefined, url: (settings.site_url || window.location.origin) + '/page/' + page.slug } : {});
 
-  if (!page) return React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-20 text-center' }, React.createElement('p', { className: 'text-gray-500' }, t('loading', settings)));
+  if (!page) return React.createElement(ContentSkeleton, null);
   if (page.error) return React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-20 text-center' }, React.createElement('h1', { className: 'text-2xl font-bold text-gray-900' }, t('page not found', settings)), React.createElement(Link, { to: '/', className: 'text-primary-600 text-sm mt-4 inline-block' }, '\u2190 ' + t('back to home', settings)));
 
   const Layout = useTheme().PageLayout;

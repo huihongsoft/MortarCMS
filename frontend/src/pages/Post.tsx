@@ -4,6 +4,7 @@ import useSEO from '../hooks/useSEO';
 import { cdnUrl } from '../lib/cdn';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
+import { ContentSkeleton } from '../components/Skeleton';
 import { useTheme } from '../themes';
 
 export default function PostPage({ settings }: { settings: Record<string, string> }) {
@@ -62,8 +63,7 @@ export default function PostPage({ settings }: { settings: Record<string, string
     ],
   } : {});
 
-  if (!post) return React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-20 text-center' },
-    React.createElement('p', { className: 'text-gray-500' }, t('loading', settings)));
+  if (!post) return React.createElement(ContentSkeleton, null);
 
   if (post.error) return React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-20 text-center' },
     React.createElement('h1', { className: 'text-2xl font-bold text-gray-900' }, t('page not found', settings)),

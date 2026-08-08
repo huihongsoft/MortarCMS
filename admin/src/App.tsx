@@ -1,7 +1,8 @@
 import React, { lazy, Suspense } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuth } from './lib/auth';
 import Layout from './components/Layout';
+import PageLoader from './components/PageLoader';
 
 const Login = React.lazy(() => import('./pages/Login'));
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
@@ -45,14 +46,14 @@ const Security = React.lazy(() => import('./pages/Security'));
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-  if (loading) return React.createElement('div', { className: 'flex items-center justify-center h-screen' }, 'Loading...');
+  if (loading) return React.createElement(PageLoader, { label: 'Checking session...' });
   if (!user) return React.createElement(Navigate, { to: '/login', replace: true });
   return React.createElement(React.Fragment, null, children);
 }
 
-export default function App() {
-  return React.createElement(Suspense, { fallback: React.createElement('div', { className: 'flex items-center justify-center h-screen text-gray-400' }, 'Loading...') },
-    React.createElement(Routes, null,
+function AnimatedRoutes() {
+  const location = useLocation();
+  return React.createElement(Routes, { location },
     React.createElement(Route, { path: '/login', element: React.createElement(Login) }),
     React.createElement(Route, { element: React.createElement(ProtectedRoute, null, React.createElement(Layout)) },
       React.createElement(Route, { path: '/', element: React.createElement(Dashboard) }),
@@ -80,6 +81,10 @@ export default function App() {
       React.createElement(Route, { path: '/settings', element: React.createElement(Settings) }),
     ),
     React.createElement(Route, { path: '*', element: React.createElement(Navigate, { to: '/', replace: true }) })
-    )
   );
+}
+
+export default function App() {
+  return React.createElement(Suspense, { fallback: React.createElement(PageLoader) },
+    React.createElement(AnimatedRoutes, null));
 }

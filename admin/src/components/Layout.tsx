@@ -30,6 +30,16 @@ export default function Layout() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [primary, setPrimary] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+
+  // Re-trigger the fade-in animation on every route change (without remounting)
+  useEffect(() => {
+    const main = mainRef.current;
+    if (!main) return;
+    main.classList.remove('page-enter');
+    void main.offsetWidth; // force reflow to restart the animation
+    main.classList.add('page-enter');
+  }, [location.pathname]);
 
   // Apply the active theme's primary color to the admin (CSS var override)
   useEffect(() => {
@@ -89,7 +99,7 @@ export default function Layout() {
           ),
         ),
       ),
-      React.createElement('main', { className: 'flex-1 p-4 lg:p-8 bg-gray-50 dark:bg-gray-900' },
+      React.createElement('main', { ref: mainRef, className: 'flex-1 p-4 lg:p-8 bg-gray-50 dark:bg-gray-900' },
         React.createElement(Outlet)
       ),
     ),
