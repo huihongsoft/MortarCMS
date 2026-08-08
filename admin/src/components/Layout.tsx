@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { Globe, Moon, Sun, ExternalLink, LogOut, ChevronDown } from 'lucide-react';
+import { Globe, Moon, Sun, ExternalLink, LogOut, ChevronDown, Bot } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAuth } from '../lib/auth';
 import { t, getLang, setLang } from '../lib/i18n';
@@ -27,6 +28,19 @@ const routeTitles: [string, string][] = [
 export default function Layout() {
   const { user, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Ctrl/Cmd+K opens the AI assistant from anywhere in the admin
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        navigate('/ai');
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [navigate]);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [primary, setPrimary] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
@@ -102,6 +116,12 @@ export default function Layout() {
       React.createElement('main', { ref: mainRef, className: 'flex-1 p-4 lg:p-8 bg-gray-50 dark:bg-gray-900' },
         React.createElement(Outlet)
       ),
+      // Floating AI assistant shortcut (Ctrl+K)
+      !location.pathname.startsWith('/ai') && React.createElement('button', {
+        onClick: () => navigate('/ai'),
+        title: 'AI 助理 (Ctrl+K)',
+        className: 'fixed bottom-6 right-6 z-40 w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 hover:scale-105 transition-transform',
+      }, React.createElement(Bot, { size: 22 })),
     ),
   );
 }
