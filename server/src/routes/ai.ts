@@ -6,7 +6,7 @@ import {
   setDefaultProvider, chatComplete, pushAssistantWithTools, pushToolResults, testProvider,
 } from '../utils/ai';
 import {
-  getAiAllowedRoles, getToolPermissions, isRoleAllowed, listToolSchemas, toolCallToResult, executeTool, guardUserMessage,
+  getAiAllowedRoles, getToolPermissions, isRoleAllowed, listToolSchemas, toolCallToResult, executeTool, guardUserMessage, memoryPrompt,
 } from '../utils/aiTools';
 
 const router = Router();
@@ -128,7 +128,7 @@ router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) 
 
     const tools = listToolSchemas(req.user!.role);
     const msgs: any[] = [
-      { role: 'system', content: SYSTEM_PROMPT + '\n\n' + buildSiteContext() + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
+      { role: 'system', content: SYSTEM_PROMPT + '\n\n' + buildSiteContext() + memoryPrompt(req.user!.userId) + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
       { role: 'user', content: guardUserMessage(String(message)) },
     ];
     const ctx = { userId: req.user!.userId, role: req.user!.role };
@@ -270,7 +270,7 @@ async function runTask(taskId: string, userId: string, role: string, username: s
     if (!provider) { updateTask(taskId, { status: 'failed', error: '尚未配置 AI 服务商', finishedAt: new Date().toISOString() }); return; }
     const tools = listToolSchemas(role);
     const msgs: any[] = [
-      { role: 'system', content: SYSTEM_PROMPT + '\n\n' + buildSiteContext() + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
+      { role: 'system', content: SYSTEM_PROMPT + '\n\n' + buildSiteContext() + memoryPrompt(userId) + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
       { role: 'user', content: guardUserMessage(message) },
     ];
     const ctx = { userId, role };
@@ -567,7 +567,7 @@ router.post('/webhook/:token', async (req: AuthRequest, res: Response) => {
 
     const tools = listToolSchemas(user.role);
     const msgs: any[] = [
-      { role: 'system', content: SYSTEM_PROMPT + ' 当前用户: ' + binding.username + '。\n' + buildSiteContext() + (tools.length ? '\n可用的工具: ' + tools.map(t => t.function.name).join(', ') : '') },
+      { role: 'system', content: SYSTEM_PROMPT + ' 当前用户: ' + binding.username + '。\n' + buildSiteContext() + memoryPrompt(user.id) + (tools.length ? '\n可用的工具: ' + tools.map(t => t.function.name).join(', ') : '') },
       { role: 'user', content: guardUserMessage(message) },
     ];
     const ctx = { userId: user.id, role: user.role };

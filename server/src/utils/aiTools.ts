@@ -408,6 +408,92 @@ register('update_site_settings', '更新站点配置（如 site_title、site_des
   return { message: '配置已更新', updated: Object.keys(entries) };
 });
 
+// ---- Long-term memory: per-user facts the assistant can save/recall ----
+
+export function getMemories(userId: string): { key: string; value: string }[] {
+  return db.prepare('SELECT key, value FROM AiMemory WHERE userId = ? ORDER BY updatedAt DESC LIMIT 30').all(userId) as any[];
+}
+
+export function setMemory(userId: string, key: string, value: string): void {
+  db.prepare("INSERT INTO AiMemory (id, userId, key, value, updatedAt) VALUES (?, ?, ?, ?, ?) ON CONFLICT(userId, key) DO UPDATE SET value = excluded.value, updatedAt = excluded.updatedAt")
+    .run(cuid(), userId, key, value, new Date().toISOString());
+}
+
+export function deleteMemory(userId: string, key: string): void {
+  db.prepare('DELETE FROM AiMemory WHERE userId = ? AND key = ?').run(userId, key);
+}
+
+export function memoryPrompt(userId: string): string {
+  const mems = getMemories(userId);
+  if (!mems.length) return '';
+  return '\n\n【长期记忆（用户已确认的事实/偏好，直接使用）】\n' + mems.map(m => '- ' + m.key + ': ' + m.value.slice(0, 200)).join('\n') + '\n【记忆结束】';
+}
+
+register('remember', '记住一条关于用户的长期事实或偏好（如"喜欢简洁文风"、"站点定位是科技博客"），之后对话都会参考。', {
+  type: 'object',
+  properties: {
+    key: { type: 'string', description: '记忆条目名称，如"写作风格"' },
+    value: { type: 'string', description: '记忆内容' },
+  },
+  required: ['key', 'value'],
+}, async (args, ctx) => {
+  setMemory(ctx.userId, String(args.key).slice(0, 60), String(args.value).slice(0, 1000));
+  return { saved: true, key: args.key };
+});
+
+register('recall', '回忆关于用户的长期记忆', {
+  type: 'object',
+  properties: {
+    key: { type: 'string', description: '可选的记忆条目名，不填则返回全部' },
+  },
+}, async (args, ctx) => {
+  const mems = getMemories(ctx.userId);
+  if (args.key) return mems.filter(m => m.key === args.key);
+  return mems;
+});
+
+// ---- Image understanding (vision): analyze a media-library image ----
+
+register('analyze_image', '分析媒体库中的一张图片：描述内容、识别文字、评估与主题的相关性。', {
+  type: 'object',
+  properties: {
+    url: { type: 'string', description: '图片 URL（/uploads/... 或完整地址）' },
+    question: { type: 'string', description: '对图片的问题，如"这张图适合做科技文章的封面吗"' },
+  },
+  required: ['url'],
+}, async (args) => {
+  const provider = getDefaultProvider();
+  if (!provider || provider.type === 'anthropic') return { error: '当前服务商不支持图片分析（需支持视觉的 OpenAI 兼容模型，如 gpt-4o）' };
+  const imgUrl = String(args.url).startsWith('http') ? String(args.url) : 'http://localhost:3001' + String(args.url);
+  // Download and base64 the image for the vision request
+  const imgRes = await fetch(imgUrl).catch(() => null);
+  if (!imgRes || !imgRes.ok) return { error: '无法读取图片' };
+  const buf = Buffer.from(await imgRes.arrayBuffer());
+  const mime = imgRes.headers.get('content-type') || 'image/png';
+  const res = await fetch(provider.baseUrl.replace(/\/$/, '') + '/chat/completions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + provider.apiKey },
+    body: JSON.stringify({
+      model: provider.model,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: String(args.question || '请描述这张图片的内容、风格和主要元素') },
+          { type: 'image_url', image_url: { url: 'data:' + mime + ';base64,' + buf.toString('base64') } },
+        ],
+      }],
+    }),
+  });
+  if (!res.ok) { const t = await res.text().catch(() => ''); return { error: '图片分析失败 (' + res.status + '): ' + t.slice(0, 200) }; }
+  const j: any = await res.json();
+  return { analysis: j.choices?.[0]?.message?.content || '' };
+});
+
+// Public registry so plugins can add their own AI tools
+export function registerTool(name: string, description: string, parameters: any, run: ToolFn): void {
+  register(name, description, parameters, run);
+}
+
 // ---- Exports ----
 
 export function listToolSchemas(role: string): AIToolFunction[] {

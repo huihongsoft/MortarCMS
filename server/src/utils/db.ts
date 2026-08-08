@@ -223,6 +223,15 @@ export function initDB(): void {
       createdAt TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS AiMemory (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      key TEXT NOT NULL,
+      value TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
+      UNIQUE(userId, key)
+    );
+
     CREATE TABLE IF NOT EXISTS AiTask (
       id TEXT PRIMARY KEY,
       userId TEXT,
