@@ -302,10 +302,39 @@ async function runTask(taskId: string, userId: string, role: string, username: s
     }
 
     updateTask(taskId, { status: 'done', result: finalText, steps: JSON.stringify(steps), finishedAt: new Date().toISOString() });
+    notifyTaskFinished(taskId, userId, 'done');
   } catch (e: any) {
     updateTask(taskId, { status: 'failed', error: e.message || String(e), finishedAt: new Date().toISOString() });
+    notifyTaskFinished(taskId, userId, 'failed');
   }
 }
+
+function notifyTaskFinished(taskId: string, userId: string, status: string): void {
+  try {
+    const task = getTask(taskId);
+    const msg = status === 'done'
+      ? '✅ AI 任务完成: ' + (task?.prompt || '').slice(0, 40)
+      : '❌ AI 任务失败: ' + (task?.prompt || '').slice(0, 40);
+    db.prepare('INSERT INTO AiNotification (id, userId, message, taskId, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)')
+      .run(cuid(), userId, msg, taskId, new Date().toISOString());
+  } catch {}
+}
+
+// Notifications
+router.get('/notifications', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const list = db.prepare('SELECT * FROM AiNotification WHERE userId = ? ORDER BY createdAt DESC LIMIT 20').all(req.user!.userId);
+    const unread = (db.prepare('SELECT COUNT(*) as c FROM AiNotification WHERE userId = ? AND read = 0').get(req.user!.userId) as any)?.c || 0;
+    res.json({ notifications: list, unread });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/notifications/read-all', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    db.prepare('UPDATE AiNotification SET read = 1 WHERE userId = ?').run(req.user!.userId);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
 
 router.post('/task', authenticate, (req: AuthRequest, res: Response) => {
   try {

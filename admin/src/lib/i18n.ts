@@ -413,6 +413,8 @@ const zh: Record<string, string> = {
   'weekly on': '每周',
   'no schedules yet': '还没有定时任务，配置一个试试',
   'last run': '上次运行',
+  'notifications': '通知',
+  'no notifications': '暂无通知',
   'seo': 'SEO 优化',
   'seo title': 'SEO 标题',
   'seo description': 'SEO 描述',

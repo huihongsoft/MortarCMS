@@ -232,6 +232,15 @@ export function initDB(): void {
       UNIQUE(userId, key)
     );
 
+    CREATE TABLE IF NOT EXISTS AiNotification (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      message TEXT NOT NULL,
+      taskId TEXT,
+      read INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS AiTask (
       id TEXT PRIMARY KEY,
       userId TEXT,

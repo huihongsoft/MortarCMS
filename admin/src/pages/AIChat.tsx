@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -117,6 +117,29 @@ export default function AIChat() {
   const [tasks, setTasks] = useState<AiTask[]>([]);
   const [taskDetail, setTaskDetail] = useState<AiTask | null>(null);
   const [tasksLoading, setTasksLoading] = useState(false);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [notifOpen, setNotifOpen] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    api.get('/ai/notifications').then(r => { setNotifications(r.data.notifications || []); setUnread(r.data.unread || 0); }).catch(() => {});
+    const iv = setInterval(() => { api.get('/ai/notifications').then(r => { setNotifications(r.data.notifications || []); setUnread(r.data.unread || 0); }).catch(() => {}); }, 15000);
+    return () => clearInterval(iv);
+  }, []);
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => { if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
+
+  async function openNotification(n: any) {
+    setNotifOpen(false);
+    if (n.taskId) { setTab('tasks'); openTask(n.taskId); }
+    await api.post('/ai/notifications/read-all');
+    setUnread(0);
+  }
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -421,6 +444,23 @@ export default function AIChat() {
           onClick: () => updateSession(active.id, x => ({ ...x, messages: [] })),
           className: 'text-xs text-gray-400 hover:text-red-600',
         }, t('clear history', getLang())) : null,
+        React.createElement('div', { ref: notifRef, className: 'relative' },
+          React.createElement('button', { onClick: () => setNotifOpen(!notifOpen), className: 'relative p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700' },
+            React.createElement(Bell, { size: 16 }),
+            unread > 0 && React.createElement('span', { className: 'absolute -top-0.5 -right-0.5 min-w-4 h-4 px-1 rounded-full bg-red-500 text-white text-[9px] flex items-center justify-center' }, unread)),
+          notifOpen && React.createElement('div', { className: 'absolute right-0 top-full mt-1 w-72 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden' },
+            React.createElement('div', { className: 'px-3 py-2 border-b border-gray-100 dark:border-gray-700 text-xs font-semibold text-gray-700 dark:text-gray-200' }, t('notifications', getLang())),
+            notifications.length === 0 && React.createElement('p', { className: 'p-3 text-xs text-gray-400' }, t('no notifications', getLang())),
+            React.createElement('div', { className: 'max-h-72 overflow-y-auto' },
+              notifications.map(n => React.createElement('button', {
+                key: n.id,
+                onClick: () => openNotification(n),
+                className: 'w-full text-left px-3 py-2.5 border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors',
+              },
+                React.createElement('p', { className: 'text-xs text-gray-700 dark:text-gray-200' + (n.read ? ' opacity-60' : ' font-medium') }, n.message),
+                React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, new Date(n.createdAt).toLocaleString())))),
+          ),
+        ),
       ),
     ),
 
