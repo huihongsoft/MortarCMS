@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye } from 'lucide-react';
 import { useToast } from '../lib/toast';
@@ -37,19 +37,23 @@ export default function PostEditor() {
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [siteId, setSiteId] = useState('');
   const [sites, setSites] = useState<any[]>([]);
+  // Tracks the id of a newly-created post so draft saves (which stay in the
+  // editor) reuse the same post instead of creating duplicates
+  const createdIdRef = useRef<string | null>(null);
 
-  
-  // Autosave every 30 seconds
+
+  // Autosave every 30 seconds (stays in the editor, never navigates away)
   useEffect(() => {
     if (!title) return;
     const timer = setInterval(async () => {
       try {
         const payload: any = { title, content, excerpt, status: 'draft', siteId: siteId || null };
         if (visualCss) payload.meta = { _visual_css: visualCss };
-        if (id) await api.put('/posts/' + id, payload);
+        const postId = id || createdIdRef.current;
+        if (postId) await api.put('/posts/' + postId, payload);
         else {
           const r = await api.post('/posts', { ...payload, categoryIds, tagNames, featured: featured || undefined });
-          if (r.data?.id) navigate('/posts/' + r.data.id + '/edit', { replace: true });
+          if (r.data?.id) createdIdRef.current = r.data.id;
         }
       } catch {}
     }, 30000);
@@ -74,17 +78,24 @@ export default function PostEditor() {
     api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])).catch(() => {});
     if (id) { api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.category.id) || []); setTagNames(p.tags?.map((t: any) => t.tag.name) || []); if (p.featured) setFeatured(p.featured); if (p.siteId) setSiteId(p.siteId); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } }); } }, [id]);
 
-  async function handleSave(s: string) {
+  // stay=false (publish): navigate to the post list; stay=true (draft from the
+  // builder): keep editing in place, like WordPress
+  async function handleSave(s: string, stay = false) {
     setSaving(true);
     setSaveState('saving');
     try {
       const schedDate = (document.getElementById('scheduled-date') as HTMLInputElement)?.value || null;
       const payload: any = { title, slug: slug || undefined, content, excerpt, status: s, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: s === 'scheduled' && schedDate ? new Date(schedDate).toISOString() : undefined, siteId: siteId || null };
       if (visualCss) payload.meta = { _visual_css: visualCss };
-      if (id) await api.put(`/posts/${id}`, payload); else await api.post('/posts', payload);
+      const postId = id || createdIdRef.current;
+      if (postId) await api.put(`/posts/${postId}`, payload);
+      else {
+        const r = await api.post('/posts', payload);
+        if (r.data?.id) createdIdRef.current = r.data.id;
+      }
       setSaveState('saved');
-      toast.toast(id ? t('post updated', getLang()) : t('post created', getLang()));
-      navigate('/posts');
+      toast.toast(postId ? t('post updated', getLang()) : t('post created', getLang()));
+      if (!stay) navigate('/posts');
     } catch (e: any) {
       setSaveState('dirty');
       const msg = e?.response?.data?.error || e?.response?.data?.message || t('save failed', getLang());
@@ -250,7 +261,7 @@ export default function PostEditor() {
           target: '_blank', rel: 'noopener',
           className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50',
         }, React.createElement(Eye, { size: 14 }), t('preview', getLang())),
-        React.createElement('button', { onClick: () => handleSave('draft'), disabled: saving || !title, className: 'btn-secondary text-xs' }, React.createElement(Save, { size: 14 }), t('save draft', getLang())),
+        React.createElement('button', { onClick: () => handleSave('draft', true), disabled: saving || !title, className: 'btn-secondary text-xs' }, React.createElement(Save, { size: 14 }), t('save draft', getLang())),
         React.createElement('button', { onClick: () => handleSave('published'), disabled: saving || !title, className: 'btn-primary text-xs' }, t('publish', getLang()))
       ),
       // Editor area + settings drawer
@@ -259,7 +270,7 @@ export default function PostEditor() {
           content, css: visualCss,
           onChange: (html: string, css: string) => { setContent(html); setVisualCss(css); setSaveState('dirty'); },
           height: '100%',
-          onSaveShortcut: () => handleSave('draft'),
+          onSaveShortcut: () => handleSave('draft', true),
         }),
         showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },
           React.createElement('div', {

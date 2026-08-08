@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye } from 'lucide-react';
 import { useToast } from '../lib/toast';
@@ -23,13 +23,31 @@ export default function PageEditor() {
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
   const [visualCss, setVisualCss] = useState('');
   const [saving, setSaving] = useState(false);
+  const createdIdRef = useRef<string | null>(null);
 
   useEffect(() => { api.get('/pages').then(r => { const all = r.data; setParentPages(all.filter((p: any) => p.id !== id)); if (id) { const p = all.find((x: any) => x.id === id); if (p) { setTitle(p.title); setSlug(p.slug || ''); setContent(p.content); setStatus(p.status); setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } } }); }, [id]);
 
-  async function handleSave(s: string) {
+  // stay=false (publish): navigate to pages; stay=true (draft from the builder):
+  // keep editing in place
+  async function handleSave(s: string, stay = false) {
     setSaving(true);
     setSaveState('saving');
-    try { const payload: any = { title, content, status: s, menuOrder, parentId: parentId || null }; if (visualCss) payload.meta = { _visual_css: visualCss }; if (id) await api.put(`/pages/${id}`, payload); else await api.post('/pages', payload); setSaveState('saved'); navigate('/pages'); } catch (e: any) { setSaveState('dirty'); const msg = e?.response?.data?.error || e?.response?.data?.message || t('save failed', getLang()); toast.toast(typeof msg === 'string' ? msg : t('save failed', getLang()), 'error'); } finally { setSaving(false); }
+    try {
+      const payload: any = { title, content, status: s, menuOrder, parentId: parentId || null };
+      if (visualCss) payload.meta = { _visual_css: visualCss };
+      const pageId = id || createdIdRef.current;
+      if (pageId) await api.put(`/pages/${pageId}`, payload);
+      else {
+        const r = await api.post('/pages', payload);
+        if (r.data?.id) createdIdRef.current = r.data.id;
+      }
+      setSaveState('saved');
+      if (!stay) navigate('/pages');
+    } catch (e: any) {
+      setSaveState('dirty');
+      const msg = e?.response?.data?.error || e?.response?.data?.message || t('save failed', getLang());
+      toast.toast(typeof msg === 'string' ? msg : t('save failed', getLang()), 'error');
+    } finally { setSaving(false); }
   }
 
   return React.createElement('div', null,
@@ -75,7 +93,7 @@ export default function PageEditor() {
           target: '_blank', rel: 'noopener',
           className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50',
         }, React.createElement(Eye, { size: 14 }), t('preview', getLang())),
-        React.createElement('button', { onClick: () => handleSave('draft'), disabled: saving || !title, className: 'btn-secondary text-xs' }, React.createElement(Save, { size: 14 }), t('save draft', getLang())),
+        React.createElement('button', { onClick: () => handleSave('draft', true), disabled: saving || !title, className: 'btn-secondary text-xs' }, React.createElement(Save, { size: 14 }), t('save draft', getLang())),
         React.createElement('button', { onClick: () => handleSave('published'), disabled: saving || !title, className: 'btn-primary text-xs' }, t('publish', getLang()))
       ),
       // Editor area + settings drawer
@@ -84,7 +102,7 @@ export default function PageEditor() {
           content, css: visualCss,
           onChange: (html: string, css: string) => { setContent(html); setVisualCss(css); setSaveState('dirty'); },
           height: '100%',
-          onSaveShortcut: () => handleSave('draft'),
+          onSaveShortcut: () => handleSave('draft', true),
         }),
         showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },
           React.createElement('div', {
