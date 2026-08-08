@@ -25,6 +25,11 @@ export default function Media() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<any>(null);
+  const [aiAnalyzing, setAiAnalyzing] = useState<string | null>(null);
+  const [aiAnalysis, setAiAnalysis] = useState<Record<string, string>>({});
+  const [genPrompt, setGenPrompt] = useState('');
+  const [genOpen, setGenOpen] = useState(false);
+  const [genLoading, setGenLoading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { api.get('/media').then(r => setMedia(r.data.media)); }, []);
