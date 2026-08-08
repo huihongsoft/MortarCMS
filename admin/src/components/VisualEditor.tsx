@@ -492,8 +492,6 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
             color: #111827;
           }
           h1, h2, h3 { font-family: var(--heading-font, inherit); line-height: 1.3; }
-          /* Only the selected component gets an outline; no constant wireframes */
-          .gjs-com-dashed * { outline: none !important; }
           [data-gjs-highlightable] { transition: box-shadow 0.15s ease; }
           /* Drop indicator — magnetic snap visual */
           .gjs-placeholder,

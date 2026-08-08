@@ -206,6 +206,13 @@ table tbody tr { transition: background-color 0.12s ease; }
   border-radius: 12px;
   overflow: hidden;
 }
+/* Hover feedback stays subtle (faint solid outline, no dashed wireframes);
+   only the selected component shows the strong theme-colored border */
+.visual-editor-container .gjs-highlighter {
+  outline: 1px solid rgba(59, 130, 246, 0.25) !important;
+  outline-offset: 0 !important;
+}
+.visual-editor-container .gjs-highlighter-warning { outline: 2px solid rgba(245, 158, 11, 0.6) !important; }
 /* Top command bar — white, matching the admin surfaces */
 .visual-editor-container .gjs-pn-panels {
   background: #ffffff;
