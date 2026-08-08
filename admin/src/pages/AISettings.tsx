@@ -17,7 +17,7 @@ interface Provider {
 
 const TOOL_NAMES = [
   'get_site_stats', 'list_posts', 'get_post', 'search_site_content', 'write_post', 'update_post',
-  'list_comments', 'get_categories', 'list_tags', 'get_site_settings', 'update_site_settings',
+  'list_comments', 'get_categories', 'list_tags', 'generate_image', 'get_site_settings', 'update_site_settings',
 ];
 
 export default function AISettings() {

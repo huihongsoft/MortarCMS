@@ -1,5 +1,8 @@
+import fs from 'fs';
+import path from 'path';
 import db, { cuid } from './db';
 import { slugify, uniqueSlug } from './slug';
+import { getDefaultProvider } from './ai';
 import type { AIToolFunction, AIToolCall } from './ai';
 
 export interface ToolContext {
@@ -179,6 +182,53 @@ register('search_site_content', '在全站文章中检索内容，返回匹配�
     }
     return { title: p.title, url: '/post/' + p.slug, status: p.status, relevance: score, snippet: snippet + (snippet.length >= 180 ? '…' : '') };
   });
+});
+
+// --- Image generation: AI creates a banner/cover and saves it to the
+// media library (OpenAI-compatible /images/generations endpoints) ---
+register('generate_image', '生成一张配图（如文章封面、插画）并保存到媒体库，返回图片 URL。', {
+  type: 'object',
+  properties: {
+    prompt: { type: 'string', description: '图片内容描述（必填，建议包含风格、主体、构图）' },
+    size: { type: 'string', enum: ['1024x1024', '1024x1792', '1792x1024'], description: '尺寸，默认 1024x1024' },
+  },
+  required: ['prompt'],
+}, async (args, ctx) => {
+  const provider = getDefaultProvider();
+  if (!provider || provider.type === 'anthropic') return { error: '当前服务商不支持图片生成（需要 OpenAI 兼容的图像接口，如 gpt-image-1 / dall-e-3）' };
+  const apiUrl = provider.baseUrl.replace(/\/$/, '') + '/images/generations';
+  const res = await fetch(apiUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + provider.apiKey },
+    body: JSON.stringify({ model: provider.model, prompt: String(args.prompt).slice(0, 1000), n: 1, size: args.size || '1024x1024' }),
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    return { error: '图像生成失败 (' + res.status + '): ' + errText.slice(0, 200) };
+  }
+  const j: any = await res.json();
+  const item = j.data?.[0];
+  const imgData = item?.url || item?.b64_json;
+  if (!imgData) return { error: '服务商未返回图片数据' };
+
+  let buf: Buffer;
+  if (imgData.startsWith('http')) {
+    const imgRes = await fetch(imgData);
+    if (!imgRes.ok) return { error: '下载生成的图片失败' };
+    buf = Buffer.from(await imgRes.arrayBuffer());
+  } else {
+    buf = Buffer.from(imgData, 'base64');
+  }
+
+  const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+  const filename = 'ai-' + Date.now() + '.png';
+  fs.writeFileSync(path.join(uploadsDir, filename), buf);
+
+  const id = cuid();
+  db.prepare('INSERT INTO Media (id, filename, original, mimeType, size, url, alt, title, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, filename, filename, 'image/png', buf.length, '/uploads/' + filename, '', 'AI 生成图片', ctx.userId);
+  return { url: '/uploads/' + filename, saved: true };
 });
 
 // --- Get single post ---
