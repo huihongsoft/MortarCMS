@@ -19,7 +19,10 @@ export function cdnUrl(url: string | undefined | null, settings: Record<string, 
 export function cdnHtml(html: string, settings: Record<string, string>): string {
   let out = html;
   const cdn = safeCdn(settings.cdn_url);
-  if (cdn) out = out.replace(/(src|href)="\/uploads\//g, '$1="' + cdn + '/uploads/');
+  if (cdn) {
+    // Also rewrite data-src (gallery lightbox full-size URLs) and poster
+    out = out.replace(/(src|href|data-src|poster)="\/uploads\//g, '$1="' + cdn + '/uploads/');
+  }
   // Lazy load images that don't already declare loading
   return out.replace(/<img(?![^>]*loading=)[^>]*>/g, (m) => m.replace(/<img/, '<img loading="lazy"'));
 }

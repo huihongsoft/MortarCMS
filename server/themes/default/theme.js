@@ -3063,7 +3063,7 @@ function _t(e, t) {
 function Ei(e, t) {
   let n = e;
   const r = Aa(t.cdn_url);
-  return r && (n = n.replace(/(src|href)="\/uploads\//g, '$1="' + r + "/uploads/")), n.replace(/<img(?![^>]*loading=)[^>]*>/g, (s) => s.replace(/<img/, '<img loading="lazy"'));
+  return r && (n = n.replace(/(src|href|data-src|poster)="\/uploads\//g, '$1="' + r + "/uploads/")), n.replace(/<img(?![^>]*loading=)[^>]*>/g, (s) => s.replace(/<img/, '<img loading="lazy"'));
 }
 function Xe(e) {
   const t = Date.now(), n = new Date(e).getTime(), r = t - n, s = Math.floor(r / 6e4);
