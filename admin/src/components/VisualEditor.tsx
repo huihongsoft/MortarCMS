@@ -11,48 +11,57 @@ interface VisualEditorProps {
 
 // CMS data block definitions: rendered as placeholder shortcodes in the editor,
 // processed server-side to display real data.
+function cmsPlaceholder(id: string, label: string, desc: string, icon: string): string {
+  return '<div class="cms-' + id + '" data-cms="' + id + '" data-gjs-type="cms-' + id + '">' +
+    '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:28px 16px;background:linear-gradient(135deg,#f8fafc,#eef2f7);border:2px dashed #94a3b8;border-radius:12px;text-align:center;">' +
+    icon +
+    '<span style="font-size:13px;font-weight:600;color:#475569;letter-spacing:.02em;">' + label + '</span>' +
+    '<span style="font-size:11px;color:#94a3b8;">' + desc + '</span>' +
+    '</div></div>';
+}
+
 const CMS_BLOCKS = [
   {
     id: 'post-list',
     label: 'Post List',
     category: 'CMS Data',
     media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>',
-    content: '<div class="cms-post-list" data-cms="post-list" data-gjs-type="cms-post-list"><p style="padding:20px;text-align:center;background:#f3f4f6;border-radius:8px;border:2px dashed #d1d5db;color:#6b7280;font-size:14px;">📰 Post List — displays site posts automatically</p></div>',
+    content: cmsPlaceholder('post-list', 'Post List', 'Auto-displays latest site posts', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>'),
   },
   {
     id: 'categories',
     label: 'Categories',
     category: 'CMS Data',
     media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h6l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></svg>',
-    content: '<div class="cms-categories" data-cms="categories" data-gjs-type="cms-categories"><p style="padding:20px;text-align:center;background:#f3f4f6;border-radius:8px;border:2px dashed #d1d5db;color:#6b7280;font-size:14px;">📁 Category List — auto-generated from site</p></div>',
+    content: cmsPlaceholder('categories', 'Categories', 'Auto-generated category list', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h6l2 2h8a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></svg>'),
   },
   {
     id: 'comments',
     label: 'Comments',
     category: 'CMS Data',
     media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
-    content: '<div class="cms-comments" data-cms="comments" data-gjs-type="cms-comments"><p style="padding:20px;text-align:center;background:#f3f4f6;border-radius:8px;border:2px dashed #d1d5db;color:#6b7280;font-size:14px;">💬 Comments — displays site comments</p></div>',
+    content: cmsPlaceholder('comments', 'Comments', 'Latest approved site comments', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>'),
   },
   {
     id: 'search',
     label: 'Search',
     category: 'CMS Data',
     media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>',
-    content: '<div class="cms-search" data-cms="search" data-gjs-type="cms-search"><form style="display:flex;gap:8px;padding:20px;background:#f3f4f6;border-radius:8px;border:2px dashed #d1d5db;"><input type="text" placeholder="Search..." style="flex:1;padding:8px 12px;border:1px solid #d1d5db;border-radius:6px;font-size:14px;" disabled><button style="padding:8px 16px;background:#3b82f6;color:#fff;border:none;border-radius:6px;font-size:14px;cursor:pointer;" disabled>Search</button></form></div>',
+    content: cmsPlaceholder('search', 'Search', 'Site search form', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>'),
   },
   {
     id: 'archive',
     label: 'Archive',
     category: 'CMS Data',
     media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>',
-    content: '<div class="cms-archive" data-cms="archive" data-gjs-type="cms-archive"><p style="padding:20px;text-align:center;background:#f3f4f6;border-radius:8px;border:2px dashed #d1d5db;color:#6b7280;font-size:14px;">📦 Archive — monthly post archive list</p></div>',
+    content: cmsPlaceholder('archive', 'Archive', 'Monthly post archive', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>'),
   },
   {
     id: 'tag-cloud',
     label: 'Tag Cloud',
     category: 'CMS Data',
     media: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>',
-    content: '<div class="cms-tag-cloud" data-cms="tag-cloud" data-gjs-type="cms-tag-cloud"><p style="padding:20px;text-align:center;background:#f3f4f6;border-radius:8px;border:2px dashed #d1d5db;color:#6b7280;font-size:14px;">🏷️ Tag Cloud — displays all site tags</p></div>',
+    content: cmsPlaceholder('tag-cloud', 'Tag Cloud', 'All site tags by popularity', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>'),
   },
 ];
 
@@ -184,19 +193,33 @@ export default function VisualEditor({ content, css, onChange, height }: VisualE
       }
     });
 
-    // Style the canvas to match frontend feel
+    // Style the canvas to match the frontend feel (theme colors + typography)
     editor.on('load', () => {
       const canvas = editor.Canvas.getDocument();
-      if (canvas) {
-        const style = canvas.createElement('style');
-        style.textContent = `
-          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin:0; }
-          .cms-post-list, .cms-categories, .cms-comments, .cms-search, .cms-archive, .cms-tag-cloud {
-            min-height: 40px;
-          }
-        `;
-        canvas.head.appendChild(style);
-      }
+      if (!canvas) return;
+      const style = canvas.createElement('style');
+      style.textContent = `
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; margin:0; }
+        .cms-post-list, .cms-categories, .cms-comments, .cms-search, .cms-archive, .cms-tag-cloud { min-height: 40px; }
+      `;
+      canvas.head.appendChild(style);
+      // Inject active theme color variables so the preview matches the real site
+      fetch('/api/settings')
+        .then(r => r.json())
+        .then(s => {
+          const vars: Record<string, string> = {
+            '--primary-color': s.theme_primary_color || '#3b82f6',
+            '--background': s.theme_background || '#ffffff',
+            '--text-color': s.theme_text_color || '#111827',
+            '--link-color': s.theme_link_color || '#2563eb',
+            '--heading-font': s.theme_heading_font || 'inherit',
+            '--body-font': s.theme_body_font || 'inherit',
+          };
+          const vStyle = canvas.createElement('style');
+          vStyle.textContent = ':root{' + Object.entries(vars).map(([k, v]) => k + ':' + v + ';').join('') + '}';
+          canvas.head.appendChild(vStyle);
+        })
+        .catch(() => {});
     });
   }, []);
 
@@ -307,6 +330,47 @@ export default function VisualEditor({ content, css, onChange, height }: VisualE
               { property: 'border-radius', type: 'slider', defaults: '0', min: 0, max: 100, unit: 'px' },
               { property: 'border', type: 'composite', properties: [
                 { property: 'border-width' }, { property: 'border-style' }, { property: 'border-color' },
+              ]},
+            ],
+          },
+          {
+            name: 'Size',
+            open: false,
+            properties: [
+              { property: 'width', type: 'slider', min: 0, max: 1200, unit: 'px', defaults: 'auto' },
+              { property: 'max-width', type: 'slider', min: 0, max: 1200, unit: 'px' },
+              { property: 'height', type: 'slider', min: 0, max: 1200, unit: 'px' },
+            ],
+          },
+          {
+            name: 'Layout',
+            open: false,
+            properties: [
+              { property: 'display', type: 'select', defaults: 'block', options: [
+                { id: 'block', value: 'block', label: 'Block' }, { id: 'inline-block', value: 'inline-block', label: 'Inline Block' }, { id: 'flex', value: 'flex', label: 'Flex' }, { id: 'grid', value: 'grid', label: 'Grid' }, { id: 'none', value: 'none', label: 'None' },
+              ]},
+              { property: 'flex-direction', type: 'select', defaults: 'row', options: [
+                { id: 'row', value: 'row', label: 'Row' }, { id: 'column', value: 'column', label: 'Column' },
+              ]},
+              { property: 'justify-content', type: 'select', defaults: 'flex-start', options: [
+                { id: 'flex-start', value: 'flex-start', label: 'Start' }, { id: 'center', value: 'center', label: 'Center' }, { id: 'flex-end', value: 'flex-end', label: 'End' }, { id: 'space-between', value: 'space-between', label: 'Space Between' },
+              ]},
+              { property: 'align-items', type: 'select', defaults: 'stretch', options: [
+                { id: 'stretch', value: 'stretch', label: 'Stretch' }, { id: 'flex-start', value: 'flex-start', label: 'Start' }, { id: 'center', value: 'center', label: 'Center' }, { id: 'flex-end', value: 'flex-end', label: 'End' },
+              ]},
+              { property: 'text-align', type: 'select', defaults: 'left', options: [
+                { id: 'left', value: 'left', label: 'Left' }, { id: 'center', value: 'center', label: 'Center' }, { id: 'right', value: 'right', label: 'Right' },
+              ]},
+            ],
+          },
+          {
+            name: 'Effects',
+            open: false,
+            properties: [
+              { property: 'opacity', type: 'slider', defaults: '1', min: 0, max: 1, step: 0.05 },
+              { property: 'box-shadow', type: 'shadow' },
+              { property: 'transform', type: 'select', defaults: 'none', options: [
+                { id: 'none', value: 'none', label: 'None' }, { id: 'rotate(90deg)', value: 'rotate(90deg)', label: 'Rotate 90°' }, { id: 'rotate(180deg)', value: 'rotate(180deg)', label: 'Rotate 180°' }, { id: 'scale(1.1)', value: 'scale(1.1)', label: 'Scale 1.1×' },
               ]},
             ],
           },

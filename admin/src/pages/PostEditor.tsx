@@ -213,50 +213,52 @@ export default function PostEditor() {
         React.createElement('button', { onClick: () => handleSave('published'), disabled: saving || !title, className: 'btn-primary' }, t('publish', getLang()))
       )
     ),
-    // ---- VISUAL MODE: full-width editor + settings drawer ----
-    visualMode && React.createElement(React.Fragment, null,
-      React.createElement('div', { className: 'space-y-3' },
-        React.createElement('div', { className: 'relative' },
-          React.createElement('input', { value: title, onChange: e => setTitle(e.target.value), placeholder: t('post title', getLang()), className: 'input-field text-lg font-semibold pr-20' }),
-          React.createElement('span', { id: 'post-word-count', className: 'absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400' }, (content || '').replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length + ' ' + t('words', getLang()))
+    // ---- VISUAL MODE: full-screen builder (Elementor/Fanke style) ----
+    visualMode && React.createElement('div', { className: 'fixed inset-0 z-50 bg-white flex flex-col' },
+      // Builder top bar
+      React.createElement('div', { className: 'flex items-center gap-3 px-4 py-2 border-b border-gray-200 bg-white shrink-0' },
+        React.createElement('button', {
+          onClick: () => setVisualMode(false),
+          className: 'flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-gray-500 hover:text-gray-900 rounded-lg hover:bg-gray-100',
+          title: t('back to rich text', getLang()),
+        }, React.createElement(ArrowLeft, { size: 16 }), React.createElement(FileText, { size: 14 })),
+        React.createElement('div', { className: 'relative flex-1 max-w-xl' },
+          React.createElement('input', { value: title, onChange: e => setTitle(e.target.value), placeholder: t('post title', getLang()), className: 'input-field text-sm font-semibold pr-16' }),
+          React.createElement('span', { className: 'absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400' }, (content || '').replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length + ' ' + t('words', getLang()))
         ),
-        React.createElement('div', { className: 'flex items-center justify-between border-b border-gray-200' },
-          React.createElement('div', { className: 'flex items-center' },
-            React.createElement('button', {
-              onClick: () => setVisualMode(false),
-              className: 'flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 transition-colors ' +
-                (!visualMode ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'),
-            }, React.createElement(FileText, { size: 14 }), t('rich text', getLang())),
-            React.createElement('button', {
-              onClick: () => setVisualMode(true),
-              className: 'flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 transition-colors ' +
-                (visualMode ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'),
-            }, React.createElement(Palette, { size: 14 }), t('visual design', getLang())),
-          ),
-          React.createElement('button', {
-            onClick: () => setShowSettings(!showSettings),
-            className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border ' +
-              (showSettings ? 'border-primary-400 bg-primary-50 text-primary-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'),
-          }, React.createElement(Settings2, { size: 14 }), t('page settings', getLang())),
-        ),
+        React.createElement('div', { className: 'flex-1' }),
+        React.createElement('button', {
+          onClick: () => setShowSettings(!showSettings),
+          className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border ' +
+            (showSettings ? 'border-primary-400 bg-primary-50 text-primary-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'),
+        }, React.createElement(Settings2, { size: 14 }), t('page settings', getLang())),
+        React.createElement('button', { onClick: () => handleSave('draft'), disabled: saving || !title, className: 'btn-secondary text-xs' }, React.createElement(Save, { size: 14 }), t('save draft', getLang())),
+        React.createElement('button', { onClick: () => handleSave('published'), disabled: saving || !title, className: 'btn-primary text-xs' }, t('publish', getLang()))
+      ),
+      // Editor area + settings drawer
+      React.createElement('div', { className: 'flex-1 relative overflow-hidden' },
         React.createElement(VisualEditor, {
           content, css: visualCss,
           onChange: (html: string, css: string) => { setContent(html); setVisualCss(css); },
-          height: 'calc(100vh - 195px)',
+          height: '100%',
         }),
-        React.createElement('textarea', { value: excerpt, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setExcerpt(e.target.value), placeholder: t('excerpt (optional)', getLang()), className: 'input-field', rows: 2 })
-      ),
-      // Settings drawer
-      showSettings && React.createElement('div', { className: 'fixed inset-0 z-40 bg-black/30', onClick: () => setShowSettings(false) },
-        React.createElement('div', {
-          className: 'absolute right-0 top-0 h-full w-96 max-w-[90vw] bg-white shadow-2xl overflow-y-auto',
-          onClick: (e: React.MouseEvent) => e.stopPropagation(),
-        },
-          React.createElement('div', { className: 'sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10' },
-            React.createElement('h3', { className: 'text-sm font-semibold text-gray-900' }, t('page settings', getLang())),
-            React.createElement('button', { onClick: () => setShowSettings(false), className: 'p-1 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 16 }))
-          ),
-          React.createElement('div', { className: 'p-4' }, renderSidebar())
+        showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },
+          React.createElement('div', {
+            className: 'absolute right-0 top-0 h-full w-96 max-w-[90vw] bg-white shadow-2xl overflow-y-auto',
+            onClick: (e: React.MouseEvent) => e.stopPropagation(),
+          },
+            React.createElement('div', { className: 'sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10' },
+              React.createElement('h3', { className: 'text-sm font-semibold text-gray-900' }, t('page settings', getLang())),
+              React.createElement('button', { onClick: () => setShowSettings(false), className: 'p-1 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 16 }))
+            ),
+            React.createElement('div', { className: 'p-4' },
+              React.createElement('div', { className: 'card p-4 mb-4' },
+                React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('excerpt (optional)', getLang())),
+                React.createElement('textarea', { value: excerpt, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setExcerpt(e.target.value), placeholder: t('excerpt (optional)', getLang()), className: 'input-field', rows: 3 })
+              ),
+              renderSidebar()
+            )
+          )
         )
       )
     ),
