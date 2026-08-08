@@ -11,6 +11,29 @@ import {
 
 const router = Router();
 
+// Compact snapshot of the site injected into the system prompt so the
+// assistant can answer site-specific questions without extra tool calls
+function buildSiteContext(): string {
+  try {
+    const settings = db.prepare("SELECT key, value FROM Setting WHERE key IN ('site_title','site_description','site_url')").all() as any[];
+    const cfg: Record<string, string> = {};
+    settings.forEach((s: any) => { cfg[s.key] = s.value; });
+    const recent = db.prepare("SELECT title, slug, status, publishedAt FROM Post WHERE type = 'post' ORDER BY createdAt DESC LIMIT 5").all() as any[];
+    const pages = db.prepare("SELECT title, slug, status FROM Post WHERE type = 'page' AND status = 'published' ORDER BY menuOrder LIMIT 3").all() as any[];
+    const catCnt = (db.prepare('SELECT COUNT(*) as c FROM Category').get() as any)?.c || 0;
+    const tagCnt = (db.prepare('SELECT COUNT(*) as c FROM Tag').get() as any)?.c || 0;
+    const postCnt = (db.prepare("SELECT COUNT(*) as c FROM Post WHERE type = 'post'").get() as any)?.c || 0;
+    let ctx = '【站点上下文】\n';
+    ctx += '站点名称: ' + (cfg.site_title || 'Mortar') + '\n';
+    ctx += '站点描述: ' + (cfg.site_description || '') + '\n';
+    ctx += '文章总数: ' + postCnt + '，分类: ' + catCnt + '，标签: ' + tagCnt + '\n';
+    if (recent.length) ctx += '最近文章:\n' + recent.map((p: any, i: number) => (i + 1) + '. 《' + p.title + '》 /post/' + p.slug + ' (' + p.status + ')').join('\n') + '\n';
+    if (pages.length) ctx += '页面: ' + pages.map((p: any) => p.title).join('、') + '\n';
+    ctx += '【上下文结束】用户问及站内内容时优先参考以上信息。';
+    return ctx;
+  } catch { return ''; }
+}
+
 const SYSTEM_PROMPT =
   '你是 Mortar CMS 的 AI 助理，一个熟悉内容管理系统的助手。' +
   '你可以查询站点数据、撰写/更新文章、管理评论等。' +
@@ -105,7 +128,7 @@ router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) 
 
     const tools = listToolSchemas(req.user!.role);
     const msgs: any[] = [
-      { role: 'system', content: SYSTEM_PROMPT + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
+      { role: 'system', content: SYSTEM_PROMPT + '\n\n' + buildSiteContext() + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
       { role: 'user', content: String(message) },
     ];
     const ctx = { userId: req.user!.userId, role: req.user!.role };
@@ -304,7 +327,7 @@ router.post('/webhook/:token', async (req: AuthRequest, res: Response) => {
 
     const tools = listToolSchemas(user.role);
     const msgs: any[] = [
-      { role: 'system', content: SYSTEM_PROMPT + ' 当前用户: ' + binding.username + '。' + (tools.length ? '\n可用的工具: ' + tools.map(t => t.function.name).join(', ') : '') },
+      { role: 'system', content: SYSTEM_PROMPT + ' 当前用户: ' + binding.username + '。\n' + buildSiteContext() + (tools.length ? '\n可用的工具: ' + tools.map(t => t.function.name).join(', ') : '') },
       { role: 'user', content: message },
     ];
     const ctx = { userId: user.id, role: user.role };
