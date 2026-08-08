@@ -133,6 +133,8 @@ export default function AIChat() {
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<any>(null);
   const [promptsOpen, setPromptsOpen] = useState(false);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const promptsRef = useRef<HTMLDivElement>(null);
 
   // Voice input (Web Speech API)
@@ -221,6 +223,29 @@ export default function AIChat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, busy]);
+
+  function startRename(id: string, current: string) {
+    setRenamingId(id); setRenameValue(current);
+  }
+
+  function commitRename() {
+    if (renamingId && renameValue.trim()) {
+      updateSession(renamingId, x => ({ ...x, title: renameValue.trim().slice(0, 40) }));
+    }
+    setRenamingId(null);
+  }
+
+  // Poll task detail while it is running
+  useEffect(() => {
+    if (!taskDetail || taskDetail.status !== 'running') return;
+    const iv = setInterval(async () => {
+      try {
+        const r = await api.get('/ai/tasks/' + taskDetail.id);
+        setTaskDetail(r.data);
+      } catch {}
+    }, 2000);
+    return () => clearInterval(iv);
+  }, [taskDetail?.id, taskDetail?.status]);
 
   async function fetchTasks() {
     try {
