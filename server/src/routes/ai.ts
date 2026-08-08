@@ -346,6 +346,28 @@ router.get('/audit', authenticate, authorize('admin'), (req: AuthRequest, res: R
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+router.post('/tasks/:id/retry', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const task = getTask(req.params.id);
+    if (!task) { res.status(404).json({ error: '任务不存在' }); return; }
+    if (req.user!.role !== 'admin' && task.userId !== req.user!.userId) { res.status(403).json({ error: '无权操作该任务' }); return; }
+    const user = db.prepare('SELECT id, username FROM User WHERE id = ?').get(task.userId) as any;
+    const newId = createTask(task.userId, user?.username || task.username || 'user', task.prompt);
+    setImmediate(() => { runTask(newId, task.userId, req.user!.role, user?.username || task.username || 'user', task.prompt); });
+    res.status(201).json({ id: newId });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/tasks/:id', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const task = getTask(req.params.id);
+    if (!task) { res.status(404).json({ error: '任务不存在' }); return; }
+    if (req.user!.role !== 'admin' && task.userId !== req.user!.userId) { res.status(403).json({ error: '无权删除该任务' }); return; }
+    db.prepare('DELETE FROM AiTask WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 router.post('/tasks/:id/cancel', authenticate, (req: AuthRequest, res: Response) => {
   try {
     const task = getTask(req.params.id);

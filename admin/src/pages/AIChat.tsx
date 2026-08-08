@@ -183,6 +183,20 @@ export default function AIChat() {
     if (taskDetail?.id === id) setTaskDetail({ ...taskDetail, status: 'cancelled' });
   }
 
+  async function retryTask(id: string) {
+    try {
+      const r = await api.post('/ai/tasks/' + id + '/retry');
+      setTaskDetail(null);
+      setTimeout(fetchTasks, 500);
+    } catch (e: any) { setError(e.response?.data?.error || '重试失败'); }
+  }
+
+  async function deleteTask(id: string) {
+    await api.delete('/ai/tasks/' + id);
+    if (taskDetail?.id === id) setTaskDetail(null);
+    fetchTasks();
+  }
+
   function newSession() {
     const s: Session = { id: 's' + Date.now(), title: t('new chat', getLang()), messages: [], ts: Date.now() };
     setSessions([s, ...sessions]);
