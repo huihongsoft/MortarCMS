@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell, Download, Settings2, Share2 } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell, Download, Settings2, Share2, Mic, BookOpen } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -34,6 +34,19 @@ const SUGGESTIONS = [
   { icon: FileText, text: '帮我列出最近发布的 5 篇文章' },
   { icon: Wand2, text: '撰写一篇关于内存涨价历史的文章并保存为草稿' },
   { icon: MessageSquare, text: '查看待审核的评论' },
+];
+
+const PROMPT_LIBRARY = [
+  { label: '✍️ 写文章', text: '撰写一篇关于【主题】的深度文章并保存为草稿' },
+  { label: '📊 站点统计', text: '查看一下站点的统计数据' },
+  { label: '📰 最近文章', text: '列出最近发布的 5 篇文章' },
+  { label: '🔍 站内检索', text: '在站内搜索关于【关键词】的内容并总结' },
+  { label: '🌐 联网调研', text: '搜索互联网上关于【主题】的最新信息并总结要点' },
+  { label: '🏷️ 标签建议', text: '为文章《【标题】》推荐合适的标签' },
+  { label: '💡 选题建议', text: '根据我站点的内容推荐 5 个新选题' },
+  { label: '🧠 记住偏好', text: '记住：我更喜欢【简洁的写作风格】' },
+  { label: '🖼️ 生成配图', text: '为文章《【标题】》生成一张封面配图' },
+  { label: '📝 评论审核', text: '帮我审核待处理的评论' },
 ];
 
 const HISTORY_KEY = 'mortar_ai_sessions';
@@ -117,6 +130,37 @@ export default function AIChat() {
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(4096);
   const [includeContext, setIncludeContext] = useState(true);
+  const [listening, setListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
+  const [promptsOpen, setPromptsOpen] = useState(false);
+  const promptsRef = useRef<HTMLDivElement>(null);
+
+  // Voice input (Web Speech API)
+  function toggleVoice() {
+    const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SR) { alert(t('voice not supported', getLang())); return; }
+    if (listening) { recognitionRef.current?.stop(); setListening(false); return; }
+    const rec = new SR();
+    rec.lang = 'zh-CN';
+    rec.continuous = false;
+    rec.interimResults = true;
+    rec.onresult = (e: any) => {
+      let t = '';
+      for (let i = 0; i < e.results.length; i++) t += e.results[i][0].transcript;
+      setInput(t);
+    };
+    rec.onend = () => setListening(false);
+    rec.onerror = () => setListening(false);
+    recognitionRef.current = rec;
+    rec.start();
+    setListening(true);
+  }
+
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => { if (promptsRef.current && !promptsRef.current.contains(e.target as Node)) setPromptsOpen(false); };
+    document.addEventListener('mousedown', onDoc);
+    return () => document.removeEventListener('mousedown', onDoc);
+  }, []);
   const paramsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -586,6 +630,20 @@ export default function AIChat() {
 
     // Input
     React.createElement('div', { className: 'mt-4 flex gap-2' },
+      React.createElement('div', { ref: promptsRef, className: 'relative' },
+        React.createElement('button', {
+          onClick: () => setPromptsOpen(!promptsOpen),
+          title: t('prompt library', getLang()),
+          className: 'h-full px-2.5 text-gray-400 hover:text-primary-600 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700',
+        }, React.createElement(BookOpen, { size: 16 })),
+        promptsOpen && React.createElement('div', { className: 'absolute bottom-full left-0 mb-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 max-h-72 overflow-y-auto' },
+          PROMPT_LIBRARY.map((p, i) => React.createElement('button', {
+            key: i,
+            onClick: () => { setInput(p.text); setPromptsOpen(false); },
+            className: 'w-full text-left px-3 py-2 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700',
+          }, p.label))
+        ),
+      ),
       React.createElement('input', {
         value: input,
         onChange: e => setInput(e.target.value),
@@ -593,6 +651,11 @@ export default function AIChat() {
         placeholder: t('ask ai something', getLang()),
         className: 'input-field flex-1',
       }),
+      React.createElement('button', {
+        onClick: toggleVoice,
+        title: t('voice input', getLang()),
+        className: 'px-3 rounded-lg border ' + (listening ? 'border-red-400 bg-red-50 text-red-600 animate-pulse' : 'border-gray-200 dark:border-gray-700 text-gray-400 hover:text-primary-600 hover:bg-gray-50 dark:hover:bg-gray-700'),
+      }, React.createElement(Mic, { size: 16 })),
       busy
         ? React.createElement('button', { onClick: stop, className: 'btn-danger' }, React.createElement(Square, { size: 16 }), t('stop', getLang()))
         : React.createElement('button', { onClick: () => send(), disabled: !input.trim(), className: 'btn-primary' },
