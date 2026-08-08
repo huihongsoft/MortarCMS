@@ -355,6 +355,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
 
       const style = canvas.createElement('style');
       style.textContent = `
+        html, body { background: #ffffff !important; color-scheme: light; min-height: 100%; }
         body { margin:0; }
         .cms-post-list, .cms-categories, .cms-comments, .cms-search, .cms-archive, .cms-tag-cloud { min-height: 40px; }
       `;
@@ -467,6 +468,13 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         styles: [], // real site CSS is injected on load (see below); CDN used as fallback
         frameStyle: `
           :root { --primary: #3b82f6; --primary-soft: rgba(59,130,246,0.08); }
+          /* Force a light canvas regardless of the OS/browser dark scheme,
+             otherwise an empty document renders as a dark void */
+          html, body {
+            background: #ffffff !important;
+            color-scheme: light;
+            min-height: 100%;
+          }
           body {
             -webkit-font-smoothing: antialiased;
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;

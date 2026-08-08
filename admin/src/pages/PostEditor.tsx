@@ -251,9 +251,9 @@ export default function PostEditor() {
       )
     ),
     // ---- VISUAL MODE: full-screen builder (Elementor/Fanke style) ----
-    visualMode && React.createElement('div', { className: 'fixed inset-0 z-50 bg-white flex flex-col' },
+    visualMode && React.createElement('div', { className: 'fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col' },
       // Builder top bar
-      React.createElement('div', { className: 'flex flex-wrap items-center gap-3 px-4 py-2 border-b border-gray-200 bg-white shrink-0' },
+      React.createElement('div', { className: 'flex flex-wrap items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0' },
         React.createElement('button', {
           onClick: () => setVisualMode(false),
           className: 'flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-gray-500 hover:text-gray-900 rounded-lg hover:bg-gray-100',
@@ -296,10 +296,10 @@ export default function PostEditor() {
         }),
         showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },
           React.createElement('div', {
-            className: 'absolute right-0 top-0 h-full w-96 max-w-[90vw] bg-white shadow-2xl overflow-y-auto',
+            className: 'absolute right-0 top-0 h-full w-96 max-w-[90vw] bg-white dark:bg-gray-900 shadow-2xl overflow-y-auto',
             onClick: (e: React.MouseEvent) => e.stopPropagation(),
           },
-            React.createElement('div', { className: 'sticky top-0 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between z-10' },
+            React.createElement('div', { className: 'sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between z-10' },
               React.createElement('h3', { className: 'text-sm font-semibold text-gray-900' }, t('page settings', getLang())),
               React.createElement('button', { onClick: () => setShowSettings(false), className: 'p-1 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 16 }))
             ),

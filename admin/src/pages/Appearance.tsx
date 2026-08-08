@@ -271,7 +271,7 @@ export default function Appearance() {
         ),
       ),
       // Section Editor — full-screen builder (same as post/page visual mode)
-      editingSection && React.createElement('div', { className: 'fixed inset-0 z-50 bg-white flex flex-col' },
+      editingSection && React.createElement('div', { className: 'fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col' },
         React.createElement('div', { className: 'flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white shrink-0' },
           React.createElement('div', { className: 'flex items-center gap-2' },
             React.createElement('button', { onClick: closeSectionEditor, className: 'p-1.5 text-gray-500 hover:text-gray-900 rounded-lg hover:bg-gray-100' }, React.createElement(X, { size: 18 })),
