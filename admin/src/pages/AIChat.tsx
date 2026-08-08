@@ -25,6 +25,14 @@ const SUGGESTIONS = [
 ];
 
 const HISTORY_KEY = 'mortar_ai_sessions';
+const HELP_TEXT = '**可用命令**\n' +
+  '- `/stats` 查看站点统计\n' +
+  '- `/posts [数量]` 列出最近文章\n' +
+  '- `/draft 主题` 撰写文章并保存草稿\n' +
+  '- `/comments` 查看待审核评论\n' +
+  '- `/context` 查看站点概况\n' +
+  '- `/help` 显示本帮助\n\n' +
+  '也可以直接对话，例如：\n"写一篇关于内存涨价历史的文章并保存为草稿"';
 const LAST_KEY = 'mortar_ai_last_session';
 
 // Lightweight Markdown renderer for assistant replies
@@ -157,9 +165,30 @@ export default function AIChat() {
     setSessions(prev => prev.map(x => x.id === id ? updater(x) : x));
   }
 
+  // Slash command map: /stats /posts /draft /comments /help
+  function expandCommand(raw: string): string | null {
+    const m = raw.match(/^\/(\w+)\s*(.*)$/s);
+    if (!m) return null;
+    const [, cmd, rest] = m;
+    const r = rest.trim();
+    switch (cmd) {
+      case 'stats': return '查看一下站点的统计数据';
+      case 'posts': return '列出最近发布的 ' + (r || '5') + ' 篇文章，只列标题和发布日期';
+      case 'draft': return '撰写一篇关于「' + (r || '这个主题') + '」的文章并保存为草稿';
+      case 'comments': return '查看待审核的评论';
+      case 'context': return '请根据站点上下文简要总结当前站点的概况';
+      case 'help':
+        if (active) updateSession(active.id, x => ({ ...x, messages: [...x.messages, { role: 'assistant', content: HELP_TEXT, ts: Date.now() }] }));
+        return null;
+      default: return null; // unknown -> send as-is
+    }
+  }
+
   async function send(text?: string) {
-    const msg = (text ?? input).trim();
-    if (!msg || busy) return;
+    const raw = (text ?? input).trim();
+    if (!raw || busy) return;
+    const msg = expandCommand(raw) || raw;
+    if (!msg) { setInput(''); return; }
     setInput('');
     setError('');
     const sid = active?.id || '';
