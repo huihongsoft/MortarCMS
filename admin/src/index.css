@@ -119,6 +119,34 @@ table tbody tr { transition: background-color 0.12s ease; }
 .dark thead { @apply bg-gray-800; }
 .dark tbody tr:hover { @apply bg-gray-700/40; }
 
+/* Global API activity bar (top of viewport) */
+#api-loading-bar {
+  position: fixed;
+  top: 0; left: 0;
+  height: 2.5px;
+  width: 100%;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity .25s ease;
+  overflow: hidden;
+  background: transparent;
+}
+#api-loading-bar.active { opacity: 1; }
+#api-loading-bar::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; height: 100%;
+  width: 40%;
+  border-radius: 0 2px 2px 0;
+  background: linear-gradient(90deg, var(--admin-primary, #2563eb), #7c3aed);
+  animation: api-bar-slide 1s ease-in-out infinite;
+}
+@keyframes api-bar-slide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(350%); }
+}
+
 /* Route transition: fade + rise on admin page changes */
 @keyframes page-enter {
   from { opacity: 0; transform: translateY(6px); }
