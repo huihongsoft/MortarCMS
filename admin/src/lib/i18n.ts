@@ -440,6 +440,8 @@ const zh: Record<string, string> = {
   'select model b': '选择模型 B',
   'compare prompt': '输入对比提示词...',
   'compare': '开始对比',
+  'share': '分享',
+  'share link copied': '分享链接已复制',
   'seo': 'SEO 优化',
   'seo title': 'SEO 标题',
   'seo description': 'SEO 描述',

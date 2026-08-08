@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
 import db, { cuid } from '../utils/db';
+import { uniqueSlug } from '../utils/slug';
 import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
 import {
   AIProvider, PROVIDER_PRESETS, getProviders, saveProviders, getDefaultProvider,
@@ -511,6 +512,63 @@ router.post('/compare', authenticate, async (req: AuthRequest, res: Response) =>
       chatComplete(b, [{ role: 'user', content: guardUserMessage(String(prompt)) }]).then(r => r.content).catch((e: any) => '❌ ' + e.message),
     ]);
     res.json({ a: { name: a.name, model: a.model, content: ra }, b: { name: b.name, model: b.model, content: rb } });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Batch translate posts into a target language (creates drafts)
+router.post('/batch-translate', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
+    const provider = getDefaultProvider();
+    if (!provider) { res.status(400).json({ error: '尚未配置 AI 服务商' }); return; }
+    const { ids, language } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0 || ids.length > 10) { res.status(400).json({ error: 'ids array (1-10) required' }); return; }
+    const lang = String(language || 'English');
+    const posts = ids.map((id: string) => db.prepare("SELECT * FROM Post WHERE id = ? AND type = 'post'").get(id) as any).filter(Boolean);
+    if (posts.length === 0) { res.status(404).json({ error: '未找到文章' }); return; }
+
+    const results: any[] = [];
+    for (const post of posts) {
+      try {
+        const plain = (post.content || '').replace(/<[^>]*>/g, '').slice(0, 6000);
+        const r = await chatComplete(provider, [
+          { role: 'system', content: '你是专业译者。把文章翻译成 ' + lang + '，输出 Markdown，标题用 # 开头。' },
+          { role: 'user', content: guardUserMessage('标题: ' + post.title + '\n\n' + plain) },
+        ]);
+        const lines = r.content.split('\n');
+        const newTitle = (lines.find((l: string) => l.startsWith('# ')) || '').replace(/^#\s*/, '').trim() || post.title + ' (' + lang + ')';
+        const body = lines.filter((l: string) => !l.startsWith('# ')).join('\n');
+        const allSlugs = (db.prepare("SELECT slug FROM Post WHERE type = 'post'").all() as any[]).map((x: any) => x.slug);
+        const id = cuid();
+        db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(id, newTitle, uniqueSlug(newTitle, allSlugs), mdToHtml(body), (post.excerpt || '').slice(0, 300), 'draft', 'post', req.user!.userId);
+        results.push({ source: post.title, id, title: newTitle, status: 'ok' });
+      } catch (e: any) {
+        results.push({ source: post.title, error: e.message || '翻译失败' });
+      }
+    }
+    res.json({ results, total: results.length });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Share a chat session via public link
+router.post('/share', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const { messages } = req.body || {};
+    if (!Array.isArray(messages) || messages.length === 0) { res.status(400).json({ error: 'messages required' }); return; }
+    const token = require('crypto').randomBytes(9).toString('hex');
+    const value = JSON.stringify({ userId: req.user!.userId, username: (db.prepare('SELECT username FROM User WHERE id = ?').get(req.user!.userId) as any)?.username, messages: messages.slice(-50), createdAt: new Date().toISOString() });
+    db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, 'ai_share_' || ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run('ai_share_' + token, token, value);
+    res.json({ url: '/share/ai/' + token });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/share/:token', (req: AuthRequest, res: Response) => {
+  try {
+    const row = db.prepare("SELECT value FROM Setting WHERE key = 'ai_share_' || ?").get(req.params.token) as any;
+    if (!row) { res.status(404).json({ error: '分享不存在或已失效' }); return; }
+    res.json(JSON.parse(row.value));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

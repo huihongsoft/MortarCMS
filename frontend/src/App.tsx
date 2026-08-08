@@ -3,6 +3,7 @@ import SearchPage from './pages/Search';
 import ArchivePage from './pages/Archive';
 import AuthorPage from './pages/Author';
 import NotFound from './pages/NotFound';
+import ShareView from './pages/ShareView';
 import ReadingProgress from './components/ReadingProgress';
 import ThemeSection from './components/ThemeSection';
 import CookieConsent from './components/CookieConsent';
@@ -37,6 +38,7 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
           React.createElement(Route, { path: '/search', element: React.createElement(SearchPage, { settings }) }),
           React.createElement(Route, { path: '/register', element: React.createElement(Register) }),
           React.createElement(Route, { path: '/login', element: React.createElement(Login) }),
+          React.createElement(Route, { path: '/share/ai/:token', element: React.createElement(ShareView, { settings }) }),
           React.createElement(Route, { path: '/tag/:slug', element: React.createElement(Home, { settings }) }),
           React.createElement(Route, { path: '/category/:slug', element: React.createElement(Home, { settings }) }),
           React.createElement(Route, { path: '*', element: React.createElement(NotFound) }),

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell, Download, Settings2 } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell, Download, Settings2, Share2 } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -263,6 +263,19 @@ export default function AIChat() {
     URL.revokeObjectURL(url);
   }
 
+  async function shareSession() {
+    if (!active?.messages.length) return;
+    try {
+      const r = await api.post('/ai/share', { messages: active.messages });
+      const url = window.location.origin + r.data.url;
+      navigator.clipboard.writeText(url);
+      setError('');
+      setCopied('share');
+      setTimeout(() => setCopied(null), 1500);
+      alert(t('share link copied', getLang()) + ': ' + url);
+    } catch (e: any) { setError(e.response?.data?.error || '分享失败'); }
+  }
+
   function exportSession() {
     if (!active?.messages.length) return;
     const md = active.messages.map(m =>
@@ -483,6 +496,8 @@ export default function AIChat() {
         active?.messages.length ? React.createElement(React.Fragment, null,
           React.createElement('button', { onClick: exportSession, className: 'text-xs text-gray-400 hover:text-primary-600 flex items-center gap-1' },
             React.createElement(Download, { size: 12 }), t('export', getLang())),
+          React.createElement('button', { onClick: shareSession, className: 'text-xs text-gray-400 hover:text-primary-600 flex items-center gap-1' },
+            React.createElement(Share2, { size: 12 }), t('share', getLang())),
           React.createElement('button', {
             onClick: () => updateSession(active.id, x => ({ ...x, messages: [] })),
             className: 'text-xs text-gray-400 hover:text-red-600',
