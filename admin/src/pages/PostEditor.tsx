@@ -100,12 +100,22 @@ export default function PostEditor() {
       if (!stay) navigate('/posts');
     } catch (e: any) {
       setSaveState('dirty');
-      const msg = e?.response?.data?.error || e?.response?.data?.message || t('save failed', getLang());
-      toast.toast(typeof msg === 'string' ? msg : t('save failed', getLang()), 'error');
+      toast.toast(describeSaveError(e, getLang()), 'error');
     } finally { setSaving(false); }
   }
 
   function addTag() { if (tagInput.trim() && !tagNames.includes(tagInput.trim())) { setTagNames([...tagNames, tagInput.trim()]); setTagInput(''); } }
+
+  function describeSaveError(e: any, lang: string): string {
+    if (!e?.response) return t('network error - check your connection and try again', lang);
+    const status = e.response.status;
+    const d = e.response.data;
+    let msg = typeof d === 'string' ? d : (d?.error || d?.message || '');
+    if (Array.isArray(msg)) msg = msg.map((x: any) => x?.message || JSON.stringify(x)).join('; ');
+    if (status === 401) return t('session expired - please log in again', lang);
+    if (status === 429) return t('too many requests - try again in a moment', lang);
+    return String(msg || t('save failed', lang)) + ' (' + status + ')';
+  }
   async function saveTemplate() { if (!templateName.trim() || !content) return; await api.post('/editor/templates', { name: templateName, html: content, css: visualCss }); toast.toast(t('template saved', getLang())); setTemplateName(''); api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])); }
   function loadTemplate(tpl: any) { setContent(tpl.html); setVisualCss(tpl.css || ''); toast.toast(t('template loaded', getLang())); }
 
