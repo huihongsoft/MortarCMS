@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Upload, Trash2, Copy, FileText, FileImage, FileAudio, FileVideo, File, Trash, X, Download, Calendar, Hash } from 'lucide-react';
+import { Upload, Trash2, Copy, FileText, FileImage, FileAudio, FileVideo, File, Trash, X, Download, Calendar, Hash, Sparkles, ScanSearch } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
@@ -46,6 +46,29 @@ export default function Media() {
   function selectAll() { if (selected.size === media.length) setSelected(new Set()); else setSelected(new Set(media.map((m: any) => m.id))); }
 
   function openPreview(m: any) { setPreview(m); }
+
+  async function analyzeImage(m: any) {
+    if (aiAnalyzing) return;
+    setAiAnalyzing(m.id);
+    try {
+      const r = await api.post('/ai/vision', { url: m.url, question: '请描述这张图片的内容、风格和适用场景' });
+      setAiAnalysis({ ...aiAnalysis, [m.id]: r.data.analysis || r.data.error || '分析失败' });
+    } catch (e: any) { setAiAnalysis({ ...aiAnalysis, [m.id]: e.response?.data?.error || '分析失败' }); }
+    finally { setAiAnalyzing(null); }
+  }
+
+  async function generateImage() {
+    if (!genPrompt.trim() || genLoading) return;
+    setGenLoading(true);
+    try {
+      const r = await api.post('/ai/image-gen', { prompt: genPrompt });
+      if (r.data.url) {
+        setGenPrompt('');
+        const rr = await api.get('/media'); setMedia(rr.data.media);
+      } else alert(r.data.error || '生成失败');
+    } catch (e: any) { alert(e.response?.data?.error || '生成失败'); }
+    finally { setGenLoading(false); }
+  }
   function closePreview() { setPreview(null); }
 
   // Keyboard: ESC to close preview
@@ -62,10 +85,14 @@ export default function Media() {
       React.createElement('div', { className: 'flex items-center gap-3' },
         React.createElement('input', { type: 'text', placeholder: t('search media', getLang()), onChange: (e: React.ChangeEvent<HTMLInputElement>) => { api.get('/media?search=' + encodeURIComponent(e.target.value)).then(r => setMedia(r.data.media)); }, className: 'input-field w-48 text-sm' }),
         React.createElement('button', { onClick: () => fileRef.current?.click(), disabled: uploading, className: 'btn-primary' }, React.createElement(Upload, { size: 16 }), uploading ? t('uploading', getLang()) : t('upload', getLang())),
+        React.createElement('button', { onClick: () => setGenOpen(!genOpen), className: 'btn-secondary' }, React.createElement(Sparkles, { size: 16 }), t('ai generate image', getLang())),
         selected.size > 0 && React.createElement('button', { onClick: bulkDelete, className: 'btn-danger text-xs' }, React.createElement(Trash, { size: 14 }), t('delete selected', getLang()) + ' (' + selected.size + ')')),
       React.createElement('input', { ref: fileRef, type: 'file', multiple: true, onChange: uploadFile, className: 'hidden', accept: 'image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,audio/mpeg,audio/wav,video/mp4,application/zip' })
     ),
     React.createElement('div', { className: 'mb-3' }, React.createElement('button', { onClick: selectAll, className: 'btn-secondary text-xs' }, selected.size === media.length ? t('deselect all', getLang()) : t('select all', getLang()))),
+    genOpen && React.createElement('div', { className: 'card p-3 mb-4 flex gap-2' },
+      React.createElement('input', { value: genPrompt, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setGenPrompt(e.target.value), onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter') generateImage(); }, placeholder: t('image gen prompt', getLang()), className: 'input-field flex-1 text-sm' }),
+      React.createElement('button', { onClick: generateImage, disabled: genLoading || !genPrompt.trim(), className: 'btn-primary text-sm' }, React.createElement(Sparkles, { size: 14 }), genLoading ? t('generating', getLang()) + '...' : t('generate', getLang()))),
     media.length === 0 ? React.createElement(EmptyState, {
         icon: FileImage,
         title: t('no media uploaded yet', getLang()),
@@ -77,8 +104,14 @@ export default function Media() {
           React.createElement('input', { type: 'checkbox', checked: selected.has(m.id), onChange: (e: React.ChangeEvent<HTMLInputElement>) => { e.stopPropagation(); toggleSelect(m.id); }, className: 'absolute top-2 left-2 z-10 w-4 h-4 rounded border-gray-300 text-primary-600 opacity-0 group-hover:opacity-100 ' + (selected.has(m.id) ? 'opacity-100' : '') }),
           React.createElement('div', { className: 'aspect-square bg-gray-100 flex items-center justify-center' },
             m.mimeType?.startsWith('image/') ? React.createElement('img', { src: (m.thumbnail || m.url), alt: m.alt || m.original, className: 'w-full h-full object-cover' })
-            : React.createElement(getFileIcon(m.mimeType), { size: 40, className: 'text-gray-400' })
-          ),
+            : React.createElement(getFileIcon(m.mimeType), { size: 40, className: 'text-gray-400' })),
+          m.mimeType?.startsWith('image/') && React.createElement('button', {
+            onClick: (e: React.MouseEvent) => { e.stopPropagation(); analyzeImage(m); },
+            disabled: aiAnalyzing === m.id,
+            className: 'absolute top-2 right-2 z-10 p-1.5 rounded-lg bg-white/90 backdrop-blur text-gray-500 hover:text-primary-600 shadow opacity-0 group-hover:opacity-100 transition-opacity',
+            title: t('ai analyze image', getLang()),
+          }, React.createElement(ScanSearch, { size: 14 })),
+          aiAnalysis[m.id] && React.createElement('div', { className: 'p-2 text-[10px] text-gray-500 bg-purple-50 dark:bg-purple-500/10 max-h-16 overflow-y-auto', onClick: (e: React.MouseEvent) => e.stopPropagation() }, aiAnalysis[m.id]),
           React.createElement('div', { className: 'p-2' },
             React.createElement('p', { className: 'text-xs text-gray-600 truncate' }, m.original),
             React.createElement('p', { className: 'text-xs text-gray-400' }, formatSize(m.size)),

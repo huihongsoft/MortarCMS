@@ -591,6 +591,27 @@ router.delete('/memories/:key', authenticate, (req: AuthRequest, res: Response) 
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Direct vision/image-gen helpers (UI-facing wrappers around the tools)
+router.post('/vision', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
+    const { url, question } = req.body || {};
+    if (!url) { res.status(400).json({ error: 'url required' }); return; }
+    const out = await executeTool('analyze_image', { url, question: question || '' }, { userId: req.user!.userId, role: req.user!.role });
+    res.json(out);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/image-gen', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
+    const { prompt, size } = req.body || {};
+    if (!prompt) { res.status(400).json({ error: 'prompt required' }); return; }
+    const out = await executeTool('generate_image', { prompt, size }, { userId: req.user!.userId, role: req.user!.role });
+    res.json(out);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // Admin: AI operation audit log (sandbox traceability)
 router.get('/audit', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
