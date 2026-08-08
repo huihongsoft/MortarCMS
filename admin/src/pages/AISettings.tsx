@@ -30,6 +30,7 @@ export default function AISettings() {
   const [roles, setRoles] = useState<string[]>([]);
   const [testing, setTesting] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<Record<string, { ok: boolean; message: string }>>({});
+  const [usage, setUsage] = useState<any>(null);
 
   useEffect(() => {
     api.get('/ai/settings').then(r => {
@@ -39,6 +40,7 @@ export default function AISettings() {
       setAllowedRoles(r.data.allowedRoles || []);
       setToolPermissions(r.data.toolPermissions || {});
       setRoles(r.data.roles || []);
+      api.get('/ai/usage').then(r => setUsage(r.data)).catch(() => {});
     }).catch(() => {});
   }, []);
 
@@ -133,6 +135,45 @@ export default function AISettings() {
           )
         ))
       )
+    ),
+
+    // ---- Usage stats (admin) ----
+    usage && React.createElement('div', { className: 'card p-6 mb-6' },
+      React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('ai usage', getLang())),
+      React.createElement('div', { className: 'grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4' },
+        React.createElement('div', { className: 'p-3 rounded-lg bg-gray-50 dark:bg-gray-800' },
+          React.createElement('p', { className: 'text-2xl font-bold text-gray-900 dark:text-white' }, usage.total?.c || 0),
+          React.createElement('p', { className: 'text-xs text-gray-500' }, t('total requests', getLang()))),
+        React.createElement('div', { className: 'p-3 rounded-lg bg-gray-50 dark:bg-gray-800' },
+          React.createElement('p', { className: 'text-2xl font-bold text-gray-900 dark:text-white' }, (usage.total?.t || 0).toLocaleString()),
+          React.createElement('p', { className: 'text-xs text-gray-500' }, t('total tokens', getLang()))),
+        React.createElement('div', { className: 'p-3 rounded-lg bg-gray-50 dark:bg-gray-800' },
+          React.createElement('p', { className: 'text-2xl font-bold text-gray-900 dark:text-white' }, usage.today?.c || 0),
+          React.createElement('p', { className: 'text-xs text-gray-500' }, t('today requests', getLang()))),
+        React.createElement('div', { className: 'p-3 rounded-lg bg-gray-50 dark:bg-gray-800' },
+          React.createElement('p', { className: 'text-2xl font-bold text-gray-900 dark:text-white' }, (usage.today?.t || 0).toLocaleString()),
+          React.createElement('p', { className: 'text-xs text-gray-500' }, t('today tokens', getLang()))),
+      ),
+      usage.byDay && usage.byDay.length > 0 && React.createElement('div', { className: 'flex items-end gap-1 h-20' },
+        usage.byDay.map((d: any) => {
+          const max = Math.max(...usage.byDay.map((x: any) => x.t), 1);
+          return React.createElement('div', { key: d.day, className: 'flex-1 flex flex-col items-center justify-end gap-1 min-w-0' },
+            React.createElement('div', { className: 'w-full max-w-6 rounded-t bg-primary-500', style: { height: Math.max(2, Math.round((d.t / max) * 64)) + 'px' }, title: d.day + ': ' + d.t + ' tokens' }),
+            React.createElement('span', { className: 'text-[9px] text-gray-400' }, d.day.slice(5)));
+        })),
+      usage.recent && usage.recent.length > 0 && React.createElement('div', { className: 'mt-4 max-h-40 overflow-y-auto' },
+        React.createElement('table', { className: 'w-full text-left' },
+          React.createElement('thead', null, React.createElement('tr', { className: 'border-b border-gray-100' },
+            React.createElement('th', { className: 'py-1.5 text-[10px] uppercase text-gray-400' }, t('time', getLang())),
+            React.createElement('th', { className: 'py-1.5 text-[10px] uppercase text-gray-400' }, t('user', getLang())),
+            React.createElement('th', { className: 'py-1.5 text-[10px] uppercase text-gray-400' }, t('kind', getLang())),
+            React.createElement('th', { className: 'py-1.5 text-[10px] uppercase text-gray-400 text-right' }, 'tokens'))),
+          React.createElement('tbody', null, usage.recent.map((r: any, i: number) =>
+            React.createElement('tr', { key: i, className: 'border-b border-gray-50' },
+              React.createElement('td', { className: 'py-1.5 text-xs text-gray-500' }, new Date(r.createdAt).toLocaleString()),
+              React.createElement('td', { className: 'py-1.5 text-xs text-gray-700 dark:text-gray-200' }, r.username || '-'),
+              React.createElement('td', { className: 'py-1.5 text-xs text-gray-500' }, r.kind),
+              React.createElement('td', { className: 'py-1.5 text-xs text-gray-500 text-right' }, r.tokens))))),
     ),
 
     // ---- Permissions ----

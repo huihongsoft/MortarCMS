@@ -112,6 +112,7 @@ router.post('/chat', authenticate, async (req: AuthRequest, res: Response) => {
       { role: 'system', content: SYSTEM_PROMPT },
       ...messages.map((m: any) => m.role === 'user' ? { ...m, content: guardUserMessage(m.content) } : m),
     ]);
+    recordUsage(req.user!.userId, 'chat', result.content, provider.model);
     res.json({ content: result.content });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -158,6 +159,7 @@ router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) 
       if (i === MAX_ITER - 1) finalText = '已达到工具调用次数上限，请简化问题重试。';
     }
 
+    recordUsage(req.user!.userId, 'assistant', finalText, provider.model);
     send({ type: 'done', content: finalText });
     res.end();
   } catch (err: any) {
@@ -230,11 +232,33 @@ router.post('/generate', authenticate, async (req: AuthRequest, res: Response) =
       { role: 'user', content: guardUserMessage(prompt) },
     ]);
 
+    recordUsage(req.user!.userId, 'generate', result.content, provider.model);
     if (action === 'generate' || action === 'polish' || action === 'continue' || action === 'translate') {
       res.json({ content: mdToHtml(result.content) });
     } else {
       res.json({ content: result.content });
     }
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// ---- Usage tracking ----
+
+function recordUsage(userId: string, kind: string, text: string, model?: string): void {
+  try {
+    const tokens = Math.ceil((text || '').length / 3) + 20;
+    db.prepare('INSERT INTO AiUsage (id, userId, kind, model, tokens, createdAt) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(cuid(), userId, kind, model || '', tokens, new Date().toISOString());
+  } catch {}
+}
+
+router.get('/usage', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+  try {
+    const total = (db.prepare('SELECT COUNT(*) as c, COALESCE(SUM(tokens),0) as t FROM AiUsage').get() as any);
+    const today = (db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(tokens),0) as t FROM AiUsage WHERE date(createdAt) = date('now')").get() as any);
+    const byKind = db.prepare('SELECT kind, COUNT(*) as c, COALESCE(SUM(tokens),0) as t FROM AiUsage GROUP BY kind').all();
+    const byDay = db.prepare("SELECT date(createdAt) as day, COUNT(*) as c, COALESCE(SUM(tokens),0) as t FROM AiUsage WHERE createdAt >= datetime('now', '-7 days') GROUP BY day ORDER BY day").all();
+    const recent = db.prepare('SELECT u.*, us.username FROM AiUsage u LEFT JOIN User us ON us.id = u.userId ORDER BY u.createdAt DESC LIMIT 20').all();
+    res.json({ total, today, byKind, byDay, recent });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -305,6 +329,7 @@ async function runTask(taskId: string, userId: string, role: string, username: s
     }
 
     updateTask(taskId, { status: 'done', result: finalText, steps: JSON.stringify(steps), finishedAt: new Date().toISOString() });
+    recordUsage(userId, 'task', finalText, provider.model);
     notifyTaskFinished(taskId, userId, 'done');
   } catch (e: any) {
     updateTask(taskId, { status: 'failed', error: e.message || String(e), finishedAt: new Date().toISOString() });
@@ -616,6 +641,7 @@ router.post('/webhook/:token', async (req: AuthRequest, res: Response) => {
       if (i === MAX_ITER - 1) reply = '已达到工具调用次数上限，请简化问题重试。';
     }
 
+    recordUsage(user.id, 'webhook', reply, provider.model);
     res.json({ reply });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
