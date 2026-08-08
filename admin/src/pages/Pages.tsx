@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Edit2, Trash2 } from 'lucide-react';
+import { Plus, Edit2, Trash2, FileText } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -13,7 +14,12 @@ export default function Pages() {
       React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('pages', getLang())),
       React.createElement(Link, { to: '/pages/new', className: 'btn-primary' }, React.createElement(Plus, { size: 16 }), t('new page', getLang()))
     ),
-    pages.length === 0 ? React.createElement('p', { className: 'text-gray-500' }, t('no pages yet', getLang()))
+    pages.length === 0 ? React.createElement(EmptyState, {
+        icon: FileText,
+        title: t('no pages yet', getLang()),
+        description: t('create pages for static content like about or contact', getLang()),
+        action: React.createElement(Link, { to: '/pages/new', className: 'btn-primary text-sm' }, React.createElement(Plus, { size: 15 }), t('new page', getLang())),
+      })
     : React.createElement('div', { className: 'card overflow-hidden' },
         React.createElement('table', { className: 'w-full' },
           React.createElement('thead', null, React.createElement('tr', { className: 'border-b border-gray-200 bg-gray-50' },

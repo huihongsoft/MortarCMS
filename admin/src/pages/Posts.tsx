@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Plus, Edit2, Trash2, Eye, Pin, Trash, Copy } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Plus, Edit2, Trash2, Eye, Pin, Trash, Copy, FileText } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import { useToast } from '../lib/toast';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
 export default function Posts() {
+  const navigate = useNavigate();
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -107,7 +109,12 @@ export default function Posts() {
       )
     ),
     loading ? React.createElement('p', { className: 'text-gray-500' }, t('loading', getLang()))
-    : posts.length === 0 ? React.createElement('p', { className: 'text-gray-500' }, t('no posts found', getLang()))
+    : posts.length === 0 ? React.createElement(EmptyState, {
+        icon: FileText,
+        title: t('no posts found', getLang()),
+        description: t('start writing and share your first post', getLang()),
+        action: React.createElement('button', { onClick: () => navigate('/posts/new'), className: 'btn-primary text-sm' }, React.createElement(Plus, { size: 15 }), t('new post', getLang())),
+      })
     : React.createElement('div', { className: 'card overflow-hidden' },
         React.createElement('table', { className: 'w-full' },
           React.createElement('thead', null, React.createElement('tr', { className: 'border-b border-gray-200 bg-gray-50' },

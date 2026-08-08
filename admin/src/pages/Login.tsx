@@ -34,6 +34,9 @@ export default function Login() {
   return React.createElement('div', { className: 'min-h-screen flex items-center justify-center bg-gray-100' },
     React.createElement('div', { className: 'w-full max-w-sm card p-8' },
       React.createElement('div', { className: 'text-center mb-6' },
+        React.createElement('div', { className: 'w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/25 mx-auto mb-3' },
+          React.createElement('span', { className: 'text-white font-black text-xl select-none' }, 'M'),
+        ),
         React.createElement('h1', { className: 'text-2xl font-bold text-gray-900' }, 'Mortar'),
         React.createElement('p', { className: 'text-sm text-gray-500 mt-1' }, t('sign in to your admin panel', getLang()))
       ),

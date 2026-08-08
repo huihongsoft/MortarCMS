@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Upload, Trash2, Copy, FileText, FileImage, FileAudio, FileVideo, File, Trash, X, Download, Calendar, Hash } from 'lucide-react';
+import EmptyState from '../components/EmptyState';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -65,7 +66,12 @@ export default function Media() {
       React.createElement('input', { ref: fileRef, type: 'file', multiple: true, onChange: uploadFile, className: 'hidden', accept: 'image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,audio/mpeg,audio/wav,video/mp4,application/zip' })
     ),
     React.createElement('div', { className: 'mb-3' }, React.createElement('button', { onClick: selectAll, className: 'btn-secondary text-xs' }, selected.size === media.length ? t('deselect all', getLang()) : t('select all', getLang()))),
-    media.length === 0 ? React.createElement('p', { className: 'text-gray-500' }, t('no media uploaded yet', getLang()))
+    media.length === 0 ? React.createElement(EmptyState, {
+        icon: FileImage,
+        title: t('no media uploaded yet', getLang()),
+        description: t('upload images, documents, audio and video to use in your content', getLang()),
+        action: React.createElement('button', { onClick: () => fileRef.current?.click(), className: 'btn-primary text-sm' }, React.createElement(Upload, { size: 15 }), t('upload', getLang())),
+      })
     : React.createElement('div', { className: 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4' },
         media.map((m: any) => React.createElement('div', { key: m.id, className: 'card overflow-hidden group relative cursor-pointer', onClick: () => openPreview(m) },
           React.createElement('input', { type: 'checkbox', checked: selected.has(m.id), onChange: (e: React.ChangeEvent<HTMLInputElement>) => { e.stopPropagation(); toggleSelect(m.id); }, className: 'absolute top-2 left-2 z-10 w-4 h-4 rounded border-gray-300 text-primary-600 opacity-0 group-hover:opacity-100 ' + (selected.has(m.id) ? 'opacity-100' : '') }),
