@@ -483,11 +483,7 @@ table tbody tr { transition: background-color 0.12s ease; }
 }
 
 /* ---- Gutenberg-style floating block toolbar ---- */
-.visual-editor-container {
-  position: relative;
-  --gjs-left-width: 300px;
-  --gjs-right-width: 340px;
-}
+.visual-editor-container { position: relative; }
 /* Hide non-Gutenberg top-bar/panel buttons */
 .visual-editor-container .gjs-pn-btn[title="View components"],
 .visual-editor-container .gjs-pn-btn[title="Open Layer Manager"] { display: none !important; }

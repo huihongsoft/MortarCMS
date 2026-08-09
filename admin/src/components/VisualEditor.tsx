@@ -633,6 +633,8 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     // with a dashed border (the wireframe look). Users can re-enable it
     // from the toolbar toggle.
     try { editor.stopCommand('core:component-outline'); } catch {}
+    // Open the block inserter by default (right-side Blocks view in GrapesJS 0.23)
+    try { setTimeout(() => editor.runCommand('open-blocks'), 120); } catch {}
 
     // Remove default blocks we don't need
     const bm = editor.BlockManager;
