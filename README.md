@@ -3,6 +3,9 @@
   <h1 align="center">Mortar</h1>
   <p align="center">A modern, WordPress-style CMS built with TypeScript — content, plugins, themes, and multi-site in one box.</p>
   <p align="center">
+    <a href="https://github.com/huihongsoft/mortar"><img src="https://img.shields.io/github/stars/huihongsoft/mortar?style=social" alt="GitHub stars" /></a>
+    <a href="https://github.com/huihongsoft/mortar/fork"><img src="https://img.shields.io/github/forks/huihongsoft/mortar?style=social" alt="GitHub forks" /></a>
+    <a href="https://github.com/huihongsoft/mortar/issues"><img src="https://img.shields.io/github/issues/huihongsoft/mortar" alt="GitHub issues" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-orange.svg" alt="License" /></a>
     <img src="https://img.shields.io/badge/TypeScript-5.x-3178c6.svg" alt="TypeScript" />
     <img src="https://img.shields.io/badge/Express-4.x-259dff.svg" alt="Express" />
@@ -14,6 +17,18 @@
 ---
 
 **Mortar** is a self-hosted content management system inspired by WordPress and Halo — with a built-in **AI assistant**, a **drag-and-drop visual page builder**, a **role-based permission system**, plugins, themes, and multi-site support, all in TypeScript.
+
+## 🚀 一键安装 (One-click Install)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/huihongsoft/mortar/main/install.sh | bash
+```
+
+自动完成：环境检测 → 拉取代码 → 安装依赖 → 构建 → 注册系统服务（systemd / launchd）→ 健康检查。
+安装后访问 `http://localhost:3001/install` 完成向导，再到 **AI 设置** 配置模型服务商即可使用 AI 助理。
+
+> 支持 Linux / macOS；数据库默认 SQLite，也可通过 `DATABASE_URL` 使用 MySQL / PostgreSQL。
+> 管理命令：`./mortarctl.sh {start|stop|restart|status|logs}`
 
 ## 📸 Screenshots
 
@@ -114,6 +129,9 @@
 ### Install & run
 
 ```bash
+# 0. (Optional) clone from GitHub
+git clone https://github.com/huihongsoft/mortar.git && cd mortar
+
 # 1. Install dependencies
 npm install            # root (concurrently)
 cd server && npm install

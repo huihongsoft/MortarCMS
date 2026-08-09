@@ -101,11 +101,23 @@ prepare_source() {
 }
 
 # ---------- 安装依赖 ----------
+# npm 默认缓存可能因权限问题失败（如 ~/.npm 被 root 占用），自动回退到临时缓存
+npm_install() {
+  local dir="$1" label="$2"
+  info "安装 $label 依赖..."
+  if (cd "$dir" && npm install --no-audit --no-fund); then return 0; fi
+  warn "$label 使用默认 npm 缓存失败，改用临时缓存重试..."
+  local tmpcache
+  tmpcache="$(mktemp -d /tmp/npm-cache-XXXXXX)"
+  (cd "$dir" && npm install --no-audit --no-fund --cache "$tmpcache") || { rm -rf "$tmpcache"; return 1; }
+  rm -rf "$tmpcache"
+}
+
 install_deps() {
   info "安装依赖（可能需要几分钟）..."
-  (cd server   && npm install --no-audit --no-fund) || err "server 依赖安装失败"
-  (cd admin    && npm install --no-audit --no-fund) || err "admin 依赖安装失败"
-  (cd frontend && npm install --no-audit --no-fund) || err "frontend 依赖安装失败"
+  npm_install server   "server"   || err "server 依赖安装失败"
+  npm_install admin    "admin"    || err "admin 依赖安装失败"
+  npm_install frontend "frontend" || err "frontend 依赖安装失败"
   ok "依赖安装完成"
 }
 
