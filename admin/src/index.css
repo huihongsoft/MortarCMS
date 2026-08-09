@@ -224,9 +224,10 @@ table tbody tr { transition: background-color 0.12s ease; }
 .visual-editor-container .gjs-pn-panels {
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
-  padding: 4px 8px;
-  min-height: 42px;
+  padding: 6px 12px;
+  min-height: 48px;
 }
+.visual-editor-container .gjs-pn-btn { height: 34px; min-width: 34px; font-size: 15px; }
 .visual-editor-container .gjs-pn-btn {
   color: #6b7280;
   border-radius: 8px;
@@ -244,7 +245,9 @@ table tbody tr { transition: background-color 0.12s ease; }
 }
 /* Panels: blocks left, views right — white surfaces */
 .visual-editor-container .gjs-pn-views-container { border-left: 1px solid #e5e7eb; }
-.visual-editor-container .gjs-blocks-c { padding: 10px; background: #ffffff; }
+.visual-editor-container .gjs-blocks-c { padding: 10px; background: #ffffff; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; }
+.visual-editor-container .gjs-block { min-height: 84px; justify-content: center; }
+.visual-editor-container .gjs-block svg, .visual-editor-container .gjs-block i.fa { width: 24px; height: 24px; font-size: 18px; }
 /* Block cards */
 .visual-editor-container .gjs-block {
   border-radius: 10px;
@@ -282,9 +285,9 @@ table tbody tr { transition: background-color 0.12s ease; }
 /* Right-side style manager — white surfaces */
 .visual-editor-container .gjs-sm-sectors { background: #fff; }
 .visual-editor-container .gjs-sm-sector .gjs-sm-sector-title {
-  background: #ffffff;
+  background: #f9fafb;
   border-bottom: 1px solid #f3f4f6;
-  color: #374151;
+  color: #111827;
   font-size: 12px;
   font-weight: 600;
   padding: 10px 12px;
@@ -432,6 +435,44 @@ table tbody tr { transition: background-color 0.12s ease; }
 }
 .dark .visual-editor-container .ve-empty-title { color: #e5e7eb; }
 .dark .visual-editor-container .ve-empty-actions button { background: #1f2937; border-color: #4b5563; color: #d1d5db; }
+
+/* ---- Gutenberg-style floating block toolbar ---- */
+.visual-editor-container { position: relative; }
+.visual-editor-container .ve-block-bar {
+  position: absolute;
+  z-index: 30;
+  display: none;
+  align-items: center;
+  gap: 1px;
+  background: #1e1e1e;
+  color: #fff;
+  border-radius: 7px;
+  padding: 3px 4px;
+  font-size: 11px;
+  box-shadow: 0 3px 14px rgba(0,0,0,0.25);
+  transform: translateY(-100%);
+  white-space: nowrap;
+  transition: opacity 0.15s ease;
+}
+.visual-editor-container .ve-block-bar-name {
+  padding: 0 7px;
+  color: #ddd;
+  font-weight: 500;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.visual-editor-container .ve-block-bar button {
+  background: none;
+  border: none;
+  color: #ddd;
+  padding: 3px 7px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+.visual-editor-container .ve-block-bar button:hover { background: rgba(255,255,255,0.15); color: #fff; }
 
 /* Canvas zoom bar (floating bottom-right) */
 .visual-editor-container .ve-zoom-bar {

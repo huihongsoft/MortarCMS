@@ -480,13 +480,18 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         styles: [], // real site CSS is injected on load (see below); CDN used as fallback
         frameStyle: `
           :root { --primary: #3b82f6; --primary-soft: rgba(59,130,246,0.08); }
-          /* Light canvas by default; theme CSS loaded later may override it */
-          html, body {
-            background: #ffffff;
+          /* Gutenberg-style: centered page column on a gray backdrop */
+          html {
+            background: #f1f3f5;
             color-scheme: light;
             min-height: 100%;
           }
           body {
+            max-width: 760px;
+            margin: 32px auto;
+            min-height: calc(100vh - 64px);
+            background: #ffffff;
+            box-shadow: 0 0 0 1px rgba(0,0,0,0.05), 0 8px 30px -8px rgba(0,0,0,0.12);
             -webkit-font-smoothing: antialiased;
             font-family: var(--body-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
             color: #111827;
@@ -738,9 +743,80 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     };
     canvasDoc?.addEventListener('keydown', canvasKeyHandler);
 
+    // ---- Gutenberg-style floating block toolbar ----
+    const blockBar = document.createElement('div');
+    blockBar.className = 've-block-bar';
+    blockBar.innerHTML =
+      '<span class="ve-block-bar-name">Block</span>' +
+      '<button data-act="up" title="Move up">↑</button>' +
+      '<button data-act="down" title="Move down">↓</button>' +
+      '<button data-act="copy" title="Duplicate">⧉</button>' +
+      '<button data-act="del" title="Delete">🗑</button>';
+    (containerRef.current as HTMLElement).appendChild(blockBar);
+
+    const moveComp = (comp: any, dir: number) => {
+      const parent = comp.parent();
+      if (!parent) return;
+      const siblings = parent.components();
+      const idx = siblings.indexOf(comp);
+      const target = idx + dir;
+      if (idx === -1 || target < 0 || target >= siblings.length) return;
+      siblings.remove(comp);
+      siblings.add(comp, { at: target });
+      editor.select(comp);
+    };
+
+    const duplicateComp = (comp: any) => {
+      const parent = comp.parent();
+      if (!parent) return;
+      const siblings = parent.components();
+      const idx = siblings.indexOf(comp);
+      if (idx === -1) return;
+      const copy = comp.clone();
+      siblings.add(copy, { at: idx + 1 });
+      editor.select(copy);
+    };
+
+    const positionBlockBar = () => {
+      const comp = editor.getSelected() as any;
+      if (!comp || !blockBar) { blockBar.style.display = 'none'; return; }
+      const el = comp.getEl();
+      if (!el) { blockBar.style.display = 'none'; return; }
+      const iframeEl = editor.Canvas.getElement() as HTMLElement;
+      const iframeRect = iframeEl.getBoundingClientRect();
+      const rect = (el as HTMLElement).getBoundingClientRect();
+      const containerRect = (containerRef.current as HTMLElement).getBoundingClientRect();
+      const left = iframeRect.left - containerRect.left + rect.left;
+      const top = iframeRect.top - containerRect.top + rect.top - 8;
+      blockBar.style.display = 'flex';
+      blockBar.style.left = Math.max(8, left) + 'px';
+      blockBar.style.top = Math.max(8, top) + 'px';
+      blockBar.querySelector('.ve-block-bar-name')!.textContent = comp.getName() || comp.get('type') || 'Block';
+    };
+
+    blockBar.addEventListener('click', (e) => {
+      const btn = (e.target as HTMLElement).closest('button');
+      if (!btn?.dataset.act) return;
+      const comp = editor.getSelected() as any;
+      if (!comp) return;
+      const act = btn.dataset.act;
+      if (act === 'up') moveComp(comp, -1);
+      else if (act === 'down') moveComp(comp, 1);
+      else if (act === 'copy') duplicateComp(comp);
+      else if (act === 'del') comp.remove();
+      notifyChange();
+    });
+
+    editor.on('component:selected', positionBlockBar);
+    editor.on('component:update', positionBlockBar);
+    editor.on('component:styleUpdate', positionBlockBar);
+    editor.on('canvas:scroll', positionBlockBar);
+    editor.on('component:selected:change', () => positionBlockBar());
+
     return () => {
       clearTimeout(changeTimer);
       zoomBar.remove();
+      blockBar.remove();
       containerRef.current?.removeEventListener('wheel', wheelHandler);
       canvasDoc?.removeEventListener('keydown', canvasKeyHandler);
       editor.destroy();
