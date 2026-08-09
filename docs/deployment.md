@@ -1,5 +1,29 @@
 # Deployment
 
+## 🚀 One-click install (recommended)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/huihongsoft/mortar/main/install.sh | bash
+```
+
+The script handles: OS/architecture detection (Linux/macOS), Node.js ≥ 18
+checks, dependency installation (with npm-cache fallback), building admin /
+frontend / ESM / theme bundles / server, registering a **systemd** service
+(Linux) or **launchd** agent (macOS) with auto-restart, and a health check.
+
+Options:
+
+```bash
+bash install.sh --port 8080 --dir /opt/mortar --no-service
+export DATABASE_URL=mysql://user:pass@host:3306/mortar   # instead of SQLite
+```
+
+Service management:
+
+```bash
+./mortarctl.sh {start|stop|restart|status|logs}   # or: systemctl ... mortar
+```
+
 ## Production build
 
 ```bash

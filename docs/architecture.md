@@ -11,6 +11,8 @@ mortar/
 ├── frontend/     Public site SPA (React 18 + Vite + Tailwind)
 ├── docs/         Documentation
 ├── build.sh      One-command production build & restart
+├── install.sh    One-click installer (curl | bash, systemd/launchd)
+├── mortarctl.sh  Service helper (start/stop/restart/status/logs)
 └── package.json  Root scripts (dev / build / start / db:*)
 ```
 
@@ -27,10 +29,16 @@ server/src/
 │   ├── dbWorker.js     Worker-thread bridge for async MySQL/PG drivers
 │   ├── hooks.ts        Action/filter hook registry (plugin API)
 │   ├── shortcodes.ts   Shortcode registry ([gallery], [audio], [video], ...)
+│   ├── ai.ts           AI provider abstraction (OpenAI-compatible + Anthropic,
+│   │                   streaming, tool calling, timeouts/retry)
+│   ├── aiTools.ts      AI tool registry (15 tools) + sandbox (audit, sanitizer,
+│   │                   prompt-injection guard) + per-role tool permissions
 │   ├── jwt.ts          JWT sign/verify (HS256)
 │   └── totp.ts         TOTP for 2FA
 ├── middleware/
-│   ├── auth.ts         authenticate / authorize / requireCap + token blacklist
+│   ├── auth.ts         authenticate / authorize / requireCap; capabilities
+│   │                   resolved from the DB Role table (cached, invalidated
+│   │                   on role changes)
 │   ├── site.ts         Multi-site resolution (Host header -> site)
 │   └── upload.ts       Multer storage with extension+MIME allowlist
 ├── routes/             One module per resource (posts, pages, media, ...)
@@ -49,7 +57,7 @@ server/src/
   placeholders; MySQL `ON CONFLICT` → `ON DUPLICATE KEY UPDATE`)
 - Select via `DATABASE_URL` or the install wizard
 
-### Data model (19 tables)
+### Data model (26 tables)
 
 ```
 User ──┬── Post ──┬── PostCategory ── Category
@@ -60,12 +68,19 @@ User ──┬── Post ──┬── PostCategory ── Category
        ├── Media
        └── AppPassword
 
+Role                     RBAC roles (slug, name, capabilities JSON, isSystem)
 Setting / SiteSetting    global + per-site key-value
 Site                     multi-site domains
 Menu                     menus with site isolation
 Link                     friend links
 Visit                    PV/UV analytics
 Activity                 activity log
+
+AiTask                   async agent tasks (status, steps, result)
+AiAudit                  sandbox audit trail of every AI tool call
+AiMemory                 per-user long-term memory
+AiNotification           task completion notifications
+AiUsage                  request/token usage statistics
 ```
 
 All primary keys are CUID strings; dates are ISO-8601 text in UTC.
@@ -76,6 +91,12 @@ All primary keys are CUID strings; dates are ISO-8601 text in UTC.
 - Route-level code splitting (lazy) + vendor chunking
 - TipTap-based three-mode editor (Rich / Markdown / HTML) with block
   templates and custom HTML blocks
+- **Visual drag-and-drop builder** (GrapesJS): 23 blocks, property panel,
+  live CMS data preview, real site CSS in the canvas, zoom, block search
+- **AI assistant**: multi-session streaming chat, async tasks, slash
+  commands, voice input, prompt library, notifications
+- **RBAC**: Roles & Permissions page — 35 capabilities across 5 groups
+  (content / media / appearance / system / AI), custom roles
 - WordPress-style UI: grouped sidebar, admin bar, light/dark mode that
   follows the active theme color
 
@@ -99,8 +120,12 @@ All primary keys are CUID strings; dates are ISO-8601 text in UTC.
 - Directory: `server/themes/<name>/theme.json`
 - Settings (colors, fonts, layout) exposed to the frontend as CSS variables
 - Per-theme override storage (`theme_<name>_<key>`), one-click activation
-- Admin appearance panel edits the active theme's settings
+- Admin appearance panel edits the active theme's settings + custom CSS
+- **Visual theme sections**: HTML/CSS blocks designed in the builder,
+  injected at 6 hook locations (before/after header/content/footer)
+- One-click theme bundle rebuild from the Appearance page
 
 ## Cron
 
 Every 60s: auto-publishes scheduled posts.
+Every 60s: AI scheduler runs interval/daily/weekly agent tasks.
