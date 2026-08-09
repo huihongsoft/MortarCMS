@@ -13,38 +13,76 @@
 
 ---
 
-**Mortar** is a self-hosted content management system inspired by WordPress and Halo. It ships with a full-featured admin panel, a plugin system with a market, a theme system, multi-site support, and modern tooling — all in TypeScript.
+**Mortar** is a self-hosted content management system inspired by WordPress and Halo — with a built-in **AI assistant**, a **drag-and-drop visual page builder**, a **role-based permission system**, plugins, themes, and multi-site support, all in TypeScript.
 
 ## 📸 Screenshots
 
 <p align="center">
   <img src="docs/screenshots/dashboard.png" alt="Admin Dashboard" width="640" />
-  <br /><em>Dashboard — stats, PV/UV chart, quick draft</em>
+  <br /><em>Dashboard — stats, PV/UV chart, quick draft, activity feed</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/dashboard-dark.png" alt="Admin Dashboard (dark)" width="640" />
+  <br /><em>Dark mode — theme-color accents everywhere</em>
 </p>
 
 <p align="center">
   <img src="docs/screenshots/posts.png" alt="Posts List" width="640" />
-  <br /><em>Posts management — bulk actions, filters, quick edit</em>
+  <br /><em>Posts — bulk actions, filters, AI batch translation</em>
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/editor.png" alt="Post Editor" width="640" />
-  <br /><em>Three-mode editor — Rich text (TipTap) / Markdown / HTML</em>
+  <img src="docs/screenshots/visual-editor.png" alt="Visual Page Builder" width="640" />
+  <br /><em>Drag-and-drop visual builder — 23 blocks, live CMS data, real site styles</em>
 </p>
 
----
+<p align="center">
+  <img src="docs/screenshots/ai-chat.png" alt="AI Assistant" width="640" />
+  <br /><em>AI assistant — streaming chat, tools, tasks, slash commands</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/ai-settings.png" alt="AI Settings" width="640" />
+  <br /><em>AI settings — 8 model providers, tool permissions, usage stats</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/roles.png" alt="Roles & Permissions" width="640" />
+  <br /><em>Roles & permissions — 35 capabilities across 5 groups, incl. AI</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/appearance.png" alt="Appearance" width="640" />
+  <br /><em>Appearance — themes, custom CSS, visual theme sections</em>
+</p>
 
 ## ✨ Features
 
 ### Content
 - Posts & pages with categories, tags, and custom post types
 - Three-mode editor: **Rich text (TipTap) / Markdown / HTML**, with block templates & custom HTML blocks
+- **Drag-and-drop visual builder** (GrapesJS): 23 blocks (layout / content / sections / live CMS data), property panel (typography, spacing, layout, effects), canvas zoom, block search, templates, real site CSS preview
 - Revisions history with side-by-side diff, trash & bulk actions, sticky, scheduled, private & password-protected posts
-- Shortcode system (`[gallery]`, `[audio]`, `[video]`, custom) with a plugin API
+- Shortcode system (`[gallery]`, `[audio]`, `[video]`, custom) with a plugin API, gallery lightbox
+- Per-post **SEO panel** with Google-style search preview (title / description / JSON-LD)
+
+### AI Assistant
+- **Chat**: multi-session streaming chat with Markdown rendering, voice input, prompt library, slash commands (`/stats`, `/posts`, `/draft 主题`, ...), copy / regenerate / stop, dark mode
+- **Agent tools** (15): site stats, post CRUD, full-site content search (RAG), web search, image generation, image understanding, comment review, translation, draft auto-completion, long-term memory
+- **Async tasks**: background agent runs with step tracking, cancel / retry, completion notifications, scheduled tasks (interval / daily / weekly)
+- **8 model providers**: OpenAI, Anthropic Claude, DeepSeek, Qwen, GLM, Kimi, Ollama, custom — with test connection, model comparison, usage statistics
+- **WeChat / DingTalk bindings**: users message a bot → AI acts with their identity & permissions via webhook
+- **Sandboxed**: every tool call is audited, AI-generated HTML is sanitized, prompt-injection guarded, per-role tool permissions
+
+### Roles & Permissions (RBAC)
+- Role manager: built-in (admin / editor / author / subscriber) + custom roles
+- **35 capabilities** across 内容 / 媒体 / 外观 / 系统 / **AI 助理** — enforced server-side via the DB-backed role table
+- Per-user role assignment; admin is locked to full access
 
 ### Platform
 - **Plugin system**: hooks (actions/filters), lifecycle (activate/deactivate/uninstall), local market + remote repository install
-- **Theme system**: theme directory (`server/themes/`), one-click switching, per-theme settings, custom CSS, CSS-variable theming
+- **Theme system**: theme directory (`server/themes/`), one-click switching, per-theme settings, custom CSS editor, CSS-variable theming, **visual theme sections** (drag-and-drop blocks injected at header/footer hooks), one-click bundle rebuild
 - **Multi-site**: domain-based site resolution, per-site settings, menus & widgets, content isolation
 
 ### Media & Performance
@@ -120,7 +158,7 @@ Configuration via `DATABASE_URL` env or the install wizard. See [docs/deployment
 | Layer | Technology |
 |-------|-----------|
 | Backend | Node.js, Express, better-sqlite3 / mysql2 / pg, zod, JWT, sharp |
-| Frontend | React 18, React Router, Vite, Tailwind CSS, TipTap, markdown-it |
+| Frontend | React 18, React Router, Vite, Tailwind CSS, TipTap, markdown-it, GrapesJS (visual builder) |
 | Tooling | TypeScript 5, tsx, Prisma (schema reference) |
 
 ## 📚 Documentation
@@ -131,6 +169,12 @@ Configuration via `DATABASE_URL` env or the install wizard. See [docs/deployment
 - [Themes](docs/themes.md) — theme structure & settings
 - [Deployment](docs/deployment.md) — environment, proxy, backup
 - [Development](docs/development.md) — local setup & contribution workflow
+
+### AI Setup
+
+1. Open **AI 设置** (`/admin/ai/settings`), pick a provider (DeepSeek / Qwen / GLM offer free credits), paste your API key, click **测试**, then **设为默认**
+2. Open **AI 对话** (`/admin/ai`) and try: *"写一篇关于内存涨价历史的文章并保存为草稿"*
+3. Grant AI access per role in **角色与权限** (`/admin/roles`) — capability `ai_use`
 
 ## 🤝 Contributing
 
