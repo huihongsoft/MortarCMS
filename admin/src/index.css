@@ -228,6 +228,23 @@ table tbody tr { transition: background-color 0.12s ease; }
   min-height: 48px;
 }
 .visual-editor-container .gjs-pn-btn { height: 34px; min-width: 34px; font-size: 15px; }
+.visual-editor-container .gjs-pn-options, .visual-editor-container .gjs-pn-views {
+  background: #f1f3f5;
+  border-radius: 8px;
+  padding: 2px;
+  margin-left: 8px;
+}
+.visual-editor-container .gjs-pn-options .gjs-pn-btn, .visual-editor-container .gjs-pn-views .gjs-pn-btn {
+  height: 30px;
+  min-width: 30px;
+  border-radius: 6px;
+  margin: 0;
+}
+.visual-editor-container .gjs-pn-options .gjs-pn-btn.gjs-pn-active, .visual-editor-container .gjs-pn-views .gjs-pn-btn.gjs-pn-active {
+  background: #ffffff;
+  color: var(--admin-primary, #2563eb);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
 .visual-editor-container .gjs-pn-btn {
   color: #6b7280;
   border-radius: 8px;
@@ -244,7 +261,9 @@ table tbody tr { transition: background-color 0.12s ease; }
   box-shadow: inset 0 -2px 0 0 var(--admin-primary, #2563eb);
 }
 /* Panels: blocks left, views right — white surfaces */
-.visual-editor-container .gjs-pn-views-container { border-left: 1px solid #e5e7eb; }
+.visual-editor-container .gjs-pn-views-container { border-left: 1px solid #e5e7eb; box-shadow: -4px 0 12px -8px rgba(0,0,0,0.08); }
+.visual-editor-container .gjs-sm-sector .gjs-sm-properties { padding: 10px 12px; }
+.visual-editor-container .gjs-sm-property { margin-bottom: 10px; }
 .visual-editor-container .gjs-blocks-c { padding: 10px; background: #ffffff; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; }
 .visual-editor-container .gjs-block { min-height: 84px; justify-content: center; }
 .visual-editor-container .gjs-block svg, .visual-editor-container .gjs-block i.fa { width: 24px; height: 24px; font-size: 18px; }
@@ -282,6 +301,7 @@ table tbody tr { transition: background-color 0.12s ease; }
   color: #374151;
 }
 .visual-editor-container .gjs-category-title .gjs-caret { font-size: 10px; }
+.visual-editor-container .gjs-category-title { background: transparent; padding: 8px 4px 4px; margin: 4px 0 2px; border-bottom: 1px solid #f3f4f6; border-radius: 0; }
 /* Right-side style manager — white surfaces */
 .visual-editor-container .gjs-sm-sectors { background: #fff; }
 .visual-editor-container .gjs-sm-sector .gjs-sm-sector-title {
@@ -436,8 +456,41 @@ table tbody tr { transition: background-color 0.12s ease; }
 .dark .visual-editor-container .ve-empty-title { color: #e5e7eb; }
 .dark .visual-editor-container .ve-empty-actions button { background: #1f2937; border-color: #4b5563; color: #d1d5db; }
 
+/* Gutenberg-style "+ Add Block" button above the canvas page */
+.visual-editor-container .ve-add-block {
+  position: absolute;
+  top: 12px;
+  z-index: 22;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1.5px dashed #9ca3af;
+  background: #ffffff;
+  color: #6b7280;
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.visual-editor-container .ve-add-block:hover {
+  border-color: var(--admin-primary, #2563eb);
+  border-style: solid;
+  color: var(--admin-primary, #2563eb);
+  transform: scale(1.08);
+}
+
 /* ---- Gutenberg-style floating block toolbar ---- */
-.visual-editor-container { position: relative; }
+.visual-editor-container {
+  position: relative;
+  --gjs-left-width: 300px;
+  --gjs-right-width: 340px;
+}
+/* Hide non-Gutenberg top-bar/panel buttons */
+.visual-editor-container .gjs-pn-btn[title="View components"],
+.visual-editor-container .gjs-pn-btn[title="Open Layer Manager"] { display: none !important; }
 .visual-editor-container .ve-block-bar {
   position: absolute;
   z-index: 30;

@@ -807,6 +807,27 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       notifyChange();
     });
 
+    // Gutenberg-style "+ Add Block" button floating at the top of the canvas
+    const addBlockBtn = document.createElement('button');
+    addBlockBtn.className = 've-add-block';
+    addBlockBtn.innerHTML = '+';
+    addBlockBtn.title = 'Add block';
+    (containerRef.current as HTMLElement).appendChild(addBlockBtn);
+    addBlockBtn.addEventListener('click', () => {
+      try { editor.runCommand('open-blocks'); } catch {}
+    });
+    const positionAddBlock = () => {
+      const canvasEl = editor.Canvas.getElement() as HTMLElement;
+      if (!canvasEl) return;
+      const containerRect = (containerRef.current as HTMLElement).getBoundingClientRect();
+      const canvasRect = canvasEl.getBoundingClientRect();
+      const pageWidth = Math.min(760, canvasRect.width - 64);
+      const left = canvasRect.left - containerRect.left + Math.max(16, (canvasRect.width - pageWidth) / 2 - 26);
+      addBlockBtn.style.left = left + 'px';
+    };
+    setTimeout(positionAddBlock, 300);
+    window.addEventListener('resize', positionAddBlock);
+
     editor.on('component:selected', positionBlockBar);
     editor.on('component:update', positionBlockBar);
     editor.on('component:styleUpdate', positionBlockBar);
@@ -819,6 +840,8 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       clearTimeout(changeTimer);
       zoomBar.remove();
       blockBar.remove();
+      addBlockBtn.remove();
+      window.removeEventListener('resize', positionAddBlock);
       canvasWrapper?.removeEventListener('scroll', positionBlockBar);
       window.removeEventListener('scroll', positionBlockBar, true);
       containerRef.current?.removeEventListener('wheel', wheelHandler);
