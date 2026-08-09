@@ -1,7 +1,8 @@
 <p align="center">
   <img src="docs/logo.svg" alt="Mortar" width="120" />
   <h1 align="center">Mortar</h1>
-  <p align="center">A modern, WordPress-style CMS built with TypeScript — content, plugins, themes, and multi-site in one box.</p>
+  <p align="center">AI 驱动的现代化开源 CMS · 内置 AI 助理 / 可视化拖拽建站 / RBAC 权限体系 / 插件与主题生态</p>
+  <p align="center"><em>AI-powered modern open-source CMS — built-in AI assistant, drag-and-drop visual builder, RBAC permissions, plugins & themes</em></p>
   <p align="center">
     <a href="https://github.com/huihongsoft/mortar"><img src="https://img.shields.io/github/stars/huihongsoft/mortar?style=social" alt="GitHub stars" /></a>
     <a href="https://github.com/huihongsoft/mortar/fork"><img src="https://img.shields.io/github/forks/huihongsoft/mortar?style=social" alt="GitHub forks" /></a>
