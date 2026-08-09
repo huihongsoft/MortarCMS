@@ -117,7 +117,7 @@ export default function Appearance() {
       React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('themes', getLang())),
       React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
         themes.map((th: any) =>
-          React.createElement('div', { key: th.name, className: 'p-4 rounded-lg border ' + (th.active ? 'border-primary-500 bg-primary-50/50' : 'border-gray-200') },
+          React.createElement('div', { key: th.name, className: 'p-4 rounded-lg border ' + (th.active ? 'theme-card-active' : 'border-gray-200 dark:border-gray-700') },
             React.createElement('div', { className: 'flex items-center justify-between' },
               React.createElement('div', { className: 'min-w-0' },
                 React.createElement('div', { className: 'flex items-center gap-2' },
