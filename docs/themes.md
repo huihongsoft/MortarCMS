@@ -3,6 +3,15 @@
 Themes define the look and feel of the public site. They live in
 `server/themes/<name>/` and are activated from the admin Appearance page.
 
+> **Visual theme sections**: from **外观** you can now visually design
+> HTML/CSS sections (drag-and-drop builder) and inject them at 6 theme
+> hook locations — `before_header`, `after_header`, `before_content`,
+> `after_content`, `before_footer`, `after_footer` — rendered by the
+> `ThemeSection` frontend component. The Appearance page also has a
+> **Rebuild Theme Bundles** button that recompiles
+> `frontend/src/themes/<name>/` into `server/themes/<name>/theme.js`
+> after editing layout components.
+
 ## Structure
 
 ```

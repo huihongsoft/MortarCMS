@@ -3,6 +3,12 @@
 Mortar's plugin system follows the WordPress model: a plugin is a folder with
 metadata and code that registers hooks.
 
+> **AI tool registry**: plugins can extend the AI assistant with new
+> tools by importing `registerTool(name, description, parameters, fn)`
+> from `server/src/utils/aiTools`. New tools become available to the
+> agent (subject to per-role tool permissions in **AI 设置**) and are
+> audited like every other tool call.
+
 ## Structure
 
 ```
