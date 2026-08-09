@@ -810,13 +810,17 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     editor.on('component:selected', positionBlockBar);
     editor.on('component:update', positionBlockBar);
     editor.on('component:styleUpdate', positionBlockBar);
-    editor.on('canvas:scroll', positionBlockBar);
-    editor.on('component:selected:change', () => positionBlockBar());
+    // Canvas scroll container + admin window scroll keep the bar in place
+    const canvasWrapper = (containerRef.current as HTMLElement).querySelector('.gjs-cv-canvas');
+    canvasWrapper?.addEventListener('scroll', positionBlockBar);
+    window.addEventListener('scroll', positionBlockBar, true);
 
     return () => {
       clearTimeout(changeTimer);
       zoomBar.remove();
       blockBar.remove();
+      canvasWrapper?.removeEventListener('scroll', positionBlockBar);
+      window.removeEventListener('scroll', positionBlockBar, true);
       containerRef.current?.removeEventListener('wheel', wheelHandler);
       canvasDoc?.removeEventListener('keydown', canvasKeyHandler);
       editor.destroy();
