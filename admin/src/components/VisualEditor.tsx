@@ -354,9 +354,17 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       loadSiteStyles();
 
       const style = canvas.createElement('style');
+      // Keep the Gutenberg centered page column: margin:auto must survive
+      // the site CSS load, so re-assert it here (this style wins the cascade)
       style.textContent = `
-        html, body { color-scheme: light; min-height: 100%; }
-        body { margin:0; }
+        html { background: #f1f3f5; color-scheme: light; min-height: 100%; }
+        body {
+          max-width: 760px;
+          margin: 32px auto !important;
+          min-height: calc(100vh - 64px);
+          background: #ffffff;
+          box-shadow: 0 0 0 1px rgba(0,0,0,0.05), 0 8px 30px -8px rgba(0,0,0,0.12);
+        }
         .cms-post-list, .cms-categories, .cms-comments, .cms-search, .cms-archive, .cms-tag-cloud { min-height: 40px; }
       `;
       canvas.head.appendChild(style);
