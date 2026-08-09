@@ -127,20 +127,27 @@ curl -fsSL https://raw.githubusercontent.com/huihongsoft/mortar/main/install.sh 
 - Node.js ≥ 18
 - npm ≥ 9
 
-### Install & run
+### Install & run — 方式 A：一键安装（推荐）
 
 ```bash
-# 0. (Optional) clone from GitHub
+curl -fsSL https://raw.githubusercontent.com/huihongsoft/mortar/main/install.sh | bash
+```
+
+自动完成：环境检测 → 拉取代码 → 安装依赖 → 构建 → 注册系统服务（systemd / launchd）→ 健康检查。
+安装后访问 `http://localhost:3001/install` 完成向导即可使用。
+
+### Install & run — 方式 B：手动安装
+
+```bash
+# 1. 获取代码
 git clone https://github.com/huihongsoft/mortar.git && cd mortar
 
-# 1. Install dependencies
-npm install            # root (concurrently)
-cd server && npm install
-cd ../admin && npm install
-cd ../frontend && npm install
+# 2. 安装依赖（三个工作区）
+(cd server   && npm install --no-audit --no-fund)
+(cd admin    && npm install --no-audit --no-fund)
+(cd frontend && npm install --no-audit --no-fund)
 
-# 2. Build the admin & frontend, start the server
-cd ..
+# 3. 构建并启动
 ./build.sh
 # Admin:  http://localhost:3001/admin
 # Site:   http://localhost:3001
@@ -149,7 +156,9 @@ cd ..
 ### Development
 
 ```bash
-npm run dev            # concurrent: server (3001) + admin (3002) + frontend (3000)
+npm run dev            # 开发模式：server (3001) + admin (3002) + frontend (3000)
+# 或生产模式（需先构建）
+(cd server && NODE_ENV=production node dist/index.js)
 ```
 
 ### First run — install wizard
