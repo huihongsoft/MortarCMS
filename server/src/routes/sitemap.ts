@@ -8,8 +8,15 @@ function esc(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+// Simple in-memory cache — sitemaps are crawled frequently and rarely change.
+let cache: { xml: string; at: number } | null = null;
+
+// Called by the cache purge system when content changes
+export function invalidateSitemapCache(): void { cache = null; }
+
 router.get('/sitemap.xml', (_req: AuthRequest, res: Response) => {
   try {
+    if (cache && Date.now() - cache.at < 5 * 60 * 1000) { res.type('application/xml'); res.send(cache.xml); return; }
     const settings = db.prepare('SELECT key, value FROM Setting').all() as any[];
     const cfg: Record<string, string> = {};
     settings.forEach((s: any) => { cfg[s.key] = s.value; });
@@ -30,6 +37,7 @@ router.get('/sitemap.xml', (_req: AuthRequest, res: Response) => {
     for (const a of authors) xml += '<url><loc>' + siteUrl + '/author/' + esc(a.username) + '</loc><changefreq>weekly</changefreq><priority>0.3</priority></url>';
     xml += '</urlset>';
 
+    cache = { xml, at: Date.now() };
     res.type('application/xml');
     res.send(xml);
   } catch (err: any) { res.status(500).json({ error: err.message }); }

@@ -2,11 +2,65 @@ import { Router, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
-import db from '../utils/db';
+import db, { listSlowQueries } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 
 const router = Router();
+
+// Admin: database status (driver, size, per-table rows, indexes, last maintenance)
+router.get('/status', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+  try {
+    const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as any[]).map((t: any) => {
+      const cnt = (db.prepare('SELECT COUNT(*) as cnt FROM "' + t.name + '"').get() as any)?.cnt || 0;
+      const idx = (db.prepare("SELECT COUNT(*) as c FROM sqlite_master WHERE type='index' AND tbl_name = ?").get(t.name) as any)?.c || 0;
+      return { name: t.name, rows: cnt, indexes: idx };
+    });
+    let size = 0; let journal = 'n/a'; let pageCount = 0; let pageSize = 0; let walSize = 0;
+    try {
+      if (db.raw) {
+        const dataDir = path.join(__dirname, '../..', 'data');
+        const dbFile = path.join(dataDir, 'mortar.db');
+        if (fs.existsSync(dbFile)) size = fs.statSync(dbFile).size;
+        const walFile = dbFile + '-wal';
+        if (fs.existsSync(walFile)) walSize = fs.statSync(walFile).size;
+        journal = ((db.raw.pragma('journal_mode') as any[])?.[0]?.journal_mode) || 'n/a';
+        pageCount = ((db.raw.pragma('page_count') as any[])?.[0]?.page_count) || 0;
+        pageSize = ((db.raw.pragma('page_size') as any[])?.[0]?.page_size) || 0;
+      }
+    } catch {}
+    const lastOpt = (db.prepare("SELECT value FROM Setting WHERE key = 'db_last_optimized'").get() as any)?.value || null;
+    const lastBackup = (db.prepare("SELECT value FROM Setting WHERE key = 'db_last_backup'").get() as any)?.value || null;
+    res.json({
+      driver: (db as any).driver || 'sqlite',
+      size,
+      walSize,
+      journal,
+      pageCount,
+      pageSize,
+      tables,
+      totalRows: tables.reduce((s, t) => s + t.rows, 0),
+      lastOptimized: lastOpt,
+      lastBackup: lastBackup,
+    });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: recently recorded slow queries (>150ms)
+router.get('/slow-queries', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+  try {
+    res.json({ slow: listSlowQueries() });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: SQLite integrity quick check
+router.get('/integrity', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+  try {
+    const result = (db.raw ? db.raw.pragma('quick_check') : []) as any[];
+    const ok = result.length === 1 && result[0]?.quick_check === 'ok';
+    res.json({ ok, detail: result[0]?.quick_check || 'unavailable' });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
 
 router.get('/optimize', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
@@ -19,7 +73,47 @@ router.get('/optimize', authenticate, authorize('admin'), (_req: AuthRequest, re
       table: t.name,
       rows: (db.prepare('SELECT COUNT(*) as cnt FROM ' + t.name).get() as any)?.cnt || 0,
     }));
+    db.prepare("INSERT INTO Setting (id, key, value) VALUES ('db_last_optimized', 'db_last_optimized', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date().toISOString());
     res.json({ success: true, optimized: true, stats });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: list backups in the backups folder
+router.get('/backups', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+  try {
+    const backupDir = path.join(__dirname, '../..', 'backups');
+    let files: { name: string; sizeKB: number; at: string }[] = [];
+    if (fs.existsSync(backupDir)) {
+      files = fs.readdirSync(backupDir)
+        .filter(f => f.endsWith('.db') || f.endsWith('.zip') || f.endsWith('.json'))
+        .map((f: string) => { const p = path.join(backupDir, f); const st = fs.statSync(p); return { name: f, sizeKB: Math.round(st.size / 1024), at: st.mtime.toISOString() }; })
+        .sort((a, b) => b.at.localeCompare(a.at));
+    }
+    const retention = parseInt((db.prepare("SELECT value FROM Setting WHERE key = 'backup_retention'").get() as any)?.value || '10') || 10;
+    res.json({ backups: files, retention });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: download a backup file (path-traversal safe)
+router.get('/backups/:name', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+  try {
+    const name = path.basename(req.params.name);
+    if (!/^[a-zA-Z0-9._-]+$/.test(name)) { res.status(400).json({ error: 'Invalid backup name' }); return; }
+    const file = path.join(__dirname, '../..', 'backups', name);
+    if (!fs.existsSync(file)) { res.status(404).json({ error: 'Backup not found' }); return; }
+    res.download(file, name);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: delete a backup file
+router.delete('/backups/:name', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+  try {
+    const name = path.basename(req.params.name);
+    if (!/^[a-zA-Z0-9._-]+$/.test(name)) { res.status(400).json({ error: 'Invalid backup name' }); return; }
+    const file = path.join(__dirname, '../..', 'backups', name);
+    if (!fs.existsSync(file)) { res.status(404).json({ error: 'Backup not found' }); return; }
+    fs.unlinkSync(file);
+    res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -29,6 +123,7 @@ router.get('/backup', authenticate, authorize('admin'), (_req: AuthRequest, res:
     const dbPath = require('path').join(__dirname, '../../data/mortar.db');
     const backupPath = '/tmp/mortar-backup.db';
     require('fs').copyFileSync(dbPath, backupPath);
+    try { db.prepare("INSERT INTO Setting (id, key, value) VALUES ('db_last_backup', 'db_last_backup', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date().toISOString()); } catch {}
     res.download(backupPath, 'mortar-backup-' + new Date().toISOString().slice(0,10) + '.db');
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

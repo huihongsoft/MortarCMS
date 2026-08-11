@@ -4,6 +4,7 @@ import fs from 'fs';
 import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { slugify, uniqueSlug } from '../utils/slug';
+import { parseFrontmatter, mdToHtml } from '../utils/markdown';
 
 const router = Router();
 const upload = multer({ dest: 'uploads/import-tmp/', limits: { fileSize: 50 * 1024 * 1024 } });
@@ -149,6 +150,51 @@ router.post('/wxr', authenticate, requireCap('manage_options'), upload.single('f
     if (tmpPath) { try { fs.unlinkSync(tmpPath); } catch {} }
     res.status(500).json({ error: err.message });
   }
+});
+
+// Admin: import Markdown files (frontmatter + body) as draft posts
+router.post('/markdown', authenticate, requireCap('manage_options'), upload.array('files', 20), (req: AuthRequest, res: Response) => {
+  try {
+    const files = (req.files as Express.Multer.File[]) || [];
+    if (files.length === 0) { res.status(400).json({ error: 'No files uploaded' }); return; }
+    const status = req.body?.status === 'published' ? 'published' : 'draft';
+    const imported: { title: string; slug: string; status: string }[] = [];
+    let errors = 0;
+    for (const file of files) {
+      try {
+        const raw = fs.readFileSync(file.path, 'utf8');
+        const { meta, body } = parseFrontmatter(raw);
+        const title = String(meta.title || file.originalname.replace(/\.md$/i, '')).slice(0, 200);
+        const existingSlugs = db.prepare("SELECT slug FROM Post WHERE type = 'post'").all().map((r: any) => r.slug);
+        const slug = uniqueSlug(String(meta.slug || slugify(title)), existingSlugs);
+        const id = cuid();
+        const now = new Date().toISOString();
+        const publishedAt = meta.date ? new Date(String(meta.date)).toISOString() : null;
+        db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(id, title, slug, mdToHtml(body), String(meta.excerpt || body.slice(0, 200)), status, 'post', req.user!.userId, publishedAt, now, now);
+        // Tags + categories from frontmatter
+        for (const tagName of (meta.tags || []) as string[]) {
+          const ts = String(tagName).trim().slice(0, 50);
+          if (!ts) continue;
+          const existing = db.prepare('SELECT id FROM Tag WHERE slug = ?').get(slugify(ts)) as any;
+          let tagId = existing?.id as string | undefined;
+          if (!tagId) { tagId = cuid(); db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tagId, ts, slugify(ts)); }
+          db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tagId);
+        }
+        for (const catName of (meta.categories || []) as string[]) {
+          const cs = String(catName).trim().slice(0, 50);
+          if (!cs) continue;
+          const existing = db.prepare('SELECT id FROM Category WHERE slug = ?').get(slugify(cs)) as any;
+          let catId = existing?.id as string | undefined;
+          if (!catId) { catId = cuid(); db.prepare('INSERT INTO Category (id, name, slug) VALUES (?, ?, ?)').run(catId, cs, slugify(cs)); }
+          db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, catId);
+        }
+        imported.push({ title, slug, status });
+      } catch { errors++; }
+      finally { try { fs.unlinkSync(file.path); } catch {} }
+    }
+    res.json({ success: true, imported: imported.length, errors, items: imported });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 export default router;

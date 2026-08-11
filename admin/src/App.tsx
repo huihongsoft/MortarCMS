@@ -17,6 +17,10 @@ const Comments = React.lazy(() => import('./pages/Comments'));
 const Users = React.lazy(() => import('./pages/Users'));
 const Appearance = React.lazy(() => import('./pages/Appearance'));
 const SystemInfo = React.lazy(() => import('./pages/SystemInfo'));
+const HooksBrowser = React.lazy(() => import('./pages/HooksBrowser'));
+const ApiDocs = React.lazy(() => import('./pages/ApiDocs'));
+const ActivityPage = React.lazy(() => import('./pages/Activity'));
+const CustomTypes = React.lazy(() => import('./pages/CustomTypes'));
 const Import = React.lazy(() => import('./pages/Import'));
 const Plugins = React.lazy(() => import('./pages/Plugins'));
 const Widgets = React.lazy(() => import('./pages/Widgets'));
@@ -73,6 +77,9 @@ function AnimatedRoutes() {
       React.createElement(Route, { path: '/comments', element: React.createElement(Comments) }),
       React.createElement(Route, { path: '/users', element: React.createElement(Users) }),
       React.createElement(Route, { path: '/sysinfo', element: React.createElement(SystemInfo) }),
+      React.createElement(Route, { path: '/hooks', element: React.createElement(HooksBrowser) }),
+      React.createElement(Route, { path: '/api-docs', element: React.createElement(ApiDocs) }),
+      React.createElement(Route, { path: '/activity', element: React.createElement(ActivityPage) }),
       React.createElement(Route, { path: '/import', element: React.createElement(Import) }),
       React.createElement(Route, { path: '/plugins', element: React.createElement(Plugins) }),
       React.createElement(Route, { path: '/sites', element: React.createElement(Sites) }),
@@ -82,6 +89,7 @@ function AnimatedRoutes() {
       React.createElement(Route, { path: '/security', element: React.createElement(Security) }),
       React.createElement(Route, { path: '/widgets', element: React.createElement(Widgets) }),
       React.createElement(Route, { path: '/appearance', element: React.createElement(Appearance) }),
+      React.createElement(Route, { path: '/post-types', element: React.createElement(CustomTypes) }),
       React.createElement(Route, { path: '/settings', element: React.createElement(Settings) }),
       React.createElement(Route, { path: '/ai', element: React.createElement(AIChat) }),
       React.createElement(Route, { path: '/ai/bindings', element: React.createElement(AIBindings) }),

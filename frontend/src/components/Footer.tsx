@@ -18,7 +18,7 @@ export default function Footer({ settings }: { settings: Record<string, string> 
           React.createElement('h4', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('about', settings)),
           React.createElement('ul', { className: 'space-y-1' },
             React.createElement('li', null, React.createElement(Link, { to: '/page/about', className: 'text-sm text-gray-500 hover:text-gray-700' }, t('about', settings))),
-            React.createElement('li', null, React.createElement(Link, { to: '/page/privacy-policy', className: 'text-sm text-gray-500 hover:text-gray-700' }, t('privacy policy', settings)))
+            React.createElement('li', null, React.createElement(Link, { to: '/page/' + (settings?.privacy_policy_slug || 'privacy-policy'), className: 'text-sm text-gray-500 hover:text-gray-700' }, t('privacy policy', settings)))
           )
         ),
         React.createElement('div', null,

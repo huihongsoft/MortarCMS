@@ -9,19 +9,30 @@ import api from '../lib/api';
 
 // Map routes to page titles for the admin bar breadcrumb (WordPress-style)
 const routeTitles: [string, string][] = [
-  ['/', 'dashboard'],
   ['/posts', 'posts'],
   ['/pages', 'pages'],
   ['/menus', 'menus'],
   ['/widgets', 'widgets'],
   ['/appearance', 'appearance'],
+  ['/post-types', 'custom post types'],
   ['/media', 'media'],
   ['/comments', 'comments'],
+  ['/categories', 'categories'],
+  ['/tags', 'tags'],
+  ['/links', 'links'],
   ['/sysinfo', 'system'],
+  ['/hooks', 'system'],
+  ['/api-docs', 'system'],
+  ['/activity', 'system'],
   ['/import', 'import'],
   ['/plugins', 'plugins'],
   ['/sites', 'sites'],
   ['/users', 'users'],
+  ['/roles', 'roles & permissions'],
+  ['/security', 'security audit'],
+  ['/ai/bindings', 'ai bindings'],
+  ['/ai/settings', 'ai settings'],
+  ['/ai', 'ai chat'],
   ['/settings', 'settings'],
 ];
 
@@ -72,7 +83,7 @@ export default function Layout() {
     return () => document.removeEventListener('mousedown', onDoc);
   }, []);
 
-  const pageTitle = (routeTitles.find(([p]) => location.pathname.startsWith(p)) || [null, 'dashboard'])[1];
+  const pageTitle = (routeTitles.find(([p]) => location.pathname === p || (p !== '/' && location.pathname.startsWith(p))) || [null, 'dashboard'])[1];
 
   const toggleDark = () => {
     document.documentElement.classList.toggle('dark');
@@ -81,6 +92,7 @@ export default function Layout() {
   const isDark = () => document.documentElement.classList.contains('dark');
 
   return React.createElement('div', { className: 'flex min-h-screen' },
+      React.createElement('a', { href: '#main-content', className: 'skip-link' }, t('skip to content', getLang())),
     React.createElement(Sidebar),
     React.createElement('div', { className: 'flex-1 lg:ml-64 flex flex-col min-h-screen' },
       // Admin bar (WordPress-style)
@@ -113,7 +125,7 @@ export default function Layout() {
           ),
         ),
       ),
-      React.createElement('main', { ref: mainRef, className: 'flex-1 p-4 lg:p-8 bg-gray-50 dark:bg-gray-900' },
+      React.createElement('main', { ref: mainRef, id: 'main-content', role: 'main', tabIndex: -1, className: 'flex-1 p-4 lg:p-8 bg-gray-50 dark:bg-gray-900' },
         React.createElement(Outlet)
       ),
       // Floating AI assistant shortcut (Ctrl+K)

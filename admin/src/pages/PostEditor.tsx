@@ -37,6 +37,9 @@ export default function PostEditor() {
   const [aiError, setAiError] = useState('');
   const [seoTitle, setSeoTitle] = useState('');
   const [seoDesc, setSeoDesc] = useState('');
+  const [seoNoindex, setSeoNoindex] = useState(false);
+  const [seoCanonical, setSeoCanonical] = useState('');
+  const [seoOgImage, setSeoOgImage] = useState('');
   const [templates, setTemplates] = useState<any[]>([]);
   const [templateName, setTemplateName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -45,6 +48,8 @@ export default function PostEditor() {
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [siteId, setSiteId] = useState('');
   const [sites, setSites] = useState<any[]>([]);
+  const [allowComments, setAllowComments] = useState(true);
+  const [password, setPassword] = useState('');
   // Tracks the id of a newly-created post so draft saves (which stay in the
   // editor) reuse the same post instead of creating duplicates
   const createdIdRef = useRef<string | null>(null);
@@ -55,8 +60,10 @@ export default function PostEditor() {
     if (!title) return;
     const timer = setInterval(async () => {
       try {
-        const payload: any = { title, content, excerpt, status: 'draft', siteId: siteId || null };
-        payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc };
+        const payload: any = { title, content, excerpt, status: 'draft', siteId: siteId || null, allowComments };
+        payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc, _seo_noindex: seoNoindex ? '1' : '', _seo_canonical: seoCanonical, _seo_og_image: seoOgImage };
+      // Custom fields (user-defined key/value pairs) ride along in meta
+      for (const mf of metaFields) { if (mf.key.trim()) payload.meta[mf.key.trim()] = mf.value; }
         const postId = id || createdIdRef.current;
         if (postId) await api.put('/posts/' + postId, payload);
         else {
@@ -66,7 +73,7 @@ export default function PostEditor() {
       } catch {}
     }, 30000);
     return () => clearInterval(timer);
-  }, [title, content, excerpt, categoryIds, tagNames, featured, siteId, id, visualCss]);
+  }, [title, content, excerpt, categoryIds, tagNames, featured, siteId, id, visualCss, metaFields]);
 
   
   // Keyboard shortcut: Ctrl+S to save draft
@@ -81,10 +88,14 @@ export default function PostEditor() {
     return () => window.removeEventListener('keydown', handler);
   }, [title, content, excerpt, status, categoryIds, tagNames, featured, slug, format, siteId]);
 
-  useEffect(() => { api.get('/sites').then(r => setSites(r.data || [])).catch(() => {}); api.get('/users').then(r => setUsers(r.data)).catch(() => {});
+  useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); api.get('/users').then(r => setUsers(r.data)).catch(() => {});
     api.get('/categories').then(r => setCategories(r.data)); api.get('/media').then(r => setMediaItems(r.data.media || []));
     api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])).catch(() => {});
-    if (id) { api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.categoryId || c.category?.id) || []); setTagNames(p.tags?.map((t: any) => t.name || t.tag?.name) || []); if (p.featured) setFeatured(p.featured); if (p.siteId) setSiteId(p.siteId); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); if (p.meta?._seo_title) setSeoTitle(p.meta._seo_title); if (p.meta?._seo_desc) setSeoDesc(p.meta._seo_desc); } }); } }, [id]);
+    if (id) { api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.categoryId || c.category?.id) || []); setTagNames(p.tags?.map((t: any) => t.name || t.tag?.name) || []); if (p.featured) setFeatured(p.featured); if (p.allowComments !== undefined) setAllowComments(p.allowComments); if (p.password) setPassword(p.password); if (p.siteId) setSiteId(p.siteId); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); if (p.meta?._seo_title) setSeoTitle(p.meta._seo_title); if (p.meta?._seo_desc) setSeoDesc(p.meta._seo_desc); if (p.meta?._seo_noindex) setSeoNoindex(p.meta._seo_noindex === '1'); if (p.meta?._seo_canonical) setSeoCanonical(p.meta._seo_canonical); if (p.meta?._seo_og_image) setSeoOgImage(p.meta._seo_og_image);
+      // Custom fields: load user-defined keys (system keys with _ prefixes are managed by their own panels)
+      const systemKeys = ['_visual_css', '_seo_title', '_seo_desc', '_seo_noindex', '_seo_canonical', '_seo_og_image'];
+      if (p.meta) setMetaFields(Object.entries(p.meta).filter(([k]) => !systemKeys.includes(k) && k.trim()).map(([key, value]) => ({ key, value: String(value) })));
+    } }); } }, [id]);
 
   // stay=false (publish): navigate to the post list; stay=true (draft from the
   // builder): keep editing in place, like WordPress
@@ -93,8 +104,13 @@ export default function PostEditor() {
     setSaveState('saving');
     try {
       const schedDate = (document.getElementById('scheduled-date') as HTMLInputElement)?.value || null;
-      const payload: any = { title, slug: slug || undefined, content, excerpt, status: s, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: s === 'scheduled' && schedDate ? new Date(schedDate).toISOString() : undefined, siteId: siteId || null };
-      payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc };
+      // "Save draft" always drafts; "Publish" uses the user-selected status
+      // (published / private / scheduled...), falling back to published.
+      const finalStatus = s === 'draft' ? 'draft' : (status === 'draft' ? 'published' : status);
+      const payload: any = { title, slug: slug || undefined, content, excerpt, status: finalStatus, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: finalStatus === 'scheduled' && schedDate ? new Date(schedDate).toISOString() : undefined, siteId: siteId || null, allowComments, password };
+      payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc, _seo_noindex: seoNoindex ? '1' : '', _seo_canonical: seoCanonical, _seo_og_image: seoOgImage };
+      // Custom fields (user-defined key/value pairs) ride along in meta
+      for (const mf of metaFields) { if (mf.key.trim()) payload.meta[mf.key.trim()] = mf.value; }
       const postId = id || createdIdRef.current;
       if (postId) await api.put(`/posts/${postId}`, payload);
       else {
@@ -251,6 +267,18 @@ export default function PostEditor() {
           React.createElement('textarea', { value: seoDesc, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setSeoDesc(e.target.value), placeholder: excerpt || t('excerpt (optional)', getLang()), maxLength: 160, rows: 3, className: 'input-field text-xs' }),
           React.createElement('p', { className: 'text-[10px] text-gray-400 mt-1' }, seoDesc.length + '/160')
         ),
+        React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer mb-3' },
+          React.createElement('input', { type: 'checkbox', checked: seoNoindex, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSeoNoindex(e.target.checked), className: 'rounded border-gray-300 text-primary-600' }),
+          React.createElement('span', { className: 'text-xs text-gray-600' }, t('noindex (hide from search engines)', getLang()))
+        ),
+        React.createElement('div', { className: 'mb-3' },
+          React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('canonical url (optional)', getLang())),
+          React.createElement('input', { value: seoCanonical, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSeoCanonical(e.target.value), placeholder: 'https://example.com/post/' + (slug || 'post-slug'), className: 'input-field text-xs' })
+        ),
+        React.createElement('div', { className: 'mb-3' },
+          React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('og image url (optional)', getLang())),
+          React.createElement('input', { value: seoOgImage, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSeoOgImage(e.target.value), placeholder: featured || 'https://.../image.jpg', className: 'input-field text-xs' })
+        ),
         // Google-style search preview
         React.createElement('div', { className: 'rounded-lg border border-gray-200 bg-white p-3' },
           React.createElement('p', { className: 'text-sm text-blue-700 hover:underline truncate' }, seoTitle || title || 'Post title'),
@@ -312,6 +340,10 @@ export default function PostEditor() {
           React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('publish date (for scheduled)', getLang())),
           React.createElement('input', { type: 'datetime-local', id: 'scheduled-date', className: 'input-field text-xs' })
         ),
+        React.createElement('div', { className: 'mt-3' },
+          React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('password protected', getLang())),
+          React.createElement('input', { type: 'password', value: password, onChange: e => setPassword(e.target.value), placeholder: t('password protect this page', getLang()), className: 'input-field text-xs' })
+        ),
       ),
       React.createElement('div', { className: 'card p-4' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('categories', getLang())),
@@ -357,49 +389,33 @@ export default function PostEditor() {
         React.createElement('button', { onClick: () => handleSave('published'), disabled: saving || !title, className: 'btn-primary' }, t('publish', getLang()))
       )
     ),
-    // ---- VISUAL MODE: full-screen builder (Elementor/Fanke style) ----
+    // ---- VISUAL MODE: full-screen Gutenberg-style builder ----
     visualMode && React.createElement('div', { className: 'fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col' },
-      // Builder top bar
-      React.createElement('div', { className: 'flex flex-wrap items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0' },
-        React.createElement('button', {
-          onClick: () => setVisualMode(false),
-          className: 'flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-gray-500 hover:text-gray-900 rounded-lg hover:bg-gray-100',
-          title: t('back to rich text', getLang()),
-        }, React.createElement(ArrowLeft, { size: 16 }), React.createElement(FileText, { size: 14 })),
-        React.createElement('div', { className: 'relative flex-1 max-w-xl' },
-          React.createElement('input', { value: title, onChange: e => setTitle(e.target.value), placeholder: t('post title', getLang()), className: 'input-field text-sm font-semibold pr-16' }),
-          React.createElement('span', { className: 'absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400' }, (content || '').replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length + ' ' + t('words', getLang()))
-        ),
-        React.createElement('div', { className: 'flex-1' }),
-        // Save status indicator
-        React.createElement('span', {
-          className: 'flex items-center gap-1.5 text-[11px] ' +
-            (saveState === 'saved' ? 'text-green-600' : saveState === 'saving' ? 'text-blue-600' : 'text-amber-600'),
-        },
-          React.createElement('span', { className: 'inline-block w-2 h-2 rounded-full ' + (saveState === 'saved' ? 'bg-green-500' : saveState === 'saving' ? 'bg-blue-500 animate-pulse' : 'bg-amber-500') }),
-          saveState === 'saved' ? t('saved', getLang()) : saveState === 'saving' ? t('saving...', getLang()) : t('unsaved changes', getLang())
-        ),
-        React.createElement('button', {
-          onClick: () => setShowSettings(!showSettings),
-          className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border ' +
-            (showSettings ? 'border-primary-400 bg-primary-50 text-primary-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'),
-        }, React.createElement(Settings2, { size: 14 }), t('page settings', getLang())),
-        // Preview on the live site (only when a slug exists)
-        slug && React.createElement('a', {
-          href: window.location.origin + '/post/' + slug,
-          target: '_blank', rel: 'noopener',
-          className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50',
-        }, React.createElement(Eye, { size: 14 }), t('preview', getLang())),
-        React.createElement('button', { onClick: () => handleSave('draft', true), disabled: saving || !title, className: 'btn-secondary text-xs' }, React.createElement(Save, { size: 14 }), t('save draft', getLang())),
-        React.createElement('button', { onClick: () => handleSave('published'), disabled: saving || !title, className: 'btn-primary text-xs' }, t('publish', getLang()))
-      ),
-      // Editor area + settings drawer
+      // Editor area — VisualEditor provides its own Gutenberg header
       React.createElement('div', { className: 'flex-1 relative overflow-hidden' },
         React.createElement(VisualEditor, {
           content, css: visualCss,
           onChange: (html: string, css: string) => { setContent(html); setVisualCss(css); setSaveState('dirty'); },
           height: '100%',
           onSaveShortcut: () => handleSave('draft', true),
+          onPublish: () => handleSave('published'),
+          onBack: () => setVisualMode(false),
+          saveState,
+          pageSettings: {
+            status,
+            onStatusChange: (v: string) => { setStatus(v); setSaveState('dirty'); },
+            slug,
+            showPreview: () => { if (slug) window.open(window.location.origin + '/post/' + slug, '_blank'); },
+            featuredImage: featured || undefined,
+            onFeaturedImageChange: (url: string) => { setFeatured(url); setSaveState('dirty'); },
+            showMediaPicker: () => setShowMediaPicker(true),
+            excerpt,
+            onExcerptChange: (v: string) => { setExcerpt(v); setSaveState('dirty'); },
+            allowComments,
+            onAllowCommentsChange: (v: boolean) => { setAllowComments(v); setSaveState('dirty'); },
+            password,
+            onPasswordChange: (v: string) => { setPassword(v); setSaveState('dirty'); },
+          },
         }),
         showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },
           React.createElement('div', {

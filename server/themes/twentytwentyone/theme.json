@@ -11,11 +11,28 @@
     "heading_font": "system",
     "body_font": "system",
     "sidebar_position": "right",
-    "posts_per_row": "1"
+    "posts_per_row": "1",
+    "heading_cap": "2",
+    "heading_max": "24"
   },
   "settingsSchema": [
-    { "key": "accent_style", "label": "Accent style", "type": "select", "options": ["orange", "blue", "green"], "default": "orange" },
-    { "key": "show_logo_border", "label": "Logo border", "type": "checkbox", "default": "1" }
+    {
+      "key": "accent_style",
+      "label": "Accent style",
+      "type": "select",
+      "options": [
+        "orange",
+        "blue",
+        "green"
+      ],
+      "default": "orange"
+    },
+    {
+      "key": "show_logo_border",
+      "label": "Logo border",
+      "type": "checkbox",
+      "default": "1"
+    }
   ],
   "custom_css": "article { border-radius: 24px; border: 1px solid #f0f0f0; padding: 32px; } article h2 { font-weight: 500; }"
 }

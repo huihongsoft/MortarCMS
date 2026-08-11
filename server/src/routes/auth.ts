@@ -6,6 +6,7 @@ import { signToken, verifyToken } from '../utils/jwt';
 export { passwordOk };
 import { logActivity } from './activity';
 import { doAction } from '../utils/hooks';
+import { renderTemplate, sendEmail } from '../utils/mailer';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -38,16 +39,32 @@ router.post('/register', async (req: AuthRequest, res: Response) => {
   try {
     const data = registerSchema.parse(req.body);
     if (!passwordOk(data.password)) { res.status(400).json({ error: 'Password must be at least 8 characters with letters and numbers' }); return; }
+    // Role handling: only authenticated admins may assign a role. Public
+    // registrations always get the site's default role (never elevated).
+    let isAdminCreate = false;
+    try {
+      const header = req.headers.authorization || '';
+      if (header.startsWith('Bearer ')) {
+        const payload = verifyToken(header.slice(7));
+        if (payload?.role === 'admin') isAdminCreate = true;
+      }
+    } catch {}
+    if (!isAdminCreate) {
+      const canRegister = (db.prepare("SELECT value FROM Setting WHERE key = 'users_can_register'").get() as any)?.value;
+      if (canRegister === '0') { res.status(403).json({ error: 'Registration is closed on this site' }); return; }
+    }
     const existing = db.prepare('SELECT id FROM User WHERE email = ? OR username = ?').get(data.email, data.username);
     if (existing) { res.status(409).json({ error: 'Username or email already taken' }); return; }
     const password = await bcrypt.hash(data.password, 10);
     const id = cuid();
-    db.prepare('INSERT INTO User (id, username, email, password, role) VALUES (?, ?, ?, ?, ?)').run(id, data.username, data.email, password, 'author');
-    const role = data.role || 'author';
-    if (role !== 'author') db.prepare('UPDATE User SET role = ? WHERE id = ?').run(role, id);
-    const token = signToken({ userId: id, role });
-    doAction('user_register', id, role);
-    res.status(201).json({ user: { id, username: data.username, email: data.email, role }, token });
+    const role = isAdminCreate
+      ? (data.role || 'author')
+      : ((db.prepare("SELECT value FROM Setting WHERE key = 'default_role'").get() as any)?.value || 'author');
+    const safeRole = ['admin', 'editor', 'author', 'contributor', 'subscriber'].includes(role) ? role : 'author';
+    db.prepare('INSERT INTO User (id, username, email, password, role) VALUES (?, ?, ?, ?, ?)').run(id, data.username, data.email, password, safeRole);
+    const token = signToken({ userId: id, role: safeRole });
+    doAction('user_register', id, safeRole);
+    res.status(201).json({ user: { id, username: data.username, email: data.email, role: safeRole }, token });
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
@@ -66,7 +83,7 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
       res.json({ twoFactorRequired: true, tempToken });
       return;
     }
-    const token = signToken({ userId: user.id, role: user.role });
+    const token = signToken({ userId: user.id, role: user.role, v: (user as any).tokenVersion || 0 });
     const { password, ...safe } = user;
     logActivity(user.id, 'login', 'User logged in');
     res.json({ user: safe, token });
@@ -84,7 +101,7 @@ router.post('/2fa/verify', async (req: AuthRequest, res: Response) => {
     if (!user || !user.two_factor_enabled) { res.status(401).json({ error: 'Invalid challenge' }); return; }
     const { verifyTOTP } = require('../utils/totp');
     if (!verifyTOTP(user.two_factor_secret, String(code))) { res.status(401).json({ error: 'Invalid verification code' }); return; }
-    const token = signToken({ userId: user.id, role: user.role });
+    const token = signToken({ userId: user.id, role: user.role, v: (user as any).tokenVersion || 0 });
     const { password, ...safe } = user;
     logActivity(user.id, 'login', 'User logged in with 2FA');
     res.json({ user: safe, token });
@@ -93,6 +110,17 @@ router.post('/2fa/verify', async (req: AuthRequest, res: Response) => {
 
 // Logout: blacklist the presented token (in-memory; cleared on restart)
 const tokenBlacklist = new Set<string>();
+router.post('/logout-all', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user) {
+      const row = db.prepare('SELECT tokenVersion FROM User WHERE id = ?').get(req.user.userId) as any;
+      const nextV = ((row?.tokenVersion || 0) as number) + 1;
+      db.prepare('UPDATE User SET tokenVersion = ? WHERE id = ?').run(nextV, req.user.userId);
+    }
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 router.post('/logout', authenticate, (req: AuthRequest, res: Response) => {
   try {
     const header = req.headers.authorization || '';
@@ -153,7 +181,7 @@ router.get('/2fa/status', authenticate, (req: AuthRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Password Reset: request token
+// Password Reset: request token (sends the reset link by email when SMTP is configured)
 router.post('/forgot-password', (req: AuthRequest, res: Response) => {
   try {
     const { email } = req.body;
@@ -162,7 +190,12 @@ router.post('/forgot-password', (req: AuthRequest, res: Response) => {
     const token = require('crypto').randomBytes(32).toString('hex');
     const expires = new Date(Date.now() + 3600000).toISOString();
     db.prepare('UPDATE User SET reset_token = ?, reset_expires = ? WHERE id = ?').run(token, expires, user.id);
-    // Token is returned to the client; do not log it
+    // Deliver the reset link by email (best-effort; SMTP may not be configured)
+    try {
+      const siteUrl = ((db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || 'http://localhost:3001').replace(/\/$/, '');
+      const tpl = renderTemplate('password_reset', { username: user.username, reset_link: siteUrl + '/admin#/reset?token=' + token });
+      if (tpl) { void sendEmail(email, tpl.subject, tpl.html); }
+    } catch { /* email delivery is best-effort */ }
     res.json({ message: 'If the email exists, a reset link has been sent.' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

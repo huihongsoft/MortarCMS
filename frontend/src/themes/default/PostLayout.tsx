@@ -1,19 +1,35 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
+import React, { useEffect, useRef } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, Folder, Tag, Clock, MessageSquare, ChevronLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RelatedPosts from '../../components/RelatedPosts';
 import SocialShare from '../../components/SocialShare';
+import Toc from '../../components/Toc';
 import { cdnUrl, cdnHtml } from '../../lib/cdn';
 import { embedContent } from '../../lib/embed';
 import { gravatarUrl } from '../../lib/gravatar';
 import { timeAgo, readingTime } from '../../lib/time';
 import { t } from '../../lib/i18n';
+import { useContentImageEnhancer } from '../../lib/imageEnhance';
 import DOMPurify from 'dompurify';
 
 // Default single-post template — WordPress-style layout
 export default function PostLayout(props: any) {
-  const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, slug } = props;
+  const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug } = props;
+  // WordPress-style multi-page posts: split content on <!--nextpage-->
+  const parts = String(post?.content || '').split(/<!--\s*nextpage\s*-->/i);
+  const [searchParams] = useSearchParams();
+  const pageCount = parts.length;
+  const curPage = Math.max(1, Math.min(pageCount, parseInt(searchParams.get('page') || '1', 10) || 1));
+  const pageContent = parts[curPage - 1] || '';
+  const pageNav = pageCount > 1 && React.createElement('nav', { className: 'flex items-center justify-center gap-3 mt-8 pt-6 border-t border-gray-100' },
+    curPage > 1 && React.createElement(Link, { to: '/post/' + slug + (curPage - 1 > 1 ? '?page=' + (curPage - 1) : ''), className: 'text-sm text-gray-500 hover:text-primary-600' }, '← ' + t('previous', settings)),
+    React.createElement('span', { className: 'text-sm text-gray-400' }, t('page', settings) + ' ' + curPage + ' / ' + pageCount),
+    curPage < pageCount && React.createElement(Link, { to: '/post/' + slug + '?page=' + (curPage + 1), className: 'text-sm text-gray-500 hover:text-primary-600' }, t('next', settings) + ' →')
+  );
+
+  const contentRef = useRef<HTMLDivElement>(null);
+  useContentImageEnhancer(contentRef, [post?.content]);
 
   const category = post.categories?.[0];
   const author = post.author;
@@ -40,13 +56,18 @@ export default function PostLayout(props: any) {
   ));
 
   // ---- Comment form ----
-  const commentFormEl = React.createElement('form', { onSubmit: submitComment, className: 'space-y-3 mt-6 p-6 rounded-2xl bg-gray-50' },
+  const commentFormEl = React.createElement('form', { onSubmit: submitComment, noValidate: true, className: 'space-y-3 mt-6 p-6 rounded-2xl bg-gray-50' },
     React.createElement('h4', { className: 'text-sm font-semibold text-gray-900' }, t('leave a comment', settings)),
+    commentError && React.createElement('div', { role: 'alert', className: 'p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg' }, commentError),
     React.createElement('input', { type: 'text', name: 'website_url', style: { position: 'absolute', left: '-9999px' }, tabIndex: -1, autoComplete: 'off' }),
     React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },
-      React.createElement('input', { value: commentForm.author, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCommentForm({ ...commentForm, author: e.target.value }), placeholder: t('name', settings), className: inputCls }),
-      React.createElement('input', { value: commentForm.email, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCommentForm({ ...commentForm, email: e.target.value }), placeholder: t('email', settings), type: 'email', className: inputCls })),
-    React.createElement('textarea', { value: commentForm.content, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentForm({ ...commentForm, content: e.target.value }), placeholder: t('your comment', settings) + '...', className: inputCls, rows: 3, required: true }),
+      React.createElement('input', { value: commentForm.author, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCommentForm({ ...commentForm, author: e.target.value }), placeholder: t('name', settings), 'aria-label': t('name', settings), className: inputCls, autoComplete: 'name' }),
+      React.createElement('input', { value: commentForm.email, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCommentForm({ ...commentForm, email: e.target.value }), placeholder: t('email', settings), type: 'email', 'aria-label': t('email', settings), className: inputCls, autoComplete: 'email' })),
+    React.createElement('textarea', { value: commentForm.content, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentForm({ ...commentForm, content: e.target.value }), placeholder: t('your comment', settings) + '...', 'aria-label': t('your comment', settings), className: inputCls, rows: 3, required: true }),
+    React.createElement('label', { className: 'flex items-center gap-2 text-sm text-gray-500 cursor-pointer' },
+      React.createElement('input', { type: 'checkbox', checked: !!commentForm.notifyMe, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCommentForm({ ...commentForm, notifyMe: e.target.checked }), className: 'rounded border-gray-300 text-primary-600' }),
+      t('notify me of replies', settings)
+    ),
     React.createElement('button', { type: 'submit', className: 'w-full py-2.5 rounded-xl text-white text-sm font-medium transition-colors', style: { background: 'var(--primary-color, #2563eb)' } }, t('submit comment', settings))
   );
 
@@ -78,14 +99,20 @@ export default function PostLayout(props: any) {
         src: cdnUrl(post.featured, settings),
         alt: post.title,
         className: 'w-full max-h-96 object-cover rounded-2xl shadow-lg',
-        loading: 'lazy',
+        // Hero image is the LCP element: load it eagerly at high priority
+        loading: 'eager',
+        fetchPriority: 'high',
+        decoding: 'async',
+        sizes: '(min-width: 900px) 768px, 100vw',
         srcSet: post.srcset ? Object.entries(post.srcset).map(([w, u]) => (cdnUrl(u as string, settings) as string) + ' ' + w + 'w').join(', ') : undefined,
       })
     ),
 
-    // Content
+    // Content + table of contents
     post.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: post.meta._visual_css } }),
-    React.createElement('div', { className: 'prose prose-gray prose-lg max-w-none mb-12', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(post.content)), settings) } }),
+    React.createElement(Toc, { containerRef: contentRef, settings }),
+    React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none mb-12', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(pageContent)), settings) } }),
+    pageNav,
 
     // Tags
     post.tags?.length > 0 && React.createElement('div', { className: 'flex flex-wrap items-center gap-2 mb-10' },
@@ -93,10 +120,10 @@ export default function PostLayout(props: any) {
       post.tags.map((tg: any) => React.createElement(Link, { key: tg.tagId, to: '/tag/' + tg.slug, className: 'px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors' }, tg.name))
     ),
 
-    // Share + back row
+    // Share + back row (share buttons toggleable in theme settings)
     React.createElement('div', { className: 'flex items-center justify-between py-6 border-t border-gray-100 mb-10' },
       React.createElement(Link, { to: '/', className: 'text-sm text-gray-500 hover:text-primary-600 flex items-center gap-1' }, React.createElement(ChevronLeft, { size: 15 }), t('all posts', settings)),
-      React.createElement(SocialShare, { title: post.title, url: '/post/' + post.slug, siteUrl: settings.site_url })
+      settings.theme_show_share_buttons !== '0' && React.createElement(SocialShare, { title: post.title, url: '/post/' + post.slug, siteUrl: settings.site_url })
     ),
 
     // Author box
@@ -109,8 +136,8 @@ export default function PostLayout(props: any) {
       )
     ),
 
-    // Related posts
-    React.createElement('section', { className: 'mb-12' },
+    // Related posts (toggleable in theme settings)
+    settings.theme_show_related_posts !== '0' && React.createElement('section', { className: 'mb-12' },
       React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-4' }, t('related posts', settings)),
       slug && React.createElement(RelatedPosts, { postId: post?.id, slug: slug })
     ),

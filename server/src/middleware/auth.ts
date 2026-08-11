@@ -27,6 +27,15 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     res.status(401).json({ error: 'Invalid or expired token' });
     return;
   }
+  // Session version check: if the user "logged out everywhere", older tokens
+  // carry a stale version and are rejected.
+  try {
+    const user = db.prepare('SELECT tokenVersion FROM User WHERE id = ?').get(payload.userId) as any;
+    if (user && payload.v !== undefined && user.tokenVersion !== payload.v) {
+      res.status(401).json({ error: 'Session expired' });
+      return;
+    }
+  } catch {}
 
   req.user = payload;
   next();
@@ -62,7 +71,7 @@ export function authorize(...roles: string[]) {
 const FALLBACK_CAPABILITIES: Record<string, string[]> = {
   admin: ['*'],
   editor: ['edit_posts', 'edit_others_posts', 'publish_posts', 'delete_posts', 'delete_others_posts', 'moderate_comments', 'manage_categories', 'upload_files', 'edit_pages', 'publish_pages', 'manage_options'],
-  author: ['edit_posts', 'edit_others_posts', 'publish_posts', 'delete_posts', 'upload_files'],
+  author: ['edit_posts', 'publish_posts', 'delete_posts', 'upload_files'],
   contributor: ['edit_posts', 'delete_posts'],
   subscriber: [],
 };

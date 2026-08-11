@@ -30,7 +30,26 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 }
 .btn-primary:not(:disabled):hover { box-shadow: 0 4px 14px -2px color-mix(in srgb, var(--admin-primary, #2563eb) 60%, transparent), 0 2px 4px rgba(0,0,0,0.1); filter: brightness(1.05); }
 .btn-primary:active:not(:disabled) { transform: scale(0.97); }
+/* Disabled state: clearly visible (gray) instead of a washed-out translucent button */
+.btn-primary:disabled {
+  background-image: none;
+  background: #e5e7eb;
+  color: #9ca3af;
+  box-shadow: none;
+  opacity: 1;
+}
+.dark .btn-primary:disabled {
+  background: #374151;
+  color: #9ca3af;
+}
 .btn-primary:focus-visible { outline: 2px solid color-mix(in srgb, var(--admin-primary, #2563eb) 60%, transparent); outline-offset: 2px; }
+a:focus-visible, button:focus-visible { outline: 2px solid color-mix(in srgb, var(--admin-primary, #2563eb) 60%, transparent); outline-offset: 2px; }
+.skip-link {
+  position: absolute; left: -9999px; top: 0; z-index: 100;
+  background: var(--admin-primary, #2563eb); color: #fff; padding: 10px 16px;
+  border-radius: 0 0 8px 0; font-size: 14px; text-decoration: none;
+}
+.skip-link:focus { left: 0; outline: 2px solid #fff; outline-offset: -2px; }
 .btn-secondary { @apply inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-xl transition-all duration-200 disabled:opacity-50; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
 .btn-secondary:hover { background: #f9fafb; border-color: #d1d5db; box-shadow: 0 2px 6px rgba(0,0,0,0.06); }
 .btn-secondary:active:not(:disabled) { transform: scale(0.97); }
@@ -174,404 +193,1332 @@ table tbody tr { transition: background-color 0.12s ease; }
 }
 
 /* ============================================================
-   GrapesJS skin — match the admin's modern look
+   WordPress Gutenberg Editor — Exact Replica
+   CSS values from: wp-includes/css/dist/{editor,block-editor,components,edit-post}/style.css
    ============================================================ */
-/* GrapesJS theme variables — panels, buttons, sectors and fields are all
-   driven by these (via .gjs-one-bg/.gjs-two-color/.gjs-four-color classes);
-   overriding the variables on the container guarantees they apply
-   regardless of CSS cascade order */
+
+/* --- CSS Variable Fallbacks (from WordPress edit-post/style.css) --- */
 .visual-editor-container {
-  --gjs-primary-color: #ffffff;                 /* panel backgrounds (one-bg) */
-  --gjs-secondary-color: #374151;               /* panel text (two-color) */
-  --gjs-tertiary-color: #f9fafb;                /* hover/secondary bg (three-bg) */
-  --gjs-quaternary-color: var(--admin-primary, #2563eb); /* accent (four-color) */
-  --gjs-main-color: #374151;
-  --gjs-main-dark-color: rgba(0, 0, 0, 0.05);   /* field/input backgrounds */
-  --gjs-font-color: #374151;                    /* buttons text */
-  --gjs-main-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --gjs-font-size: 14px;
-  /* Selection outline, handles and other accents follow the admin theme color */
-  --gjs-color-blue: var(--admin-primary, #2563eb);
-  --gjs-color-light-blue: color-mix(in srgb, var(--admin-primary, #2563eb) 30%, transparent);
-  --gjs-color-yellow: #f59e0b;
-  --gjs-color-red: #ef4444;
-  --gjs-color-green: #10b981;
+  --wp-admin-theme-color: #007cba;
+  --wp-admin-theme-color-darker-10: #006ba1;
+  --wp-admin-theme-color-darker-20: #005a87;
+  --wp-admin-border-width-focus: 2px;
+  --wp-editor-canvas-background: #fff;
+  /* GrapesJS internal variables */
+  --gjs-primary-color: #ffffff;
+  --gjs-secondary-color: #1e1e1e;
+  --gjs-tertiary-color: #f0f0f0;
+  --gjs-quaternary-color: var(--wp-admin-theme-color);
+  --gjs-main-color: #1e1e1e;
+  --gjs-main-dark-color: rgba(0,0,0,0.04);
+  --gjs-font-color: #1e1e1e;
+  --gjs-font-size: 13px;
+  --gjs-color-blue: var(--wp-admin-theme-color);
+  --gjs-color-light-blue: rgba(0,124,186,0.3);
 }
+
 .dark .visual-editor-container {
-  --gjs-primary-color: #1f2937;                 /* panels = admin card color */
-  --gjs-secondary-color: #e5e7eb;               /* light text */
-  --gjs-tertiary-color: #374151;                /* hover bg */
-  --gjs-quaternary-color: #ffffff;              /* active accent */
-  --gjs-main-color: #e5e7eb;
-  --gjs-main-dark-color: rgba(255, 255, 255, 0.08);
-  --gjs-font-color: #d1d5db;
-  --gjs-color-blue: #60a5fa;
-  --gjs-color-light-blue: rgba(96,165,250,0.3);
+  --gjs-primary-color: #1e1e1e;
+  --gjs-secondary-color: #e0e0e0;
+  --gjs-tertiary-color: #2c2c2c;
+  --gjs-quaternary-color: #fff;
+  --gjs-font-color: #ccc;
 }
-.visual-editor-container .gjs-editor {
-  border: 1px solid #e5e7eb;
-  border-radius: 12px;
+
+/* =================================================================
+   INTERFACE SKELETON (wp editor/style.css lines 316-543)
+   .interface-interface-skeleton
+   ================================================================= */
+
+.ve-guten-skeleton {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* =================================================================
+   HEADER (wp editor/style.css lines 6825-7007)
+   .editor-header — 64px height, white bg, CSS grid, bottom shadow
+   ================================================================= */
+
+.ve-guten-header {
+  box-sizing: border-box;
+  height: 64px;
+  background: #fff;
+  display: grid;
+  grid-auto-flow: row;
+  grid-template: auto / 32px minmax(0, max-content) minmax(min-content, 1fr) auto;
+  align-items: center;
+  padding: 0;
+  gap: 16px;
+  flex-shrink: 0;
+  box-shadow: 0 1px 0 0 rgba(0, 0, 0, 0.133);
+  z-index: 30;
+  color: #1e1e1e;
+  outline: 1px solid transparent;
+  max-width: 100vw;
+}
+.ve-guten-header *,
+.ve-guten-header *::before,
+.ve-guten-header *::after { box-sizing: inherit; }
+
+.dark .ve-guten-header { background: #1e1e1e; color: #e0e0e0; }
+
+.ve-guten-header-left {
+  grid-column: 1 / 3;   /* start at the very left (column 1), no leading gap */
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-inline: 0;
+}
+.ve-guten-header-left > :first-child { margin-inline: 0; }
+
+.ve-guten-header-center {
+  grid-column: 3;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
   overflow: hidden;
 }
-/* Hover feedback stays subtle (faint solid outline, no dashed wireframes);
-   only the selected component shows the strong theme-colored border */
-.visual-editor-container .gjs-highlighter {
-  outline: 1px solid rgba(59, 130, 246, 0.25) !important;
-  outline-offset: 0 !important;
+
+.ve-guten-header-right {
+  grid-column: 4;
+  justify-self: end;
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+  padding-right: 4px;
 }
-.visual-editor-container .gjs-highlighter-warning { outline: 2px solid rgba(245, 158, 11, 0.6) !important; }
-/* Top command bar — white, matching the admin surfaces */
-.visual-editor-container .gjs-pn-panels {
-  background: #ffffff;
-  border-bottom: 1px solid #e5e7eb;
-  padding: 6px 12px;
-  min-height: 48px;
+
+/* Header buttons — matching .components-button (wp components/style.css lines 274-403) */
+.ve-guten-header .ve-guten-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  min-width: 36px;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #1e1e1e;
+  cursor: pointer;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
 }
-.visual-editor-container .gjs-pn-btn { height: 34px; min-width: 34px; font-size: 15px; }
-.visual-editor-container .gjs-pn-options, .visual-editor-container .gjs-pn-views {
-  background: #f1f3f5;
-  border-radius: 8px;
+.ve-guten-header .ve-guten-icon-btn svg { width: 24px; height: 24px; pointer-events: none; }
+.ve-guten-header .ve-guten-icon-btn:hover { color: var(--wp-admin-theme-color); }
+.ve-guten-header .ve-guten-icon-btn.is-disabled { opacity: 0.4; cursor: default; pointer-events: none; }
+.ve-guten-header .ve-guten-icon-btn.is-disabled:hover { color: #1e1e1e; }
+.ve-guten-header .ve-guten-icon-btn:focus:not(:active) {
+  box-shadow: 0 0 0 var(--wp-admin-border-width-focus) var(--wp-admin-theme-color);
+  outline: 2px solid transparent;
+}
+.dark .ve-guten-header .ve-guten-icon-btn { color: #e0e0e0; }
+.dark .ve-guten-header .ve-guten-icon-btn:hover { color: #fff; }
+
+/* Device switcher (segmented control, like WP toolbar groups) */
+.ve-guten-device-switcher {
+  display: inline-flex;
+  align-items: center;
+  background: #f0f0f0;
+  border-radius: 2px;
   padding: 2px;
-  margin-left: 8px;
+  margin-right: 4px;
 }
-.visual-editor-container .gjs-pn-options .gjs-pn-btn, .visual-editor-container .gjs-pn-views .gjs-pn-btn {
-  height: 30px;
-  min-width: 30px;
-  border-radius: 6px;
-  margin: 0;
-}
-.visual-editor-container .gjs-pn-options .gjs-pn-btn.gjs-pn-active, .visual-editor-container .gjs-pn-views .gjs-pn-btn.gjs-pn-active {
-  background: #ffffff;
-  color: var(--admin-primary, #2563eb);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-}
-.visual-editor-container .gjs-pn-btn {
-  color: #6b7280;
-  border-radius: 8px;
+.ve-guten-device-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   height: 32px;
   min-width: 32px;
-  margin: 0 2px;
-  transition: color .15s, background .15s;
-}
-.visual-editor-container .gjs-pn-btn:hover { color: #111827; background: #f3f4f6; }
-/* Active view button: theme-color tint + underline indicator (admin tab style) */
-.visual-editor-container .gjs-pn-btn.gjs-pn-active {
-  color: var(--admin-primary, #2563eb);
-  background: color-mix(in srgb, var(--admin-primary, #2563eb) 8%, transparent);
-  box-shadow: inset 0 -2px 0 0 var(--admin-primary, #2563eb);
-}
-/* Panels: blocks left, views right — white surfaces */
-.visual-editor-container .gjs-pn-views-container { border-left: 1px solid #e5e7eb; box-shadow: -4px 0 12px -8px rgba(0,0,0,0.08); }
-.visual-editor-container .gjs-sm-sector .gjs-sm-properties { padding: 10px 12px; }
-.visual-editor-container .gjs-sm-property { margin-bottom: 10px; }
-.visual-editor-container .gjs-blocks-c { padding: 10px; background: #ffffff; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-content: start; }
-.visual-editor-container .gjs-block { min-height: 84px; justify-content: center; }
-.visual-editor-container .gjs-block svg, .visual-editor-container .gjs-block i.fa { width: 24px; height: 24px; font-size: 18px; }
-/* Block cards */
-.visual-editor-container .gjs-block {
-  border-radius: 10px;
-  border: 1px solid #e5e7eb;
-  background: #fff;
-  padding: 10px 8px 8px;
-  min-height: 72px;
-  box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
-}
-.visual-editor-container .gjs-block:hover {
-  transform: translateY(-1px);
-  border-color: color-mix(in srgb, var(--admin-primary, #2563eb) 60%, transparent);
-  box-shadow: 0 3px 10px -2px color-mix(in srgb, var(--admin-primary, #2563eb) 25%, transparent);
-}
-.visual-editor-container .gjs-block svg {
-  width: 26px; height: 26px;
-  color: var(--admin-primary, #2563eb);
-}
-.visual-editor-container .gjs-block i.fa {
-  font-size: 20px;
-  color: var(--admin-primary, #2563eb);
-}
-.visual-editor-container .gjs-block-label { color: #4b5563; font-size: 11px; line-height: 1.3; margin-top: 4px; }
-.visual-editor-container .gjs-category-title {
-  background: #f9fafb;
-  border-radius: 8px;
-  margin: 8px 0 6px;
-  padding: 7px 10px;
-  font-size: 12px;
-  font-weight: 600;
-  color: #374151;
-}
-.visual-editor-container .gjs-category-title .gjs-caret { font-size: 10px; }
-.visual-editor-container .gjs-category-title { background: transparent; padding: 8px 4px 4px; margin: 4px 0 2px; border-bottom: 1px solid #f3f4f6; border-radius: 0; }
-/* Right-side style manager — white surfaces */
-.visual-editor-container .gjs-sm-sectors { background: #fff; }
-.visual-editor-container .gjs-sm-sector .gjs-sm-sector-title {
-  background: #f9fafb;
-  border-bottom: 1px solid #f3f4f6;
-  color: #111827;
-  font-size: 12px;
-  font-weight: 600;
-  padding: 10px 12px;
-}
-.visual-editor-container .gjs-sm-field {
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  background: #fff;
-}
-.visual-editor-container .gjs-sm-field:hover { border-color: #d1d5db; }
-.visual-editor-container .gjs-sm-label { color: #6b7280; font-size: 11px; }
-.visual-editor-container .gjs-color-main,
-.visual-editor-container .gjs-color-input { border-radius: 8px; }
-/* Traits panel */
-.visual-editor-container .gjs-trt-trait { padding: 6px 12px; }
-.visual-editor-container .gjs-trt-label { font-size: 11px; color: #6b7280; }
-/* Layer manager */
-.visual-editor-container .gjs-layer { padding: 5px 8px; border-radius: 6px; }
-.visual-editor-container .gjs-layer:hover { background: #f9fafb; }
-.visual-editor-container .gjs-layer .gjs-layer-title { font-size: 12px; }
-/* Scrollbars in editor panels */
-.visual-editor-container ::-webkit-scrollbar { width: 8px; height: 8px; }
-.visual-editor-container ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 4px; border: none; }
-/* Canvas toolbar device buttons */
-.visual-editor-container .gjs-cv-canvas { border-top: 1px solid #e5e7eb; }
-/* Asset Manager (image picker) skin */
-.visual-editor-container .gjs-am-container {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 14px;
-  box-shadow: 0 20px 60px -12px rgba(0,0,0,0.25);
-  padding: 20px;
-}
-.visual-editor-container .gjs-am-header { padding: 8px 4px 16px; }
-.visual-editor-container .gjs-am-title { font-size: 15px; font-weight: 600; color: #111827; }
-.visual-editor-container .gjs-am-close { color: #6b7280; font-size: 22px; }
-.visual-editor-container .gjs-am-close:hover { color: #111827; }
-.visual-editor-container .gjs-am-assets { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; padding: 10px 0; }
-.visual-editor-container .gjs-am-asset {
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
   padding: 4px;
-  background: #f9fafb;
-  transition: border-color .15s, transform .15s;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  color: #1e1e1e;
+  cursor: pointer;
 }
-.visual-editor-container .gjs-am-asset:hover { border-color: var(--admin-primary, #2563eb); transform: translateY(-1px); }
-.visual-editor-container .gjs-am-asset-image { border-radius: 8px; }
-.visual-editor-container .gjs-am-add-asset {
-  border: 2px dashed #d1d5db;
-  border-radius: 10px;
-  background: #f9fafb;
-  color: #6b7280;
+.ve-guten-device-btn svg { width: 20px; height: 20px; pointer-events: none; }
+.ve-guten-device-btn:hover { background: #fff; color: #1e1e1e; }
+.ve-guten-device-btn.is-active {
+  background: #fff;
+  color: var(--wp-admin-theme-color);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+.dark .ve-guten-device-switcher { background: #2c2c2c; }
+.dark .ve-guten-device-btn { color: #e0e0e0; }
+.dark .ve-guten-device-btn:hover { background: #1e1e1e; }
+.dark .ve-guten-device-btn.is-active { background: #1e1e1e; color: #fff; }
+
+/* More options menu (dropdown) */
+.ve-guten-more-menu {
+  position: absolute;
+  top: 64px;
+  right: 8px;
+  z-index: 100;
+  min-width: 200px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px #ccc, 0 2px 3px rgba(0,0,0,0.05), 0 4px 5px rgba(0,0,0,0.04), 0 12px 12px rgba(0,0,0,0.03), 0 16px 16px rgba(0,0,0,0.02);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.ve-guten-more-menu button {
+  display: block;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  text-align: left;
+  font-size: 13px;
+  color: #1e1e1e;
+  cursor: pointer;
+  border-radius: 2px;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-guten-more-menu button:hover { background: #f0f0f0; }
+.dark .ve-guten-more-menu { background: #1e1e1e; border-color: #333; }
+.dark .ve-guten-more-menu button { color: #e0e0e0; }
+.dark .ve-guten-more-menu button:hover { background: #2c2c2c; }
+
+/* Inserter "+" button — rotated when open, like WordPress */
+.ve-guten-header .ve-guten-icon-btn.is-pressed { background: #1e1e1e; color: #fff; }
+.ve-guten-header .ve-guten-icon-btn.is-pressed:hover { color: #fff; }
+.ve-guten-header .ve-guten-icon-btn.is-pressed svg { transform: rotate(45deg); transition: transform cubic-bezier(0.165, 0.84, 0.44, 1) 0.2s; }
+.dark .ve-guten-header .ve-guten-icon-btn.is-pressed { background: #fff; color: #1e1e1e; }
+
+.ve-guten-header .ve-guten-text-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: transparent;
+  color: #1e1e1e;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-guten-header .ve-guten-text-btn:hover { background: #f0f0f0; }
+.dark .ve-guten-header .ve-guten-text-btn { color: #e0e0e0; }
+.dark .ve-guten-header .ve-guten-text-btn:hover { background: #2c2c2c; }
+
+.ve-guten-header .ve-guten-primary-btn {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 4px 12px;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: var(--wp-admin-theme-color);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-guten-header .ve-guten-primary-btn:hover { background: var(--wp-admin-theme-color-darker-10); }
+
+/* =================================================================
+   BODY (wp editor/style.css lines 378-444)
+   .interface-interface-skeleton__body
+   ================================================================= */
+
+.ve-guten-body {
+  flex-grow: 1;
+  display: flex;
+  overflow: auto;
+  overscroll-behavior-y: none;
+  position: relative;
+  min-height: 0;
+}
+
+/* =================================================================
+   SECONDARY SIDEBAR — List View (wp editor/style.css lines 404-444)
+   .interface-interface-skeleton__secondary-sidebar
+   ================================================================= */
+
+.ve-guten-secondary-sidebar {
+  flex-shrink: 0;
+  width: 280px;
+  background: #fff;
+  color: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 1px 0 0 0 rgba(0, 0, 0, 0.133);
+  outline: 1px solid transparent;
+  z-index: 25;
+}
+.dark .ve-guten-secondary-sidebar { background: #1e1e1e; color: #e0e0e0; }
+
+.ve-guten-panel-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  flex-shrink: 0;
+  border-bottom: 1px solid #e0e0e0;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.dark .ve-guten-panel-hdr { border-color: #333; }
+
+.ve-guten-close-sm {
+  background: none; border: none; color: #757575; cursor: pointer;
+  padding: 0; width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+  border-radius: 2px; font-size: 14px;
+}
+.ve-guten-close-sm svg { width: 16px; height: 16px; pointer-events: none; }
+.ve-guten-close-sm:hover { color: #1e1e1e; background: #f0f0f0; }
+.dark .ve-guten-close-sm { color: #999; }
+.dark .ve-guten-close-sm:hover { color: #fff; background: #2c2c2c; }
+
+/* List items */
+.ve-guten-list-body { overflow-y: auto; flex: 1; padding: 4px 0; }
+.ve-guten-list-item {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 12px;
+  cursor: pointer; font-size: 13px; color: #1e1e1e;
+  transition: background .1s;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-guten-list-item:hover { background: #f0f0f0; }
+.ve-guten-list-item.is-active {
+  background: color-mix(in srgb, var(--wp-admin-theme-color) 12%, transparent);
+  color: var(--wp-admin-theme-color); font-weight: 500;
+}
+.dark .ve-guten-list-item { color: #e0e0e0; }
+.dark .ve-guten-list-item:hover { background: #2c2c2c; }
+.ve-guten-list-icon { font-size: 12px; width: 18px; text-align: center; flex-shrink: 0; opacity: 0.8; }
+.ve-guten-list-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ve-guten-list-arrow {
+  width: 16px;
+  text-align: center;
+  flex-shrink: 0;
+  font-size: 10px;
+  color: #757575;
+  cursor: pointer;
+  user-select: none;
+}
+.ve-guten-list-arrow:hover { color: #1e1e1e; }
+.dark .ve-guten-list-arrow:hover { color: #fff; }
+
+/* =================================================================
+   CONTENT AREA (wp editor/style.css lines 8660-8687, edit-post 96-113)
+   .editor-visual-editor — #ddd canvas background, centered content
+   ================================================================= */
+
+.ve-guten-content {
+  flex-grow: 1;
+  flex-shrink: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background-color: var(--wp-editor-canvas-background);
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+/* Zero margins on all canvas-chain elements inside content area */
+.ve-guten-content .gjs-editor,
+.ve-guten-content .gjs-editor > *,
+.ve-guten-content .gjs-cv-canvas,
+.ve-guten-content .gjs-cv-canvas > *,
+.ve-guten-content .gjs-frames,
+.ve-guten-content .gjs-frames > *,
+.ve-guten-content .gjs-frame-wrapper,
+.ve-guten-content .gjs-frame-wrapper > *,
+.ve-guten-content .gjs-frame {
+  margin-top: 0 !important;
+  padding-top: 0 !important;
+}
+.dark .ve-guten-content { background-color: #111; }
+
+/* Hide ALL GrapesJS toolbar buttons (View code, Preview, Fullscreen, etc.)
+   — their functions are provided by our own header ⋯ menu */
+.ve-guten-content .gjs-pn-panels,
+.ve-guten-content .gjs-blocks-c,
+.ve-guten-content .gjs-devices-c,
+.ve-guten-content .gjs-device-label,
+.ve-guten-content .gjs-devices,
+.ve-guten-content .gjs-pn-btn { display: none !important; }
+
+/* Ensure GrapesJS editor fills the content area */
+.ve-guten-content > .gjs-editor {
+  flex: 1 1 0%;
+  display: flex;
+  min-height: 0;
+}
+
+/* =================================================================
+   SETTINGS SIDEBAR — GrapesJS views-container styled as WP sidebar
+   (wp editor/style.css lines 404-444, complementary-area lines 221-278)
+   .interface-interface-skeleton__sidebar + .interface-complementary-area
+   ================================================================= */
+
+.ve-guten-content .gjs-pn-views-container {
+  display: none;
+  flex-shrink: 0;
+  background: #fff;
+  color: #1e1e1e;
+  overflow-y: auto;
+  overflow-x: hidden;
+  box-shadow: -1px 0 0 0 rgba(0, 0, 0, 0.133);
+  outline: 1px solid transparent;
+}
+@media (min-width: 600px) {
+  .ve-guten-content .gjs-pn-views-container { width: 280px !important; }
+}
+.dark .ve-guten-content .gjs-pn-views-container { background: #1e1e1e; color: #e0e0e0; }
+
+/* Sidebar header (tabs + close) — sticky within the views container */
+.ve-guten-content .ve-guten-sidebar-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  background: #fff;
+  z-index: 1;
+  padding-right: 8px;
+}
+.dark .ve-guten-content .ve-guten-sidebar-hdr { background: #1e1e1e; }
+
+/* =================================================================
+   SIDEBAR TABS (wp components/style.css lines 3499-3564)
+   .components-tab-panel__tabs-item — 48px height, ::after underline
+   ================================================================= */
+
+.ve-guten-content .ve-guten-tabs {
+  display: flex;
+}
+.ve-guten-content .ve-guten-tab {
+  position: relative;
+  border-radius: 0;
+  height: 48px;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+  padding: 3px 16px;
+  margin-left: 0;
+  font-weight: 400;
+  font-size: 13px;
+  color: #1e1e1e;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-guten-content .ve-guten-tab:hover { color: #1e1e1e; }
+.ve-guten-content .ve-guten-tab:focus { position: relative; box-shadow: none; outline: none; }
+.ve-guten-content .ve-guten-tab::after {
+  content: "";
+  position: absolute;
+  right: 0; bottom: 0; left: 0;
+  pointer-events: none;
+  background: var(--wp-admin-theme-color);
+  height: 0;
+  border-radius: 0;
+  transition: height 0.1s linear;
+}
+.ve-guten-content .ve-guten-tab.is-active::after {
+  height: var(--wp-admin-border-width-focus);
+  outline: 2px solid transparent;
+  outline-offset: -1px;
+}
+.ve-guten-content .ve-guten-tab::before {
+  content: "";
+  position: absolute;
+  inset: 12px;
+  pointer-events: none;
+  box-shadow: 0 0 0 0 transparent;
+  border-radius: 2px;
+  transition: box-shadow 0.1s linear;
+}
+.ve-guten-content .ve-guten-tab:focus-visible::before {
+  box-shadow: 0 0 0 var(--wp-admin-border-width-focus) var(--wp-admin-theme-color);
+  outline: 2px solid transparent;
+}
+.dark .ve-guten-content .ve-guten-tab { color: #e0e0e0; }
+.dark .ve-guten-content .ve-guten-tab:hover { color: #fff; }
+
+/* Tab panels */
+.ve-guten-content .ve-guten-tab-panel[data-gpanel] { overflow-y: auto; }
+
+/* =================================================================
+   SIDEBAR PANELS — Post/Page settings (wp components/style.css 2613-2721)
+   .components-panel__body — 16px padding, toggle with arrow
+   ================================================================= */
+
+.ve-guten-content .components-panel__body {
+  border-top: 1px solid #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
+}
+.ve-guten-content .components-panel__body + .components-panel__body { border-top: none; }
+.ve-guten-content .components-panel__body.is-opened {
   padding: 16px;
 }
-.visual-editor-container .gjs-am-add-asset:hover { border-color: var(--admin-primary, #2563eb); color: var(--admin-primary, #2563eb); }
-.visual-editor-container .gjs-am-add-field { border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px; font-size: 13px; }
-.visual-editor-container .gjs-am-file-uploader {
-  border: 2px dashed #d1d5db;
-  border-radius: 10px;
-  background: #f9fafb;
-  color: #6b7280;
-}
-.dark .visual-editor-container .gjs-am-container { background: #1f2937; border-color: #4b5563; }
-.dark .visual-editor-container .gjs-am-title { color: #e5e7eb; }
-.dark .visual-editor-container .gjs-am-asset { background: #111827; border-color: #4b5563; }
-.dark .visual-editor-container .gjs-am-add-asset { border-color: #4b5563; background: #111827; color: #9ca3af; }
-.dark .visual-editor-container .gjs-am-file-uploader { border-color: #4b5563; background: #111827; color: #9ca3af; }
+.dark .ve-guten-content .components-panel__body { border-color: #333; }
 
-/* One-time usage hint toast */
-.visual-editor-container .ve-hint {
-  position: absolute;
-  bottom: 56px;
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 18;
-  background: #111827;
-  color: #f9fafb;
-  font-size: 12.5px;
-  padding: 9px 18px;
-  border-radius: 999px;
-  box-shadow: 0 8px 24px -6px rgba(0,0,0,0.35);
+.ve-guten-content .components-panel__body-title {
+  margin: 0;
+  display: block;
+  padding: 0;
+}
+.ve-guten-content .components-panel__body-title button {
+  position: relative;
+  padding: 16px 48px 16px 16px;
+  width: 100%;
+  height: auto;
+  background: none;
+  border: none;
+  text-align: left;
+  font-weight: 600;
+  font-size: 13px;
+  color: #1e1e1e;
+  cursor: pointer;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  transition: background 0.1s ease-in-out;
+}
+.ve-guten-content .components-panel__body-title button:hover {
+  background: #f0f0f0;
+  border: none;
+}
+.ve-guten-content .components-panel__body.is-opened > .components-panel__body-title {
+  margin: -16px;
+  margin-bottom: 5px;
+}
+.dark .ve-guten-content .components-panel__body-title button { color: #e0e0e0; }
+
+/* Field wrappers inside panel body */
+.ve-guten-content .ve-guten-field {
+  padding: 8px 0 0;
+}
+.ve-guten-select,
+.ve-guten-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 2px;
+  font-size: 13px;
+  color: #1e1e1e;
+  background: #fff;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  line-height: 1.4;
+}
+.ve-guten-select:focus,
+.ve-guten-input:focus {
+  border-color: var(--wp-admin-theme-color);
+  box-shadow: 0 0 0 1px var(--wp-admin-theme-color);
+  outline: 2px solid transparent;
+}
+.dark .ve-guten-select,
+.dark .ve-guten-input { background: #111; border-color: #333; color: #e0e0e0; }
+
+.ve-guten-slug {
+  display: block;
+  font-size: 13px; color: #757575; word-break: break-all;
+  padding: 8px 0;
+}
+.ve-guten-slug strong { color: #1e1e1e; }
+.dark .ve-guten-slug strong { color: #fff; }
+
+.ve-guten-link {
+  display: inline-block; margin-top: 4px;
+  font-size: 13px; color: var(--wp-admin-theme-color); text-decoration: none;
+}
+.ve-guten-link:hover { text-decoration: underline; }
+
+/* Toggle row (e.g. Allow comments) */
+.ve-guten-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #1e1e1e;
+  cursor: pointer;
+  padding: 4px 0;
+}
+.ve-guten-toggle-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--wp-admin-theme-color);
+  cursor: pointer;
+}
+.dark .ve-guten-toggle-row { color: #e0e0e0; }
+
+.ve-guten-field-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #757575;
+  line-height: 1.4;
+}
+.dark .ve-guten-field-hint { color: #999; }
+
+/* Featured image */
+.ve-guten-featured { display: flex; flex-direction: column; gap: 8px; }
+.ve-guten-featured-img {
+  width: 100%;
+  max-height: 180px;
+  object-fit: cover;
+  border-radius: 2px;
+  border: 1px solid #ddd;
+  cursor: pointer;
+}
+.ve-guten-featured-btn {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px dashed #bbb;
+  border-radius: 2px;
+  background: transparent;
+  color: #1e1e1e;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-guten-featured-btn:hover {
+  border-color: var(--wp-admin-theme-color);
+  color: var(--wp-admin-theme-color);
+}
+.dark .ve-guten-featured-btn { color: #e0e0e0; }
+.dark .ve-guten-featured-btn:hover { color: #fff; }
+.dark .ve-guten-featured-img { border-color: #333; }
+
+/* =================================================================
+   STYLE MANAGER (inside Block tab) — wp-style form fields
+   ================================================================= */
+
+.ve-guten-content .gjs-sm-sectors { background: transparent; }
+.ve-guten-content .gjs-sm-sector .gjs-sm-sector-title {
+  background: #f0f0f0;
+  border-bottom: 1px solid #e0e0e0;
+  color: #1e1e1e;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  padding: 8px 16px;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.dark .ve-guten-content .gjs-sm-sector .gjs-sm-sector-title { background: #2c2c2c; border-color: #333; color: #e0e0e0; }
+
+.ve-guten-content .gjs-sm-sector .gjs-sm-properties { padding: 16px; }
+.ve-guten-content .gjs-sm-property { margin-bottom: 12px; }
+
+.ve-guten-content .gjs-sm-field {
+  border: 1px solid #ddd;
+  border-radius: 2px;
+  background: #fff;
+  color: #1e1e1e;
+  font-size: 13px;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.dark .ve-guten-content .gjs-sm-field { border-color: #333; background: #111; color: #e0e0e0; }
+
+.ve-guten-content .gjs-sm-label { font-size: 11px; color: #757575; margin-bottom: 4px; font-weight: 500; }
+
+.ve-guten-content .gjs-field select,
+.ve-guten-content .gjs-field input[type="text"],
+.ve-guten-content .gjs-field input[type="number"] {
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 2px;
+  font-size: 13px;
+  color: #1e1e1e;
+  background: #fff;
+  width: 100%;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.dark .ve-guten-content .gjs-field select,
+.dark .ve-guten-content .gjs-field input { background: #111; border-color: #333; color: #e0e0e0; }
+
+.ve-guten-content .gjs-trt-trait { padding: 6px 16px; }
+.ve-guten-content .gjs-trt-label { font-size: 11px; color: #757575; }
+
+/* =================================================================
+   FOOTER (wp editor/style.css lines 454-481)
+   .interface-interface-skeleton__footer — 32px height, border-top
+   ================================================================= */
+
+.ve-guten-footer {
+  height: auto;
+  flex-shrink: 0;
+  border-top: 1px solid #e0e0e0;
+  color: #1e1e1e;
+  background-color: #fff;
+  z-index: 90;
+  display: none;
+}
+@media (min-width: 600px) {
+  .ve-guten-footer { display: flex; }
+}
+.dark .ve-guten-footer { background: #1e1e1e; border-color: #333; }
+
+/* =================================================================
+   BREADCRUMB (wp block-editor/style.css lines 634-663)
+   .block-editor-block-breadcrumb — 32px, 13px font, padding 0 18px
+   ================================================================= */
+
+.ve-guten-footer-breadcrumb {
+  z-index: 30;
+  display: flex;
+  background: #fff;
+  height: 32px;
+  align-items: center;
+  font-size: 13px;
+  padding: 0 18px;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  gap: 0;
+  overflow: hidden;
+}
+.dark .ve-guten-footer-breadcrumb { background: #1e1e1e; }
+
+#ve-header-breadcrumb {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  font-size: 12px;
+  color: #757575;
+  overflow: hidden;
+  max-width: 100%;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
   white-space: nowrap;
-  animation: ve-hint-in .3s ease;
-  transition: opacity .5s ease;
+  flex-wrap: nowrap;
+}
+
+.ve-guten-breadcrumb-item {
+  padding: 0 8px;
+  color: #1e1e1e;
+  cursor: pointer;
+  font-size: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
+  flex-shrink: 1;
+}
+.ve-guten-breadcrumb-item.is-current { cursor: default; flex-shrink: 0; }
+.ve-guten-breadcrumb-sep { color: #999; user-select: none; flex-shrink: 0; }
+.dark .ve-guten-breadcrumb-item { color: #e0e0e0; }
+
+/* =================================================================
+   BLOCK INSERTER SIDE PANEL — pushes canvas right, not a popover
+   ================================================================= */
+
+.ve-guten-inserter-sidebar {
+  flex-shrink: 0;
+  width: 350px;
+  background: #fff;
+  color: #1e1e1e;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 1px 0 0 0 rgba(0,0,0,0.133);
+  outline: 1px solid transparent;
+  z-index: 25;
+}
+.dark .ve-guten-inserter-sidebar { background: #1e1e1e; color: #e0e0e0; }
+
+.ve-guten-inserter-sidebar .ve-guten-panel-hdr {
+  flex-shrink: 0;
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+/* Inserter tabs (Blocks / Media) */
+.ve-guten-inserter-tabs {
+  display: flex;
+  gap: 0;
+}
+.ve-guten-inserter-tab {
+  position: relative;
+  height: 32px;
+  padding: 0 12px;
+  background: none;
+  border: none;
+  border-radius: 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #757575;
+  cursor: pointer;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-guten-inserter-tab:hover { color: #1e1e1e; }
+.ve-guten-inserter-tab.is-active { color: var(--wp-admin-theme-color); }
+.dark .ve-guten-inserter-tab:hover { color: #fff; }
+
+/* Media tab grid */
+.ve-guten-inserter-media {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+}
+.ve-guten-inserter-media-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.ve-guten-inserter-media-item {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  border-radius: 2px;
+  overflow: hidden;
+  outline: 1px solid rgba(0,0,0,0.1);
+  transition: outline-color 0.1s;
+}
+.ve-guten-inserter-media-item:hover { outline-color: var(--wp-admin-theme-color); }
+.ve-guten-inserter-media-item img {
+  display: block;
+  width: 100%;
+  height: 80px;
+  object-fit: cover;
+}
+.ve-guten-inserter-media-empty {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 32px 0;
+  color: #757575;
+  font-size: 13px;
+}
+.ve-guten-inserter-media-item.is-picked {
+  outline: 2px solid var(--wp-admin-theme-color) !important;
+  outline-offset: -2px;
+}
+.ve-guten-inserter-gallery-btn {
+  width: 100%;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  background: var(--wp-admin-theme-color);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.ve-guten-inserter-search {
+  padding: 12px 16px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #e0e0e0;
+  background: #fff;
+}
+.dark .ve-guten-inserter-search { background: #1e1e1e; border-color: #333; }
+
+.ve-guten-inserter-search input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 2px;
+  font-size: 13px;
+  color: #1e1e1e;
+  background: #fff;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  line-height: 1.4;
+}
+.ve-guten-inserter-search input:focus {
+  border-color: var(--wp-admin-theme-color);
+  box-shadow: 0 0 0 1px var(--wp-admin-theme-color);
+  outline: 2px solid transparent;
+}
+.dark .ve-guten-inserter-search input { background: #111; border-color: #333; color: #e0e0e0; }
+
+.ve-guten-inserter-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 4px 8px 16px;
+}
+
+.ve-guten-inserter-cat { margin-top: 12px; }
+
+.ve-guten-inserter-cat-title {
+  color: #757575;
+  text-transform: uppercase;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 8px 8px 6px;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.dark .ve-guten-inserter-cat-title { color: #999; }
+
+.ve-guten-inserter-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+
+.ve-guten-inserter-block {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 2px;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  color: #1e1e1e;
+  text-align: left;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  transition: background .1s;
+}
+.ve-guten-inserter-block:hover { background: #f0f0f0; }
+.dark .ve-guten-inserter-block { color: #e0e0e0; }
+.dark .ve-guten-inserter-block:hover { background: #2c2c2c; }
+
+.ve-guten-inserter-icon {
+  width: 24px; height: 24px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  background: #f0f0f0; border-radius: 2px;
+  color: #1e1e1e;
+}
+.ve-guten-inserter-shortcode .ve-guten-inserter-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.4;
+}
+.ve-guten-inserter-icon svg {
+  width: 20px; height: 20px;
+  fill: currentColor;
   pointer-events: none;
 }
-.visual-editor-container .ve-hint.ve-hint-out { opacity: 0; }
-@keyframes ve-hint-in { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+.dark .ve-guten-inserter-icon { background: #2c2c2c; }
+.dark .ve-guten-inserter-icon svg { color: #e0e0e0; stroke: #e0e0e0; }
 
-/* Canvas empty-state overlay */
-.visual-editor-container .ve-empty-state {
-  position: absolute;
-  inset: 42px 0 0 0; /* below the GrapesJS top bar */
-  z-index: 15;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: auto;
-  background: radial-gradient(circle at 50% 40%, rgba(59,130,246,0.05), transparent 60%);
-}
-.visual-editor-container .ve-empty-card {
-  text-align: center;
-  padding: 36px 44px;
-  max-width: 420px;
-}
-.visual-editor-container .ve-empty-icon {
-  font-size: 34px;
-  color: var(--admin-primary, #3b82f6);
-  opacity: 0.7;
-  margin-bottom: 12px;
-}
-.visual-editor-container .ve-empty-title {
-  font-size: 17px;
-  font-weight: 600;
-  color: #374151;
-  margin: 0 0 6px;
-}
-.visual-editor-container .ve-empty-sub {
-  font-size: 13px;
-  color: #9ca3af;
-  margin: 0 0 20px;
-}
-.visual-editor-container .ve-empty-actions {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-  flex-wrap: wrap;
-}
-.visual-editor-container .ve-empty-actions button {
-  padding: 8px 18px;
-  border: 1px solid #e5e7eb;
-  background: #fff;
-  border-radius: 10px;
-  font-size: 13px;
+.ve-guten-inserter-label {
+  font-size: 12px;
   font-weight: 500;
-  color: #4b5563;
-  cursor: pointer;
-  transition: all .15s ease;
+  color: #1e1e1e;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.visual-editor-container .ve-empty-actions button:hover {
-  border-color: var(--admin-primary, #3b82f6);
-  color: var(--admin-primary, #3b82f6);
-  background: color-mix(in srgb, var(--admin-primary, #3b82f6) 6%, transparent);
-  transform: translateY(-1px);
-}
-.dark .visual-editor-container .ve-empty-title { color: #e5e7eb; }
-.dark .visual-editor-container .ve-empty-actions button { background: #1f2937; border-color: #4b5563; color: #d1d5db; }
+.dark .ve-guten-inserter-label { color: #e0e0e0; }
 
-/* Gutenberg-style "+ Add Block" button above the canvas page */
-.visual-editor-container .ve-add-block {
-  position: absolute;
-  top: 12px;
-  z-index: 22;
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 1.5px dashed #9ca3af;
-  background: #ffffff;
-  color: #6b7280;
-  font-size: 17px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.15s ease;
-}
-.visual-editor-container .ve-add-block:hover {
-  border-color: var(--admin-primary, #2563eb);
-  border-style: solid;
-  color: var(--admin-primary, #2563eb);
-  transform: scale(1.08);
-}
+/* =================================================================
+   FLOATING BLOCK TOOLBAR (wp block-editor/style.css lines 3872-3920)
+   .block-editor-block-contextual-toolbar
+   ================================================================= */
 
-/* ---- Gutenberg-style floating block toolbar ---- */
-.visual-editor-container { position: relative; }
-/* Hide non-Gutenberg top-bar/panel buttons */
-.visual-editor-container .gjs-pn-btn[title="View components"],
-.visual-editor-container .gjs-pn-btn[title="Open Layer Manager"] { display: none !important; }
-.visual-editor-container .ve-block-bar {
+.ve-block-bar {
   position: absolute;
-  z-index: 30;
+  z-index: 35;
   display: none;
   align-items: center;
-  gap: 1px;
+  gap: 0;
   background: #1e1e1e;
   color: #fff;
-  border-radius: 7px;
-  padding: 3px 4px;
-  font-size: 11px;
-  box-shadow: 0 3px 14px rgba(0,0,0,0.25);
-  transform: translateY(-100%);
+  border-radius: 2px;
+  padding: 2px 4px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  /* transform is managed by JS (flips below the block when no room above) */
   white-space: nowrap;
-  transition: opacity 0.15s ease;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
 }
-.visual-editor-container .ve-block-bar-name {
-  padding: 0 7px;
-  color: #ddd;
+.ve-block-bar-name {
+  padding: 0 8px;
+  color: #ccc;
+  font-size: 12px;
   font-weight: 500;
-  max-width: 140px;
+  max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.visual-editor-container .ve-block-bar button {
+.ve-block-bar button {
+  background: none; border: none;
+  color: #ccc; padding: 4px 6px; border-radius: 2px;
+  cursor: pointer; font-size: 13px; line-height: 1;
+}
+.ve-block-bar button:hover { background: rgba(255,255,255,0.15); color: #fff; }
+
+/* Block transform menu */
+.ve-block-transform-menu {
+  position: absolute;
+  z-index: 40;
+  min-width: 180px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px #ccc, 0 2px 3px rgba(0,0,0,0.05), 0 4px 5px rgba(0,0,0,0.04), 0 12px 12px rgba(0,0,0,0.03), 0 16px 16px rgba(0,0,0,0.02);
+  padding: 4px;
+}
+.ve-block-transform-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: #757575;
+  padding: 4px 8px 8px;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-block-transform-menu button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
   background: none;
   border: none;
-  color: #ddd;
-  padding: 3px 7px;
-  border-radius: 5px;
+  text-align: left;
+  font-size: 13px;
+  color: #1e1e1e;
   cursor: pointer;
-  font-size: 12px;
-  line-height: 1;
+  border-radius: 2px;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
 }
-.visual-editor-container .ve-block-bar button:hover { background: rgba(255,255,255,0.15); color: #fff; }
+.ve-block-transform-menu button:hover { background: #f0f0f0; }
+.ve-block-transform-menu button span {
+  width: 20px;
+  text-align: center;
+  font-size: 13px;
+  color: #757575;
+}
+.dark .ve-block-transform-menu { background: #1e1e1e; border-color: #333; }
+.dark .ve-block-transform-menu button { color: #e0e0e0; }
+.dark .ve-block-transform-menu button:hover { background: #2c2c2c; }
 
-/* Canvas zoom bar (floating bottom-right) */
-.visual-editor-container .ve-zoom-bar {
+/* =================================================================
+   ZOOM BAR (floating, bottom-right)
+   ================================================================= */
+
+.ve-zoom-bar {
   position: absolute;
-  bottom: 12px; right: 12px;
+  bottom: 42px; left: 12px;
   z-index: 20;
   display: flex;
   align-items: center;
   gap: 2px;
   background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 10px;
-  box-shadow: 0 4px 12px -2px rgba(0,0,0,0.15);
-  padding: 3px;
+  border: 1px solid #ddd;
+  border-radius: 2px;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  padding: 2px;
 }
-.visual-editor-container .ve-zoom-bar button {
+.ve-zoom-bar button {
   width: 28px; height: 28px;
   display: flex; align-items: center; justify-content: center;
   border: none; background: transparent;
-  border-radius: 7px;
-  color: #4b5563;
-  font-size: 15px;
-  cursor: pointer;
-  transition: background .15s, color .15s;
+  border-radius: 2px; color: #1e1e1e;
+  font-size: 15px; cursor: pointer;
 }
-.visual-editor-container .ve-zoom-bar button:hover { background: #f3f4f6; color: #111827; }
-.visual-editor-container .ve-zoom-value {
-  min-width: 44px;
-  text-align: center;
-  font-size: 11px;
-  font-weight: 600;
-  color: #6b7280;
+.ve-zoom-bar button:hover { background: #f0f0f0; }
+.ve-zoom-value {
+  min-width: 44px; text-align: center;
+  font-size: 11px; font-weight: 600; color: #757575;
+  user-select: none;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.dark .ve-zoom-bar { background: #1e1e1e; border-color: #333; }
+.dark .ve-zoom-bar button { color: #e0e0e0; }
+.dark .ve-zoom-bar button:hover { background: #2c2c2c; }
+.dark .ve-zoom-value { color: #999; }
+
+/* =================================================================
+   EMPTY STATE + HINT
+   ================================================================= */
+
+.ve-empty-state {
+  position: absolute; inset: 0;
+  z-index: 15;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: auto;
+}
+.ve-empty-card { text-align: center; padding: 36px 44px; max-width: 420px; }
+.ve-empty-icon { font-size: 34px; color: var(--wp-admin-theme-color); opacity: 0.7; margin-bottom: 12px; }
+.ve-empty-title {
+  font-size: 17px; font-weight: 600; color: #1e1e1e; margin: 0 0 6px;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-empty-sub { font-size: 13px; color: #757575; margin: 0 0 20px; }
+.ve-empty-actions { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+.ve-empty-actions button {
+  padding: 6px 12px;
+  border: 1px solid #ddd; background: #fff; border-radius: 2px;
+  font-size: 13px; color: #1e1e1e; cursor: pointer;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-empty-actions button:hover {
+  border-color: var(--wp-admin-theme-color);
+  color: var(--wp-admin-theme-color);
+}
+.dark .ve-empty-title { color: #fff; }
+.dark .ve-empty-actions button { background: #1e1e1e; border-color: #333; color: #e0e0e0; }
+
+/* ---- Style book (block style preview panel) ---- */
+.ve-style-book {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+.ve-style-book-hdr {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  padding: 8px 12px;
+  z-index: 2;
+}
+.dark .ve-style-book-hdr { background: #1e1e1e; border-color: #333; }
+.ve-style-book-title { font-size: 13px; font-weight: 600; color: #1e1e1e; }
+.dark .ve-style-book-title { color: #e0e0e0; }
+.ve-style-book-devices { display: flex; gap: 2px; background: #f0f0f0; border-radius: 4px; padding: 2px; }
+.dark .ve-style-book-devices { background: #2c2c2c; }
+.ve-style-book-devices button { width: 30px; height: 26px; display: flex; align-items: center; justify-content: center; border: none; background: transparent; border-radius: 3px; cursor: pointer; color: #666; }
+.ve-style-book-devices button.is-active { background: #fff; color: #1e1e1e; box-shadow: 0 1px 3px rgba(0,0,0,0.15); }
+.dark .ve-style-book-devices button.is-active { background: #1e1e1e; color: #fff; }
+.ve-style-book-devices svg { width: 16px; height: 16px; pointer-events: none; }
+.ve-style-book-close { background: none; border: none; color: #757575; cursor: pointer; padding: 4px; border-radius: 4px; }
+.ve-style-book-close svg { width: 16px; height: 16px; pointer-events: none; }
+.ve-style-book-close:hover { color: #1e1e1e; background: #f0f0f0; }
+.ve-style-book-body {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+  width: min(1100px, 100%);
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+.dark .ve-style-book-body { background: #1e1e1e; border-color: #333; }
+.ve-sb-cat { margin-bottom: 20px; }
+.ve-sb-cat-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+  color: #757575; margin-bottom: 8px; padding-bottom: 4px; border-bottom: 1px solid #f0f0f0;
+}
+.dark .ve-sb-cat-title { color: #999; border-color: #2c2c2c; }
+.ve-sb-item { margin-bottom: 14px; }
+.ve-sb-label { font-size: 12px; font-weight: 500; color: #4b5563; margin-bottom: 4px; }
+.dark .ve-sb-label { color: #ccc; }
+.ve-sb-frame {
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fff;
+  max-width: 100%;
+  transition: width .2s ease;
+}
+.dark .ve-sb-frame { border-color: #333; background: #111; }
+
+/* ---- Save snackbar (bottom-right, WordPress style) ---- */
+.ve-snackbar {
+  position: absolute;
+  bottom: 48px;
+  right: 16px;
+  z-index: 100;
+  background: #1e1e1e;
+  color: #fff;
+  font-size: 13px;
+  padding: 10px 16px;
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  align-items: center;
+  gap: 8px;
+  transition: opacity 0.3s ease;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-snackbar.ve-snackbar-out { opacity: 0; }
+
+.ve-hint {
+  position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%);
+  z-index: 50;
+  background: #1e1e1e; color: #fff;
+  font-size: 13px; padding: 8px 16px; border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  white-space: nowrap;
+  animation: ve-hint-in .3s ease; transition: opacity .5s ease;
+  pointer-events: none;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-hint.ve-hint-out { opacity: 0; }
+@keyframes ve-hint-in { from { opacity: 0; transform: translateX(-50%) translateY(8px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+
+/* Prevent GrapesJS canvas border and zero out all gaps.
+   KEY: GrapesJS offsets the canvas by var(--gjs-canvas-top) to make room
+   for its hidden top toolbar — force those to 0 so no blank band remains
+   between our header and the canvas. overflow:auto shows scrollbars when
+   the zoomed-in frame grows beyond the viewport. */
+.ve-guten-content .gjs-cv-canvas {
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  top: 0 !important;
+  left: 0 !important;
+  --gjs-canvas-top: 0px !important;
+  --gjs-left-width: 0px !important;
+  width: 100% !important;
+  height: 100% !important;
+  overflow: auto !important;
+}
+/* Visible scrollbars when zoomed in (contrast against white canvas) */
+.ve-guten-content .gjs-cv-canvas::-webkit-scrollbar { width: 10px; height: 10px; }
+.ve-guten-content .gjs-cv-canvas::-webkit-scrollbar-track { background: #e5e5e5; }
+.ve-guten-content .gjs-cv-canvas::-webkit-scrollbar-thumb { background: #999; border-radius: 5px; border: 2px solid #e5e5e5; }
+.ve-guten-content .gjs-cv-canvas::-webkit-scrollbar-thumb:hover { background: #666; }
+.ve-guten-content .gjs-cv-canvas::-webkit-scrollbar-corner { background: #e5e5e5; }
+.dark .ve-guten-content .gjs-cv-canvas::-webkit-scrollbar-track { background: #222; }
+.dark .ve-guten-content .gjs-cv-canvas::-webkit-scrollbar-thumb { background: #555; border-color: #222; }
+.dark .ve-guten-content .gjs-cv-canvas::-webkit-scrollbar-thumb:hover { background: #777; }
+.ve-guten-content .gjs-cv-canvas__frames {
+  padding: 0 !important;
+  margin: 0 !important;
+  /* Zoom anchors to the top edge — canvas never drifts to center */
+  transform-origin: top center !important;
+}
+.ve-guten-content .gjs-cv-canvas__spots {
+  display: none !important;
+}
+.ve-guten-content .gjs-frame-wrapper__top,
+.ve-guten-content .gjs-frame-wrapper__right,
+.ve-guten-content .gjs-frame-wrapper__left,
+.ve-guten-content .gjs-frame-wrapper__bottom {
+  display: none !important;
+}
+.ve-guten-content .gjs-frame-wrapper {
+  /* NOTE: do NOT override margin — GrapesJS centers the frame with
+     left:0; right:0; margin:auto. Overriding margin breaks device centering. */
+  padding: 0 !important;
+  border: none !important;
+}
+.ve-guten-content .gjs-frame {
+  display: block;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* GrapesJS internal flex layout — ensure canvas fills available space with ZERO gaps */
+.ve-guten-content .gjs-editor {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 0% !important;
+  min-height: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+  gap: 0 !important;
+}
+
+/* All direct div children of editor (canvas, views, etc.) fill available space.
+   Exclude the modal container — it needs its own fixed/block layout to show
+   the code editor dialog. */
+.ve-guten-content .gjs-editor > div:not(.gjs-mdl-container):not(.gjs-pn-panels) {
+  flex: 1 1 0% !important;
+  display: flex !important;
+  min-height: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+/* Remove ALL gaps in canvas wrapper chain + kill bg pattern.
+   IMPORTANT: .gjs-cv-canvas__frames width is NOT forced here — the custom
+   zoom logic sets it to an absolute pixel width (canvas.clientWidth * zoom),
+   and a `width:100% !important` would silently defeat it. */
+.ve-guten-content .gjs-cv-canvas__wrapper,
+.ve-guten-content .gjs-cv-canvas,
+.ve-guten-content .gjs-cv-canvas__frames,
+.ve-guten-content .gjs-frames {
+  flex: 1 1 0%;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+}
+/* Only the fixed containers keep full width */
+.ve-guten-content .gjs-cv-canvas__wrapper,
+.ve-guten-content .gjs-cv-canvas {
+  width: 100% !important;
+}
+.ve-guten-content .gjs-frame-wrapper,
+.ve-guten-content .gjs-frame {
+  padding: 0 !important;
+  border: none !important;
+}
+/* Do NOT override .gjs-frame-wrapper margin or height — GrapesJS uses
+   margin:auto to center the device-width frame and auto-sizes the frame
+   height to the iframe content, so zoomed-in content is never clipped. */
+/* Kill GrapesJS canvas background pattern */
+.ve-guten-content .gjs-cv-canvas-bg {
+  background: #fff !important;
+  background-image: none !important;
+}
+/* Hide GrapesJS badge (shows "Body" text overlapping canvas) */
+.ve-guten-content .gjs-badge { display: none !important; }
+
+/* Code editor modal — ensure it renders above our header/sidebars */
+.ve-guten-content .gjs-mdl-container {
+  z-index: 99999 !important;
+}
+.ve-guten-content .gjs-mdl-dialog {
+  z-index: 99999 !important;
+}
+
+/* Selection/hover highlight — WordPress style: subtle theme-colored border
+   instead of GrapesJS's default bright blue outline */
+.ve-guten-content .gjs-highlighter {
+  outline: 1px solid rgba(0, 124, 186, 0.35) !important;
+  outline-offset: -1px !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+.ve-guten-content .gjs-highlighter-warning {
+  outline: 1px solid rgba(245, 158, 11, 0.5) !important;
+  outline-offset: -1px !important;
+  border: none !important;
+}
+
+/* ---- Rich-text formatting toolbar (double-click to edit) — WP style ---- */
+.ve-guten-content .gjs-rte-toolbar {
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  box-shadow: 0 0 0 1px #ccc, 0 2px 3px rgba(0,0,0,0.05), 0 4px 5px rgba(0,0,0,0.04), 0 12px 12px rgba(0,0,0,0.03), 0 16px 16px rgba(0,0,0,0.02);
+  padding: 2px;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-guten-content .gjs-rte-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  min-width: 32px;
+  padding: 0 8px;
+  margin: 0;
+  border-radius: 2px;
+  color: #1e1e1e;
+  font-size: 14px;
+  cursor: pointer;
   user-select: none;
 }
-.dark .visual-editor-container .ve-zoom-bar { background: #1f2937; border-color: #4b5563; }
-.dark .visual-editor-container .ve-zoom-bar button { color: #d1d5db; }
-.dark .visual-editor-container .ve-zoom-bar button:hover { background: #374151; color: #fff; }
-.dark .visual-editor-container .ve-zoom-value { color: #9ca3af; }
-.dark .visual-editor-container .gjs-blocks-search { background: #1f2937 !important; border-color: #4b5563 !important; color: #e5e7eb !important; }
-.dark .visual-editor-container .gjs-blocks-search::placeholder { color: #6b7280; }
-
-/* Dark mode adjustments */
-.dark .visual-editor-container .gjs-editor { border-color: #374151; }
-.dark .visual-editor-container .gjs-pn-panels { background: #1f2937; border-color: #374151; }
-.dark .visual-editor-container .gjs-pn-btn { color: #9ca3af; }
-.dark .visual-editor-container .gjs-pn-btn:hover { color: #fff; background: #374151; }
-.dark .visual-editor-container .gjs-blocks-c { background: #111827; }
-.dark .visual-editor-container .gjs-block { background: #1f2937; border-color: #374151; }
-.dark .visual-editor-container .gjs-block-label { color: #d1d5db; }
-.dark .visual-editor-container .gjs-category-title { background: #374151; color: #e5e7eb; }
-.dark .visual-editor-container .gjs-sm-sector .gjs-sm-sector-title { background: #1f2937; color: #e5e7eb; border-color: #374151; }
-.dark .visual-editor-container .gjs-sm-field { background: #1f2937; border-color: #4b5563; }
-.dark .visual-editor-container .gjs-pn-views-container { border-color: #374151; }
+.ve-guten-content .gjs-rte-action:hover { background: #f0f0f0; }
+.ve-guten-content .gjs-rte-action svg { width: 20px; height: 20px; }
+.ve-guten-content .gjs-rte-toolbar .gjs-rte-actionbar {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+/* NOTE: frame centering is handled by the custom zoom logic in JS
+   (frames get an absolute pixel width; wrapper is left-anchored).
+   Do NOT add flex/centering rules here — they fight the pixel sizing. */

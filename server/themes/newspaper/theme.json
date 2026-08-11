@@ -11,7 +11,9 @@
     "heading_font": "serif",
     "body_font": "serif",
     "sidebar_position": "left",
-    "posts_per_row": "1"
+    "posts_per_row": "1",
+    "heading_cap": "2",
+    "heading_max": "24"
   },
   "custom_css": "body { background: #fefcf9; } article h2 { font-family: Georgia, serif; font-weight: 700; letter-spacing: -0.01em; } article { border-bottom: 2px solid #1c1917 !important; } aside h3 { font-family: Georgia, serif; border-bottom: 3px double #1c1917; padding-bottom: 6px; } .masthead { font-family: Georgia, serif; letter-spacing: 0.02em; }"
 }

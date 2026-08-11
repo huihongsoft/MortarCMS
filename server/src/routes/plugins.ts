@@ -13,8 +13,8 @@ router.get('/hooks', (_req: AuthRequest, res: Response) => {
   try {
     const hooks = listHooks();
     res.json({
-      actions: hooks.actions.map((h: string) => ({ hook: h, description: hookDescriptions[h] || '' })),
-      filters: hooks.filters.map((h: string) => ({ hook: h, description: hookDescriptions[h] || '' })),
+      actions: hooks.actions.map((h: any) => ({ hook: h.name, description: hookDescriptions[h.name] || '', listeners: h.listeners.length })),
+      filters: hooks.filters.map((h: any) => ({ hook: h.name, description: hookDescriptions[h.name] || '', listeners: h.listeners.length })),
     });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

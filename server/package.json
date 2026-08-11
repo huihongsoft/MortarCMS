@@ -8,7 +8,8 @@
     "start": "node dist/index.js",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "test:ai": "tsx scripts/ai-regression.ts && tsx scripts/fix-test.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

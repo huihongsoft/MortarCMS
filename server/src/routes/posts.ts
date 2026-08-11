@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import crypto from 'crypto';
 import { z } from 'zod';
 import db, { cuid } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
@@ -35,24 +36,32 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     const search = (req.query.search as string) || '';
     const category = req.query.category as string;
     const tag = req.query.tag as string;
+    const type = (req.query.type as string) || 'post';
     let sql = 'SELECT DISTINCT p.* FROM Post p';
     const params: any[] = [];
     if (category) { sql += ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId'; }
     if (tag) { sql += ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId'; }
     const now = new Date().toISOString();
     sql += ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)';
-    params.push('post', 'published', now);
+    params.push(type, 'published', now);
     if (req.siteId) { sql += ' AND (p.siteId IS NULL OR p.siteId = ?)'; params.push(req.siteId); }
-    if (search) { sql += ' AND p.title LIKE ?'; params.push('%' + search + '%'); }
+    if (search) { sql += ' AND (p.title LIKE ? OR p.content LIKE ? OR p.excerpt LIKE ?)'; params.push('%' + search + '%', '%' + search + '%', '%' + search + '%'); }
     if (category) { sql += ' AND c.slug = ?'; params.push(category); }
     if (tag) { sql += ' AND t.slug = ?'; params.push(tag); }
-    sql += ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?';
-    params.push(limit, (page - 1) * limit);
+    // Relevance: title matches rank above body matches
+    if (search) {
+      const sp = '%' + search + '%';
+      sql += ' ORDER BY p.sticky DESC, CASE WHEN p.title LIKE ? THEN 0 ELSE 1 END, p.publishedAt DESC LIMIT ? OFFSET ?';
+      params.push(sp, limit, (page - 1) * limit);
+    } else {
+      sql += ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?';
+      params.push(limit, (page - 1) * limit);
+    }
     const postsData = db.prepare(sql).all(...params) as any[];
-    const countSql = 'SELECT COUNT(DISTINCT p.id) as cnt FROM Post p' + (category ? ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId' : '') + (tag ? ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId' : '') + ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + (req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '') + (search ? ' AND p.title LIKE ?' : '') + (category ? ' AND c.slug = ?' : '') + (tag ? ' AND t.slug = ?' : '');
+    const countSql = 'SELECT COUNT(DISTINCT p.id) as cnt FROM Post p' + (category ? ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId' : '') + (tag ? ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId' : '') + ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + (req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '') + (search ? ' AND (p.title LIKE ? OR p.content LIKE ? OR p.excerpt LIKE ?)' : '') + (category ? ' AND c.slug = ?' : '') + (tag ? ' AND t.slug = ?' : '');
     const countParams: any[] = ['post', 'published', now];
     if (req.siteId) countParams.push(req.siteId);
-    if (search) countParams.push('%' + search + '%');
+    if (search) countParams.push('%' + search + '%', '%' + search + '%', '%' + search + '%');
     if (category) countParams.push(category);
     if (tag) countParams.push(tag);
     const total = (db.prepare(countSql).get(...countParams) as any)?.cnt || 0;
@@ -62,16 +71,33 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Search suggestions for the search widget autocomplete (lightweight, no content)
+router.get('/suggest', (req: AuthRequest, res: Response) => {
+  try {
+    const q = String(req.query.q || '').trim().slice(0, 60);
+    if (!q) { res.json({ suggestions: [] }); return; }
+    const like = '%' + q + '%';
+    const rows = db.prepare("SELECT id, title, slug, type, publishedAt FROM Post WHERE type IN ('post','page') AND status = 'published' AND (title LIKE ? OR slug LIKE ?) ORDER BY CASE WHEN title LIKE ? THEN 0 ELSE 1 END, publishedAt DESC LIMIT 6").all(like, like, like) as any[];
+    res.json({ suggestions: rows.map((p: any) => ({ id: p.id, title: p.title, slug: p.slug, type: p.type, date: p.publishedAt })) });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     const post = (req.siteId
       ? db.prepare('SELECT * FROM Post WHERE slug = ? AND type = ? AND (siteId IS NULL OR siteId = ?)').get(req.params.slug, 'post', req.siteId)
       : db.prepare('SELECT * FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'post')) as any;
     if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
-    // Password protection applies regardless of status; admins/editors bypass
-    if (post.password && post.password !== (req.query.pwd || '')) {
-      if (!req.user || !['admin', 'editor'].includes(req.user.role)) {
-        res.json({ ...post, content: '', protected: true });
+    // WordPress-style password protection: cookie (hashed) unlocks the post.
+    // Admins/editors bypass.
+    if (post.password && (!req.user || !['admin', 'editor'].includes(req.user.role))) {
+      const raw = String(req.headers.cookie || '');
+      const m = raw.match(new RegExp('mortar_post_pass_' + post.id + '=([^;]+)'));
+      const cookieVal = m ? decodeURIComponent(m[1]) : null;
+      const expected = crypto.createHash('sha256').update(post.id + ':' + post.password).digest('hex');
+      if (cookieVal !== expected) {
+        const safe = { id: post.id, title: post.title, slug: post.slug, status: post.status, protected: true };
+        res.json(safe);
         return;
       }
     }
@@ -83,6 +109,25 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
     const enriched = enrichPost(post);
     enriched.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', enriched.content || '', enriched), enriched));
     res.json(enriched);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Verify a password for a protected post; on success set an httpOnly cookie
+// (WordPress-style wp-postpass behaviour, matching the page flow).
+router.post('/slug/:slug/password', (req: AuthRequest, res: Response) => {
+  try {
+    const post = db.prepare('SELECT id, password FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'post') as any;
+    if (!post || !post.password) { res.status(404).json({ error: 'Post not found' }); return; }
+    const submitted = String((req.body || {}).password || '');
+    if (post.password !== submitted) { res.status(401).json({ error: 'wrong_password' }); return; }
+    const hash = crypto.createHash('sha256').update(post.id + ':' + post.password).digest('hex');
+    res.cookie('mortar_post_pass_' + post.id, hash, {
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      sameSite: 'lax',
+      path: '/',
+    });
+    res.json({ ok: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -160,14 +205,16 @@ router.get('/admin', authenticate, authorize('admin', 'editor', 'author'), (req:
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
+router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contributor'), (req: AuthRequest, res: Response) => {
   try {
     const data = postSchema.parse(req.body);
+    // Contributors submit drafts only (an editor publishes later), like WP
+    const status = req.user!.role === 'contributor' ? 'draft' : (data.status || 'draft');
     const allSlugs = (db.prepare('SELECT slug FROM Post WHERE type = ?').all('post') as any[]).map((s: any) => s.slug);
     const slug = uniqueSlug(data.title, allSlugs);
     const id = cuid();
     const now = new Date().toISOString();
-    db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', data.status || 'draft', data.featured || null, data.password || '', req.user!.userId, data.parentId || null, data.menuOrder || 0, data.status === 'published' ? now : null, data.siteId || null);
+    db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', status, data.featured || null, data.password || '', req.user!.userId, data.parentId || null, data.menuOrder || 0, status === 'published' ? now : null, data.siteId || null);
     if (data.categoryIds) for (const cid of data.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, cid);
     if (data.tagIds) for (const tid of data.tagIds) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tid);
     if (data.tagNames) for (const name of data.tagNames) {
@@ -182,18 +229,20 @@ router.post('/', authenticate, authorize('admin', 'editor', 'author'), (req: Aut
       }
     }
     const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(id) as any;
-    doAction('post_created', id, data.status || 'draft');
-    if ((data.status || 'draft') === 'published') doAction('post_published', id);
+    doAction('post_created', id, status);
+    if (status === 'published') doAction('post_published', id);
     res.status(201).json(enrichPost(post));
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:id', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contributor'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
-    if (req.user!.role === 'author' && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot edit another author\'s post' }); return; }
+    if ((req.user!.role === 'author' || req.user!.role === 'contributor') && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot edit another user\'s post' }); return; }
     const data = postSchema.partial().parse(req.body);
+    // Contributors may never publish (or unpublish) their drafts
+    if (req.user!.role === 'contributor' && data.status !== undefined && data.status !== 'draft') { res.status(403).json({ error: 'Contributors can only keep posts as drafts' }); return; }
     const sets: string[] = []; const vals: any[] = [];
     if (data.title !== undefined) { sets.push('title = ?'); vals.push(data.title); }
     if (data.content !== undefined) { sets.push('content = ?'); vals.push(data.content); }
@@ -233,6 +282,7 @@ router.delete('/:id', authenticate, authorize('admin', 'editor', 'author'), (req
     const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
     if (req.user!.role === 'author' && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot delete another author\'s post' }); return; }
+    doAction('delete_post', req.params.id);
     db.prepare('DELETE FROM Post WHERE id = ?').run(req.params.id);
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -270,6 +320,21 @@ router.post('/bulk-restore', authenticate, authorize('admin', 'editor'), (req: A
     let restored = 0;
     for (const id of ids) restored += stmt.run(now, id).changes;
     res.json({ success: true, restored });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: bulk change status (e.g. publish / draft a selection at once)
+router.post('/bulk-status', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+  try {
+    const { ids, status } = req.body || {};
+    if (!ids || !Array.isArray(ids) || ids.length === 0 || !status) { res.status(400).json({ error: 'ids and status required' }); return; }
+    const valid = ['draft', 'published', 'private', 'pending', 'trash'];
+    if (!valid.includes(status)) { res.status(400).json({ error: 'invalid status' }); return; }
+    const stmt = db.prepare("UPDATE Post SET status = ?, publishedAt = CASE WHEN ? = 'published' THEN COALESCE(publishedAt, ?) ELSE publishedAt END, updatedAt = ? WHERE id = ?");
+    const now = new Date().toISOString();
+    let updated = 0;
+    for (const id of ids) updated += stmt.run(status, status, now, now, id).changes;
+    res.json({ success: true, updated });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

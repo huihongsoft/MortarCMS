@@ -67,22 +67,36 @@ export default function Categories() {
                 React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('posts', getLang())),
                 React.createElement('th', { className: 'text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('actions', getLang())),
               )),
-              React.createElement('tbody', null, cats.map(c =>
-                React.createElement('tr', { key: c.id, className: 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800' },
-                  React.createElement('td', { className: 'px-4 py-3' },
-                    React.createElement('p', { className: 'font-medium text-gray-900' }, c.name),
-                    c.parent && React.createElement('p', { className: 'text-xs text-gray-400' }, '— ' + c.parent.name)
-                  ),
-                  React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, '/' + c.slug),
-                  React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, c._count?.posts || 0),
-                  React.createElement('td', { className: 'px-4 py-3' },
-                    React.createElement('div', { className: 'flex justify-end gap-1' },
-                      React.createElement('button', { onClick: () => startEdit(c), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),
-                      React.createElement('button', { onClick: () => del(c), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 }))
-                    )
-                  )
-                )
-              ))
+              React.createElement('tbody', null, (() => {
+                // Build a tree so child categories render indented under parents
+                const childrenOf: Record<string, any[]> = {};
+                cats.forEach((c: any) => { (childrenOf[c.parentId || ''] ||= []).push(c); });
+                const rows: any[] = [];
+                const walk = (list: any[], depth: number) => {
+                  list.forEach((c: any) => {
+                    rows.push(React.createElement('tr', { key: c.id, className: 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800' },
+                      React.createElement('td', { className: 'px-4 py-3' },
+                        React.createElement('div', { className: 'flex items-center gap-2' },
+                          depth > 0 && React.createElement('span', { className: 'text-gray-300 text-xs' }, '└─'),
+                          React.createElement('span', { style: { paddingLeft: depth * 14 } }),
+                          React.createElement('p', { className: 'font-medium text-gray-900' }, c.name),
+                          c.parent && React.createElement('span', { className: 'text-xs text-gray-400' }, '· ' + c.parent.name))),
+                      React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, '/' + c.slug),
+                      React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, c._count?.posts || 0),
+                      React.createElement('td', { className: 'px-4 py-3' },
+                        React.createElement('div', { className: 'flex justify-end gap-1' },
+                          React.createElement('button', { onClick: () => startEdit(c), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),
+                          React.createElement('button', { onClick: () => del(c), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 }))
+                        )
+                      )
+                    ));
+                    const kids = childrenOf[c.id] || [];
+                    if (kids.length) walk(kids, depth + 1);
+                  });
+                };
+                walk(childrenOf[''] || [], 0);
+                return rows;
+              })())
             )
       )
     )

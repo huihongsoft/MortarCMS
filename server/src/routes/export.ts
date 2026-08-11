@@ -15,9 +15,26 @@ router.get('/export', authenticate, authorize('admin'), (_req: AuthRequest, res:
     data.settings = db.prepare("SELECT key, value FROM Setting").all();
     data.menus = db.prepare("SELECT * FROM Menu").all();
     data.comments = db.prepare("SELECT * FROM Comment").all();
+    data.media = db.prepare("SELECT * FROM Media").all();
 
     res.setHeader('Content-Disposition', 'attachment; filename=mortar-export.json');
     res.json(data);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Import preview: report what the file contains without writing anything
+router.post('/import/preview', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+  try {
+    const data = req.body || {};
+    const counts: Record<string, number> = {};
+    for (const key of ['users', 'categories', 'tags', 'posts', 'menus', 'comments', 'media']) {
+      counts[key] = Array.isArray(data[key]) ? data[key].length : 0;
+    }
+    // Detect potential slug conflicts
+    const posts = Array.isArray(data.posts) ? data.posts : [];
+    const existing = db.prepare("SELECT slug FROM Post WHERE type = 'post'").all().map((r: any) => r.slug);
+    const conflicts = posts.filter((p: any) => existing.includes(p.slug)).length;
+    res.json({ counts, conflicts });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -42,6 +59,20 @@ router.post('/import', authenticate, authorize('admin'), (req: AuthRequest, res:
     if (data.posts) for (const p of data.posts) {
       db.prepare('INSERT OR IGNORE INTO Post (id, title, slug, content, excerpt, status, type, featured, authorId, parentId, menuOrder, sticky, password, publishedAt, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(p.id||cuid_import(), p.title, p.slug, p.content||'', p.excerpt||'', p.status||'draft', p.type||'post', p.featured||null, p.authorId, p.parentId||null, p.menuOrder||0, p.sticky||0, p.password||'', p.publishedAt||null, p.createdAt||new Date().toISOString(), p.updatedAt||new Date().toISOString());
       count++;
+    }
+    if (data.menus) for (const m of data.menus) {
+      db.prepare('INSERT OR IGNORE INTO Menu (id, name, location, items, siteId) VALUES (?,?,?,?,?)').run(m.id||cuid_import(), m.name, m.location||'primary', JSON.stringify(m.items||[]), m.siteId||null);
+      count++;
+    }
+    if (data.comments) for (const cm of data.comments) {
+      db.prepare('INSERT OR IGNORE INTO Comment (id, content, author, email, website, postId, parentId, status, createdAt) VALUES (?,?,?,?,?,?,?,?,?)').run(cm.id||cuid_import(), cm.content||'', cm.author||'Anonymous', cm.email||'', cm.website||'', cm.postId, cm.parentId||null, cm.status||'pending', cm.createdAt||new Date().toISOString());
+      count++;
+    }
+    if (data.media) for (const md of data.media) {
+      try {
+        db.prepare('INSERT OR IGNORE INTO Media (id, filename, original, mimeType, size, url, thumbnail, title, alt, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)').run(md.id||cuid_import(), md.filename, md.original, md.mimeType, md.size||0, md.url, md.thumbnail||null, md.title||'', md.alt||'', md.createdAt||new Date().toISOString());
+        count++;
+      } catch {}
     }
     res.json({ success: true, imported: count });
   } catch (err: any) { res.status(500).json({ error: err.message }); }

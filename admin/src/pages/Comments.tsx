@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Check, X, Trash2, Trash, Sparkles } from 'lucide-react';
+import { Check, X, Trash2, Trash, Sparkles, Pencil, Save } from 'lucide-react';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
@@ -8,9 +8,23 @@ export default function Comments() {
   const [comments, setComments] = useState<any[]>([]);
   const toast = useToast();
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState(() => new URLSearchParams(window.location.search).get('status') || '');
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (filter) url.searchParams.set('status', filter); else url.searchParams.delete('status');
+    window.history.replaceState(null, '', url.toString());
+  }, [filter]);
   const [aiReview, setAiReview] = useState<any[] | null>(null);
   const [aiReviewing, setAiReviewing] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [editAuthor, setEditAuthor] = useState('');
+
+  async function saveEdit(id: string) {
+    await api.put('/comments/' + id, { content: editText, author: editAuthor });
+    setEditingId(null);
+    fetchComments();
+  }
   useEffect(() => { fetchComments(); }, [filter]);
   async function fetchComments() { const r = await api.get(`/comments/admin?limit=50&status=${filter}`); setComments(r.data.comments); }
   async function updateStatus(id: string, status: string) { await api.put(`/comments/${id}`, { status }); fetchComments(); }
@@ -46,8 +60,8 @@ export default function Comments() {
         disabled: aiReviewing,
         className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100 disabled:opacity-50',
       }, React.createElement(Sparkles, { size: 13 }), aiReviewing ? t('reviewing', getLang()) + '...' : t('ai review comments', getLang())),
-      ['all', 'pending', 'approved', 'spam'].map(s =>
-        React.createElement('button', { key: s, onClick: () => setFilter(s === 'all' ? '' : s), className: `px-3 py-1.5 text-sm rounded-lg ${(s === 'all' && !filter) || filter === s ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}` }, s.charAt(0).toUpperCase() + s.slice(1))
+      ['all', 'pending', 'approved', 'spam', 'trash'].map(s =>
+        React.createElement('button', { key: s, onClick: () => setFilter(s === 'all' ? '' : s), className: `px-3 py-1.5 text-sm rounded-lg ${(s === 'all' && !filter) || filter === s ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}` }, t('status ' + s, getLang()))
       )
     ),
     aiReview && React.createElement('div', { className: 'card p-4 mb-4 border-purple-200 dark:border-purple-800' },
@@ -68,21 +82,35 @@ export default function Comments() {
         React.createElement('div', { key: c.id, className: 'card p-3 flex items-start gap-3' },
           // Selection checkbox — left side
           React.createElement('input', { type: 'checkbox', checked: selected.has(c.id), onChange: () => toggle(c.id), className: 'mt-1 w-4 h-4 rounded border-gray-300 text-primary-600 flex-shrink-0' }),
-          // Content area
+          // Content area (inline edit like WordPress)
           React.createElement('div', { className: 'flex-1 min-w-0' },
-            React.createElement('div', { className: 'flex items-center gap-2 mb-0.5' },
-              React.createElement('span', { className: 'font-medium text-sm text-gray-900' }, c.author),
-              c.email && React.createElement('span', { className: 'text-xs text-gray-400' }, c.email),
-              React.createElement('span', { className: `px-1.5 py-0.5 text-xs rounded-full ${c.status === 'approved' ? 'bg-green-100 text-green-700' : c.status === 'spam' ? 'bg-red-100 text-red-700' : 'bg-yellow-100 text-yellow-700'}` }, c.status)
-            ),
-            React.createElement('p', { className: 'text-sm text-gray-700 mt-1' }, c.content),
-            React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, `${t('on', getLang())}: ${c.post?.title || t('unknown', getLang())} · ${new Date(c.createdAt).toLocaleString()}`)
+            editingId === c.id ? React.createElement('div', { className: 'space-y-2' },
+              React.createElement('input', { type: 'text', value: editAuthor, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditAuthor(e.target.value), className: 'input-field text-sm', placeholder: t('author', getLang()) }),
+              React.createElement('textarea', { value: editText, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setEditText(e.target.value), rows: 3, className: 'input-field text-sm', placeholder: t('comment content', getLang()) }),
+              React.createElement('div', { className: 'flex gap-2' },
+                React.createElement('button', { onClick: () => saveEdit(c.id), className: 'btn-primary text-xs' }, React.createElement(Save, { size: 13 }), t('save', getLang())),
+                React.createElement('button', { onClick: () => setEditingId(null), className: 'btn-secondary text-xs' }, t('cancel', getLang())))
+            ) : React.createElement(React.Fragment, null,
+              React.createElement('div', { className: 'flex items-center gap-2 mb-0.5' },
+                React.createElement('span', { className: 'font-medium text-sm text-gray-900' }, c.author),
+                c.email && React.createElement('span', { className: 'text-xs text-gray-400' }, c.email),
+                React.createElement('span', { className: `px-1.5 py-0.5 text-xs rounded-full ${c.status === 'approved' ? 'bg-green-100 text-green-700' : c.status === 'spam' ? 'bg-red-100 text-red-700' : c.status === 'trash' ? 'bg-gray-100 text-gray-500' : 'bg-yellow-100 text-yellow-700'}` }, t('status ' + c.status, getLang()))
+              ),
+              React.createElement('p', { className: 'text-sm text-gray-700 mt-1' }, c.content),
+              React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, `${t('on', getLang())}: ${c.post?.title || t('unknown', getLang())} · ${new Date(c.createdAt).toLocaleString()}`)
+            )
           ),
-          // Action buttons — same icon-only pattern used across Posts/Pages/Categories/Users
+          // Action buttons — WordPress-style: approve/spam/edit/trash-restore
           React.createElement('div', { className: 'flex items-center gap-1 ml-4 flex-shrink-0' },
-            c.status !== 'approved' && React.createElement('button', { onClick: () => updateStatus(c.id, 'approved'), className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('approve', getLang()) }, React.createElement(Check, { size: 16 })),
-            c.status !== 'spam' && React.createElement('button', { onClick: () => updateStatus(c.id, 'spam'), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('spam', getLang()) }, React.createElement(X, { size: 16 })),
-            React.createElement('button', { onClick: () => del(c.id), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 }))
+            c.status !== 'approved' && c.status !== 'trash' && React.createElement('button', { onClick: () => updateStatus(c.id, 'approved'), className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('approve', getLang()) }, React.createElement(Check, { size: 16 })),
+            c.status !== 'spam' && c.status !== 'trash' && React.createElement('button', { onClick: () => updateStatus(c.id, 'spam'), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('spam', getLang()) }, React.createElement(X, { size: 16 })),
+            c.status !== 'trash' && React.createElement('button', { onClick: () => { setEditingId(c.id); setEditText(c.content); setEditAuthor(c.author); }, className: 'p-1.5 text-gray-400 hover:text-blue-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),
+            c.status !== 'trash'
+              ? React.createElement('button', { onClick: () => updateStatus(c.id, 'trash'), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('move to trash', getLang()) }, React.createElement(Trash2, { size: 16 }))
+              : React.createElement(React.Fragment, null,
+                  React.createElement('button', { onClick: () => updateStatus(c.id, 'approved'), className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('restore', getLang()) }, React.createElement(Check, { size: 16 })),
+                  React.createElement('button', { onClick: () => del(c.id), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete permanently', getLang()) }, React.createElement(Trash, { size: 16 }))
+                )
           )
         )
       ))

@@ -1,45 +1,45 @@
 import db from './db';
 
-// WordPress-style shortcode system: [tag attr="value"]content[/tag]
+// Shortcode system: [tag attr="value"]content[/tag]
 type ShortcodeFn = (attrs: Record<string, string>, content: string, ctx: any) => string;
 
-const shortcodes = new Map<string, ShortcodeFn>();
+const shortcodes = new Map<string, { fn: ShortcodeFn; desc?: string }>();
 
-export function addShortcode(name: string, fn: ShortcodeFn): void {
-  shortcodes.set(name, fn);
+export function addShortcode(name: string, fn: ShortcodeFn, desc?: string): void {
+  shortcodes.set(name, { fn, desc });
 }
 
-export function listShortcodes(): string[] {
-  return [...shortcodes.keys()];
+export function listShortcodes(): { name: string; desc?: string }[] {
+  return [...shortcodes.entries()].map(([name, v]) => ({ name, desc: v.desc }));
 }
 
 // Render a single shortcode by name with attrs (used for live previews)
 export function renderShortcode(name: string, attrs: Record<string, string> = {}): string {
-  const fn = shortcodes.get(name);
-  if (!fn) return '';
-  try { return fn(attrs, '', {}); } catch { return ''; }
+  const sc = shortcodes.get(name);
+  if (!sc) return '';
+  try { return sc.fn(attrs, '', {}); } catch { return ''; }
 }
 
 // Parse and render all shortcodes in an HTML string (server-side, like WP do_shortcode)
 export function applyShortcodes(html: string, ctx: any = {}): string {
   if (!html || shortcodes.size === 0) return html;
   let out = html;
-  // Nested content shortcodes: [tag ...]content[/tag]
-  out = out.replace(/\[(\w+)([^\]]*)\]([\s\S]*?)\[\/\1\]/g, (full, name, attrsRaw, content) => {
-    const fn = shortcodes.get(name);
-    if (!fn) return full;
-    try { return fn(parseAttrs(attrsRaw), content, ctx); } catch { return full; }
+  // Nested content shortcodes: [tag ...]content[/tag] (tag names may contain hyphens)
+  out = out.replace(/\[([\w-]+)([^\]]*)\]([\s\S]*?)\[\/\1\]/g, (full, name, attrsRaw, content) => {
+    const sc = shortcodes.get(name);
+    if (!sc) return full;
+    try { return sc.fn(parseAttrs(attrsRaw), content, ctx); } catch { return full; }
   });
   // Self-closing: [tag ...]
-  out = out.replace(/\[(\w+)([^\]]*)\/\]/g, (full, name, attrsRaw) => {
-    const fn = shortcodes.get(name);
-    if (!fn) return full;
-    try { return fn(parseAttrs(attrsRaw), '', ctx); } catch { return full; }
+  out = out.replace(/\[([\w-]+)([^\]]*)\/\]/g, (full, name, attrsRaw) => {
+    const sc = shortcodes.get(name);
+    if (!sc) return full;
+    try { return sc.fn(parseAttrs(attrsRaw), '', ctx); } catch { return full; }
   });
-  out = out.replace(/\[(\w+)([^\]]*)\]/g, (full, name, attrsRaw) => {
-    const fn = shortcodes.get(name);
-    if (!fn) return full;
-    try { return fn(parseAttrs(attrsRaw), '', ctx); } catch { return full; }
+  out = out.replace(/\[([\w-]+)([^\]]*)\]/g, (full, name, attrsRaw) => {
+    const sc = shortcodes.get(name);
+    if (!sc) return full;
+    try { return sc.fn(parseAttrs(attrsRaw), '', ctx); } catch { return full; }
   });
   return out;
 }
@@ -72,21 +72,21 @@ addShortcode('gallery', (attrs, _content, ctx) => {
     return '<div class="gallery-item"><img loading="lazy" src="' + displayUrl + '" alt="' + caption + '" data-src="' + m.url + '" data-caption="' + caption.replace(/"/g, '&quot;') + '"></div>';
   }).join('');
   return '<div class="gallery" data-gallery-id="' + gid + '" style="display:grid;grid-template-columns:repeat(' + columns + ',1fr);gap:8px;">' + items + '</div>';
-});
+}, 'Responsive image grid from the media library (ids=, columns=, size=)');
 
 // [audio src="url"] -> audio player
 addShortcode('audio', (attrs) => {
   const src = attrs.src || '';
   if (!src) return '';
   return '<audio controls preload="none" style="width:100%;"><source src="' + src + '"></audio>';
-});
+}, 'Audio player (src=)');
 
 // [video src="url"] -> video player
 addShortcode('video', (attrs) => {
   const src = attrs.src || '';
   if (!src) return '';
   return '<video controls preload="metadata" style="width:100%;border-radius:8px;"><source src="' + src + '"></video>';
-});
+}, 'Video player (src=)');
 
 // ---- CMS Data shortcodes (used by VisualEditor dynamic blocks) ----
 
@@ -99,14 +99,14 @@ addShortcode('post-list', (attrs) => {
     return '<a href="/post/' + p.slug + '" style="display:flex;gap:16px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #e5e7eb;text-decoration:none;color:inherit;">' + img + '<div><h4 style="margin:0 0 4px;font-size:15px;color:#111827;">' + (p.title || '') + '</h4><p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">' + (p.excerpt || '').substring(0, 120) + '</p></div></a>';
   }).join('');
   return '<div class="cms-rendered-post-list">' + items + '</div>';
-});
+}, 'Latest published posts (limit=)');
 
 addShortcode('categories', () => {
   const cats = db.prepare('SELECT c.name, c.slug, COUNT(pc.postId) as cnt FROM Category c LEFT JOIN PostCategory pc ON pc.categoryId = c.id GROUP BY c.id ORDER BY c.name').all() as any[];
   if (cats.length === 0) return '<p class="text-gray-400 text-sm italic">No categories yet.</p>';
   const items = cats.map((c: any) => '<a href="/category/' + c.slug + '" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6;text-decoration:none;color:#374151;font-size:14px;"><span>' + c.name + '</span><span style="color:#9ca3af;">' + (c.cnt || 0) + '</span></a>').join('');
   return '<div class="cms-rendered-categories">' + items + '</div>';
-});
+}, 'Category list with post counts');
 
 addShortcode('comments', (attrs) => {
   const limit = Math.min(parseInt(attrs.limit || '5') || 5, 20);
@@ -114,11 +114,11 @@ addShortcode('comments', (attrs) => {
   if (comments.length === 0) return '<p class="text-gray-400 text-sm italic">No comments yet.</p>';
   const items = comments.map((c: any) => '<div style="padding:10px 0;border-bottom:1px solid #f3f4f6;"><p style="margin:0;font-size:13px;color:#374151;">' + c.content.substring(0, 150) + '</p><p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">' + c.author + ' on <a href="/post/' + c.postSlug + '" style="color:#6b7280;text-decoration:none;">' + (c.postTitle || 'post') + '</a></p></div>').join('');
   return '<div class="cms-rendered-comments">' + items + '</div>';
-});
+}, 'Recent approved comments (limit=)');
 
 addShortcode('search', () => {
   return '<form action="/search" method="get" style="display:flex;gap:8px;"><input type="text" name="q" placeholder="Search..." style="flex:1;padding:10px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none;"><button type="submit" style="padding:10px 20px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">Search</button></form>';
-});
+}, 'Site search form');
 
 addShortcode('archive', () => {
   const months = db.prepare("SELECT strftime('%Y-%m', publishedAt) as month, COUNT(*) as cnt FROM Post WHERE type = 'post' AND status = 'published' AND publishedAt IS NOT NULL GROUP BY month ORDER BY month DESC LIMIT 12").all() as any[];
@@ -129,7 +129,7 @@ addShortcode('archive', () => {
     return '<a href="/archive/' + y + '/' + mo + '" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6;text-decoration:none;color:#374151;font-size:14px;"><span>' + names[parseInt(mo)] + ' ' + y + '</span><span style="color:#9ca3af;">' + m.cnt + '</span></a>';
   }).join('');
   return '<div class="cms-rendered-archive">' + items + '</div>';
-});
+}, 'Monthly archive list');
 
 addShortcode('tag-cloud', () => {
   const tags = db.prepare('SELECT t.name, t.slug, COUNT(pt.postId) as cnt FROM Tag t JOIN PostTag pt ON pt.tagId = t.id GROUP BY t.id ORDER BY cnt DESC LIMIT 30').all() as any[];
@@ -141,7 +141,7 @@ addShortcode('tag-cloud', () => {
     return '<a href="/tag/' + t.slug + '" style="display:inline-block;margin:4px 8px 4px 0;font-size:' + size + 'px;color:#6b7280;text-decoration:none;transition:color .15s;" onmouseover="this.style.color=\'#3b82f6\'" onmouseout="this.style.color=\'#6b7280\'">' + t.name + '</a>';
   }).join('');
   return '<div class="cms-rendered-tag-cloud" style="line-height:2;">' + items + '</div>';
-});
+}, 'Tag cloud sized by usage');
 
 // Replace VisualEditor CMS placeholder blocks with rendered shortcodes.
 // Detects <div data-cms="xxx"> elements and replaces them entirely with
@@ -152,8 +152,8 @@ export function renderCmsBlocks(html: string): string {
   const cmsTypes = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud'];
   let out = html;
   for (const type of cmsTypes) {
-    const fn = shortcodes.get(type);
-    if (!fn) continue;
+    const sc = shortcodes.get(type);
+    if (!sc) continue;
     const marker = 'data-cms="' + type + '"';
     const openRe = /<div[\s>]/gi;
     const closeRe = /<\/div\s*>/gi;
@@ -189,7 +189,7 @@ export function renderCmsBlocks(html: string): string {
       }
       if (closeEnd === -1) { searchFrom = markerIdx + marker.length; continue; }
       let rendered = '';
-      try { rendered = fn({}, '', {}); } catch { rendered = ''; }
+      try { rendered = sc.fn({}, '', {}); } catch { rendered = ''; }
       out = out.slice(0, openStart) + rendered + out.slice(closeEnd + '</div>'.length);
       pos = openStart + rendered.length;
       searchFrom = pos;

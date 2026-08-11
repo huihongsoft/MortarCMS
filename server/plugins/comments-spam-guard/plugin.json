@@ -1,1 +1,7 @@
-{ "name": "comments-spam-guard", "version": "1.0.0", "description": "Automatically marks comments containing spammy keywords (viagra, casino, buy now) as spam.", "author": "Mortar Market" }
+{
+ "name": "comments-spam-guard",
+ "version": "1.0.0",
+ "description": "Automatically marks comments containing spammy keywords (viagra, casino, buy now) as spam.",
+ "author": "Mortar Market",
+ "requires": "0.1.0"
+}

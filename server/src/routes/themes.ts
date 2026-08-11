@@ -4,6 +4,7 @@ import path from 'path';
 import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
+import { purgeAllCaches } from '../utils/cache';
 import { execFileSync, execSync } from 'child_process';
 
 const router = Router();
@@ -183,6 +184,54 @@ router.delete('/:name', authenticate, requireCap('manage_options'), (req: AuthRe
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Admin: list theme files (safelisted extensions only, no traversal)
+const SAFE_THEME_EXTS = ['.css', '.json', '.tsx', '.js'];
+function safeThemePath(themeName: string, rel: string): string | null {
+  if (!rel || rel.includes('..') || rel.startsWith('/')) return null;
+  const full = path.resolve(path.join(themesDir, themeName), rel);
+  if (!full.startsWith(path.resolve(path.join(themesDir, themeName)) + path.sep)) return null;
+  return full;
+}
+router.get('/:name/files', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    const dir = path.join(themesDir, req.params.name);
+    if (!fs.existsSync(dir)) { res.status(404).json({ error: 'Theme not found' }); return; }
+    const walk = (d: string, base = ''): any[] => {
+      const out: any[] = [];
+      for (const entry of fs.readdirSync(d, { withFileTypes: true })) {
+        if (entry.name.startsWith('.') || entry.name === 'node_modules') continue;
+        const rel = base ? base + '/' + entry.name : entry.name;
+        if (entry.isDirectory()) out.push(...walk(path.join(d, entry.name), rel));
+        else if (SAFE_THEME_EXTS.includes(path.extname(entry.name))) {
+          const stat = fs.statSync(path.join(d, entry.name));
+          out.push({ path: rel, size: stat.size });
+        }
+      }
+      return out;
+    };
+    res.json({ files: walk(dir) });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+router.get('/:name/file', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    const full = safeThemePath(req.params.name, String(req.query.path || ''));
+    if (!full || !fs.existsSync(full)) { res.status(404).json({ error: 'File not found' }); return; }
+    const content = fs.readFileSync(full, 'utf8');
+    res.json({ content, path: req.query.path });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+// Admin: edit a CSS file (the only writable type — safe from code injection)
+router.put('/:name/file', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    const rel = String(req.body.path || '');
+    if (!rel.endsWith('.css')) { res.status(400).json({ error: 'Only CSS files are editable' }); return; }
+    const full = safeThemePath(req.params.name, rel);
+    if (!full || !fs.existsSync(full)) { res.status(404).json({ error: 'File not found' }); return; }
+    fs.writeFileSync(full, String(req.body.content || ''));
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // Public: get all theme sections (HTML+CSS for hook locations)
 router.get('/sections', (_req: AuthRequest, res: Response) => {
   try {
@@ -208,6 +257,113 @@ router.put('/sections/:location', authenticate, requireCap('manage_options'), (r
     db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
       .run(cuid(), key, value);
     res.json({ success: true, location });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// ---- Theme backups: snapshot the effective settings (+ theme.json file) so
+// style changes made in the Appearance panel or by AI tools can be rolled
+// back. Stored in the Setting table (list index + per-backup blobs). ----
+const MAX_BACKUPS_PER_THEME = 10;
+
+function getAllBackups(): any[] {
+  try {
+    const row = db.prepare("SELECT value FROM Setting WHERE key = 'theme_backup_list'").get() as any;
+    const list = row ? JSON.parse(row.value) : [];
+    return Array.isArray(list) ? list : [];
+  } catch { return []; }
+}
+
+function persistBackups(list: any[]): void {
+  db.prepare('INSERT OR REPLACE INTO Setting (id, key, value) VALUES (?, ?, ?)').run('theme_backup_list', 'theme_backup_list', JSON.stringify(list));
+}
+
+export function themeBackupList(theme: string): any[] {
+  return getAllBackups().filter((b: any) => b.theme === theme);
+}
+
+export function createThemeBackup(theme: string, name: string, note?: string, auto?: boolean): { id: string } | null {
+  const t = readTheme(theme);
+  if (!t) return null;
+  const overrides = themeOverrides(t.name);
+  const themeJsonPath = path.join(themesDir, t.name, 'theme.json');
+  const themeJson = fs.existsSync(themeJsonPath) ? fs.readFileSync(themeJsonPath, 'utf8') : null;
+  const id = 'bk_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const entry = { id, theme: t.name, name: String(name || '').slice(0, 80), note: String(note || '').slice(0, 200), auto: !!auto, createdAt: new Date().toISOString() };
+  db.prepare('INSERT OR REPLACE INTO Setting (id, key, value) VALUES (?, ?, ?)').run('theme_backup_' + id, 'theme_backup_' + id, JSON.stringify({ ...entry, settings: overrides, themeJson }));
+  // Trim this theme's backups to the cap, dropping the oldest ones
+  const all = getAllBackups();
+  const mine = themeBackupList(t.name);
+  const others = all.filter((b: any) => b.theme !== t.name);
+  const excess = mine.length + 1 - MAX_BACKUPS_PER_THEME;
+  if (excess > 0) {
+    const drop = mine.slice(0, excess);
+    for (const d of drop) db.prepare('DELETE FROM Setting WHERE key = ?').run('theme_backup_' + d.id);
+    persistBackups([...others, ...mine.slice(excess), entry]);
+  } else {
+    persistBackups([...others, ...mine, entry]);
+  }
+  return { id };
+}
+
+function deleteThemeBackup(id: string): boolean {
+  const row = db.prepare('SELECT value FROM Setting WHERE key = ?').get('theme_backup_' + id) as any;
+  if (!row) return false;
+  const snap = JSON.parse(row.value);
+  db.prepare('DELETE FROM Setting WHERE key = ?').run('theme_backup_' + id);
+  const all = getAllBackups().filter((b: any) => b.id !== id);
+  persistBackups(all);
+  return !!snap;
+}
+
+router.get('/:name/backups', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    const t = readTheme(req.params.name);
+    if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
+    res.json({ backups: themeBackupList(t.name) });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/:name/backups', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    const t = readTheme(req.params.name);
+    if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
+    const created = createThemeBackup(t.name, String((req.body || {}).name || '').trim() || '手动备份 ' + new Date().toLocaleString(), String((req.body || {}).note || ''), false);
+    res.json({ success: true, id: created?.id, backups: themeBackupList(t.name) });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/:name/backups/:id/restore', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    const t = readTheme(req.params.name);
+    if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
+    const row = db.prepare('SELECT value FROM Setting WHERE key = ?').get('theme_backup_' + req.params.id) as any;
+    if (!row) { res.status(404).json({ error: '备份不存在' }); return; }
+    const snap = JSON.parse(row.value);
+    if (snap.theme !== t.name) { res.status(400).json({ error: '备份不属于该主题' }); return; }
+    // 1. Replace the theme's DB overrides with the snapshot's settings
+    const del = db.prepare('DELETE FROM Setting WHERE key = ?');
+    for (const r of db.prepare("SELECT key FROM Setting WHERE key LIKE 'theme_" + t.name + "_%'").all() as any[]) del.run(r.key);
+    const upsert = db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+    for (const [k, v] of Object.entries(snap.settings || {})) upsert.run(cuid(), 'theme_' + t.name + '_' + k, String(v));
+    // 2. Restore theme.json from the snapshot (validated before writing; the
+    // current file is preserved as .bak-<ts> first so the write is reversible)
+    if (snap.themeJson) {
+      try {
+        JSON.parse(snap.themeJson);
+        const p = path.join(themesDir, t.name, 'theme.json');
+        if (fs.existsSync(p)) fs.copyFileSync(p, p + '.bak-' + Date.now().toString(36));
+        fs.writeFileSync(p, snap.themeJson);
+      } catch { /* invalid snapshot file: settings still restored */ }
+    }
+    purgeAllCaches();
+    res.json({ success: true, message: '主题已恢复到备份：' + snap.name });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/:name/backups/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    if (!deleteThemeBackup(req.params.id)) { res.status(404).json({ error: '备份不存在' }); return; }
+    res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

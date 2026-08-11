@@ -6,7 +6,7 @@ import fs from 'fs';
 import db, { initDB } from './utils/db';
 import { verifyToken } from './utils/jwt';
 import { appPasswordAuth } from './middleware/auth';
-import './utils/hooks';
+import { doAction } from './utils/hooks';
 import authRoutes from './routes/auth';
 import postRoutes from './routes/posts';
 import pageRoutes from './routes/pages';
@@ -16,7 +16,7 @@ import mediaRoutes from './routes/media';
 import commentRoutes from './routes/comments';
 import userRoutes from './routes/users';
 import menuRoutes from './routes/menus';
-import activityRoutes from './routes/activity';
+import activityRoutes, { logActivity } from './routes/activity';
 import appPwRoutes from './routes/appPasswords';
 import gdprRoutes from './routes/gdpr';
 import dbToolsRoutes from './routes/dbTools';
@@ -26,6 +26,12 @@ import sitemapRoutes from './routes/sitemap';
 import feedRoutes from './routes/feed';
 import settingsRoutes from './routes/settings';
 import siteHealthRoutes from './routes/siteHealth';
+import hooksRoutes from './routes/hooks';
+import cacheAdminRoutes from './routes/cacheAdmin';
+import mailerRoutes from './routes/mailer';
+import tasksRoutes from './routes/tasks';
+import { registerBuiltinTasks, startScheduler, runTaskNow } from './utils/scheduler';
+import { cacheGet, cacheSet, cacheConfigure, purgeContentCaches, purgeAllCaches } from './utils/cache';
 import importRoutes from './routes/import';
 import pluginsRoutes from './routes/plugins';
 import siteRoutes from './routes/sites';
@@ -56,15 +62,27 @@ app.use((_req: any, res: any, next: any) => {
   next();
 });
 app.use(resolveSite);
-// Visit tracking (PV/UV): record page views for non-API, non-asset requests
+// Visit tracking (PV/UV): record page views for non-API, non-asset requests.
+// Respects the visit_logging privacy setting (checked with a short cache).
+let visitLogging: boolean | null = null;
+let visitLoggingAt = 0;
 app.use((req, res, next) => {
   try {
-    const p = req.path;
-    if (!p.startsWith('/api') && !p.startsWith('/assets') && !p.startsWith('/admin') && !p.startsWith('/uploads') && p !== '/favicon.ico') {
-      const ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '') .split(',')[0].trim();
-      const today = new Date().toISOString().slice(0, 10);
-      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-      db.prepare('INSERT INTO Visit (id, date, ip, path) VALUES (?, ?, ?, ?)').run(id, today, ip || 'unknown', p.slice(0, 200));
+    if (Date.now() - visitLoggingAt > 10000) {
+      visitLoggingAt = Date.now();
+      try {
+        const row = db.prepare("SELECT value FROM Setting WHERE key = 'visit_logging'").get() as any;
+        visitLogging = !row || row.value !== '0';
+      } catch { visitLogging = true; }
+    }
+    if (visitLogging !== false) {
+      const p = req.path;
+      if (!p.startsWith('/api') && !p.startsWith('/assets') && !p.startsWith('/admin') && !p.startsWith('/uploads') && p !== '/favicon.ico') {
+        const ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '') .split(',')[0].trim();
+        const today = new Date().toISOString().slice(0, 10);
+        const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        db.prepare('INSERT INTO Visit (id, date, ip, path) VALUES (?, ?, ?, ?)').run(id, today, ip || 'unknown', p.slice(0, 200));
+      }
     }
   } catch {}
   next();
@@ -82,8 +100,25 @@ app.use((req, res, next) => {
       if (payload && payload.role === 'admin') return next();
     } catch {}
   }
+  // Manual toggle OR an active scheduled maintenance window
+  let active = false;
   const mm = db.prepare("SELECT value FROM Setting WHERE key = 'maintenance_mode'").get() as any;
-  if (mm && mm.value === '1') {
+  if (mm && mm.value === '1') active = true;
+  if (!active) {
+    try {
+      const sch = JSON.parse((db.prepare("SELECT value FROM Setting WHERE key = 'maintenance_schedule'").get() as any)?.value || 'null');
+      if (sch?.start && sch?.end) {
+        const now = Date.now();
+        active = now >= new Date(sch.start).getTime() && now < new Date(sch.end).getTime();
+      }
+    } catch {}
+  }
+  if (active) {
+    // IP whitelist bypasses maintenance (IPv6 loopback forms normalized)
+    const wl = ((db.prepare("SELECT value FROM Setting WHERE key = 'maintenance_whitelist'").get() as any)?.value || '').split(/[,\s]+/).filter(Boolean);
+    let ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '').split(',')[0].trim();
+    if (ip === '::1' || ip === '::ffff:127.0.0.1') ip = '127.0.0.1';
+    if (wl.includes(ip) || wl.includes('*')) { next(); return; }
     const msg = (db.prepare("SELECT value FROM Setting WHERE key = 'maintenance_message'").get() as any)?.value || 'Under maintenance';
     return res.status(503).send('<!DOCTYPE html><html><head><title>Maintenance</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f9fafb;color:#374151}div{text-align:center;max-width:400px;padding:40px}h1{font-size:2rem;margin-bottom:1rem}p{color:#6b7280}</style></head><body><div><h1>\u{1F6E0} Under Maintenance</h1><p>' + msg + '</p></div></body></html>');
   }
@@ -135,6 +170,56 @@ app.use('/uploads', cacheControl('86400'), (_req: any, res: any, next: any) => {
 
 // App-password auth (alternative to Bearer tokens) for all API routes
 app.use('/api', appPasswordAuth);
+
+// Public page cache: caches anonymous GET responses for the frontend content
+// endpoints, so repeated visitors skip DB work. Admin/API clients (Bearer/App
+// auth) are never cached. Content mutations purge the affected prefixes.
+const CACHE_PREFIXES = ['/api/posts', '/api/pages', '/api/menus', '/api/categories', '/api/tags', '/api/links', '/api/comments/post', '/api/settings', '/api/feed', '/api/themes'];
+app.use('/api', (req: any, res: any, next: any) => {
+  if (req.method !== 'GET' || req.headers.authorization) { next(); return; }
+  if (!CACHE_PREFIXES.some((p: string) => req.originalUrl.startsWith(p))) { next(); return; }
+  // Key includes the Host so per-site overrides are cached separately
+  const key = 'GET ' + (req.headers.host || '') + req.originalUrl;
+  const cached = cacheGet(key);
+  if (cached !== undefined) { res.json(cached); return; }
+  const origJson = res.json.bind(res);
+  res.json = (body: any) => {
+    if (res.statusCode < 400 && body && typeof body === 'object') cacheSet(key, body);
+    return origJson(body);
+  };
+  next();
+});
+
+// After any successful mutation on a content route, drop the cached public
+// responses so visitors immediately see the new state. Settings changes
+// purge everything (they can alter any page). Successful authenticated
+// mutations are also recorded in the activity log (audit trail).
+app.use('/api', (req: any, res: any, next: any) => {
+  if (req.method === 'GET' || !CACHE_PREFIXES.some((p: string) => req.originalUrl.startsWith(p))) { next(); return; }
+  const origJson = res.json.bind(res);
+  res.json = (body: any) => {
+    const status = res.statusCode;
+    const r = origJson(body);
+    if (status < 400) {
+      // Imports, settings and site changes can affect every page
+      if (req.originalUrl.startsWith('/api/settings') || req.originalUrl.startsWith('/api/sites') ||
+          req.originalUrl.startsWith('/api/themes') || req.originalUrl.startsWith('/api/export/import') ||
+          req.originalUrl.startsWith('/api/import') || req.originalUrl.startsWith('/api/install')) purgeAllCaches();
+      else purgeContentCaches();
+      // Audit trail: record authenticated content mutations (skip public
+      // endpoints like comment submission / password checks)
+      if (req.user?.userId && !req.originalUrl.includes('/password')) {
+        const path = req.originalUrl.split('?')[0];
+        try {
+          logActivity(req.user.userId, req.method + ' ' + path.slice(0, 60), '');
+        } catch {}
+      }
+    }
+    return r;
+  };
+  next();
+});
+
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/pages', pageRoutes);
@@ -166,6 +251,10 @@ app.use('/api/feed', cacheControl('600'), feedRoutes);
 app.use('/api/sitemap.xml', cacheControl('600'));
 app.use('/api/settings', settingsRoutes);
 app.use('/api', siteHealthRoutes);
+app.use('/api', hooksRoutes);
+app.use('/api', cacheAdminRoutes);
+app.use('/api', mailerRoutes);
+app.use('/api', tasksRoutes);
 
 app.get('/api/health', (_req, res) => { res.json({ status: 'ok', version: '0.1.0' }); });
 
@@ -183,25 +272,64 @@ app.get('/robots.txt', (_req, res) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// API endpoint discovery
+// API documentation: endpoint list with descriptions, query params and sample
+// bodies, consumed by the admin "API docs & test center" page.
 app.get('/api/schema', (_req, res) => {
   const endpoints = [
-    { method: 'GET', path: '/api/auth/login' }, { method: 'GET', path: '/api/auth/me' },
-    { method: 'GET', path: '/api/posts' }, { method: 'GET', path: '/api/posts/slug/:slug' }, { method: 'GET', path: '/api/posts/popular' }, { method: 'GET', path: '/api/posts/archive/:year/:month' }, { method: 'GET', path: '/api/posts/archives' }, { method: 'GET', path: '/api/posts/author/:username' }, { method: 'GET', path: '/api/posts/:id/related' },
-    { method: 'GET', path: '/api/pages' }, { method: 'GET', path: '/api/pages/slug/:slug' },
-    { method: 'GET', path: '/api/categories' }, { method: 'GET', path: '/api/tags' },
-    { method: 'GET', path: '/api/comments/post/:postId' },
-    { method: 'GET', path: '/api/media' }, { method: 'GET', path: '/api/menus/location/:location' },
-    { method: 'GET', path: '/api/feed/rss' }, { method: 'GET', path: '/api/sitemap.xml' }, { method: 'GET', path: '/api/settings' },
-    { method: 'GET', path: '/api/health' }, { method: 'GET', path: '/api/health/detail', auth: 'admin' },
-    { method: 'POST', path: '/api/posts', auth: 'editor+' }, { method: 'PUT', path: '/api/posts/:id', auth: 'editor+' }, { method: 'DELETE', path: '/api/posts/:id', auth: 'editor+' },
-    { method: 'GET', path: '/api/posts/admin', auth: 'editor+' }, { method: 'GET', path: '/api/posts/:id/revisions', auth: 'editor+' }, { method: 'PUT', path: '/api/posts/:id/revisions/:revId/restore', auth: 'editor+' },
-    { method: 'POST', path: '/api/posts/bulk-trash', auth: 'editor+' }, { method: 'POST', path: '/api/posts/bulk-restore', auth: 'editor+' }, { method: 'POST', path: '/api/posts/bulk-delete', auth: 'editor+' },
-    { method: 'GET', path: '/api/comments/admin', auth: 'editor+' }, { method: 'POST', path: '/api/comments/bulk-action', auth: 'editor+' },
-    { method: 'GET', path: '/api/users', auth: 'admin' }, { method: 'GET', path: '/api/activity', auth: 'admin' },
-    { method: 'GET', path: '/api/app-passwords', auth: 'admin' }, { method: 'GET', path: '/api/gdpr/export', auth: 'admin' },
-    { method: 'GET', path: '/api/post-types' }, { method: 'GET', path: '/api/export/wxr', auth: 'admin' }, { method: 'POST', path: '/api/import/wxr', auth: 'admin' },
-    { method: 'GET', path: '/api/db/backup', auth: 'admin' }, { method: 'GET', path: '/api/settings/info' },
+    { method: 'POST', path: '/api/auth/login', desc: 'Log in with email + password, returns a JWT', body: { email: 'admin@example.com', password: 'secret' } },
+    { method: 'GET', path: '/api/auth/me', desc: 'Current user profile' },
+    { method: 'GET', path: '/api/posts', desc: 'Published posts, paginated; supports search/category/tag/site filtering', query: { page: '1', limit: '10', search: 'term', category: 'slug', tag: 'slug' } },
+    { method: 'GET', path: '/api/posts/slug/:slug', desc: 'Single post by slug (enriched: author, categories, tags, meta)' },
+    { method: 'GET', path: '/api/posts/suggest', desc: 'Search suggestions for the autocomplete widget', query: { q: 'term' } },
+    { method: 'GET', path: '/api/posts/popular', desc: 'Most viewed posts', query: { limit: '5' } },
+    { method: 'GET', path: '/api/posts/archive/:year/:month', desc: 'Posts published in a month', query: { page: '1' } },
+    { method: 'GET', path: '/api/posts/archives', desc: 'Monthly archive list with counts' },
+    { method: 'GET', path: '/api/posts/author/:username', desc: 'Posts by an author' },
+    { method: 'GET', path: '/api/posts/:id/related', desc: 'Related posts by shared tags/categories' },
+    { method: 'GET', path: '/api/posts/admin', auth: 'editor+', desc: 'All posts with any status (admin list)' },
+    { method: 'POST', path: '/api/posts', auth: 'editor+', desc: 'Create a post', body: { title: 'Hello world', content: '<p>...</p>', status: 'draft', categoryIds: [], tagNames: [] } },
+    { method: 'PUT', path: '/api/posts/:id', auth: 'editor+', desc: 'Update a post' },
+    { method: 'DELETE', path: '/api/posts/:id', auth: 'editor+', desc: 'Delete a post' },
+    { method: 'POST', path: '/api/posts/bulk-trash', auth: 'editor+', desc: 'Move posts to trash', body: { ids: ['id1', 'id2'] } },
+    { method: 'POST', path: '/api/posts/bulk-restore', auth: 'editor+', desc: 'Restore trashed posts', body: { ids: [] } },
+    { method: 'POST', path: '/api/posts/bulk-status', auth: 'editor+', desc: 'Set status on many posts', body: { ids: [], status: 'published' } },
+    { method: 'POST', path: '/api/posts/bulk-delete', auth: 'editor+', desc: 'Permanently delete posts', body: { ids: [] } },
+    { method: 'GET', path: '/api/posts/:id/revisions', auth: 'editor+', desc: 'Revision history of a post' },
+    { method: 'PUT', path: '/api/posts/:id/revisions/:revId/restore', auth: 'editor+', desc: 'Restore a revision' },
+    { method: 'GET', path: '/api/pages', desc: 'Published pages' },
+    { method: 'GET', path: '/api/pages/slug/:slug', desc: 'Single page by slug' },
+    { method: 'POST', path: '/api/pages', auth: 'editor+', desc: 'Create a page', body: { title: 'About', content: '<p>...</p>', status: 'published' } },
+    { method: 'PUT', path: '/api/pages/:id', auth: 'editor+', desc: 'Update a page' },
+    { method: 'DELETE', path: '/api/pages/:id', auth: 'editor+', desc: 'Delete a page' },
+    { method: 'GET', path: '/api/categories', desc: 'All categories with post counts' },
+    { method: 'GET', path: '/api/tags', desc: 'All tags with post counts' },
+    { method: 'GET', path: '/api/comments/post/:postId', desc: 'Approved comments for a post' },
+    { method: 'POST', path: '/api/comments', desc: 'Submit a comment', body: { postId: 'id', author: 'Name', email: 'a@b.c', content: 'Nice post!' } },
+    { method: 'GET', path: '/api/comments/admin', auth: 'editor+', desc: 'All comments with status (moderation queue)' },
+    { method: 'POST', path: '/api/comments/bulk-action', auth: 'editor+', desc: 'Moderate comments', body: { ids: [], action: 'approved' } },
+    { method: 'GET', path: '/api/media', auth: 'editor+', desc: 'Media library, paginated', query: { page: '1', limit: '20', search: '' } },
+    { method: 'GET', path: '/api/media/:id/img', desc: 'Responsive resized image', query: { w: '640', fmt: 'webp' } },
+    { method: 'POST', path: '/api/media/upload', auth: 'editor+', desc: 'Upload a file (multipart field "file")' },
+    { method: 'GET', path: '/api/menus', desc: 'All menus' },
+    { method: 'GET', path: '/api/menus/location/:location', desc: 'Menus for a location (primary etc.)' },
+    { method: 'GET', path: '/api/widgets', desc: 'Active widgets by area' },
+    { method: 'GET', path: '/api/links', desc: 'Blogroll links' },
+    { method: 'GET', path: '/api/settings', desc: 'Public site settings' },
+    { method: 'PUT', path: '/api/settings', auth: 'admin', desc: 'Update site settings', body: { site_title: 'My Site', site_url: 'https://example.com' } },
+    { method: 'GET', path: '/api/feed/rss', desc: 'RSS 2.0 feed' },
+    { method: 'GET', path: '/api/sitemap.xml', desc: 'XML sitemap' },
+    { method: 'GET', path: '/api/health', desc: 'Liveness check' },
+    { method: 'GET', path: '/api/health/detail', auth: 'admin', desc: 'Detailed site health' },
+    { method: 'GET', path: '/api/users', auth: 'admin', desc: 'All users' },
+    { method: 'GET', path: '/api/activity', auth: 'admin', desc: 'Activity log' },
+    { method: 'GET', path: '/api/gdpr/export', auth: 'admin', desc: 'Download all user data' },
+    { method: 'GET', path: '/api/db/backup', auth: 'admin', desc: 'SQLite backup download' },
+    { method: 'GET', path: '/api/system/hooks', auth: 'admin', desc: 'Registered hooks (actions/filters) with listeners' },
+    { method: 'GET', path: '/api/system/cache', auth: 'admin', desc: 'Page cache stats' },
+    { method: 'POST', path: '/api/system/cache/purge', auth: 'admin', desc: 'Purge all cached responses' },
+    { method: 'GET', path: '/api/editor/shortcodes', auth: 'editor+', desc: 'Registered shortcodes with descriptions' },
+    { method: 'GET', path: '/api/sites', auth: 'admin', desc: 'Sites with per-site content stats' },
+    { method: 'POST', path: '/api/sites/:id/duplicate', auth: 'admin', desc: 'Duplicate a site with settings and menus' },
   ];
   res.json({ name: 'Mortar CMS API', version: '0.1.0', endpoints });
 });
@@ -223,16 +351,17 @@ if (fs.existsSync(frontendDist)) {
 }
 
 
-// Cron: auto-publish scheduled posts
-function runCron() {
-  try {
-    const now = new Date().toISOString();
-    const result = db.prepare("UPDATE Post SET status = 'published', publishedAt = ? WHERE status = 'scheduled' AND publishedAt <= ?").run(now, now);
-    if (result.changes > 0) console.log('[Cron] Published ' + result.changes + ' scheduled posts');
-  } catch (e) {}
-}
-runCron();
-setInterval(runCron, 60000);
+// Scheduled tasks: auto-publish, trash purge, activity pruning, db maintenance
+registerBuiltinTasks();
+startScheduler();
+void runTaskNow('publish_scheduled'); // catch up on due posts at boot
+
+// Apply page cache settings persisted by the admin tools panel
+try {
+  const cEnabled = db.prepare("SELECT value FROM Setting WHERE key = 'cache_enabled'").get() as any;
+  const cTtl = db.prepare("SELECT value FROM Setting WHERE key = 'cache_ttl'").get() as any;
+  cacheConfigure(cEnabled ? cEnabled.value !== '0' : true, cTtl ? parseInt(cTtl.value) || 60 : 60);
+} catch {}
 
 
 // Unified error handler: any uncaught error -> 500 { error } (details only in dev)
@@ -246,4 +375,5 @@ app.listen(PORT, () => {
   console.log('Mortar server at http://localhost:' + PORT);
   console.log('  Admin:    http://localhost:' + PORT + '/admin');
   console.log('  Frontend: http://localhost:' + PORT);
+  doAction('init'); // Fired once everything is up; plugins listen to bootstrap
 });

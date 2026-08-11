@@ -14,6 +14,64 @@ export default function Appearance() {
 	const [sectionHtml, setSectionHtml] = useState('');
 	const [sectionCss, setSectionCss] = useState('');
 	const [rebuilding, setRebuilding] = useState(false);
+	const [themeDetail, setThemeDetail] = useState<any>(null);
+	const [fileBrowser, setFileBrowser] = useState<{ theme: string; files: any[]; path: string; content: string; loading: boolean } | null>(null);
+	const [backups, setBackups] = useState<any[]>([]);
+	const [backupName, setBackupName] = useState('');
+	const [backupBusy, setBackupBusy] = useState(false);
+	// Developer tools (theme file editor) only show in developer mode
+	const [devMode, setDevMode] = useState(false);
+	useEffect(() => {
+		const load = () => api.get('/settings').then(r => {
+			setDevMode(r.data?.dev_mode === '1');
+		}).catch(() => {});
+		load();
+		window.addEventListener('mortar-settings-saved', load);
+		return () => window.removeEventListener('mortar-settings-saved', load);
+	}, []);
+
+	async function loadBackups() {
+		if (!activeTheme) return;
+		try { const r = await api.get('/themes/' + activeTheme + '/backups'); setBackups(r.data.backups || []); } catch {}
+	}
+	async function createBackup() {
+		if (backupBusy) return;
+		setBackupBusy(true);
+		try {
+			await api.post('/themes/' + activeTheme + '/backups', { name: backupName.trim() || undefined });
+			setBackupName('');
+			await loadBackups();
+		} catch (e: any) { alert(e.response?.data?.error || t('save failed', getLang())); }
+		setBackupBusy(false);
+	}
+	async function restoreBackup(id: string, name: string) {
+		if (!window.confirm(t('restore backup confirm', getLang()) + '「' + name + '」？')) return;
+		try {
+			await api.post('/themes/' + activeTheme + '/backups/' + id + '/restore');
+			alert(t('restore backup success', getLang()));
+			window.location.reload();
+		} catch (e: any) { alert(e.response?.data?.error || t('save failed', getLang())); }
+	}
+	async function deleteBackup(id: string) {
+		if (!window.confirm(t('delete backup confirm', getLang()))) return;
+		try { await api.delete('/themes/' + activeTheme + '/backups/' + id); await loadBackups(); } catch {}
+	}
+
+	async function openFileBrowser(theme: string) {
+		setFileBrowser({ theme, files: [], path: '', content: '', loading: true });
+		try {
+			const r = await api.get('/themes/' + theme + '/files');
+			setFileBrowser({ theme, files: r.data.files || [], path: '', content: '', loading: false });
+		} catch { setFileBrowser(f => f ? { ...f, loading: false } : f); }
+	}
+	async function openFile(path: string) {
+		if (!fileBrowser) return;
+		try { const r = await api.get('/themes/' + fileBrowser.theme + '/file?path=' + encodeURIComponent(path)); setFileBrowser({ ...fileBrowser, path, content: r.data.content || '' }); } catch {}
+	}
+	async function saveFile() {
+		if (!fileBrowser || !fileBrowser.path) return;
+		try { await api.put('/themes/' + fileBrowser.theme + '/file', { path: fileBrowser.path, content: fileBrowser.content }); alert(t('file saved', getLang())); } catch (e: any) { alert(e.response?.data?.error || t('save failed', getLang())); }
+	}
 
 	useEffect(() => {
 		api.get('/themes').then(r => { setThemes(r.data.themes || []); setActiveTheme(r.data.active || 'default'); }).catch(() => {});
@@ -22,6 +80,7 @@ export default function Appearance() {
 			if (r.data.theme_custom_css) setCustomCss(r.data.theme_custom_css);
 		}).catch(() => {});
 	}, []);
+	useEffect(() => { if (activeTheme) loadBackups(); }, [activeTheme]);
 
   async function activate(name: string) {
     await api.post('/themes/' + name + '/activate');
@@ -51,7 +110,7 @@ export default function Appearance() {
     // Fixed core keys + schema-declared custom keys (theme_<key> from the active theme)
     const activeMeta = themes.find((x: any) => x.name === activeTheme);
     const schemaKeys = (activeMeta?.settingsSchema || []).map((f: any) => f.key);
-    const themeKeys = ['primary_color', 'background', 'text_color', 'link_color', 'heading_font', 'body_font', 'sidebar_position', 'posts_per_row', ...schemaKeys];
+    const themeKeys = ['primary_color', 'background', 'text_color', 'link_color', 'heading_font', 'body_font', 'sidebar_position', 'posts_per_row', 'heading_cap', 'heading_max', ...schemaKeys];
     for (const k of themeKeys) {
       const v = settings['theme_' + k];
       if (v !== undefined) themeSettings[k] = v;
@@ -129,6 +188,9 @@ export default function Appearance() {
                 React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, t('by', getLang()) + ' ' + th.author),
               ),
               React.createElement('div', { className: 'flex items-center gap-2 shrink-0' },
+                devMode && React.createElement('button', { onClick: () => openFileBrowser(th.name), className: 'btn-secondary text-xs' }, t('edit files', getLang())),
+                React.createElement('button', { onClick: () => setThemeDetail(th), className: 'btn-secondary text-xs' }, t('details', getLang())),
+                React.createElement('button', { onClick: () => window.open('/?theme=' + th.name, '_blank'), className: 'btn-secondary text-xs' }, t('preview', getLang())),
                 !th.active && React.createElement('button', { onClick: () => activate(th.name), className: 'btn-secondary text-xs' }, t('activate', getLang())),
                 React.createElement('button', {
                   onClick: async () => {
@@ -214,6 +276,19 @@ export default function Appearance() {
         React.createElement('div', { className: 'space-y-4' },
           selectField(t('heading font', getLang()), 'theme_heading_font', ['System', 'Serif', 'Sans-serif'], settings, setSettings),
           selectField(t('body font', getLang()), 'theme_body_font', ['System', 'Serif', 'Sans-serif'], settings, setSettings),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('heading cap', getLang())),
+            React.createElement('select', { value: settings.theme_heading_cap || '2', onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSettings({ ...settings, theme_heading_cap: e.target.value }), className: 'input-field' },
+              React.createElement('option', { value: '2' }, '2（从 h2 开始）'),
+              React.createElement('option', { value: '1' }, '1（允许 h1）')
+            ),
+            React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, t('heading cap hint', getLang()))
+          ),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('heading max size', getLang())),
+            React.createElement('input', { type: 'number', min: 14, max: 48, value: settings.theme_heading_max || '', placeholder: '24', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, theme_heading_max: e.target.value }), className: 'input-field' }),
+            React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, t('heading max size hint', getLang()))
+          )
         )
       ),
       React.createElement('div', { className: 'card p-6' },
@@ -250,6 +325,34 @@ export default function Appearance() {
           placeholder: '/* Custom CSS for the active theme */\nbody { }\n',
           spellCheck: false,
         }),
+        // Live preview of unsaved CSS (frontend reads ?preview_css=)
+        React.createElement('div', { className: 'flex gap-2 mt-3' },
+          React.createElement('button', { onClick: () => window.open('/?preview_css=' + encodeURIComponent(customCss), '_blank'), disabled: !customCss.trim(), className: 'btn-secondary text-sm disabled:opacity-40' }, t('preview custom css', getLang()))
+        ),
+      ),
+      // Theme backups (snapshots of settings + custom CSS, rollback point for
+      // panel edits and AI apply_theme_style calls)
+      React.createElement('div', { className: 'card p-6 mb-6' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('theme backups', getLang())),
+        React.createElement('p', { className: 'text-xs text-gray-400 mb-3' }, t('theme backups hint', getLang())),
+        React.createElement('div', { className: 'flex gap-2 mb-4' },
+          React.createElement('input', { value: backupName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setBackupName(e.target.value), placeholder: t('backup name placeholder', getLang()), className: 'input-field flex-1' }),
+          React.createElement('button', { onClick: createBackup, disabled: backupBusy, className: 'btn-primary text-sm whitespace-nowrap' }, t('create backup', getLang()))
+        ),
+        backups.length === 0
+          ? React.createElement('p', { className: 'text-sm text-gray-400' }, t('no backups yet', getLang()))
+          : React.createElement('div', { className: 'space-y-2' },
+              [...backups].sort((a: any, b: any) => b.createdAt.localeCompare(a.createdAt)).map((b: any) =>
+                React.createElement('div', { key: b.id, className: 'flex items-center gap-3 p-3 rounded-lg border border-gray-100 dark:border-gray-700' },
+                  React.createElement('div', { className: 'flex-1 min-w-0' },
+                    React.createElement('p', { className: 'text-sm text-gray-800 dark:text-gray-100 truncate' }, b.name, b.auto && React.createElement('span', { className: 'ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700' }, t('auto', getLang()))),
+                    React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, new Date(b.createdAt).toLocaleString())
+                  ),
+                  React.createElement('button', { onClick: () => restoreBackup(b.id, b.name), className: 'text-xs px-2.5 py-1 rounded-lg bg-primary-50 text-primary-700 hover:bg-primary-100' }, t('restore', getLang())),
+                  React.createElement('button', { onClick: () => deleteBackup(b.id), className: 'text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-red-500 hover:bg-red-50' }, t('delete', getLang()))
+                )
+              )
+            )
       ),
       // Theme Sections (visual hook editor)
       React.createElement('div', { className: 'card p-6 mb-6' },
@@ -290,6 +393,61 @@ export default function Appearance() {
             height: '100%',
           })
         ),
+      ),
+      // ---- Theme file browser/editor modal ----
+      fileBrowser && React.createElement('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4', onClick: () => setFileBrowser(null) },
+        React.createElement('div', { className: 'bg-white rounded-xl shadow-2xl max-w-3xl w-full h-[80vh] flex flex-col', onClick: (e: React.MouseEvent) => e.stopPropagation() },
+          React.createElement('div', { className: 'flex items-center justify-between px-5 py-3 border-b border-gray-200' },
+            React.createElement('h3', { className: 'text-base font-semibold text-gray-900' }, t('theme files', getLang()) + ': ' + fileBrowser.theme),
+            React.createElement('button', { onClick: () => setFileBrowser(null), className: 'text-gray-400 hover:text-gray-600 p-1' }, React.createElement(X, { size: 18 }))),
+          React.createElement('div', { className: 'flex flex-1 min-h-0' },
+            // File list
+            React.createElement('div', { className: 'w-56 border-r border-gray-200 overflow-y-auto p-2 shrink-0' },
+              fileBrowser.loading ? React.createElement('p', { className: 'text-xs text-gray-400 p-2' }, t('loading', getLang()) + '...')
+              : fileBrowser.files.length === 0 ? React.createElement('p', { className: 'text-xs text-gray-400 p-2' }, t('no editable files', getLang()))
+              : fileBrowser.files.map((f: any) => React.createElement('button', {
+                  key: f.path,
+                  onClick: () => openFile(f.path),
+                  className: 'block w-full text-left text-xs px-2 py-1.5 rounded hover:bg-gray-100 ' + (fileBrowser.path === f.path ? 'bg-primary-50 text-primary-700 font-medium' : 'text-gray-600'),
+                }, f.path))),
+            // Editor pane
+            React.createElement('div', { className: 'flex-1 flex flex-col min-w-0' },
+              fileBrowser.path ? React.createElement(React.Fragment, null,
+                React.createElement('textarea', {
+                  value: fileBrowser.content,
+                  onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setFileBrowser({ ...fileBrowser, content: e.target.value }),
+                  readOnly: !fileBrowser.path.endsWith('.css'),
+                  spellCheck: false,
+                  className: 'flex-1 p-4 font-mono text-xs bg-gray-50 outline-none resize-none' + (!fileBrowser.path.endsWith('.css') ? ' text-gray-500' : ''),
+                }),
+                React.createElement('div', { className: 'px-4 py-2 border-t border-gray-200 flex items-center justify-between' },
+                  React.createElement('span', { className: 'text-xs text-gray-400' }, fileBrowser.path + (fileBrowser.path.endsWith('.css') ? ' · ' + t('editable', getLang()) : ' · ' + t('read only', getLang()))),
+                  fileBrowser.path.endsWith('.css') && React.createElement('button', { onClick: saveFile, className: 'btn-primary text-xs' }, React.createElement(Save, { size: 13 }), t('save', getLang()))))
+              : React.createElement('div', { className: 'flex-1 flex items-center justify-center text-sm text-gray-400' }, t('select a file to view', getLang())))
+          )
+        )
+      ),
+      // ---- Theme details modal ----
+      themeDetail && React.createElement('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4', onClick: () => setThemeDetail(null) },
+        React.createElement('div', { className: 'bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto', onClick: (e: React.MouseEvent) => e.stopPropagation() },
+          React.createElement('div', { className: 'p-6' },
+            React.createElement('div', { className: 'flex items-start justify-between mb-4' },
+              React.createElement('div', null,
+                React.createElement('h3', { className: 'text-xl font-bold text-gray-900' }, themeDetail.name),
+                React.createElement('p', { className: 'text-sm text-gray-500 mt-1' }, t('version', getLang()) + ' ' + themeDetail.version + ' · ' + t('by', getLang()) + ' ' + themeDetail.author)),
+              React.createElement('button', { onClick: () => setThemeDetail(null), className: 'text-gray-400 hover:text-gray-600 p-1' }, React.createElement(X, { size: 20 }))),
+            themeDetail.active && React.createElement('div', { className: 'mb-4 flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-green-100 text-green-700 w-fit' }, React.createElement(CheckCircle2, { size: 14 }), t('this theme is active', getLang())),
+            React.createElement('div', { className: 'bg-gray-50 rounded-lg p-4 mb-4' },
+              React.createElement('p', { className: 'text-sm text-gray-700 leading-relaxed' }, themeDetail.description || t('no description', getLang()))),
+            themeDetail.settingsSchema && themeDetail.settingsSchema.length > 0 && React.createElement('div', { className: 'mb-4' },
+              React.createElement('p', { className: 'text-xs font-semibold text-gray-500 uppercase mb-2' }, t('customizable options', getLang())),
+              React.createElement('div', { className: 'flex flex-wrap gap-1.5' },
+                themeDetail.settingsSchema.map((s: any) => React.createElement('span', { key: s.key, className: 'text-xs px-2 py-1 rounded bg-blue-50 text-blue-700' }, s.label || s.key)))),
+            React.createElement('div', { className: 'flex gap-2 pt-4 border-t border-gray-100' },
+              !themeDetail.active && React.createElement('button', { onClick: () => { activate(themeDetail.name); setThemeDetail(null); }, className: 'btn-primary text-sm flex-1' }, t('activate this theme', getLang())),
+              React.createElement('button', { onClick: () => setThemeDetail(null), className: 'btn-secondary text-sm flex-1' }, t('close', getLang()))),
+          )
+        )
       ),
     );
 }

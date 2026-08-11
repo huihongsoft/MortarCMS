@@ -1,6 +1,7 @@
 {
-  "name": "post-footer",
-  "version": "0.2.0",
-  "description": "Appends a signature footer with published date to every post.",
-  "author": "Mortar Team"
+ "name": "post-footer",
+ "version": "0.2.0",
+ "description": "Appends a signature footer with published date to every post.",
+ "author": "Mortar Team",
+ "requires": "0.1.0"
 }

@@ -47,12 +47,29 @@ interface Statement {
   all: (...args: any[]) => any;
 }
 
+// Slow query tracker (in-memory ring buffer, exposed to the admin tools)
+const SLOW_QUERIES: { sql: string; ms: number; at: string }[] = [];
+export function listSlowQueries(): any[] { return SLOW_QUERIES; }
+
+function recordSlow(sql: string, ms: number): void {
+  if (ms > 150) {
+    SLOW_QUERIES.push({ sql: sql.slice(0, 220), ms: Math.round(ms), at: new Date().toISOString() });
+    if (SLOW_QUERIES.length > 20) SLOW_QUERIES.shift();
+  }
+}
+
 function prepareSqlite(sql: string): Statement {
   const stmt = db.raw.prepare(sql);
+  const timed = <T>(fn: () => T): T => {
+    const t0 = Date.now();
+    const r = fn();
+    recordSlow(sql, Date.now() - t0);
+    return r;
+  };
   return {
-    run: (...args: any[]) => stmt.run(...args),
-    get: (...args: any[]) => stmt.get(...args),
-    all: (...args: any[]) => stmt.all(...args),
+    run: (...args: any[]) => timed(() => stmt.run(...args)),
+    get: (...args: any[]) => timed(() => stmt.get(...args)),
+    all: (...args: any[]) => timed(() => stmt.all(...args)),
   };
 }
 
@@ -104,7 +121,8 @@ export function initDB(): void {
       avatar TEXT,
       bio TEXT,
       createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
-      updatedAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+      updatedAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+      tokenVersion INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS Post (
@@ -169,7 +187,9 @@ export function initDB(): void {
       status TEXT NOT NULL DEFAULT 'pending',
       postId TEXT NOT NULL REFERENCES Post(id) ON DELETE CASCADE,
       parentId TEXT REFERENCES Comment(id) ON DELETE CASCADE,
+      siteId TEXT,
       userId TEXT REFERENCES User(id) ON DELETE SET NULL,
+      subscribe INTEGER NOT NULL DEFAULT 0,
       createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
       updatedAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
     );
@@ -185,6 +205,7 @@ export function initDB(): void {
       title TEXT NOT NULL DEFAULT '',
       width INTEGER,
       height INTEGER,
+      siteId TEXT,
       userId TEXT REFERENCES User(id) ON DELETE SET NULL,
       createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
     );
@@ -343,9 +364,27 @@ export function initDB(): void {
     CREATE INDEX IF NOT EXISTS idx_posttag_post ON PostTag (postId);
     CREATE INDEX IF NOT EXISTS idx_posttag_tag ON PostTag (tagId);
     CREATE INDEX IF NOT EXISTS idx_media_user ON Media (userId);
+    CREATE INDEX IF NOT EXISTS idx_media_created ON Media (createdAt DESC);
     CREATE INDEX IF NOT EXISTS idx_revision_post ON Revision (postId, createdAt);
+    CREATE INDEX IF NOT EXISTS idx_activity_created ON Activity (createdAt DESC);
+    CREATE INDEX IF NOT EXISTS idx_activity_user ON Activity (userId);
+    CREATE INDEX IF NOT EXISTS idx_comment_created ON Comment (createdAt DESC);
+    CREATE INDEX IF NOT EXISTS idx_aitask_created ON AiTask (createdAt DESC);
+    CREATE INDEX IF NOT EXISTS idx_aiusage_created ON AiUsage (createdAt DESC);
+
+    CREATE TABLE IF NOT EXISTS AiSession (
+      id TEXT PRIMARY KEY,
+      userId TEXT NOT NULL,
+      title TEXT NOT NULL DEFAULT 'New chat',
+      messages TEXT NOT NULL DEFAULT '[]',
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_aisession_user ON AiSession (userId, updatedAt DESC);
   `);
 
+  // Schema migrations (best-effort; column may already exist on fresh DBs)
+  try { db.exec("ALTER TABLE User ADD COLUMN tokenVersion INTEGER NOT NULL DEFAULT 0"); } catch {}
   // Multi-site content isolation: NULL siteId = global content visible on every site
   try { db.exec("ALTER TABLE Post ADD COLUMN siteId TEXT"); } catch {}
   try { db.exec("ALTER TABLE Post ADD COLUMN views INTEGER DEFAULT 0"); } catch {}
@@ -360,6 +399,9 @@ export function initDB(): void {
   try { db.exec("ALTER TABLE Activity ADD COLUMN ip TEXT DEFAULT ''"); } catch {}
   try { db.exec("ALTER TABLE Activity ADD COLUMN meta TEXT DEFAULT ''"); } catch {}
   try { db.exec("ALTER TABLE Menu ADD COLUMN siteId TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Media ADD COLUMN siteId TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Comment ADD COLUMN siteId TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Comment ADD COLUMN subscribe INTEGER DEFAULT 0"); } catch {}
   try { db.exec("ALTER TABLE Media ADD COLUMN thumbnail TEXT"); } catch {}
   try { db.exec("ALTER TABLE Media ADD COLUMN width INTEGER"); } catch {}
   try { db.exec("ALTER TABLE Media ADD COLUMN height INTEGER"); } catch {}

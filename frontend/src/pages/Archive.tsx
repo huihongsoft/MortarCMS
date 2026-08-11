@@ -16,7 +16,26 @@ export default function ArchivePage({ settings }: { settings: Record<string, str
     api.get('/posts/archive/' + year + '/' + month).then(r => setData(r.data)).catch(() => setData({ error: true }));
   }, [year, month]);
 
-  useSEO({ title: MONTHS[parseInt(month || '1') - 1] + ' ' + year + ' ' + t('archive'), url: window.location.origin + '/archive/' + year + '/' + month });
+  const monthLabel = MONTHS[parseInt(month || '1') - 1] + ' ' + year;
+  useSEO({
+    title: monthLabel + ' ' + t('archive'),
+    url: window.location.origin + '/archive/' + year + '/' + month,
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'BreadcrumbList',
+        itemListElement: [
+          { '@type': 'ListItem', position: 1, name: t('home'), item: window.location.origin + '/' },
+          { '@type': 'ListItem', position: 2, name: monthLabel, item: window.location.origin + '/archive/' + year + '/' + month },
+        ],
+      },
+      ...(data?.posts?.length ? [{
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        itemListElement: data.posts.map((p: any, i: number) => ({ '@type': 'ListItem', position: i + 1, name: p.title, url: window.location.origin + '/post/' + p.slug })),
+      }] : []),
+    ],
+  });
 
   if (!data) return React.createElement(ListSkeleton, null);
   if (data.error) return React.createElement('p', { className: 'text-gray-500 p-8' }, t('failed to load archive'));

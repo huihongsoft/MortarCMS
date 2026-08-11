@@ -24,13 +24,13 @@ function loadSecret(): string {
 const SECRET = loadSecret();
 const EXPIRES_IN = '7d';
 
-export function signToken(payload: { userId: string; role: string; type?: string }, expiresIn: SignOptions['expiresIn'] = EXPIRES_IN): string {
+export function signToken(payload: { userId: string; role: string; type?: string; v?: number }, expiresIn: SignOptions['expiresIn'] = EXPIRES_IN): string {
   return jwt.sign(payload, SECRET, { expiresIn });
 }
 
-export function verifyToken(token: string): { userId: string; role: string; type?: string } | null {
+export function verifyToken(token: string): { userId: string; role: string; type?: string; v?: number } | null {
   try {
-    return jwt.verify(token, SECRET, { algorithms: ['HS256'] }) as { userId: string; role: string; type?: string };
+    return jwt.verify(token, SECRET, { algorithms: ['HS256'] }) as { userId: string; role: string; type?: string; v?: number };
   } catch {
     return null;
   }

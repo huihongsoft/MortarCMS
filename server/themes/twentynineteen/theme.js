@@ -2570,12 +2570,17 @@ const {
   getAdapter: Vs,
   mergeConfig: Ws,
   create: Js
-} = T, Re = T.create({ baseURL: "/api" });
+} = T, Re = T.create({ baseURL: "/api", withCredentials: !0 });
 Re.interceptors.request.use((e) => {
   const t = localStorage.getItem("mortar_token");
   return t && (e.headers.Authorization = "Bearer " + t), e;
 });
 const Es = {
+  "your homepage displays": "首页显示",
+  "your latest posts": "你的最新文章",
+  "a static page": "一个静态页面",
+  homepage: "首页",
+  "select a page": "选择页面",
   home: "首页",
   search: "搜索",
   about: "关于",
@@ -2607,6 +2612,7 @@ const Es = {
   "no related posts": "暂无相关文章",
   comments: "评论",
   "no comments yet": "暂无评论",
+  "notify me of replies": "有人回复时通过邮件通知我",
   "be the first to share your thoughts": "成为第一个评论的人",
   "leave a comment": "发表评论",
   name: "姓名",
@@ -2614,7 +2620,13 @@ const Es = {
   "your comment": "你的评论",
   "submit comment": "提交评论",
   "comment submitted and pending review": "评论已提交,等待审核",
+  password: "密码",
   "password protected": "密码保护",
+  "log in": "登录",
+  checking: "验证中",
+  "wrong password, please try again": "密码错误，请重试",
+  "log in to view this page": "请登录后查看此页面",
+  "this page is private": "此页面为私密",
   "enter the password to view this post": "输入密码查看这篇文章",
   "enter password": "输入密码",
   "all posts": "全部文章",
@@ -2659,10 +2671,24 @@ const Es = {
   tag: "标签",
   category: "分类",
   links: "友情链接",
-  featured: "精选"
+  featured: "精选",
+  "switch language": "切换语言",
+  "username must be at least 3 characters": "用户名至少需要 3 个字符",
+  "enter a valid email address": "请输入有效的邮箱地址",
+  "password strength": "密码强度",
+  "confirm new password": "确认新密码",
+  "name and email are required to comment": "填写昵称和邮箱后才能评论",
+  "comment failed": "评论提交失败，请稍后重试",
+  "table of contents": "目录"
 };
 function N(e, t) {
-  return ((t == null ? void 0 : t.site_lang) || localStorage.getItem("mortar_site_lang") || localStorage.getItem("mortar_lang") || "en") === "zh" && Es[e] || e;
+  if (t != null && t.translations_override)
+    try {
+      const s = JSON.parse(t.translations_override)[e];
+      if (typeof s == "string" && s) return s;
+    } catch {
+    }
+  return (localStorage.getItem("mortar_lang") || (t == null ? void 0 : t.site_lang) || "en") === "zh" && Es[e] || e;
 }
 function Rs({ settings: e }) {
   const [t, n] = Le([]), [r, s] = Le(!1), [o, i] = Le(null);
@@ -2791,7 +2817,7 @@ function _s(e) {
     )
   );
 }
-const Ks = { name: "twentynineteen", Header: Rs, HomeLayout: _s };
+const Ks = { name: "twentynineteen", typography: { cap: 2, max: 24 }, Header: Rs, HomeLayout: _s };
 export {
   Ks as default
 };

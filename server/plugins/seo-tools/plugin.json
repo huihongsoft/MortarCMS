@@ -1,1 +1,7 @@
-{ "name": "seo-tools", "version": "1.1.0", "description": "Adds a 'Read in X min' hint and SEO-friendly meta tweaks to published posts.", "author": "Mortar Market" }
+{
+ "name": "seo-tools",
+ "version": "1.1.0",
+ "description": "Adds a 'Read in X min' hint and SEO-friendly meta tweaks to published posts.",
+ "author": "Mortar Market",
+ "requires": "0.1.0"
+}

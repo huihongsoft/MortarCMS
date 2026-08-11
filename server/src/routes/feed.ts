@@ -27,7 +27,35 @@ router.get('/rss', (_req: AuthRequest, res: Response) => {
       return '<item><title>' + esc(p.title) + '</title><link>' + link + '</link><guid>' + link + '</guid><description>' + desc + '</description><pubDate>' + date + '</pubDate><author>' + author + '</author></item>';
     }).join('');
 
-    const xml = '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>' + esc(cfg.site_title || 'Mortar CMS') + '</title><link>' + siteUrl + '</link><description>' + esc(cfg.site_description || '') + '</description><atom:link href="' + siteUrl + '/api/feed/rss" rel="self" type="application/rss+xml"/>' + items + '</channel></rss>';
+    const latest = db.prepare("SELECT COALESCE(publishedAt, createdAt) as d FROM Post WHERE type = 'post' AND status = 'published' ORDER BY publishedAt DESC LIMIT 1").get() as any;
+    const lastBuild = latest ? new Date(latest.d).toUTCString() : new Date().toUTCString();
+    const xml = '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>' + esc(cfg.site_title || 'Mortar CMS') + '</title><link>' + siteUrl + '</link><description>' + esc(cfg.site_description || '') + '</description><lastBuildDate>' + lastBuild + '</lastBuildDate><atom:link href="' + siteUrl + '/api/feed/rss" rel="self" type="application/rss+xml"/>' + items + '</channel></rss>';
+
+    res.type('application/rss+xml');
+    res.send(xml);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Comments feed: the latest approved comments across the site (WP-style)
+router.get('/comments', (_req: AuthRequest, res: Response) => {
+  try {
+    const settings = db.prepare('SELECT key, value FROM Setting').all() as any[];
+    const cfg: Record<string, string> = {};
+    settings.forEach((s: any) => { cfg[s.key] = s.value; });
+    const siteUrl = cfg.site_url || 'http://localhost:3001';
+
+    const comments = db.prepare(
+      "SELECT c.*, p.title as postTitle, p.slug as postSlug FROM Comment c JOIN Post p ON p.id = c.postId WHERE c.status = 'approved' ORDER BY c.createdAt DESC LIMIT 20"
+    ).all() as any[];
+
+    const items = comments.map((c: any) => {
+      const link = siteUrl + '/post/' + esc(c.postSlug) + '#comment-' + c.id;
+      const desc = '<![CDATA[' + (c.author || 'Anonymous') + ' 评论于 《' + c.postTitle + '》：<br>' + (c.content || '').replace(/</g, '&lt;') + ']]>';
+      const date = new Date(c.createdAt).toUTCString();
+      return '<item><title>评论于《' + esc(c.postTitle) + '》</title><link>' + link + '</link><guid>' + link + '</guid><description>' + desc + '</description><pubDate>' + date + '</pubDate></item>';
+    }).join('');
+
+    const xml = '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel><title>' + esc(cfg.site_title || 'Mortar CMS') + ' · 评论</title><link>' + siteUrl + '</link><description>最新评论</description><atom:link href="' + siteUrl + '/api/feed/comments" rel="self" type="application/rss+xml"/>' + items + '</channel></rss>';
 
     res.type('application/rss+xml');
     res.send(xml);

@@ -7,7 +7,7 @@ export function register() {
   addFilter('post_content', (html: string, post: any) => {
     if (!html) return html;
     return '<div style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;padding:12px 16px;margin-bottom:16px;font-size:14px;">\u{1F44B} Hello! This banner was injected by the <strong>hello-world</strong> plugin.</div>' + html;
-  });
+  }, 10, 'hello-world');
 }
 
 // Shortcode demo: [hello name="World"]

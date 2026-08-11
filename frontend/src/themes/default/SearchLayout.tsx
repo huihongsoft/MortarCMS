@@ -30,7 +30,7 @@ export default function SearchLayout(props: any) {
       )
     : React.createElement('div', { className: 'space-y-6' },
         posts.map((p: any) => React.createElement('article', { key: p.id, className: 'pb-6 border-b border-gray-100 last:border-0' },
-          React.createElement(Link, { to: '/post/' + p.slug }, React.createElement('h2', { className: 'text-lg font-bold text-gray-900 hover:text-primary-600 mb-2' }, p.title)),
+          React.createElement(Link, { to: '/post/' + p.slug }, React.createElement('h2', { className: 'text-lg font-bold text-gray-900 hover:text-primary-600 mb-2' }, highlight(p.title, query))),
           React.createElement('div', { className: 'flex items-center gap-3 text-xs text-gray-500 mb-2' },
             React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Calendar, { size: 12 }), timeAgo(p.publishedAt || p.createdAt)),
             React.createElement('span', null, t('written by') + ' ' + (p.author?.username || 'Unknown'))

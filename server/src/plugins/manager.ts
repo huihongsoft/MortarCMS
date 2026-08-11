@@ -13,6 +13,7 @@ export interface PluginMeta {
   author?: string;
   active: boolean;
   builtin: boolean;
+  requires?: string; // minimum core version, e.g. "0.1.0"
   error?: string;
 }
 
@@ -48,6 +49,7 @@ export function listPlugins(): PluginMeta[] {
           version: meta.version || '0.0.0',
           description: meta.description || '',
           author: meta.author || '',
+          requires: meta.requires || undefined,
           active: active.includes(meta.name || dir),
           builtin: true,
         });
@@ -216,9 +218,26 @@ export async function uninstallPlugin(name: string): Promise<{ ok: boolean; erro
   }
 }
 
+// Minimal semver compare: "1.2.3" >= "0.9.0"
+function versionAtLeast(actual: string, required: string): boolean {
+  const a = actual.split('.').map(Number);
+  const r = required.split('.').map(Number);
+  for (let i = 0; i < Math.max(a.length, r.length); i++) {
+    const av = a[i] || 0, rv = r[i] || 0;
+    if (av !== rv) return av > rv;
+  }
+  return true;
+}
+
+export const CORE_VERSION = '0.1.0';
+
 export async function setPluginActive(name: string, active: boolean): Promise<{ ok: boolean; error?: string }> {
   const metas = listPlugins();
-  if (!metas.find((m: any) => m.name === name)) return { ok: false, error: 'Plugin not found' };
+  const meta = metas.find((m: any) => m.name === name);
+  if (!meta) return { ok: false, error: 'Plugin not found' };
+  if (active && meta.requires && !versionAtLeast(CORE_VERSION, meta.requires)) {
+    return { ok: false, error: 'This plugin requires core version ' + meta.requires + ' or newer (installed: ' + CORE_VERSION + ')' };
+  }
   const current = activePlugins();
   const idx = current.indexOf(name);
   if (active && idx === -1) current.push(name);

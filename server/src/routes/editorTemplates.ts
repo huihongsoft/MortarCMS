@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
-import { renderShortcode } from '../utils/shortcodes';
+import { renderShortcode, listShortcodes } from '../utils/shortcodes';
 
 const CMS_TYPES = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud'];
 
@@ -39,6 +39,13 @@ router.get('/preview-cms/:type', (req: AuthRequest, res: Response) => {
   try {
     const html = renderShortcode(type, { limit: String(req.query.limit || 5) });
     res.json({ html });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: list all registered shortcodes (name + description) for the editor inserter
+router.get('/shortcodes', authenticate, requireCap('edit_posts'), (_req: AuthRequest, res: Response) => {
+  try {
+    res.json({ shortcodes: listShortcodes() });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

@@ -10,17 +10,19 @@ const availableWidgets = [
   { id: 'recent_posts', name: t('recent posts', getLang()), desc: t('your most recent posts', getLang()) },
   { id: 'archives', name: t('archives', getLang()), desc: t('a monthly archive of your posts', getLang()) },
   { id: 'tag_cloud', name: t('tag cloud', getLang()), desc: t('a cloud of your most used tags', getLang()) },
+  { id: 'html', name: t('custom html', getLang()), desc: t('free-form html block', getLang()) },
 ];
 
 export default function Widgets() {
   const toast = useToast();
   const [active, setActive] = useState<string[]>(['search', 'categories']);
+  const [config, setConfig] = useState<Record<string, { title?: string; html?: string }>>({});
   const [saved, setSaved] = useState(false);
   const [sites, setSites] = useState<any[]>([]);
   const [siteId, setSiteId] = useState('');
 
   useEffect(() => {
-    api.get('/sites').then(r => setSites(r.data || [])).catch(() => {});
+    api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {});
     load();
   }, []);
 
@@ -32,14 +34,24 @@ export default function Widgets() {
         : await api.get('/settings');
       const w = r.data.widgets_active;
       if (w) setActive(JSON.parse(w));
+      const cfg = r.data.widgets_config;
+      if (cfg) setConfig(JSON.parse(cfg));
     } catch {}
   }
 
   async function save() {
-    if (siteId) await api.put('/sites/' + siteId + '/settings', { widgets_active: JSON.stringify(active) });
-    else await api.put('/settings', { widgets_active: JSON.stringify(active) });
+    const payload: any = {
+      widgets_active: JSON.stringify(active),
+      widgets_config: JSON.stringify(config),
+    };
+    if (siteId) await api.put('/sites/' + siteId + '/settings', payload);
+    else await api.put('/settings', payload);
     toast.toast(siteId ? t('widgets saved for site', getLang()) : t('widgets saved globally', getLang()));
     setSaved(true); setTimeout(() => setSaved(false), 2000);
+  }
+
+  function setCfg(id: string, patch: { title?: string; html?: string }) {
+    setConfig(prev => ({ ...prev, [id]: { ...(prev[id] || {}), ...patch } }));
   }
 
   function toggle(id: string) {
@@ -96,14 +108,33 @@ export default function Widgets() {
               active.map((id, idx) => {
                 const w = availableWidgets.find(x => x.id === id);
                 if (!w) return null;
-                return React.createElement('div', { key: id, className: 'flex items-center gap-2 p-3 border border-gray-200 rounded-lg bg-gray-50' },
-                  React.createElement('div', { className: 'flex flex-col gap-px' },
-                    React.createElement('button', { onClick: () => moveUp(idx), className: 'p-px text-gray-400 hover:text-gray-600 leading-none' }, '\u25b2'),
-                    React.createElement('button', { onClick: () => moveDown(idx), className: 'p-px text-gray-400 hover:text-gray-600 leading-none' }, '\u25bc')
+                return React.createElement('div', { key: id, className: 'p-3 border border-gray-200 rounded-lg bg-gray-50' },
+                  React.createElement('div', { className: 'flex items-center gap-2' },
+                    React.createElement('div', { className: 'flex flex-col gap-px' },
+                      React.createElement('button', { onClick: () => moveUp(idx), className: 'p-px text-gray-400 hover:text-gray-600 leading-none' }, '\u25b2'),
+                      React.createElement('button', { onClick: () => moveDown(idx), className: 'p-px text-gray-400 hover:text-gray-600 leading-none' }, '\u25bc')
+                    ),
+                    React.createElement(GripVertical, { size: 14, className: 'text-gray-300' }),
+                    React.createElement('span', { className: 'flex-1 text-sm text-gray-900' }, w.name),
+                    React.createElement('button', { onClick: () => toggle(id), className: 'text-xs text-red-500 hover:text-red-700 font-medium' }, t('remove', getLang()))
                   ),
-                  React.createElement(GripVertical, { size: 14, className: 'text-gray-300' }),
-                  React.createElement('span', { className: 'flex-1 text-sm text-gray-900' }, w.name),
-                  React.createElement('button', { onClick: () => toggle(id), className: 'text-xs text-red-500 hover:text-red-700 font-medium' }, t('remove', getLang()))
+                  // Per-widget configuration (title for all, custom HTML for html widgets)
+                  React.createElement('div', { className: 'mt-2 space-y-2' },
+                    id !== 'html' && React.createElement('input', {
+                      type: 'text',
+                      value: config[id]?.title || '',
+                      onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCfg(id, { title: e.target.value }),
+                      placeholder: t('widget title (optional)', getLang()),
+                      className: 'input-field text-xs',
+                    }),
+                    id === 'html' && React.createElement('textarea', {
+                      value: config[id]?.html || '',
+                      onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setCfg(id, { html: e.target.value }),
+                      placeholder: '<p>' + t('custom html content', getLang()) + '</p>',
+                      rows: 3,
+                      className: 'input-field text-xs font-mono',
+                    })
+                  )
                 );
               })
             )

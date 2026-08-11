@@ -4,6 +4,7 @@ import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye } from 'lucide-re
 import { useToast } from '../lib/toast';
 import RichEditor from '../components/RichEditor';
 import VisualEditor from '../components/VisualEditor';
+import RevisionsPanel from '../components/RevisionsPanel';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -17,6 +18,7 @@ export default function PageEditor() {
   const [parentId, setParentId] = useState('');
   const [parentPages, setParentPages] = useState<any[]>([]);
   const [menuOrder, setMenuOrder] = useState(0);
+  const [password, setPassword] = useState('');
   const toast = useToast();
   const [visualMode, setVisualMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -25,7 +27,7 @@ export default function PageEditor() {
   const [saving, setSaving] = useState(false);
   const createdIdRef = useRef<string | null>(null);
 
-  useEffect(() => { api.get('/pages').then(r => { const all = r.data; setParentPages(all.filter((p: any) => p.id !== id)); if (id) { const p = all.find((x: any) => x.id === id); if (p) { setTitle(p.title); setSlug(p.slug || ''); setContent(p.content); setStatus(p.status); setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } } }); }, [id]);
+  useEffect(() => { api.get('/pages').then(r => { const all = r.data; setParentPages(all.filter((p: any) => p.id !== id)); if (id) { const p = all.find((x: any) => x.id === id); if (p) { setTitle(p.title); setSlug(p.slug || ''); setContent(p.content); setStatus(p.status === 'published' && p.password ? 'password' : p.status); setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); setPassword(p.password || ''); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } } }); }, [id]);
 
   // stay=false (publish): navigate to pages; stay=true (draft from the builder):
   // keep editing in place
@@ -33,7 +35,11 @@ export default function PageEditor() {
     setSaving(true);
     setSaveState('saving');
     try {
-      const payload: any = { title, content, status: s, menuOrder, parentId: parentId || null };
+      // "Save draft" always saves as draft; "Publish" uses the user-selected
+      // status (published / password-protected / private), falling back to
+      // published when the select is still on draft.
+      const finalStatus = s === 'draft' ? 'draft' : (status === 'draft' ? 'published' : status);
+      const payload: any = { title, content, status: finalStatus, menuOrder, parentId: parentId || null, password };
       if (visualCss) payload.meta = { _visual_css: visualCss };
       const pageId = id || createdIdRef.current;
       if (pageId) await api.put(`/pages/${pageId}`, payload);
@@ -71,48 +77,31 @@ export default function PageEditor() {
         React.createElement('button', { onClick: () => handleSave('published'), disabled: saving || !title, className: 'btn-primary' }, t('publish', getLang()))
       )
     ),
-    // ---- VISUAL MODE: full-screen builder (Elementor/Fanke style) ----
+    // ---- VISUAL MODE: full-screen Gutenberg-style builder ----
     visualMode && React.createElement('div', { className: 'fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col' },
-      // Builder top bar
-      React.createElement('div', { className: 'flex flex-wrap items-center gap-3 px-4 py-2 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 shrink-0' },
-        React.createElement('button', {
-          onClick: () => setVisualMode(false),
-          className: 'flex items-center gap-1.5 px-2.5 py-1.5 text-sm text-gray-500 hover:text-gray-900 rounded-lg hover:bg-gray-100',
-          title: t('back to rich text', getLang()),
-        }, React.createElement(ArrowLeft, { size: 16 }), React.createElement(FileText, { size: 14 })),
-        React.createElement('div', { className: 'relative flex-1 max-w-xl' },
-          React.createElement('input', { value: title, onChange: e => setTitle(e.target.value), placeholder: t('page title', getLang()), className: 'input-field text-sm font-semibold pr-16' })
-        ),
-        React.createElement('div', { className: 'flex-1' }),
-        // Save status indicator
-        React.createElement('span', {
-          className: 'flex items-center gap-1.5 text-[11px] ' +
-            (saveState === 'saved' ? 'text-green-600' : saveState === 'saving' ? 'text-blue-600' : 'text-amber-600'),
-        },
-          React.createElement('span', { className: 'inline-block w-2 h-2 rounded-full ' + (saveState === 'saved' ? 'bg-green-500' : saveState === 'saving' ? 'bg-blue-500 animate-pulse' : 'bg-amber-500') }),
-          saveState === 'saved' ? t('saved', getLang()) : saveState === 'saving' ? t('saving...', getLang()) : t('unsaved changes', getLang())
-        ),
-        React.createElement('button', {
-          onClick: () => setShowSettings(!showSettings),
-          className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border ' +
-            (showSettings ? 'border-primary-400 bg-primary-50 text-primary-700' : 'border-gray-300 text-gray-600 hover:bg-gray-50'),
-        }, React.createElement(Settings2, { size: 14 }), t('page settings', getLang())),
-        // Preview on the live site (only when a slug exists)
-        slug && React.createElement('a', {
-          href: window.location.origin + '/page/' + slug,
-          target: '_blank', rel: 'noopener',
-          className: 'flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border border-gray-300 text-gray-600 hover:bg-gray-50',
-        }, React.createElement(Eye, { size: 14 }), t('preview', getLang())),
-        React.createElement('button', { onClick: () => handleSave('draft', true), disabled: saving || !title, className: 'btn-secondary text-xs' }, React.createElement(Save, { size: 14 }), t('save draft', getLang())),
-        React.createElement('button', { onClick: () => handleSave('published'), disabled: saving || !title, className: 'btn-primary text-xs' }, t('publish', getLang()))
-      ),
-      // Editor area + settings drawer
+      // Editor area — VisualEditor provides its own Gutenberg header
       React.createElement('div', { className: 'flex-1 relative overflow-hidden' },
         React.createElement(VisualEditor, {
           content, css: visualCss,
           onChange: (html: string, css: string) => { setContent(html); setVisualCss(css); setSaveState('dirty'); },
           height: '100%',
           onSaveShortcut: () => handleSave('draft', true),
+          onPublish: () => handleSave('published'),
+          onBack: () => setVisualMode(false),
+          saveState,
+          pageSettings: {
+            status,
+            onStatusChange: (v: string) => { setStatus(v); setSaveState('dirty'); },
+            parentId,
+            onParentIdChange: (v: string) => { setParentId(v); setSaveState('dirty'); },
+            parentPages: parentPages.filter((p: any) => p.id !== id).map((p: any) => ({ id: p.id, title: p.title })),
+            menuOrder,
+            onMenuOrderChange: (v: number) => { setMenuOrder(v); setSaveState('dirty'); },
+            password,
+            onPasswordChange: (v: string) => { setPassword(v); setSaveState('dirty'); },
+            slug,
+            showPreview: () => { if (slug) window.open(window.location.origin + '/page/' + slug, '_blank'); },
+          },
         }),
         showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },
           React.createElement('div', {
@@ -127,8 +116,9 @@ export default function PageEditor() {
               React.createElement('div', { className: 'card p-4' },
                 React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('status', getLang())),
                 React.createElement('select', { value: status, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setStatus(e.target.value), className: 'input-field' },
-                  React.createElement('option', { value: 'draft' }, t('draft', getLang())), React.createElement('option', { value: 'published' }, t('published', getLang())), React.createElement('option', { value: 'private' }, t('private', getLang()))
-                )
+                  React.createElement('option', { value: 'draft' }, t('draft', getLang())), React.createElement('option', { value: 'published' }, t('published', getLang())), React.createElement('option', { value: 'password' }, t('password protected', getLang())), React.createElement('option', { value: 'private' }, t('private', getLang()))
+                ),
+                React.createElement('input', { type: 'password', value: password, onChange: e => setPassword(e.target.value), placeholder: t('password protect this page', getLang()), className: 'input-field mt-2' })
               ),
               parentPages.length > 0 && React.createElement('div', { className: 'card p-4' },
                 React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('parent page', getLang())),
@@ -168,8 +158,9 @@ export default function PageEditor() {
         React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('status', getLang())),
           React.createElement('select', { value: status, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setStatus(e.target.value), className: 'input-field' },
-            React.createElement('option', { value: 'draft' }, t('draft', getLang())), React.createElement('option', { value: 'published' }, t('published', getLang())), React.createElement('option', { value: 'private' }, t('private', getLang()))
-          )
+            React.createElement('option', { value: 'draft' }, t('draft', getLang())), React.createElement('option', { value: 'published' }, t('published', getLang())), React.createElement('option', { value: 'password' }, t('password protected', getLang())), React.createElement('option', { value: 'private' }, t('private', getLang()))
+          ),
+          status === 'password' && React.createElement('input', { type: 'password', value: password, onChange: e => setPassword(e.target.value), placeholder: t('password protect this page', getLang()), className: 'input-field mt-2' })
         ),
         parentPages.length > 0 && React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('parent page', getLang())),
@@ -181,7 +172,8 @@ export default function PageEditor() {
         React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('menu order', getLang())),
           React.createElement('input', { type: 'number', value: menuOrder, onChange: e => setMenuOrder(parseInt(e.target.value) || 0), className: 'input-field' })
-        )
+        ),
+        id && React.createElement(RevisionsPanel, { postId: id, onRestore: (post: any) => { setTitle(post.title); setContent(post.content || ''); setSaveState('dirty'); } })
       )
     )
   );

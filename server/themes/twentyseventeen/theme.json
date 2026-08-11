@@ -11,10 +11,17 @@
     "heading_font": "system",
     "body_font": "system",
     "sidebar_position": "right",
-    "posts_per_row": "1"
+    "posts_per_row": "1",
+    "heading_cap": "2",
+    "heading_max": "24"
   },
   "settingsSchema": [
-    { "key": "header_image", "label": "Header image URL", "type": "text", "default": "" }
+    {
+      "key": "header_image",
+      "label": "Header image URL",
+      "type": "text",
+      "default": ""
+    }
   ],
   "custom_css": "article { border-bottom: 1px solid #eee; } article h2 { font-weight: 400; }"
 }

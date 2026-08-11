@@ -10,9 +10,10 @@ export default function Menus() {
   const [newName, setNewName] = useState('');
   const [newLocation, setNewLocation] = useState('primary');
   const [newSiteId, setNewSiteId] = useState('');
+  const [showLogin, setShowLogin] = useState(true);
   const [sites, setSites] = useState<any[]>([]);
 
-  useEffect(() => { api.get('/menus').then(r => setMenus(r.data)).catch(() => {}); api.get('/sites').then(r => setSites(r.data || [])).catch(() => {}); }, []);
+  useEffect(() => { api.get('/menus').then(r => setMenus(r.data)).catch(() => {}); api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); api.get('/settings').then(r => setShowLogin(r.data?.frontend_show_login !== '0')).catch(() => {}); }, []);
 
   async function createMenu() {
     if (!newName) return;
@@ -32,6 +33,13 @@ export default function Menus() {
       React.createElement('button', { onClick: () => setShowNew(true), className: 'btn-primary' },
         React.createElement(Plus, { size: 16 }), t('new menu', getLang())
       )
+    ),
+    React.createElement('div', { className: 'card p-4 mb-6 max-w-md' },
+      React.createElement('h3', { className: 'text-sm font-semibold mb-2' }, t('frontend login entry', getLang())),
+      React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300' },
+        React.createElement('input', { type: 'checkbox', checked: showLogin, onChange: () => { setShowLogin(!showLogin); api.put('/settings', { frontend_show_login: showLogin ? '0' : '1' }).catch(() => setShowLogin(!showLogin)); }, className: 'rounded border-gray-300 text-primary-600' }),
+        t('show login entry on frontend', getLang())),
+      React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, t('frontend login entry hint', getLang()))
     ),
     showNew && React.createElement('div', { className: 'card p-4 mb-6 max-w-md' },
       React.createElement('h3', { className: 'text-sm font-semibold mb-3' }, t('create menu', getLang())),

@@ -10,4 +10,4 @@ import PostLayout from './PostLayout';
 import PageLayout from './PageLayout';
 
 // Default theme entry (bundled as themes/default.js at build time)
-export default { name: 'default', Header, Footer, HomeLayout, CategoryLayout, TagLayout, ArchiveLayout, SearchLayout, AuthorLayout, PostLayout, PageLayout };
+export default { name: 'default', typography: { cap: 2, max: 24 }, Header, Footer, HomeLayout, CategoryLayout, TagLayout, ArchiveLayout, SearchLayout, AuthorLayout, PostLayout, PageLayout };

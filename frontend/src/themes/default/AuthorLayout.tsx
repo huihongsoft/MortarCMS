@@ -1,4 +1,5 @@
 import React from 'react';
+import { ListSkeleton } from '../../components/Skeleton';
 import { Link } from 'react-router-dom';
 import { Calendar, ArrowLeft } from 'lucide-react';
 import { timeAgo } from '../../lib/time';
@@ -17,7 +18,7 @@ export default function AuthorLayout(props: any) {
         React.createElement('p', { className: 'text-sm text-gray-500' }, posts.length + ' ' + t('posts'))
       )
     ),
-    loading ? React.createElement('p', { className: 'text-gray-500' }, t('loading'))
+    loading ? React.createElement(ListSkeleton, null)
     : posts.length === 0 ? React.createElement('p', { className: 'text-gray-500' }, t('no posts yet'))
     : React.createElement('div', { className: 'space-y-6' },
         posts.map((p: any) => React.createElement('article', { key: p.id, className: 'pb-6 border-b border-gray-100 last:border-0' },

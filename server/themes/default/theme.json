@@ -11,7 +11,68 @@
     "heading_font": "system",
     "body_font": "system",
     "sidebar_position": "right",
-    "posts_per_row": "1"
+    "posts_per_row": "1",
+    "show_related_posts": "1",
+    "show_share_buttons": "1",
+    "heading_cap": "2",
+    "heading_max": "24"
   },
+  "settingsSchema": [
+    {
+      "key": "sidebar_position",
+      "label": "Sidebar position",
+      "type": "select",
+      "options": [
+        "right",
+        "left"
+      ],
+      "default": "right"
+    },
+    {
+      "key": "posts_per_row",
+      "label": "Posts per row",
+      "type": "select",
+      "options": [
+        "1",
+        "2",
+        "3"
+      ],
+      "default": "1"
+    },
+    {
+      "key": "show_related_posts",
+      "label": "Show related posts",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "show_share_buttons",
+      "label": "Show share buttons",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "heading_font",
+      "label": "Heading font",
+      "type": "select",
+      "options": [
+        "system",
+        "serif",
+        "mono"
+      ],
+      "default": "system"
+    },
+    {
+      "key": "body_font",
+      "label": "Body font",
+      "type": "select",
+      "options": [
+        "system",
+        "serif",
+        "mono"
+      ],
+      "default": "system"
+    }
+  ],
   "custom_css": ""
 }

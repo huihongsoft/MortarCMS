@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Plus, Edit2, Trash2, FileText } from 'lucide-react';
+import { Plus, Edit2, Trash2, FileText, Eye } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
@@ -25,16 +25,28 @@ export default function Pages() {
           React.createElement('thead', null, React.createElement('tr', { className: 'border-b border-gray-200 bg-gray-50' },
             React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('title', getLang())),
             React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('status', getLang())),
+            React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('comments', getLang())),
             React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('order', getLang())),
             React.createElement('th', { className: 'text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('actions', getLang())),
           )),
           React.createElement('tbody', null, pages.map((p: any) =>
             React.createElement('tr', { key: p.id, className: 'border-b border-gray-100 hover:bg-gray-50' },
               React.createElement('td', { className: 'px-4 py-3 font-medium' }, p.title),
-              React.createElement('td', { className: 'px-4 py-3' }, React.createElement('span', { className: `px-2 py-1 text-xs rounded-full font-medium ${p.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}` }, p.status)),
+              React.createElement('td', { className: 'px-4 py-3' }, (() => {
+                const isPwd = p.status === 'published' && p.password;
+                const cls = isPwd ? 'bg-purple-100 text-purple-700' : p.status === 'published' ? 'bg-green-100 text-green-700' : p.status === 'private' ? 'bg-gray-100 text-gray-600' : 'bg-yellow-100 text-yellow-700';
+                return React.createElement('span', { className: `px-2 py-1 text-xs rounded-full font-medium ${cls}` }, isPwd ? t('password protected', getLang()) : t(p.status, getLang()));
+              })()),
+              React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, p.commentCount || 0),
               React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, p.menuOrder),
               React.createElement('td', { className: 'px-4 py-3' },
                 React.createElement('div', { className: 'flex items-center justify-end gap-2' },
+                  p.slug && p.status !== 'draft' ? React.createElement('a', {
+                    href: window.location.origin + '/page/' + p.slug,
+                    target: '_blank', rel: 'noopener',
+                    title: t('preview', getLang()),
+                    className: 'p-1.5 text-gray-400 hover:text-blue-600',
+                  }, React.createElement(Eye, { size: 16 })) : null,
                   React.createElement(Link, { to: `/pages/${p.id}/edit`, className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Edit2, { size: 16 })),
                   React.createElement('button', { onClick: () => del(p.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 16 }))
                 )

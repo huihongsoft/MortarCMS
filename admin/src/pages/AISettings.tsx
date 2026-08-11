@@ -13,6 +13,8 @@ interface Provider {
   model: string;
   enabled: boolean;
   hasKey?: boolean;
+  vision?: boolean;
+  imageGen?: boolean;
 }
 
 const TOOL_NAMES = [
@@ -43,6 +45,7 @@ export default function AISettings() {
   const [cmpResult, setCmpResult] = useState<any>(null);
   const [cmpLoading, setCmpLoading] = useState(false);
   const [memories, setMemories] = useState<any[]>([]);
+  const [usageLimit, setUsageLimit] = useState('');
 
   useEffect(() => {
     api.get('/ai/settings').then(r => {
@@ -54,6 +57,7 @@ export default function AISettings() {
       setRoles(r.data.roles || []);
       api.get('/ai/usage').then(r => setUsage(r.data)).catch(() => {});
       api.get('/ai/memories').then(r => setMemories(r.data.memories || [])).catch(() => {});
+      setUsageLimit(r.data?.usageLimit || '');
     }).catch(() => {});
   }, []);
 
@@ -155,6 +159,14 @@ export default function AISettings() {
             React.createElement('div', null,
               React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('model', getLang())),
               React.createElement('input', { value: p.model, onChange: e => updateProvider(p.id, { model: e.target.value }), className: 'input-field text-xs' })),
+          ),
+          React.createElement('div', { className: 'flex items-center gap-4 mt-2' },
+            React.createElement('label', { className: 'flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer' },
+              React.createElement('input', { type: 'checkbox', checked: !!p.vision, onChange: e => updateProvider(p.id, { vision: e.target.checked }), className: 'rounded border-gray-300 text-primary-600' }),
+              t('vision (image analysis)', getLang())),
+            React.createElement('label', { className: 'flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer' },
+              React.createElement('input', { type: 'checkbox', checked: !!p.imageGen, onChange: e => updateProvider(p.id, { imageGen: e.target.checked }), className: 'rounded border-gray-300 text-primary-600' }),
+              t('image generation', getLang()))
           )
         ))
       )
@@ -184,7 +196,17 @@ export default function AISettings() {
 
     // ---- Usage stats (admin) ----
     usage && React.createElement('div', { className: 'card p-6 mb-6' },
-      React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('ai usage', getLang())),
+      React.createElement('div', { className: 'flex items-center justify-between mb-4 flex-wrap gap-2' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('ai usage', getLang())),
+        React.createElement('div', { className: 'flex items-center gap-2' },
+          React.createElement('label', { className: 'text-xs text-gray-500' }, t('daily token limit', getLang())),
+          React.createElement('input', { type: 'number', min: 0, step: 1000, value: usageLimit, onChange: e => setUsageLimit(e.target.value), className: 'input-field w-28 text-xs py-1.5' }),
+          React.createElement('button', { onClick: async () => {
+            try { await api.put('/settings', { ai_usage_limit_daily: String(usageLimit || '') }); toast.toast(t('saved', getLang())); }
+            catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+          }, className: 'btn-secondary text-xs' }, t('save', getLang()))
+        )
+      ),
       React.createElement('div', { className: 'grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4' },
         React.createElement('div', { className: 'p-3 rounded-lg bg-gray-50 dark:bg-gray-800' },
           React.createElement('p', { className: 'text-2xl font-bold text-gray-900 dark:text-white' }, usage.total?.c || 0),
@@ -198,6 +220,11 @@ export default function AISettings() {
         React.createElement('div', { className: 'p-3 rounded-lg bg-gray-50 dark:bg-gray-800' },
           React.createElement('p', { className: 'text-2xl font-bold text-gray-900 dark:text-white' }, (usage.today?.t || 0).toLocaleString()),
           React.createElement('p', { className: 'text-xs text-gray-500' }, t('today tokens', getLang()))),
+      ),
+      usage.byKind && usage.byKind.length > 0 && React.createElement('div', { className: 'flex flex-wrap gap-2 mb-4' },
+        usage.byKind.map((k: any) =>
+          React.createElement('span', { key: k.kind, className: 'px-2.5 py-1 text-xs rounded-full bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' },
+            k.kind + ': ' + k.c + ' (' + (k.t || 0).toLocaleString() + ' tokens)'))
       ),
       usage.byDay && usage.byDay.length > 0 && React.createElement('div', { className: 'flex items-end gap-1 h-20' },
         usage.byDay.map((d: any) => {

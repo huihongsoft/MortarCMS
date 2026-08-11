@@ -11,10 +11,17 @@
     "heading_font": "system",
     "body_font": "system",
     "sidebar_position": "none",
-    "posts_per_row": "1"
+    "posts_per_row": "1",
+    "heading_cap": "2",
+    "heading_max": "24"
   },
   "settingsSchema": [
-    { "key": "hero_heading", "label": "Hero heading", "type": "text", "default": "" }
+    {
+      "key": "hero_heading",
+      "label": "Hero heading",
+      "type": "text",
+      "default": ""
+    }
   ],
   "custom_css": "article h2 { font-weight: 800; letter-spacing: -0.03em; } body { letter-spacing: -0.01em; }"
 }

@@ -2,6 +2,7 @@
 // The default theme is bundled with the app (no flash); other themes are
 // dynamically imported from /themes/<name>/theme.js (served by the server).
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import type { ThemeTypography } from '../lib/typography';
 import DefaultHeader from './default/Header';
 import DefaultFooter from './default/Footer';
 import DefaultHomeLayout from './default/HomeLayout';
@@ -15,6 +16,10 @@ import DefaultPageLayout from './default/PageLayout';
 
 export interface Theme {
   name: string;
+  // Heading standard for article/page body copy: cap (1 = allow h1 in body,
+  // 2 = body copy starts at h2) + max heading size in px. Presentation only —
+  // stored content keeps its semantic h1-h6 tags.
+  typography: ThemeTypography;
   Header: React.ComponentType<any>;
   Footer: React.ComponentType<any>;
   HomeLayout: React.ComponentType<any>;
@@ -29,6 +34,7 @@ export interface Theme {
 
 export const defaultTheme: Theme = {
   name: 'default',
+  typography: { cap: 2, max: 24 },
   Header: DefaultHeader,
   Footer: DefaultFooter,
   HomeLayout: DefaultHomeLayout,
@@ -46,6 +52,7 @@ function mergeTheme(name: string, mod: any): Theme {
   const t = mod?.default || mod || {};
   return {
     name: t.name || name,
+    typography: t.typography || defaultTheme.typography,
     Header: t.Header || defaultTheme.Header,
     Footer: t.Footer || defaultTheme.Footer,
     HomeLayout: t.HomeLayout || defaultTheme.HomeLayout,

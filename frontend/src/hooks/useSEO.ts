@@ -7,6 +7,8 @@ interface SEOOptions {
   url?: string;         // path like /post/slug
   type?: string;        // article | website
   jsonLd?: object[];    // structured data (JSON-LD)
+  noindex?: boolean;    // robots noindex
+  canonical?: string;   // custom canonical URL override
 }
 
 const SITE_TITLE = 'Mortar CMS';
@@ -58,7 +60,20 @@ export default function useSEO(opts: SEOOptions = {}) {
       ldEl.remove();
     }
 
-    // Canonical
+    // Robots: noindex (per-post SEO setting)
+    let robotsEl = document.head.querySelector('meta[name="robots"]') as HTMLMetaElement | null;
+    if (opts.noindex) {
+      if (!robotsEl) {
+        robotsEl = document.createElement('meta');
+        robotsEl.name = 'robots';
+        document.head.appendChild(robotsEl);
+      }
+      robotsEl.content = 'noindex, nofollow';
+    } else if (robotsEl) {
+      robotsEl.remove();
+    }
+
+    // Canonical (custom per-post override wins over the page URL)
     if (opts.url) {
       let link = document.head.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
       if (!link) {
@@ -66,7 +81,7 @@ export default function useSEO(opts: SEOOptions = {}) {
         link.rel = 'canonical';
         document.head.appendChild(link);
       }
-      link.href = opts.url;
+      link.href = opts.canonical || opts.url;
     }
-  }, [opts.title, opts.description, opts.image, opts.url, opts.type, JSON.stringify(opts.jsonLd)]);
+  }, [opts.title, opts.description, opts.image, opts.url, opts.type, opts.noindex, opts.canonical, JSON.stringify(opts.jsonLd)]);
 }

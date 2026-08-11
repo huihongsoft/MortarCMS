@@ -7,8 +7,10 @@ import {
   setDefaultProvider, chatComplete, pushAssistantWithTools, pushToolResults, testProvider,
 } from '../utils/ai';
 import {
-  getAiAllowedRoles, getToolPermissions, isRoleAllowed, listToolSchemas, toolCallToResult, executeTool, guardUserMessage, memoryPrompt, mdToHtml,
+  getAiAllowedRoles, getToolPermissions, isRoleAllowed, listToolSchemas, toolCallToResult, executeTool, guardUserMessage, memoryPrompt, prepareAiContent, friendlyTaskError,
 } from '../utils/aiTools';
+import { mdToHtml } from '../utils/markdown';
+import { purgeContentCaches } from '../utils/cache';
 
 const router = Router();
 
@@ -59,6 +61,7 @@ router.get('/settings', authenticate, requireCap('ai_manage', 'manage_options'),
       allowedRoles: getAiAllowedRoles(),
       toolPermissions: getToolPermissions(),
       roles: (db.prepare('SELECT DISTINCT role FROM User').all() as any[]).map((r: any) => r.role),
+      usageLimit: (db.prepare("SELECT value FROM Setting WHERE key = 'ai_usage_limit_daily'").get() as any)?.value || '',
     });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -118,19 +121,68 @@ router.post('/chat', authenticate, async (req: AuthRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Summarize a long conversation excerpt (used to compress chat history)
+router.post('/summarize', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const now = Date.now();
+    const last = lastAiRequest.get(req.user!.userId);
+    if (last && now - last < AI_MIN_INTERVAL_MS) { res.status(429).json({ error: '请求太频繁，请稍等几秒再试' }); return; }
+    lastAiRequest.set(req.user!.userId, now);
+    const text = String(req.body?.text || '').trim();
+    if (!text) { res.status(400).json({ error: 'text required' }); return; }
+    const provider = getDefaultProvider();
+    if (!provider) { res.status(400).json({ error: '未配置 AI 服务商' }); return; }
+    const result = await chatComplete(provider, [
+      { role: 'system', content: '你是对话压缩器。把给定的聊天记录压缩成简洁的要点摘要，保留关键信息、结论、用户偏好和已执行的操作。使用中文，150 字以内，只输出摘要本身。' },
+      { role: 'user', content: String(text).slice(0, 12000) },
+    ], { maxTokens: 400 });
+    recordUsage(req.user!.userId, 'summarize', result.content, provider.model);
+    res.json({ summary: result.content });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // ---- Assistant (tools + permissions) — SSE streaming ----
+
+// Per-user request throttle (prevents runaway token spend from misfires)
+const lastAiRequest = new Map<string, number>();
+const AI_MIN_INTERVAL_MS = 2000;
+
+// Build multi-turn history from the client (validated, trimmed, role-checked)
+function buildHistoryMessages(raw: any): { role: 'user' | 'assistant'; content: string }[] {
+  if (!Array.isArray(raw)) return [];
+  const out: { role: 'user' | 'assistant'; content: string }[] = [];
+  let total = 0;
+  for (const m of raw.slice(-20)) {
+    if (m?.role !== 'user' && m?.role !== 'assistant') continue;
+    let content = String(m.content || '');
+    if (!content.trim()) continue;
+    content = content.slice(0, 1500);
+    total += content.length;
+    if (total > 12000) break;
+    out.push(m.role === 'user' ? { role: 'user', content: guardUserMessage(content) } : { role: 'assistant', content });
+  }
+  return out;
+}
 
 router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
+    const now = Date.now();
+    const last = lastAiRequest.get(req.user!.userId);
+    if (last && now - last < AI_MIN_INTERVAL_MS) {
+      res.status(429).json({ error: '请求太频繁，请稍等几秒再试' });
+      return;
+    }
+    lastAiRequest.set(req.user!.userId, now);
     const provider = getDefaultProvider();
     if (!provider) { res.status(400).json({ error: '尚未配置 AI 服务商，请先在 AI 设置中配置' }); return; }
-    const { message, temperature, maxTokens, includeContext } = req.body;
+    const { message, temperature, maxTokens, includeContext, history } = req.body;
     if (!message) { res.status(400).json({ error: 'message required' }); return; }
 
     const tools = listToolSchemas(req.user!.role);
     const msgs: any[] = [
       { role: 'system', content: SYSTEM_PROMPT + (includeContext === false ? '' : '\n\n' + buildSiteContext() + memoryPrompt(req.user!.userId)) + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
+      ...buildHistoryMessages(history),
       { role: 'user', content: guardUserMessage(String(message)) },
     ];
     const ctx = { userId: req.user!.userId, role: req.user!.role };
@@ -156,6 +208,11 @@ router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) 
       send({ type: 'tools', tools: result.toolCalls.map(t => t.name) });
       pushAssistantWithTools(msgs, result.content, result.toolCalls, provider.type);
       const results = await Promise.all(result.toolCalls.map(tc => toolCallToResult(tc, ctx)));
+      // Stream tool results to the UI so users can see what was queried
+      for (const r of results) {
+        const tc = result.toolCalls.find((x: any) => x.id === r.id);
+        send({ type: 'tool_result', name: tc?.name || 'tool', output: String(r.output || '').slice(0, 800) });
+      }
       pushToolResults(msgs, results, provider.type);
       if (i === MAX_ITER - 1) finalText = '已达到工具调用次数上限，请简化问题重试。';
     }
@@ -230,6 +287,25 @@ function recordUsage(userId: string, kind: string, text: string, model?: string)
     db.prepare('INSERT INTO AiUsage (id, userId, kind, model, tokens, createdAt) VALUES (?, ?, ?, ?, ?, ?)')
       .run(cuid(), userId, kind, model || '', tokens, new Date().toISOString());
   } catch {}
+  checkUsageAlert();
+}
+
+// Daily usage alert: notify admins once per day when the token budget is exceeded
+function checkUsageAlert(): void {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const warned = (db.prepare("SELECT value FROM Setting WHERE key = 'ai_usage_warned_date'").get() as any)?.value;
+    if (warned === today) return; // already notified today
+    const limit = parseInt((db.prepare("SELECT value FROM Setting WHERE key = 'ai_usage_limit_daily'").get() as any)?.value || '500000') || 500000;
+    const used = (db.prepare("SELECT COALESCE(SUM(tokens),0) as t FROM AiUsage WHERE date(createdAt) = date('now')").get() as any)?.t || 0;
+    if (used < limit) return;
+    db.prepare("INSERT INTO Setting (id, key, value) VALUES ('ai_usage_warned_date', 'ai_usage_warned_date', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(today);
+    const admins = db.prepare("SELECT id FROM User WHERE role = 'admin'").all() as any[];
+    for (const a of admins) {
+      db.prepare('INSERT INTO AiNotification (id, userId, message, read, createdAt) VALUES (?, ?, ?, 0, ?)')
+        .run(cuid(), a.id, '⚠️ 今日 AI 用量已达 ' + Math.round(used / 1000) + 'K tokens（限额 ' + Math.round(limit / 1000) + 'K）', new Date().toISOString());
+    }
+  } catch {}
 }
 
 router.get('/usage', authenticate, requireCap('ai_manage'), (req: AuthRequest, res: Response) => {
@@ -237,7 +313,7 @@ router.get('/usage', authenticate, requireCap('ai_manage'), (req: AuthRequest, r
     const total = (db.prepare('SELECT COUNT(*) as c, COALESCE(SUM(tokens),0) as t FROM AiUsage').get() as any);
     const today = (db.prepare("SELECT COUNT(*) as c, COALESCE(SUM(tokens),0) as t FROM AiUsage WHERE date(createdAt) = date('now')").get() as any);
     const byKind = db.prepare('SELECT kind, COUNT(*) as c, COALESCE(SUM(tokens),0) as t FROM AiUsage GROUP BY kind').all();
-    const byDay = db.prepare("SELECT date(createdAt) as day, COUNT(*) as c, COALESCE(SUM(tokens),0) as t FROM AiUsage WHERE createdAt >= datetime('now', '-7 days') GROUP BY day ORDER BY day").all();
+    const byDay = db.prepare("SELECT date(createdAt) as day, COUNT(*) as c, COALESCE(SUM(tokens),0) as t FROM AiUsage WHERE createdAt >= datetime('now', '-30 days') GROUP BY day ORDER BY day").all();
     const recent = db.prepare('SELECT u.*, us.username FROM AiUsage u LEFT JOIN User us ON us.id = u.userId ORDER BY u.createdAt DESC LIMIT 20').all();
     res.json({ total, today, byKind, byDay, recent });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -273,19 +349,39 @@ function getTask(id: string): any {
 }
 
 async function runTask(taskId: string, userId: string, role: string, username: string, message: string): Promise<void> {
+  // Tool-call budget per task: complex workflows (search + write + cover +
+  // SEO) need headroom, and the model is told to batch calls in one round.
+  const MAX_ITER = 16;
+  let timeout: any = null;
+  const steps: TaskStep[] = [];
   try {
     const provider = getDefaultProvider();
     if (!provider) { updateTask(taskId, { status: 'failed', error: '尚未配置 AI 服务商', finishedAt: new Date().toISOString() }); return; }
     const tools = listToolSchemas(role);
     const msgs: any[] = [
-      { role: 'system', content: SYSTEM_PROMPT + '\n\n' + buildSiteContext() + memoryPrompt(userId) + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
+      { role: 'system', content: SYSTEM_PROMPT + '\n\n' + buildSiteContext() + memoryPrompt(userId) + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') + '\n\n注意：一次任务最多可进行 ' + MAX_ITER + ' 轮工具调用。请尽量在一轮中并行调用多个工具（一次返回多个工具调用），避免多余的确认性调用，把轮次留给真正需要的操作。' },
       { role: 'user', content: guardUserMessage(message) },
     ];
     const ctx = { userId, role };
-    const steps: TaskStep[] = [];
     let finalText = '';
+    let finished = false;
+    const finish = (status: string, patch: Record<string, any>) => {
+      if (finished) return;
+      finished = true;
+      clearTimeout(timeout);
+      updateTask(taskId, { status, ...patch, steps: JSON.stringify(steps), finishedAt: new Date().toISOString() });
+      // R1: notification carries a summary of what the task produced so the
+      // user sees the outcome without opening the task detail
+      const summary = (status === 'done' ? finalText : patch.error) || '';
+      notifyTaskFinished(taskId, userId, status, summary);
+      recordUsage(userId, 'task', finalText || taskId, provider.model);
+    };
 
-    const MAX_ITER = 10;
+    // Hard timeout so a hung tool call can never block a task forever
+    timeout = setTimeout(() => {
+      finish('failed', { error: '任务执行超时（10 分钟上限）' });
+    }, 600000);
+
     for (let i = 0; i < MAX_ITER; i++) {
       // Cancellation check
       const cur = db.prepare('SELECT status FROM AiTask WHERE id = ?').get(taskId) as any;
@@ -306,24 +402,35 @@ async function runTask(taskId: string, userId: string, role: string, username: s
         return { id: tc.id, output: JSON.stringify(output) };
       }));
       pushToolResults(msgs, outputs, provider.type);
-      if (i === MAX_ITER - 1) finalText = '已达到工具调用次数上限。';
+      if (i === MAX_ITER - 1) {
+        // Cap reached with tools still pending: give the model one final
+        // chance to summarize what was done instead of leaving the user with
+        // a bare "limit reached" message.
+        try {
+          msgs.push({ role: 'system', content: '工具调用次数已达上限。请立即用自然语言总结：已完成的工作、产出（如文章标题/链接/ID）、以及未能完成的部分。不要再调用任何工具。' });
+          const wrap = await chatComplete(provider, msgs, {});
+          finalText = wrap.content || '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。';
+        } catch { finalText = '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。'; }
+        break;
+      }
     }
 
-    updateTask(taskId, { status: 'done', result: finalText, steps: JSON.stringify(steps), finishedAt: new Date().toISOString() });
-    recordUsage(userId, 'task', finalText, provider.model);
-    notifyTaskFinished(taskId, userId, 'done');
+    finish('done', { result: finalText });
   } catch (e: any) {
-    updateTask(taskId, { status: 'failed', error: e.message || String(e), finishedAt: new Date().toISOString() });
-    notifyTaskFinished(taskId, userId, 'failed');
+    try { clearTimeout(timeout); } catch {}
+    const friendly = friendlyTaskError(e);
+    updateTask(taskId, { status: 'failed', error: friendly, steps: JSON.stringify(steps), finishedAt: new Date().toISOString() });
+    notifyTaskFinished(taskId, userId, 'failed', friendly);
   }
 }
 
-function notifyTaskFinished(taskId: string, userId: string, status: string): void {
+function notifyTaskFinished(taskId: string, userId: string, status: string, summary?: string): void {
   try {
     const task = getTask(taskId);
-    const msg = status === 'done'
+    const head = status === 'done'
       ? '✅ AI 任务完成: ' + (task?.prompt || '').slice(0, 40)
       : '❌ AI 任务失败: ' + (task?.prompt || '').slice(0, 40);
+    const msg = summary ? head + '\n' + String(summary).replace(/\s+/g, ' ').slice(0, 80) : head;
     db.prepare('INSERT INTO AiNotification (id, userId, message, taskId, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)')
       .run(cuid(), userId, msg, taskId, new Date().toISOString());
   } catch {}
@@ -338,6 +445,14 @@ router.get('/notifications', authenticate, (req: AuthRequest, res: Response) => 
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Mark a single notification as read
+router.post('/notifications/:id/read', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    db.prepare('UPDATE AiNotification SET read = 1 WHERE id = ? AND userId = ?').run(req.params.id, req.user!.userId);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 router.post('/notifications/read-all', authenticate, (req: AuthRequest, res: Response) => {
   try {
     db.prepare('UPDATE AiNotification SET read = 1 WHERE userId = ?').run(req.user!.userId);
@@ -348,21 +463,40 @@ router.post('/notifications/read-all', authenticate, (req: AuthRequest, res: Res
 router.post('/task', authenticate, (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
-    const { message } = req.body;
+    const message = String((req.body || {}).message || '').trim();
     if (!message) { res.status(400).json({ error: 'message required' }); return; }
+    // R4: cap prompt length so a huge description cannot blow up the token budget
+    const prompt = message.slice(0, 2000);
+    // R8: rate-limit task creation (per user)
+    const recent = (db.prepare("SELECT COUNT(*) as c FROM AiTask WHERE userId = ? AND createdAt > ?").get(req.user!.userId, new Date(Date.now() - 60_000).toISOString()) as any)?.c || 0;
+    if (recent >= 5) { res.status(429).json({ error: '任务创建过于频繁，请稍候再试' }); return; }
+    // R9: cap concurrent running tasks (per user)
+    const running = (db.prepare("SELECT COUNT(*) as c FROM AiTask WHERE userId = ? AND status = 'running'").get(req.user!.userId) as any)?.c || 0;
+    if (running >= 3) { res.status(429).json({ error: '同时最多运行 3 个任务，请等待当前任务完成后再试' }); return; }
     const user = db.prepare('SELECT id, username FROM User WHERE id = ?').get(req.user!.userId) as any;
-    const taskId = createTask(req.user!.userId, user?.username || 'user', String(message));
+    const taskId = createTask(req.user!.userId, user?.username || 'user', prompt);
     // Run in background without blocking the response
-    setImmediate(() => { runTask(taskId, req.user!.userId, req.user!.role, user?.username || 'user', String(message)); });
+    setImmediate(() => { runTask(taskId, req.user!.userId, req.user!.role, user?.username || 'user', prompt); });
     res.status(201).json({ id: taskId });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 router.get('/tasks', authenticate, (req: AuthRequest, res: Response) => {
   try {
-    const tasks = req.user!.role === 'admin'
-      ? db.prepare('SELECT id, username, prompt, status, createdAt, finishedAt FROM AiTask ORDER BY createdAt DESC LIMIT 50').all()
-      : db.prepare('SELECT id, username, prompt, status, createdAt, finishedAt FROM AiTask WHERE userId = ? ORDER BY createdAt DESC LIMIT 50').all(req.user!.userId);
+    const rows = req.user!.role === 'admin'
+      ? db.prepare('SELECT id, username, prompt, status, error, steps, createdAt, finishedAt FROM AiTask ORDER BY createdAt DESC LIMIT 50').all()
+      : db.prepare('SELECT id, username, prompt, status, error, steps, createdAt, finishedAt FROM AiTask WHERE userId = ? ORDER BY createdAt DESC LIMIT 50').all(req.user!.userId);
+    const tasks = (rows as any[]).map((t: any) => {
+      let steps: any[] = [];
+      try { steps = JSON.parse(t.steps || '[]'); } catch {}
+      const last = steps[steps.length - 1];
+      return {
+        id: t.id, username: t.username, prompt: t.prompt, status: t.status, error: t.error,
+        createdAt: t.createdAt, finishedAt: t.finishedAt,
+        stepCount: steps.length,
+        lastStep: last ? (last.type === 'think' ? String(last.content || '').slice(0, 60) : last.name) : null,
+      };
+    });
     res.json({ tasks });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -540,8 +674,9 @@ router.post('/batch-translate', authenticate, async (req: AuthRequest, res: Resp
         const body = lines.filter((l: string) => !l.startsWith('# ')).join('\n');
         const allSlugs = (db.prepare("SELECT slug FROM Post WHERE type = 'post'").all() as any[]).map((x: any) => x.slug);
         const id = cuid();
-        db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(id, newTitle, uniqueSlug(newTitle, allSlugs), mdToHtml(body), (post.excerpt || '').slice(0, 300), 'draft', 'post', req.user!.userId);
+        db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, featured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(id, newTitle, uniqueSlug(newTitle, allSlugs), prepareAiContent(body), (post.excerpt || '').slice(0, 300), 'draft', 'post', req.user!.userId, post.featured || null);
+        purgeContentCaches();
         results.push({ source: post.title, id, title: newTitle, status: 'ok' });
       } catch (e: any) {
         results.push({ source: post.title, error: e.message || '翻译失败' });
@@ -591,6 +726,80 @@ router.delete('/memories/:key', authenticate, (req: AuthRequest, res: Response) 
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// ---- Chat sessions (server-side persistence, cross-device) ----
+
+function parseSessionMessages(raw: any): string {
+  if (!Array.isArray(raw)) return '[]';
+  const cleaned = raw
+    .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant'))
+    .map((m: any) => ({ role: m.role, content: String(m.content || '').slice(0, 20000), ts: m.ts || Date.now() }))
+    .slice(-100);
+  return JSON.stringify(cleaned);
+}
+
+// List current user's sessions (summaries only)
+router.get('/sessions', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const rows = db.prepare('SELECT id, title, createdAt, updatedAt, LENGTH(messages) as size FROM AiSession WHERE userId = ? ORDER BY updatedAt DESC LIMIT 50').all(req.user!.userId) as any[];
+    res.json({ sessions: rows });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Full session (messages)
+router.get('/sessions/:id', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const row = db.prepare('SELECT * FROM AiSession WHERE id = ? AND userId = ?').get(req.params.id, req.user!.userId) as any;
+    if (!row) { res.status(404).json({ error: '会话不存在' }); return; }
+    let messages: any[] = [];
+    try { messages = JSON.parse(row.messages || '[]'); } catch {}
+    res.json({ id: row.id, title: row.title, messages });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Create a session
+router.post('/sessions', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const id = req.body?.id || cuid();
+    const title = String(req.body?.title || 'New chat').slice(0, 60);
+    const messages = parseSessionMessages(req.body?.messages);
+    const now = new Date().toISOString();
+    db.prepare('INSERT INTO AiSession (id, userId, title, messages, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, req.user!.userId, title, messages, now, now);
+    res.status(201).json({ id, title });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Update a session (title and/or messages)
+router.put('/sessions/:id', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const existing = db.prepare('SELECT id FROM AiSession WHERE id = ? AND userId = ?').get(req.params.id, req.user!.userId) as any;
+    if (!existing) { res.status(404).json({ error: '会话不存在' }); return; }
+    const sets: string[] = []; const vals: any[] = [];
+    if (req.body?.title !== undefined) { sets.push('title = ?'); vals.push(String(req.body.title).slice(0, 60)); }
+    if (req.body?.messages !== undefined) { sets.push('messages = ?'); vals.push(parseSessionMessages(req.body.messages)); }
+    sets.push('updatedAt = ?'); vals.push(new Date().toISOString());
+    vals.push(req.params.id);
+    db.prepare('UPDATE AiSession SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Delete all sessions for the current user
+router.delete('/sessions', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const r = db.prepare('DELETE FROM AiSession WHERE userId = ?').run(req.user!.userId);
+    res.json({ success: true, deleted: r.changes });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Delete a session
+router.delete('/sessions/:id', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    db.prepare('DELETE FROM AiSession WHERE id = ? AND userId = ?').run(req.params.id, req.user!.userId);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // Direct vision/image-gen helpers (UI-facing wrappers around the tools)
 router.post('/vision', authenticate, async (req: AuthRequest, res: Response) => {
   try {
@@ -635,6 +844,7 @@ router.post('/tasks/:id/retry', authenticate, (req: AuthRequest, res: Response) 
 router.delete('/tasks/:id', authenticate, (req: AuthRequest, res: Response) => {
   try {
     const task = getTask(req.params.id);
+    db.prepare('DELETE FROM AiNotification WHERE taskId = ?').run(req.params.id);
     if (!task) { res.status(404).json({ error: '任务不存在' }); return; }
     if (req.user!.role !== 'admin' && task.userId !== req.user!.userId) { res.status(403).json({ error: '无权删除该任务' }); return; }
     db.prepare('DELETE FROM AiTask WHERE id = ?').run(req.params.id);

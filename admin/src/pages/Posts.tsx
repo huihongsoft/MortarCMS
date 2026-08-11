@@ -23,7 +23,13 @@ export default function Posts() {
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortDir, setSortDir] = useState('desc');
   const [counts, setCounts] = useState<Record<string,number>>({});
-  const [filter, setFilter] = useState('');
+  const [filter, setFilter] = useState(() => new URLSearchParams(window.location.search).get('status') || '');
+  // Keep the status filter in the URL so dashboard links land on the right list
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    if (filter) url.searchParams.set('status', filter); else url.searchParams.delete('status');
+    window.history.replaceState(null, '', url.toString());
+  }, [filter]);
 
   useEffect(() => { api.get('/posts/admin?limit=1').then(r => setCounts(c => ({...c, all: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=published&limit=1').then(r => setCounts(c => ({...c, published: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=draft&limit=1').then(r => setCounts(c => ({...c, draft: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=trash&limit=1').then(r => setCounts(c => ({...c, trash: r.data.total || 0}))).catch(()=>{}); }, []);
   useEffect(() => { fetchPosts(); }, [page, filter]);
@@ -44,6 +50,13 @@ export default function Posts() {
   }
   function openQuickEdit(p: any) { setQuickEdit(p); setQeTitle(p.title); setQeStatus(p.status); }
 
+  async function bulkStatus(status: string) {
+    if (selected.size === 0) return;
+    await api.post('/posts/bulk-status', { ids: Array.from(selected), status });
+    toast.toast(selected.size + ' ' + t('posts', getLang()) + ' → ' + t(status, getLang()));
+    setSelected(new Set());
+    fetchPosts();
+  }
   async function bulkTrash() {
     if (selected.size === 0) return;
     await api.post('/posts/bulk-trash', { ids: Array.from(selected) });
@@ -113,6 +126,8 @@ export default function Posts() {
                 React.createElement('button', { onClick: bulkDelete, className: 'btn-danger text-xs' }, t('delete permanently', getLang()) + ' (' + selected.size + ')'),
               )
             : React.createElement(React.Fragment, null,
+                React.createElement('button', { onClick: () => bulkStatus('published'), className: 'btn-secondary text-xs' }, t('publish selected', getLang()) + ' (' + selected.size + ')'),
+                React.createElement('button', { onClick: () => bulkStatus('draft'), className: 'btn-secondary text-xs' }, t('draft selected', getLang()) + ' (' + selected.size + ')'),
                 React.createElement('button', { onClick: bulkTrash, className: 'btn-danger text-xs' }, React.createElement(Trash, { size: 14 }), t('trash selected', getLang()) + ' (' + selected.size + ')'),
                 React.createElement('div', { className: 'flex items-center gap-1' },
                   React.createElement('select', { value: batchLang, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setBatchLang(e.target.value), className: 'input-field w-28 text-xs' },

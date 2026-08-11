@@ -10,12 +10,15 @@ export interface AIProvider {
   apiKey: string;
   model: string;
   enabled: boolean;
+  vision?: boolean;   // supports image input (e.g. gpt-4o)
+  imageGen?: boolean; // supports /images/generations (e.g. dall-e-3, gpt-image-1)
 }
 
 export interface AIMessage {
   role: 'system' | 'user' | 'assistant' | 'tool';
   content: any;
   tool_call_id?: string;
+  tool_calls?: any[]; // OpenAI wire format, set on assistant messages that invoked tools
 }
 
 export interface AIToolFunction {
@@ -110,7 +113,8 @@ async function readOpenAIStream(res: Response, onDelta: (text: string) => void):
             const idx = tc.index ?? 0;
             acc[idx] = acc[idx] || { id: '', name: '', args: '' };
             if (tc.id) acc[idx].id = tc.id;
-            if (tc.function?.name) acc[idx].name += tc.function.name;
+            // Streaming sends the full name in the first chunk (not incremental)
+            if (tc.function?.name && !acc[idx].name) acc[idx].name = tc.function.name;
             if (tc.function?.arguments) acc[idx].args += tc.function.arguments;
           }
         }
@@ -131,6 +135,7 @@ async function openaiChat(provider: AIProvider, messages: AIMessage[], tools: AI
     messages: messages.map(m => {
       const msg: any = { role: m.role, content: m.content };
       if (m.tool_call_id) msg.tool_call_id = m.tool_call_id;
+      if (m.tool_calls) msg.tool_calls = m.tool_calls;
       return msg;
     }),
     stream: !!onDelta,
@@ -168,7 +173,6 @@ async function anthropicChat(provider: AIProvider, messages: AIMessage[], tools:
   const rest = messages.filter(m => m.role !== 'system').map(m => ({
     role: m.role,
     content: m.content,
-    ...(m.tool_call_id ? {} : {}),
   }));
 
   const body: any = {
@@ -200,6 +204,9 @@ async function anthropicChat(provider: AIProvider, messages: AIMessage[], tools:
     const decoder = new TextDecoder();
     let buf = '';
     let full = '';
+    // Streaming tool use: content_block_start(tool_use) + input_json_delta
+    const toolBlocks: { id: string; name: string; input: string }[] = [];
+    let cur: { id: string; name: string; input: string } | null = null;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -211,14 +218,26 @@ async function anthropicChat(provider: AIProvider, messages: AIMessage[], tools:
         if (!t.startsWith('data:')) continue;
         try {
           const j: any = JSON.parse(t.slice(5).trim());
-          if (j.type === 'content_block_delta' && j.delta?.type === 'text_delta') {
+          if (j.type === 'content_block_start' && j.content_block?.type === 'tool_use') {
+            cur = { id: j.content_block.id, name: j.content_block.name, input: '' };
+            toolBlocks.push(cur);
+          } else if (j.type === 'content_block_delta' && j.delta?.type === 'text_delta') {
             full += j.delta.text;
             onDelta(j.delta.text);
+          } else if (j.type === 'content_block_delta' && j.delta?.type === 'input_json_delta' && cur) {
+            cur.input += j.delta.partial_json || '';
+          } else if (j.type === 'content_block_stop') {
+            cur = null;
           }
         } catch {}
       }
     }
-    return { content: full, toolCalls: [] };
+    const toolCalls: AIToolCall[] = toolBlocks.map(tb => {
+      let args: any = {};
+      try { args = JSON.parse(tb.input || '{}'); } catch {}
+      return { id: tb.id, name: tb.name, args };
+    });
+    return { content: full, toolCalls };
   }
   const j: any = await res.json();
   const content = (j.content || []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('');
@@ -281,7 +300,6 @@ export function pushAssistantWithTools(msgs: AIMessage[], content: string, toolC
   msgs.push({
     role: 'assistant',
     content: content || '',
-    // @ts-ignore — OpenAI wire format
     tool_calls: toolCalls.map(tc => ({ id: tc.id, type: 'function', function: { name: tc.name, arguments: JSON.stringify(tc.args) } })),
   });
 }

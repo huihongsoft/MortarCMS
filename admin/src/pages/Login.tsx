@@ -13,8 +13,29 @@ export default function Login() {
   const [code, setCode] = useState('');
   const [twoFactor, setTwoFactor] = useState(false);
   const [loading, setLoading] = useState(false);
+  // Password reset mode: /admin#/reset?token=xxx
+  const resetToken = new URLSearchParams((window.location.hash.split('?')[1]) || '').get('token');
+  const [newPwd, setNewPwd] = useState('');
+  const [newPwd2, setNewPwd2] = useState('');
+  const [resetMsg, setResetMsg] = useState('');
+  const [resetErr, setResetErr] = useState('');
 
   if (user) { navigate('/', { replace: true }); return null; }
+
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetErr(''); setResetMsg('');
+    if (newPwd.length < 8) { setResetErr(t('password must be at least 8 characters', getLang())); return; }
+    if (newPwd !== newPwd2) { setResetErr(t('passwords do not match', getLang())); return; }
+    try {
+      await fetch('/api/auth/reset-password', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken, password: newPwd }),
+      });
+      setResetMsg(t('password has been reset. you can now sign in.', getLang()));
+      window.location.hash = '';
+    } catch (err: any) { setResetErr(err.response?.data?.error || t('reset failed', getLang())); }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault(); setError(''); setLoading(true);
@@ -40,7 +61,14 @@ export default function Login() {
         React.createElement('h1', { className: 'text-2xl font-bold text-gray-900' }, 'Mortar'),
         React.createElement('p', { className: 'text-sm text-gray-500 mt-1' }, t('sign in to your admin panel', getLang()))
       ),
-      React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
+      resetToken ? React.createElement('form', { onSubmit: handleReset, className: 'space-y-4' },
+        React.createElement('p', { className: 'text-sm text-gray-500' }, t('choose a new password for your account', getLang())),
+        resetErr && React.createElement('div', { className: 'p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg' }, resetErr),
+        resetMsg && React.createElement('div', { className: 'p-3 bg-green-50 border border-green-200 text-green-700 text-sm rounded-lg' }, resetMsg),
+        React.createElement('div', null, React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('new password', getLang())), React.createElement('input', { type: 'password', value: newPwd, onChange: e => setNewPwd(e.target.value), className: 'input-field', placeholder: '********', required: true })),
+        React.createElement('div', null, React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('confirm new password', getLang())), React.createElement('input', { type: 'password', value: newPwd2, onChange: e => setNewPwd2(e.target.value), className: 'input-field', placeholder: '********', required: true })),
+        React.createElement('button', { type: 'submit', className: 'btn-primary w-full justify-center' }, t('reset password', getLang())),
+      ) : React.createElement('form', { onSubmit: handleSubmit, className: 'space-y-4' },
         error && React.createElement('div', { className: 'p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg' }, error),
         React.createElement('div', null, React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('email', getLang())), React.createElement('input', { id: 'login-email', type: 'email', value: email, onChange: e => setEmail(e.target.value), className: 'input-field', placeholder: 'admin@mortar.dev', required: true })),
         React.createElement('div', null, React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('password', getLang())), React.createElement('input', { type: 'password', value: password, onChange: e => setPassword(e.target.value), className: 'input-field', placeholder: t('enter password', getLang()), required: true })),

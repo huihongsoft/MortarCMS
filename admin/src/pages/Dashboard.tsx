@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, Files, MessageSquare, Users, Image, Tag as TagIcon, PenLine } from 'lucide-react';
+import { FileText, Files, MessageSquare, Users, Image, Tag as TagIcon, PenLine, Sparkles, Clock, AlertCircle, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { t, getLang } from '../lib/i18n';
 import RecentActivity from '../components/RecentActivity';
@@ -9,6 +9,8 @@ import { useToast } from '../lib/toast';
 export default function Dashboard() {
   const toast = useToast();
   const [stats, setStats] = useState({ posts: 0, pages: 0, comments: 0, users: 0, media: 0, tags: 0 });
+  const [postStatus, setPostStatus] = useState<Record<string, number>>({});
+  const [commentStatus, setCommentStatus] = useState<Record<string, number>>({});
   const [recent, setRecent] = useState<any[]>([]);
   const [recentComments, setRecentComments] = useState<any[]>([]);
   const [statsData, setStatsData] = useState<any>(null);
@@ -27,16 +29,16 @@ export default function Dashboard() {
   }
 
   useEffect(() => {
-    api.get('/posts/admin?limit=5').then(r => setRecent(r.data.posts)).catch(() => {});
-    api.get('/comments/admin?limit=5&status=approved').then(r => setRecentComments(r.data.comments)).catch(() => {});
-    Promise.all([
-      api.get('/posts/admin?limit=1').then(r => r.data.total),
-      api.get('/pages').then(r => r.data.length),
-      api.get('/comments/admin?limit=1').then(r => r.data.total),
-      api.get('/users').then(r => r.data.length),
-      api.get('/media?limit=1').then(r => r.data.total),
-      api.get('/tags').then(r => r.data.length),
-    ]).then(([p, pg, c, u, m, tg]) => setStats({ posts: p, pages: pg, comments: c, users: u, media: m, tags: tg }));
+    api.get('/stats/dashboard').then(r => {
+      setStats({
+        posts: r.data.counts.posts, pages: r.data.counts.pages, comments: r.data.counts.comments,
+        users: r.data.counts.users, media: r.data.counts.media, tags: r.data.counts.tags,
+      });
+      setPostStatus(r.data.postStatus || {});
+      setCommentStatus(r.data.commentStatus || {});
+      setRecent(r.data.recent?.posts || []);
+      setRecentComments(r.data.recent?.comments || []);
+    }).catch(() => {});
     api.get('/stats?days=14').then(r => setStatsData(r.data)).catch(() => {});
   }, []);
 
@@ -49,8 +51,43 @@ export default function Dashboard() {
     { label: t('tags', getLang()), value: (stats as any).tags || 0, icon: TagIcon, gradient: 'linear-gradient(135deg,#2dd4bf,#0d9488)' },
   ];
 
+  const glance = [
+    { label: t('drafts', getLang()), value: postStatus.draft || 0, to: '/posts?status=draft', icon: PenLine, color: 'text-yellow-600 bg-yellow-50 dark:bg-yellow-900/30' },
+    { label: t('scheduled', getLang()), value: postStatus.scheduled || 0, to: '/posts?status=scheduled', icon: Clock, color: 'text-blue-600 bg-blue-50 dark:bg-blue-900/30' },
+    { label: t('pending comments', getLang()), value: commentStatus.pending || 0, to: '/comments?status=pending', icon: AlertCircle, color: 'text-orange-600 bg-orange-50 dark:bg-orange-900/30' },
+    { label: t('spam', getLang()), value: commentStatus.spam || 0, to: '/comments?status=spam', icon: Trash2, color: 'text-red-600 bg-red-50 dark:bg-red-900/30' },
+  ];
+
   return React.createElement('div', null,
-    React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 mb-6' }, t('dashboard', getLang())),
+    React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 mb-4' }, t('dashboard', getLang())),
+    // Welcome banner with quick actions
+    React.createElement('div', { className: 'rounded-2xl p-6 mb-6 text-white shadow-lg', style: { background: 'linear-gradient(135deg,#2563eb,#7c3aed)' } },
+      React.createElement('div', { className: 'flex flex-col lg:flex-row lg:items-center gap-4 justify-between' },
+        React.createElement('div', null,
+          React.createElement('p', { className: 'text-sm text-white/80 mb-1' }, t('welcome back', getLang()) + ' \u{1F44B}'),
+          React.createElement('h3', { className: 'text-xl font-bold' }, t('everything looks good today', getLang())),
+          React.createElement('p', { className: 'text-sm text-white/70 mt-1' }, t('dashboard summary', getLang()))
+        ),
+        React.createElement('div', { className: 'flex flex-wrap gap-2' },
+          React.createElement('button', { onClick: () => navigate('/posts/new'), className: 'px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur text-sm font-medium flex items-center gap-1.5 transition-colors' }, React.createElement(PenLine, { size: 14 }), t('write post', getLang())),
+          React.createElement('button', { onClick: () => navigate('/media'), className: 'px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur text-sm font-medium flex items-center gap-1.5 transition-colors' }, React.createElement(Image, { size: 14 }), t('upload media', getLang())),
+          React.createElement('button', { onClick: () => navigate('/comments'), className: 'px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur text-sm font-medium flex items-center gap-1.5 transition-colors' }, React.createElement(MessageSquare, { size: 14 }), t('comments', getLang())),
+          React.createElement('button', { onClick: () => navigate('/pages'), className: 'px-4 py-2 rounded-xl bg-white/15 hover:bg-white/25 backdrop-blur text-sm font-medium flex items-center gap-1.5 transition-colors' }, React.createElement(Files, { size: 14 }), t('pages', getLang()))
+        )
+      )
+    ),
+    // At-a-glance actionable row
+    React.createElement('div', { className: 'grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8' },
+      glance.map(g =>
+        React.createElement('button', { key: g.label, onClick: () => navigate(g.to), className: 'card p-4 flex items-center gap-3 hover:shadow-lg transition-all text-left' },
+          React.createElement('div', { className: 'w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ' + g.color }, React.createElement(g.icon, { size: 17 })),
+          React.createElement('div', null,
+            React.createElement('p', { className: 'text-xl font-bold text-gray-900 leading-tight' }, g.value),
+            React.createElement('p', { className: 'text-xs text-gray-500' }, g.label)
+          )
+        )
+      )
+    ),
     // Row 1: unified stat cards (6 in one row)
     React.createElement('div', { className: 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8' },
       cards.map(c => React.createElement('div', { key: c.label, className: 'card p-4 flex items-center gap-3 hover:shadow-lg hover:-translate-y-1 transition-all duration-200 cursor-default' },

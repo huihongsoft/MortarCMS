@@ -14,7 +14,24 @@ export default function AuthorPage({ settings }: { settings: Record<string, stri
     api.get('/posts/author/' + username).then(r => setPosts(r.data.posts || [])).catch(() => {}).finally(() => setLoading(false));
   }, [username]);
 
-  useSEO({ title: username || t('author'), url: window.location.origin + '/author/' + username });
+  useSEO({
+    title: username || t('author'),
+    url: window.location.origin + '/author/' + username,
+    jsonLd: [
+      {
+        '@context': 'https://schema.org',
+        '@type': 'ProfilePage',
+        name: username || t('author'),
+        url: window.location.origin + '/author/' + username,
+        mainEntity: { '@type': 'Person', name: username || t('author') },
+      },
+      ...(posts.length ? [{
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        itemListElement: posts.map((p: any, i: number) => ({ '@type': 'ListItem', position: i + 1, name: p.title, url: window.location.origin + '/post/' + p.slug })),
+      }] : []),
+    ],
+  });
 
   const Layout = useTheme().AuthorLayout;
   return React.createElement(Layout, { username, posts, loading });

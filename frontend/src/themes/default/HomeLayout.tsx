@@ -33,7 +33,9 @@ export default function HomeLayout(props: any) {
               : React.createElement('div', { className: 'text-center py-20' }, React.createElement('div', { className: 'text-6xl mb-4' }, '\u{1F4DD}'), React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-2' }, t('no posts yet', settings)), React.createElement('p', { className: 'text-sm text-gray-500' }, t('check back later for new content', settings)))
             : React.createElement('div', { className: 'space-y-8' },
                 posts.map((p: any) => React.createElement('article', { key: p.id, className: 'pb-8 border-b border-gray-100 last:border-0' },
-                  p.featured && React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full h-48 object-cover rounded-lg mb-4', loading: 'lazy' }),
+                  p.featured && React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full h-48 object-cover rounded-lg mb-4', loading: 'lazy', decoding: 'async',
+                    sizes: '(min-width: 900px) 512px, 100vw',
+                    srcSet: p.srcset ? Object.entries(p.srcset).map(([w, u]) => (cdnUrl(u as string, settings) as string) + ' ' + w + 'w').join(', ') : undefined }),
                   React.createElement('div', { className: 'flex items-center gap-4 text-xs text-gray-500 mb-3' },
                     React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Calendar, { size: 12 }), timeAgo(p.publishedAt || p.createdAt)),
                     React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(User, { size: 12 }), React.createElement(Link, { to: '/author/' + (p.author?.username || ''), className: 'hover:text-primary-600' }, p.author?.username)),
@@ -57,6 +59,7 @@ export default function HomeLayout(props: any) {
         React.createElement('aside', { className: 'space-y-6' },
           (() => {
             const activeWidgets: string[] = (() => { try { return JSON.parse(settings.widgets_active || '[]'); } catch { return []; } })();
+            const cfg: Record<string, { title?: string; html?: string }> = (() => { try { return JSON.parse(settings.widgets_config || '{}'); } catch { return {}; } })();
             const has = (id: string) => activeWidgets.length === 0 || activeWidgets.includes(id);
             return React.createElement(React.Fragment, null,
               has('search') && React.createElement(SearchWidget),
@@ -65,6 +68,10 @@ export default function HomeLayout(props: any) {
               has('tag_cloud') && React.createElement(TagCloudWidget),
               has('archives') && React.createElement(ArchiveWidget),
               has('links') && React.createElement(LinksWidget),
+              has('html') && cfg.html?.html && React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
+                cfg.html.title && React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider' }, cfg.html.title),
+                React.createElement('div', { dangerouslySetInnerHTML: { __html: cfg.html.html } })
+              ),
             );
           })(),
           React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
