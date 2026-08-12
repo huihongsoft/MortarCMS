@@ -25,6 +25,24 @@ function getFileIconInfo(mime: string): { icon: any; color: string } {
   return { icon: File, color: 'text-gray-400' };
 }
 
+// Image tile with graceful fallback: thumbnail -> original -> type icon.
+// Broken thumbnails (e.g. async generation failed) no longer render as a
+// broken image — the user always sees something meaningful.
+function MediaThumb({ m }: { m: any }) {
+  const [src, setSrc] = useState<string | null>(m.thumbnail || m.url);
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    const fi = getFileIconInfo(m.mimeType);
+    return React.createElement(fi.icon, { size: 40, className: fi.color });
+  }
+  return React.createElement('img', {
+    src: src as string,
+    alt: m.alt || m.original,
+    className: 'w-full h-full object-cover',
+    onError: () => { if (src !== m.url) setSrc(m.url); else setFailed(true); },
+  });
+}
+
 export default function Media() {
   const toast = useToast();
   const [media, setMedia] = useState<any[]>([]);
@@ -32,6 +50,7 @@ export default function Media() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<any>(null);
+  const [previewFailed, setPreviewFailed] = useState(false);
   const [aiAnalyzing, setAiAnalyzing] = useState<string | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<Record<string, string>>({});
   const [genPrompt, setGenPrompt] = useState('');
@@ -115,7 +134,7 @@ export default function Media() {
   function toggleSelect(id: string) { const n = new Set(selected); n.has(id) ? n.delete(id) : n.add(id); setSelected(n); }
   function selectAll() { if (selected.size === media.length) setSelected(new Set()); else setSelected(new Set(media.map((m: any) => m.id))); }
 
-  function openPreview(m: any) { setPreview(m); }
+  function openPreview(m: any) { setPreview(m); setPreviewFailed(false); }
 
   async function analyzeImage(m: any) {
     if (aiAnalyzing) return;
@@ -203,7 +222,7 @@ export default function Media() {
         filtered.map((m: any) => React.createElement('div', { key: m.id, className: 'card overflow-hidden group relative cursor-pointer', onClick: () => openPreview(m) },
           React.createElement('input', { type: 'checkbox', checked: selected.has(m.id), onChange: (e: React.ChangeEvent<HTMLInputElement>) => { e.stopPropagation(); toggleSelect(m.id); }, className: 'absolute top-2 left-2 z-10 w-4 h-4 rounded border-gray-300 text-primary-600 opacity-0 group-hover:opacity-100 ' + (selected.has(m.id) ? 'opacity-100' : '') }),
           React.createElement('div', { className: 'aspect-square bg-gray-100 flex items-center justify-center' },
-            m.mimeType?.startsWith('image/') ? React.createElement('img', { src: (m.thumbnail || m.url), alt: m.alt || m.original, className: 'w-full h-full object-cover' })
+            m.mimeType?.startsWith('image/') ? React.createElement(MediaThumb, { m })
             : (() => { const fi = getFileIconInfo(m.mimeType); return React.createElement(fi.icon, { size: 40, className: fi.color }); })()),
           m.mimeType?.startsWith('image/') && React.createElement('button', {
             onClick: (e: React.MouseEvent) => { e.stopPropagation(); analyzeImage(m); },
@@ -233,7 +252,7 @@ export default function Media() {
         ),
         // Preview area
         React.createElement('div', { className: 'bg-gray-100 flex items-center justify-center p-4', style: { minHeight: '200px', maxHeight: '400px' } },
-          preview.mimeType?.startsWith('image/') ? React.createElement('img', { src: preview.url, alt: preview.alt || preview.original, className: 'max-w-full max-h-80 object-contain rounded' })
+          preview.mimeType?.startsWith('image/') && !previewFailed ? React.createElement('img', { src: preview.url, alt: preview.alt || preview.original, className: 'max-w-full max-h-80 object-contain rounded', onError: () => setPreviewFailed(true) })
           : preview.mimeType?.startsWith('video/') ? React.createElement('video', { src: preview.url, controls: true, className: 'max-w-full max-h-80 rounded' })
           : preview.mimeType?.startsWith('audio/') ? React.createElement('audio', { src: preview.url, controls: true, className: 'w-full' })
           : React.createElement('div', { className: 'text-center' },
