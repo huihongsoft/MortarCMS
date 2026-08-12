@@ -154,7 +154,10 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
             this.model.on('change', () => this.applyPreview());
           },
           fetchPreview() {
-            fetch('/api/editor/preview-cms/' + block.id)
+            const h = new Headers();
+            const tk = localStorage.getItem('mortar_token');
+            if (tk) h.set('Authorization', 'Bearer ' + tk);
+            fetch('/api/editor/preview-cms/' + block.id, { headers: h })
               .then(r => r.json())
               .then((d: any) => { if (d.html && this.el && (this.el as HTMLElement).isConnected) { this.previewHtml = d.html; this.applyPreview(); } })
               .catch(() => {});
@@ -173,7 +176,10 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       const canvas = editor.Canvas.getDocument();
       if (!canvas) return;
 
-      fetch('/api/editor/canvas-css')
+      const h = new Headers();
+      const tk = localStorage.getItem('mortar_token');
+      if (tk) h.set('Authorization', 'Bearer ' + tk);
+      fetch('/api/editor/canvas-css', { headers: h })
         .then(r => r.json()).then((d: any) => {
           const urls = (d?.styles || []) as string[];
           if (urls.length === 0) { const link = canvas.createElement('link'); link.rel = 'stylesheet'; link.href = 'https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css'; canvas.head.appendChild(link); return; }

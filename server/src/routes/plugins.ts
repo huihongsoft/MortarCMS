@@ -9,7 +9,7 @@ import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 const router = Router();
 
 // Public: registered hooks (plugin system introspection)
-router.get('/hooks', (_req: AuthRequest, res: Response) => {
+router.get('/hooks', authenticate, requireCap('manage_options'), (_req: AuthRequest, res: Response) => {
   try {
     const hooks = listHooks();
     res.json({

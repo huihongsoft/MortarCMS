@@ -22,7 +22,7 @@ function saveTemplates(templates: any[]): void {
 
 // Public: the real site's built CSS bundle URLs, so the visual editor canvas
 // preview matches the live frontend (typography, theme CSS, components).
-router.get('/canvas-css', (_req: AuthRequest, res: Response) => {
+router.get('/canvas-css', authenticate, requireCap('edit_posts'), (_req: AuthRequest, res: Response) => {
   try {
     const indexHtml = path.join(__dirname, '..', '..', '..', 'frontend', 'dist', 'index.html');
     if (!fs.existsSync(indexHtml)) { res.json({ styles: [] }); return; }
@@ -33,7 +33,7 @@ router.get('/canvas-css', (_req: AuthRequest, res: Response) => {
 });
 
 // Public: live preview HTML for a CMS data block (used by the visual editor canvas)
-router.get('/preview-cms/:type', (req: AuthRequest, res: Response) => {
+router.get('/preview-cms/:type', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
   const type = req.params.type;
   if (!CMS_TYPES.includes(type)) { res.status(400).json({ error: 'Unknown CMS block type' }); return; }
   try {
@@ -49,8 +49,8 @@ router.get('/shortcodes', authenticate, requireCap('edit_posts'), (_req: AuthReq
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Public: custom block templates (used by the editor)
-router.get('/templates', (_req: AuthRequest, res: Response) => {
+// Editor: custom block templates (admin-only)
+router.get('/templates', authenticate, requireCap('edit_posts'), (_req: AuthRequest, res: Response) => {
   try {
     res.json({ templates: loadTemplates() });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
