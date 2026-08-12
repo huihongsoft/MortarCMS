@@ -6,7 +6,18 @@ import { doAction } from '../utils/hooks';
 import { renderTemplate, sendEmail } from '../utils/mailer';
 
 const router = Router();
-const commentSchema = z.object({ content: z.string().min(1), author: z.string().optional(), email: z.string().optional().or(z.literal('')), website: z.string().optional().or(z.literal('')), parentId: z.string().optional(), postId: z.string(), subscribe: z.boolean().optional() });
+// Length caps prevent storage abuse / oversized notifications. Content is
+// stored raw (rendered as React text nodes on the frontend — never innerHTML)
+// and emails escape it; length bounds keep everything bounded.
+const commentSchema = z.object({
+  content: z.string().min(1).max(2000),
+  author: z.string().max(50).optional(),
+  email: z.string().email().max(254).optional().or(z.literal('')),
+  website: z.string().max(500).optional().or(z.literal('')),
+  parentId: z.string().optional(),
+  postId: z.string(),
+  subscribe: z.boolean().optional(),
+});
 
 // Public: latest approved comments across posts (for the Recent Comments widget)
 router.get('/recent', (req: AuthRequest, res: Response) => {
