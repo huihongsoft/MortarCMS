@@ -40,13 +40,13 @@ export default function HomeLayout(props: any) {
                   p.featured && React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full h-48 object-cover rounded-lg mb-5', loading: 'lazy', decoding: 'async',
                     sizes: '(min-width: 900px) 512px, 100vw',
                     srcSet: p.srcset ? Object.entries(p.srcset).map(([w, u]) => (cdnUrl(u as string, settings) as string) + ' ' + w + 'w').join(', ') : undefined }),
+                  React.createElement(Link, { to: '/post/' + p.slug },
+                    React.createElement('h2', { className: 'text-xl font-bold text-gray-900 hover:text-primary-600 mb-3' }, p.format && p.format !== 'standard' ? React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded' }, formatIcon(p.format), p.format.charAt(0).toUpperCase() + p.format.slice(1)) : null, p.sticky ? React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle' }, '\u2605 ' + t('featured', settings)) : null, p.title)
+                  ),
                   React.createElement('div', { className: 'flex items-center gap-4 text-xs text-gray-500 mb-4' },
                     React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Calendar, { size: 12 }), timeAgo(p.publishedAt || p.createdAt)),
                     React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(User, { size: 12 }), React.createElement(Link, { to: '/author/' + (p.author?.username || ''), className: 'hover:text-primary-600' }, p.author?.username)),
                     p.categories?.[0] && React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Folder, { size: 12 }), p.categories[0].name)
-                  ),
-                  React.createElement(Link, { to: '/post/' + p.slug },
-                    React.createElement('h2', { className: 'text-xl font-bold text-gray-900 hover:text-primary-600 mb-3' }, p.format && p.format !== 'standard' ? React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded' }, formatIcon(p.format), p.format.charAt(0).toUpperCase() + p.format.slice(1)) : null, p.sticky ? React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle' }, '\u2605 ' + t('featured', settings)) : null, p.title)
                   ),
                   p.excerpt && React.createElement('p', { className: 'text-gray-600 text-sm leading-relaxed mb-4' }, p.excerpt),
                   React.createElement('div', { className: 'flex items-center justify-between gap-3' },

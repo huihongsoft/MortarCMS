@@ -3397,16 +3397,16 @@ function zl(e) {
                   srcSet: u.srcset ? Object.entries(u.srcset).map(([P, B]) => it(B, t) + " " + P + "w").join(", ") : void 0
                 }),
                 a.createElement(
+                  F,
+                  { to: "/post/" + u.slug },
+                  a.createElement("h2", { className: "text-xl font-bold text-gray-900 hover:text-primary-600 mb-3" }, u.format && u.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, Fl(u.format), u.format.charAt(0).toUpperCase() + u.format.slice(1)) : null, u.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + g("featured", t)) : null, u.title)
+                ),
+                a.createElement(
                   "div",
                   { className: "flex items-center gap-4 text-xs text-gray-500 mb-4" },
                   a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Fe, { size: 12 }), Xe(u.publishedAt || u.createdAt)),
                   a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Mr, { size: 12 }), a.createElement(F, { to: "/author/" + (((y = u.author) == null ? void 0 : y.username) || ""), className: "hover:text-primary-600" }, (b = u.author) == null ? void 0 : b.username)),
                   ((k = u.categories) == null ? void 0 : k[0]) && a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Zt, { size: 12 }), u.categories[0].name)
-                ),
-                a.createElement(
-                  F,
-                  { to: "/post/" + u.slug },
-                  a.createElement("h2", { className: "text-xl font-bold text-gray-900 hover:text-primary-600 mb-3" }, u.format && u.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, Fl(u.format), u.format.charAt(0).toUpperCase() + u.format.slice(1)) : null, u.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + g("featured", t)) : null, u.title)
                 ),
                 u.excerpt && a.createElement("p", { className: "text-gray-600 text-sm leading-relaxed mb-4" }, u.excerpt),
                 a.createElement(
@@ -3521,16 +3521,16 @@ function Bl(e) {
                 { key: d.id, className: "pb-12 border-b border-gray-100 last:border-0" },
                 d.featured && a.createElement("img", { src: it(d.featured, t), alt: d.title, className: "w-full h-48 object-cover rounded-lg mb-5", loading: "lazy" }),
                 a.createElement(
+                  F,
+                  { to: "/post/" + d.slug },
+                  a.createElement("h2", { className: "text-xl font-bold text-gray-900 hover:text-primary-600 mb-3" }, d.format && d.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, Hl(d.format), d.format.charAt(0).toUpperCase() + d.format.slice(1)) : null, d.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + g("featured", t)) : null, d.title)
+                ),
+                a.createElement(
                   "div",
                   { className: "flex items-center gap-4 text-xs text-gray-500 mb-4" },
                   a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Fe, { size: 12 }), Xe(d.publishedAt || d.createdAt)),
                   a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Mr, { size: 12 }), a.createElement(F, { to: "/author/" + (((u = d.author) == null ? void 0 : u.username) || ""), className: "hover:text-primary-600" }, (y = d.author) == null ? void 0 : y.username)),
                   ((b = d.categories) == null ? void 0 : b[0]) && a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Zt, { size: 12 }), d.categories[0].name)
-                ),
-                a.createElement(
-                  F,
-                  { to: "/post/" + d.slug },
-                  a.createElement("h2", { className: "text-xl font-bold text-gray-900 hover:text-primary-600 mb-3" }, d.format && d.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, Hl(d.format), d.format.charAt(0).toUpperCase() + d.format.slice(1)) : null, d.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + g("featured", t)) : null, d.title)
                 ),
                 d.excerpt && a.createElement("p", { className: "text-gray-600 text-sm leading-relaxed mb-4" }, d.excerpt),
                 a.createElement(
@@ -3628,16 +3628,16 @@ function ql(e) {
                 { key: d.id, className: "pb-12 border-b border-gray-100 last:border-0" },
                 d.featured && a.createElement("img", { src: it(d.featured, t), alt: d.title, className: "w-full h-48 object-cover rounded-lg mb-5", loading: "lazy" }),
                 a.createElement(
+                  F,
+                  { to: "/post/" + d.slug },
+                  a.createElement("h2", { className: "text-xl font-bold text-gray-900 hover:text-primary-600 mb-3" }, d.format && d.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, jl(d.format), d.format.charAt(0).toUpperCase() + d.format.slice(1)) : null, d.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + g("featured", t)) : null, d.title)
+                ),
+                a.createElement(
                   "div",
                   { className: "flex items-center gap-4 text-xs text-gray-500 mb-4" },
                   a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Fe, { size: 12 }), Xe(d.publishedAt || d.createdAt)),
                   a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Mr, { size: 12 }), a.createElement(F, { to: "/author/" + (((u = d.author) == null ? void 0 : u.username) || ""), className: "hover:text-primary-600" }, (y = d.author) == null ? void 0 : y.username)),
                   ((b = d.categories) == null ? void 0 : b[0]) && a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Zt, { size: 12 }), d.categories[0].name)
-                ),
-                a.createElement(
-                  F,
-                  { to: "/post/" + d.slug },
-                  a.createElement("h2", { className: "text-xl font-bold text-gray-900 hover:text-primary-600 mb-3" }, d.format && d.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, jl(d.format), d.format.charAt(0).toUpperCase() + d.format.slice(1)) : null, d.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + g("featured", t)) : null, d.title)
                 ),
                 d.excerpt && a.createElement("p", { className: "text-gray-600 text-sm leading-relaxed mb-4" }, d.excerpt),
                 a.createElement(
