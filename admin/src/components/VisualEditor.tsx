@@ -790,7 +790,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           galleryBtn.addEventListener('click', () => {
             const items = imgs.filter((m: any) => picked.has(m.id));
             const galleryHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">' +
-              items.map((m: any) => `<img src="${m.url}" alt="${m.original || ''}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;display:block;" />`).join('') +
+              items.map((m: any) => `<img src="${m.thumbnail || m.url}" alt="${m.original || ''}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;display:block;" />`).join('') +
               '</div>';
             const sel = editor.getSelected() as any;
             if (sel) { const p = sel.parent?.(); if (p) { const s = p.components(); s.add(galleryHtml, { at: s.indexOf(sel) + 1 }); } else editor.addComponents(galleryHtml); }
@@ -800,7 +800,11 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           imgs.forEach((m: any) => {
             const item = document.createElement('button');
             item.className = 've-guten-inserter-media-item';
-            item.innerHTML = `<img src="${m.url}" alt="${m.original || ''}" loading="lazy" />`;
+            // Thumbnail first, fall back to the original, then to an extension
+            // placeholder — a broken file never renders as a broken image.
+            const ext = String(m.original || '').split('.').pop()?.toUpperCase().replace(/[^A-Z0-9]/g, '') || 'FILE';
+            const placeholder = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='60'><rect width='100%25' height='100%25' fill='%23e5e7eb' rx='6'/><text x='50%25' y='55%25' font-size='18' fill='%239ca3af' text-anchor='middle'>" + ext + '</text></svg>';
+            item.innerHTML = `<img src="${m.thumbnail || m.url}" alt="${m.original || ''}" loading="lazy" data-orig="${m.url}" onerror="this.onerror=null;if(this.src!==this.dataset.orig)this.src=this.dataset.orig;else this.src='${placeholder}'" />`;
             item.addEventListener('click', () => {
               // Toggle multi-select if the gallery bar is visible; otherwise single insert
               if (galleryBtn.style.display !== 'none') {
