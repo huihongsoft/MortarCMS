@@ -952,6 +952,8 @@ const zh: Record<string, string> = {
 'fill required fields': '请填写必填字段',
 'notify me of replies': '有人回复时通过邮件通知我',
 'select task hint': '从左侧选择任务查看详情，或在下方输入新任务',
+'execution trace': '执行过程',
+'execution in progress': '任务执行中，展开工具调用过程…',
 'search tasks': '搜索任务…',
 'enter to send hint': 'Enter 发送 · Shift+Enter 换行',
 'abnormal': '异常',
