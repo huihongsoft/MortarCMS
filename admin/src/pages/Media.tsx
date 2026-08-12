@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Upload, Trash2, Copy, FileText, FileImage, FileAudio, FileVideo, File, Trash, X, Download, Calendar, Hash, Sparkles, ScanSearch } from 'lucide-react';
+import { Upload, Trash2, Copy, FileText, FileImage, FileAudio, FileVideo, File, FileArchive, FileSpreadsheet, FileType, Trash, X, Download, Calendar, Hash, Sparkles, ScanSearch } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
@@ -12,13 +12,17 @@ function formatSize(bytes: number): string {
   return (bytes / Math.pow(1024, i)).toFixed(1) + ' ' + sizes[i];
 }
 
-function getFileIcon(mime: string) {
-  if (!mime) return File;
-  if (mime.startsWith('image/')) return FileImage;
-  if (mime.startsWith('video/')) return FileVideo;
-  if (mime.startsWith('audio/')) return FileAudio;
-  if (mime.includes('pdf') || mime.includes('document')) return FileText;
-  return File;
+// Per-type icon + accent color for non-image media (grid + preview)
+function getFileIconInfo(mime: string): { icon: any; color: string } {
+  if (!mime) return { icon: File, color: 'text-gray-400' };
+  if (mime.startsWith('image/')) return { icon: FileImage, color: 'text-blue-500' };
+  if (mime.startsWith('video/')) return { icon: FileVideo, color: 'text-purple-500' };
+  if (mime.startsWith('audio/')) return { icon: FileAudio, color: 'text-green-500' };
+  if (mime.includes('zip') || mime.includes('compressed') || mime.includes('tar') || mime.includes('rar')) return { icon: FileArchive, color: 'text-amber-500' };
+  if (mime.includes('pdf')) return { icon: FileType, color: 'text-red-500' };
+  if (mime.includes('spreadsheet') || mime.includes('excel') || mime.includes('csv') || mime.includes('sheet')) return { icon: FileSpreadsheet, color: 'text-emerald-500' };
+  if (mime.includes('document') || mime.includes('word') || mime.includes('text') || mime.includes('rtf')) return { icon: FileText, color: 'text-blue-400' };
+  return { icon: File, color: 'text-gray-400' };
 }
 
 export default function Media() {
@@ -200,7 +204,7 @@ export default function Media() {
           React.createElement('input', { type: 'checkbox', checked: selected.has(m.id), onChange: (e: React.ChangeEvent<HTMLInputElement>) => { e.stopPropagation(); toggleSelect(m.id); }, className: 'absolute top-2 left-2 z-10 w-4 h-4 rounded border-gray-300 text-primary-600 opacity-0 group-hover:opacity-100 ' + (selected.has(m.id) ? 'opacity-100' : '') }),
           React.createElement('div', { className: 'aspect-square bg-gray-100 flex items-center justify-center' },
             m.mimeType?.startsWith('image/') ? React.createElement('img', { src: (m.thumbnail || m.url), alt: m.alt || m.original, className: 'w-full h-full object-cover' })
-            : React.createElement(getFileIcon(m.mimeType), { size: 40, className: 'text-gray-400' })),
+            : (() => { const fi = getFileIconInfo(m.mimeType); return React.createElement(fi.icon, { size: 40, className: fi.color }); })()),
           m.mimeType?.startsWith('image/') && React.createElement('button', {
             onClick: (e: React.MouseEvent) => { e.stopPropagation(); analyzeImage(m); },
             disabled: aiAnalyzing === m.id,
@@ -233,7 +237,7 @@ export default function Media() {
           : preview.mimeType?.startsWith('video/') ? React.createElement('video', { src: preview.url, controls: true, className: 'max-w-full max-h-80 rounded' })
           : preview.mimeType?.startsWith('audio/') ? React.createElement('audio', { src: preview.url, controls: true, className: 'w-full' })
           : React.createElement('div', { className: 'text-center' },
-              React.createElement(getFileIcon(preview.mimeType), { size: 64, className: 'text-gray-400 mx-auto mb-2' }),
+              React.createElement((() => { const fi = getFileIconInfo(preview.mimeType); return fi.icon; })(), { size: 64, className: getFileIconInfo(preview.mimeType).color + ' mx-auto mb-2' }),
               React.createElement('p', { className: 'text-sm text-gray-500' }, preview.mimeType || t('unknown type', getLang())))
         ),
         // Details
