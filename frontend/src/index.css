@@ -21,6 +21,20 @@ body { font-family: var(--body-font); background-color: var(--background, #fffff
 .prose pre code { background: transparent; }
 h1, h2, h3, h4, h5, h6 { font-family: var(--heading-font); }
 
+/* Dark-theme adaptation: when the active theme's background is dark
+   (body[data-theme="dark"], set from the theme's background color),
+   Tailwind's light surfaces and dark text classes flip to dark equivalents
+   so components (comments, tags, author card, breadcrumbs, widgets) stay
+   readable without per-component dark variants. */
+[data-theme="dark"] .bg-white { background-color: #1e293b !important; }
+[data-theme="dark"] .bg-gray-50, [data-theme="dark"] .bg-gray-50\/70, [data-theme="dark"] .bg-gray-50\/50 { background-color: #1e293b !important; }
+[data-theme="dark"] .bg-gray-100, [data-theme="dark"] .bg-gray-100\/80 { background-color: #1e293b !important; }
+[data-theme="dark"] .text-gray-900 { color: #f9fafb !important; }
+[data-theme="dark"] .text-gray-800 { color: #f3f4f6 !important; }
+[data-theme="dark"] .text-gray-700 { color: #e5e7eb !important; }
+[data-theme="dark"] .text-gray-600, [data-theme="dark"] .text-gray-500 { color: #cbd5e1 !important; }
+[data-theme="dark"] .border-gray-100, [data-theme="dark"] .border-gray-200 { border-color: #334155 !important; }
+
 
 @media print {
   header, footer, aside, .no-print, button { display: none !important; }

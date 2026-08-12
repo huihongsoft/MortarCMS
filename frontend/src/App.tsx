@@ -112,6 +112,17 @@ export default function App() {
         if (!el) { el = document.createElement('style'); el.id = 'mortar-theme-vars'; document.head.appendChild(el); }
         el.textContent = ':root{' + vars + '}';
       }
+      // Flag dark themes on <body data-theme="dark"> so global CSS can adapt
+      // Tailwind light surfaces/text (bg-gray-50, text-gray-900, ...) to dark.
+      const bg = r.data.theme_background || '';
+      const m = bg.match(/#([0-9a-f]{6})/i);
+      let isDark = false;
+      if (m) {
+        const n = parseInt(m[1], 16);
+        const lum = ((n >> 16) & 255) * 0.299 + ((n >> 8) & 255) * 0.587 + (n & 255) * 0.114;
+        isDark = lum < 128;
+      }
+      document.body.dataset.theme = isDark ? 'dark' : 'light';
       // Unsaved custom CSS preview (Appearance panel opens ?preview_css=...).
       // Security: the query parameter is attacker-controllable (a crafted link
       // could inject arbitrary CSS, e.g. attribute-selector data exfiltration),
