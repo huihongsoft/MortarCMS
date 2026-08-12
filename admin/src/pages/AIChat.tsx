@@ -173,6 +173,19 @@ function renderMd(text: string): React.ReactNode[] {
   return nodes;
 }
 
+// Render a tool's output: JSON-shaped results stay in a monospace <pre>,
+// markdown-shaped text (headings/lists/tables/code fences) is rendered.
+function renderToolOutput(out: string): React.ReactNode {
+  const s = String(out || '');
+  const trimmed = s.trim();
+  const looksLikeJson = trimmed.startsWith('{') || trimmed.startsWith('[');
+  const looksLikeMarkdown = /```/.test(s) || /(^|\n)\s*(#{1,4}\s+|\||[-*] |>\s)/.test(s);
+  if (looksLikeJson || !looksLikeMarkdown) {
+    return React.createElement('pre', { className: 'mt-1 whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400 max-h-32 overflow-y-auto bg-white dark:bg-gray-900 rounded p-2' }, s.slice(0, 2000));
+  }
+  return React.createElement('div', { className: 'mt-1 max-h-48 overflow-y-auto bg-white dark:bg-gray-900 rounded p-2' }, renderMd(s.slice(0, 2000)));
+}
+
 function safeHref(url: string): string {
   const u = String(url || '').trim();
   if (u.startsWith('/') || u.startsWith('http://') || u.startsWith('https://')) return u;
@@ -1068,7 +1081,7 @@ export default function AIChat() {
                     ? React.createElement('div', { key: i, className: 'text-xs text-gray-600 dark:text-gray-300' }, '💭 ' + String(st.content || '').slice(0, 300))
                     : React.createElement('details', { key: i, className: 'text-xs text-gray-600 dark:text-gray-300' },
                         React.createElement('summary', { className: 'cursor-pointer' }, '🔧 ' + st.name + ' ' + JSON.stringify(st.args || {}).slice(0, 100)),
-                        st.output !== undefined && React.createElement('pre', { className: 'mt-1 whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400 max-h-32 overflow-y-auto bg-white dark:bg-gray-900 rounded p-2' }, String(st.output).slice(0, 500))
+                        st.output !== undefined && renderToolOutput(String(st.output).slice(0, 2000))
                       )
                 )
               ),
@@ -1192,7 +1205,7 @@ export default function AIChat() {
               m.toolResults.map((tr: any, ti: number) =>
                 React.createElement('details', { key: ti, className: 'text-[10px] rounded-lg bg-gray-50 dark:bg-gray-800/60 px-2 py-1' },
                   React.createElement('summary', { className: 'cursor-pointer text-gray-500 dark:text-gray-400' }, '🔧 ' + tr.name + ' ' + t('result', getLang())),
-                  React.createElement('pre', { className: 'mt-1 whitespace-pre-wrap break-words text-gray-500 dark:text-gray-400 max-h-32 overflow-y-auto' }, tr.output)
+                  renderToolOutput(String(tr.output || ''))
                 )
               )),
             m.role === 'assistant' && !m.content && busy
