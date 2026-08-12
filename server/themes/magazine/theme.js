@@ -2611,23 +2611,23 @@ T.getAdapter = Yt.getAdapter;
 T.HttpStatusCode = We;
 T.default = T;
 const {
-  Axios: Ws,
-  AxiosError: Vs,
-  CanceledError: Js,
-  isCancel: Ks,
-  CancelToken: Xs,
-  VERSION: Gs,
-  all: Zs,
-  Cancel: Qs,
-  isAxiosError: Ys,
-  spread: eo,
-  toFormData: to,
-  AxiosHeaders: ro,
-  HttpStatusCode: no,
-  formToJSON: so,
-  getAdapter: oo,
-  mergeConfig: ao,
-  create: io
+  Axios: Vs,
+  AxiosError: Js,
+  CanceledError: Ks,
+  isCancel: Xs,
+  CancelToken: Gs,
+  VERSION: Zs,
+  all: Qs,
+  Cancel: Ys,
+  isAxiosError: eo,
+  spread: to,
+  toFormData: ro,
+  AxiosHeaders: no,
+  HttpStatusCode: so,
+  formToJSON: oo,
+  getAdapter: ao,
+  mergeConfig: io,
+  create: lo
 } = T, q = T.create({ baseURL: "/api", withCredentials: !0 });
 q.interceptors.request.use((e) => {
   const t = localStorage.getItem("mortar_token");
@@ -3064,8 +3064,12 @@ function js(e, t) {
   const r = Bs(t.cdn_url);
   return r && e.startsWith("/uploads/") ? r + e : e;
 }
+function Is(e) {
+  const t = String(e || ""), r = t.match(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/);
+  return new Date(r ? t.replace(" ", "T") + "Z" : t).getTime();
+}
 function At(e) {
-  const t = Date.now(), r = new Date(e).getTime(), n = t - r, s = Math.floor(n / 6e4);
+  const t = Date.now(), r = Is(e), n = t - r, s = Math.floor(n / 6e4);
   if (s < 1) return "just now";
   if (s < 60) return `${s}m ago`;
   const o = Math.floor(s / 60);
@@ -3073,9 +3077,9 @@ function At(e) {
   const a = Math.floor(o / 24);
   if (a < 7) return `${a}d ago`;
   const l = Math.floor(a / 7);
-  return l < 5 ? `${l}w ago` : new Date(e).toLocaleDateString();
+  return l < 5 ? `${l}w ago` : new Date(r).toLocaleDateString();
 }
-function Is(e) {
+function Ms(e) {
   var x, O;
   const { settings: t, posts: r, total: n, page: s, setPage: o, loadError: a, catSlug: l, isTagPage: d, categories: m } = e, u = { fontFamily: "Georgia, serif" }, [f, ...y] = r;
   return c.createElement(
@@ -3193,7 +3197,7 @@ function Is(e) {
     )
   );
 }
-const lo = { name: "magazine", typography: { cap: 1, max: 30 }, Header: Ps, Footer: ks, HomeLayout: Is };
+const co = { name: "magazine", typography: { cap: 1, max: 30 }, Header: Ps, Footer: ks, HomeLayout: Ms };
 export {
-  lo as default
+  co as default
 };

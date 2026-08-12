@@ -2553,23 +2553,23 @@ T.getAdapter = Xt.getAdapter;
 T.HttpStatusCode = ze;
 T.default = T;
 const {
-  Axios: ks,
-  AxiosError: Ds,
-  CanceledError: Ls,
-  isCancel: Us,
-  CancelToken: Fs,
-  VERSION: Bs,
-  all: js,
-  Cancel: Is,
-  isAxiosError: vs,
-  spread: Ms,
-  toFormData: qs,
-  AxiosHeaders: Hs,
-  HttpStatusCode: $s,
-  formToJSON: zs,
-  getAdapter: Vs,
-  mergeConfig: Ws,
-  create: Js
+  Axios: Ds,
+  AxiosError: Ls,
+  CanceledError: Us,
+  isCancel: Fs,
+  CancelToken: Bs,
+  VERSION: js,
+  all: Is,
+  Cancel: vs,
+  isAxiosError: Ms,
+  spread: qs,
+  toFormData: Hs,
+  AxiosHeaders: $s,
+  HttpStatusCode: zs,
+  formToJSON: Vs,
+  getAdapter: Ws,
+  mergeConfig: Js,
+  create: Ks
 } = T, Re = T.create({ baseURL: "/api", withCredentials: !0 });
 Re.interceptors.request.use((e) => {
   const t = localStorage.getItem("mortar_token");
@@ -2751,7 +2751,11 @@ function Os(e, t) {
   return n && e.startsWith("/uploads/") ? n + e : e;
 }
 function Ss(e) {
-  const t = Date.now(), n = new Date(e).getTime(), r = t - n, s = Math.floor(r / 6e4);
+  const t = String(e || ""), n = t.match(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/);
+  return new Date(n ? t.replace(" ", "T") + "Z" : t).getTime();
+}
+function _s(e) {
+  const t = Date.now(), n = Ss(e), r = t - n, s = Math.floor(r / 6e4);
   if (s < 1) return "just now";
   if (s < 60) return `${s}m ago`;
   const o = Math.floor(s / 60);
@@ -2759,9 +2763,9 @@ function Ss(e) {
   const i = Math.floor(o / 24);
   if (i < 7) return `${i}d ago`;
   const c = Math.floor(i / 7);
-  return c < 5 ? `${c}w ago` : new Date(e).toLocaleDateString();
+  return c < 5 ? `${c}w ago` : new Date(n).toLocaleDateString();
 }
-function _s(e) {
+function As(e) {
   const { settings: t, posts: n, total: r, page: s, setPage: o, loadError: i, catSlug: c, isTagPage: l } = e, f = t.theme_hero_heading || "";
   return g.createElement(
     "div",
@@ -2798,7 +2802,7 @@ function _s(e) {
               g.createElement(
                 "div",
                 { className: "flex items-center gap-4 text-xs uppercase tracking-widest text-gray-500 mb-4" },
-                g.createElement("span", { className: "flex items-center gap-1" }, g.createElement(on, { size: 12 }), Ss(u.publishedAt || u.createdAt)),
+                g.createElement("span", { className: "flex items-center gap-1" }, g.createElement(on, { size: 12 }), _s(u.publishedAt || u.createdAt)),
                 g.createElement("span", { className: "flex items-center gap-1" }, g.createElement(cn, { size: 12 }), (p = u.author) == null ? void 0 : p.username),
                 ((w = u.categories) == null ? void 0 : w[0]) && g.createElement("span", { className: "text-primary-600" }, u.categories[0].name)
               ),
@@ -2823,7 +2827,7 @@ function _s(e) {
     )
   );
 }
-const Ks = { name: "twentynineteen", typography: { cap: 2, max: 24 }, Header: Rs, HomeLayout: _s };
+const Xs = { name: "twentynineteen", typography: { cap: 2, max: 24 }, Header: Rs, HomeLayout: As };
 export {
-  Ks as default
+  Xs as default
 };

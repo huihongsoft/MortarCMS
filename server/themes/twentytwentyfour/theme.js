@@ -2553,23 +2553,23 @@ T.getAdapter = Xt.getAdapter;
 T.HttpStatusCode = ze;
 T.default = T;
 const {
-  Axios: ks,
-  AxiosError: Ls,
-  CanceledError: Us,
-  isCancel: Fs,
-  CancelToken: Bs,
-  VERSION: vs,
-  all: js,
-  Cancel: Is,
-  isAxiosError: Ms,
-  spread: qs,
-  toFormData: Hs,
-  AxiosHeaders: $s,
-  HttpStatusCode: zs,
-  formToJSON: Ws,
-  getAdapter: Vs,
-  mergeConfig: Js,
-  create: Ks
+  Axios: Ls,
+  AxiosError: Us,
+  CanceledError: Fs,
+  isCancel: Bs,
+  CancelToken: vs,
+  VERSION: js,
+  all: Is,
+  Cancel: Ms,
+  isAxiosError: qs,
+  spread: Hs,
+  toFormData: $s,
+  AxiosHeaders: zs,
+  HttpStatusCode: Ws,
+  formToJSON: Vs,
+  getAdapter: Js,
+  mergeConfig: Ks,
+  create: Xs
 } = T, xe = T.create({ baseURL: "/api", withCredentials: !0 });
 xe.interceptors.request.use((e) => {
   const t = localStorage.getItem("mortar_token");
@@ -2824,7 +2824,11 @@ function Ss(e, t) {
   return n && e.startsWith("/uploads/") ? n + e : e;
 }
 function _s(e) {
-  const t = Date.now(), n = new Date(e).getTime(), r = t - n, s = Math.floor(r / 6e4);
+  const t = String(e || ""), n = t.match(/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}:\d{2}$/);
+  return new Date(n ? t.replace(" ", "T") + "Z" : t).getTime();
+}
+function As(e) {
+  const t = Date.now(), n = _s(e), r = t - n, s = Math.floor(r / 6e4);
   if (s < 1) return "just now";
   if (s < 60) return `${s}m ago`;
   const o = Math.floor(s / 60);
@@ -2832,9 +2836,9 @@ function _s(e) {
   const a = Math.floor(o / 24);
   if (a < 7) return `${a}d ago`;
   const l = Math.floor(a / 7);
-  return l < 5 ? `${l}w ago` : new Date(e).toLocaleDateString();
+  return l < 5 ? `${l}w ago` : new Date(n).toLocaleDateString();
 }
-function As(e) {
+function Ns(e) {
   const { settings: t, posts: n, total: r, page: s, setPage: o, loadError: a, catSlug: l, isTagPage: c } = e, p = (t.theme_show_hero || "1") !== "0", u = t.theme_hero_title || "";
   return d.createElement(
     "div",
@@ -2876,7 +2880,7 @@ function As(e) {
               d.createElement(
                 "div",
                 { className: "flex items-center gap-3 text-xs text-gray-400 mb-2" },
-                d.createElement("span", { className: "flex items-center gap-1" }, d.createElement(on, { size: 12 }), _s(f.publishedAt || f.createdAt)),
+                d.createElement("span", { className: "flex items-center gap-1" }, d.createElement(on, { size: 12 }), As(f.publishedAt || f.createdAt)),
                 d.createElement("span", { className: "flex items-center gap-1" }, d.createElement(ln, { size: 12 }), (b = f.author) == null ? void 0 : b.username),
                 ((x = f.categories) == null ? void 0 : x[0]) && d.createElement("span", { className: "text-gray-300" }, "/", f.categories[0].name)
               ),
@@ -2906,7 +2910,7 @@ function As(e) {
     )
   );
 }
-const Xs = { name: "twentytwentyfour", typography: { cap: 2, max: 24 }, Header: xs, Footer: Rs, HomeLayout: As };
+const Gs = { name: "twentytwentyfour", typography: { cap: 2, max: 24 }, Header: xs, Footer: Rs, HomeLayout: Ns };
 export {
-  Xs as default
+  Gs as default
 };
