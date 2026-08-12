@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import db, { cuid } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
@@ -9,6 +10,20 @@ import { applyFilters, doAction } from '../utils/hooks';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 
 const router = Router();
+// Protected-post password guessing is brute-forced per IP
+const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, message: { error: 'Too many attempts, slow down' } });
+
+// Visual-editor CSS is rendered into a <style> tag on the public site, so
+// dangerous primitives are stripped at write time (defense in depth with the
+// frontend render guard). @import can pull external resources, expression() is
+// an XSS vector in old engines, behavior: is an IE active-content vector.
+function sanitizeVisualCss(css: string): string {
+  return String(css || '')
+    .replace(/@import[^;]+;?/gi, '')
+    .replace(/expression\([^)]*\)/gi, '')
+    .replace(/behavior\s*:[^;}]+;?/gi, '')
+    .replace(/url\(\s*(javascript|data):/gi, 'url(');
+}
 const postSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), meta: z.record(z.string(), z.string()).optional() });
 
 function enrichPost(p: any) {
@@ -59,7 +74,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     }
     const postsData = db.prepare(sql).all(...params) as any[];
     const countSql = 'SELECT COUNT(DISTINCT p.id) as cnt FROM Post p' + (category ? ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId' : '') + (tag ? ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId' : '') + ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + (req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '') + (search ? ' AND (p.title LIKE ? OR p.content LIKE ? OR p.excerpt LIKE ?)' : '') + (category ? ' AND c.slug = ?' : '') + (tag ? ' AND t.slug = ?' : '');
-    const countParams: any[] = ['post', 'published', now];
+    const countParams: any[] = [type, 'published', now];
     if (req.siteId) countParams.push(req.siteId);
     if (search) countParams.push('%' + search + '%', '%' + search + '%', '%' + search + '%');
     if (category) countParams.push(category);
@@ -101,9 +116,12 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
         return;
       }
     }
-    if (post.status !== 'published' && (!req.user || req.user.role === 'subscriber')) {
-      res.status(404).json({ error: 'Post not found' });
-      return;
+    if (post.status !== 'published') {
+      // Non-published posts (draft/private/trash) are only visible to
+      // admins/editors or the author themselves — never to other logged-in
+      // users or anonymous visitors.
+      const canView = req.user && (['admin', 'editor'].includes(req.user.role) || (req.user.userId && req.user.userId === post.authorId));
+      if (!canView) { res.status(404).json({ error: 'Post not found' }); return; }
     }
     db.prepare('UPDATE Post SET views = views + 1 WHERE id = ?').run(post.id);
     const enriched = enrichPost(post);
@@ -114,7 +132,7 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
 
 // Verify a password for a protected post; on success set an httpOnly cookie
 // (WordPress-style wp-postpass behaviour, matching the page flow).
-router.post('/slug/:slug/password', (req: AuthRequest, res: Response) => {
+router.post('/slug/:slug/password', passwordLimiter, (req: AuthRequest, res: Response) => {
   try {
     const post = db.prepare('SELECT id, password FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'post') as any;
     if (!post || !post.password) { res.status(404).json({ error: 'Post not found' }); return; }
@@ -126,6 +144,8 @@ router.post('/slug/:slug/password', (req: AuthRequest, res: Response) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       sameSite: 'lax',
       path: '/',
+      // Only sent over HTTPS in production (deployments are expected to use TLS)
+      secure: process.env.NODE_ENV === 'production',
     });
     res.json({ ok: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -187,12 +207,16 @@ router.get('/admin', authenticate, authorize('admin', 'editor', 'author'), (req:
     const limit = parseInt(req.query.limit as string) || 20;
     const status = req.query.status as string;
     const search = (req.query.search as string) || '';
+    // Sort columns are whitelisted (never concatenate raw query input into SQL)
+    const sortCols: Record<string, string> = { title: 'title', createdAt: 'createdAt', views: 'views' };
+    const sortCol = sortCols[(req.query.sortBy as string) || 'createdAt'] || 'createdAt';
+    const sortDir = req.query.sortDir === 'asc' ? 'ASC' : 'DESC';
     let sql = 'SELECT * FROM Post WHERE type = ?';
     const params: any[] = ['post'];
     if (req.user!.role === 'author') { sql += ' AND authorId = ?'; params.push(req.user!.userId); }
     if (status) { sql += ' AND status = ?'; params.push(status); }
     if (search) { sql += ' AND title LIKE ?'; params.push('%' + search + '%'); }
-    sql += ' ORDER BY sticky DESC, createdAt DESC LIMIT ? OFFSET ?';
+    sql += ' ORDER BY sticky DESC, ' + sortCol + ' ' + sortDir + ' LIMIT ? OFFSET ?';
     params.push(limit, (page - 1) * limit);
     const postsData = db.prepare(sql).all(...params) as any[];
     const cntSql = 'SELECT COUNT(*) as cnt FROM Post WHERE type = ?' + (req.user!.role === 'author' ? ' AND authorId = ?' : '') + (status ? ' AND status = ?' : '') + (search ? ' AND title LIKE ?' : '');
@@ -225,7 +249,7 @@ router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contribut
     }
     if (data.meta) {
       for (const [key, value] of Object.entries(data.meta)) {
-        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, value);
+        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
       }
     }
     const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(id) as any;
@@ -257,7 +281,7 @@ router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contrib
     if (data.meta) {
       db.prepare('DELETE FROM PostMeta WHERE postId = ?').run(req.params.id);
       for (const [key, value] of Object.entries(data.meta)) {
-        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, value);
+        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
       }
     }
     if (sets.length > 0) {
@@ -451,18 +475,6 @@ router.post('/:id/clone', authenticate, authorize('admin', 'editor', 'author'), 
     const tags = db.prepare('SELECT tagId FROM PostTag WHERE postId = ?').all(req.params.id) as any[];
     for (const t of tags) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, t.tagId);
     res.status(201).json(db.prepare('SELECT * FROM Post WHERE id = ?').get(id));
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
-});
-
-// Admin: bulk change status
-router.post('/bulk-status', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
-  try {
-    const { ids, status } = req.body;
-    if (!ids || !Array.isArray(ids) || !status) { res.status(400).json({ error: 'ids array and status required' }); return; }
-    const stmt = db.prepare('UPDATE Post SET status = ?, updatedAt = ? WHERE id = ?');
-    const now = new Date().toISOString();
-    for (const id of ids) stmt.run(status, now, id);
-    res.json({ success: true, count: ids.length });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

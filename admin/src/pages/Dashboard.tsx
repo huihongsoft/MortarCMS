@@ -117,7 +117,7 @@ export default function Dashboard() {
                 React.createElement('div', { title: 'PV ' + d.pv, className: 'w-2 rounded-t bg-primary-500', style: { height: Math.max(2, Math.round(h * 0.8)) + 'px' } }),
                 React.createElement('div', { title: 'UV ' + d.uv, className: 'w-2 rounded-t bg-green-500', style: { height: Math.max(2, Math.round(h * 0.5)) + 'px' } }),
               ),
-              React.createElement('span', { className: 'text-[9px] text-gray-400 truncate w-full text-center' }, d.date.slice(5)),
+              React.createElement('span', { className: 'text-[10px] text-gray-500 truncate w-full text-center' }, d.date.slice(5)),
             );
           })
         ),

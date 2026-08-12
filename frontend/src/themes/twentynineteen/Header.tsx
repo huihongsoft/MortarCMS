@@ -39,7 +39,7 @@ export default function TN19Header({ settings }: { settings: Record<string, stri
         React.createElement('a', { href: '/admin', className: 'text-sm uppercase tracking-widest text-primary-600 hover:text-primary-700' }, t('admin', settings)),
       ),
       React.createElement('div', { className: 'md:hidden flex justify-between items-center mt-4' },
-        React.createElement('button', { onClick: () => setMenuOpen(!menuOpen), className: 'p-2 text-gray-600' }, menuOpen ? React.createElement(X, { size: 20 }) : React.createElement(Menu, { size: 20 })),
+        React.createElement('button', { onClick: () => setMenuOpen(!menuOpen), className: 'p-2 text-gray-600', 'aria-label': t('toggle menu', settings), 'aria-expanded': menuOpen, 'aria-controls': 'mobile-nav' }, menuOpen ? React.createElement(X, { size: 20 }) : React.createElement(Menu, { size: 20 })),
         React.createElement('a', { href: '/admin', className: 'text-xs uppercase tracking-widest text-primary-600' }, t('admin', settings)),
       ),
       menuOpen && React.createElement('div', { className: 'md:hidden border-t border-gray-100 mt-4 pt-4 space-y-2' },

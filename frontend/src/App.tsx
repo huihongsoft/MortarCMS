@@ -4,23 +4,32 @@ import AdminBar from './components/AdminBar';
 import ThemeSection from './components/ThemeSection';
 import CookieConsent from './components/CookieConsent';
 import ScrollToTop from './components/ScrollToTop';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Routes, Route } from 'react-router-dom';
 import { ThemeProvider, useTheme } from './themes';
 import { headingCss } from './lib/typography';
 import api from './lib/api';
 import { initLightbox } from './lib/lightbox';
+
+// lazyWithRetry: a lazy() wrapper whose failure falls through to the app
+// ErrorBoundary (React.lazy rejects once and caches the failure — retrying
+// means reloading the chunk, so the boundary's reload action is the recovery).
+function lazyWithRetry(factory: () => Promise<{ default: React.ComponentType<any> }>) {
+  return lazy(factory);
+}
+
 // Route-level code splitting: Home stays eager (first paint), the rest load on demand
-const Home = lazy(() => import('./pages/Home'));
-const PostPage = lazy(() => import('./pages/Post'));
-const PageView = lazy(() => import('./pages/Page'));
-const SearchPage = lazy(() => import('./pages/Search'));
-const ArchivePage = lazy(() => import('./pages/Archive'));
-const AuthorPage = lazy(() => import('./pages/Author'));
-const NotFound = lazy(() => import('./pages/NotFound'));
-const ShareView = lazy(() => import('./pages/ShareView'));
-const Register = lazy(() => import('./pages/Register'));
-const Login = lazy(() => import('./pages/Login'));
-const Install = lazy(() => import('./pages/Install'));
+const Home = lazyWithRetry(() => import('./pages/Home'));
+const PostPage = lazyWithRetry(() => import('./pages/Post'));
+const PageView = lazyWithRetry(() => import('./pages/Page'));
+const SearchPage = lazyWithRetry(() => import('./pages/Search'));
+const ArchivePage = lazyWithRetry(() => import('./pages/Archive'));
+const AuthorPage = lazyWithRetry(() => import('./pages/Author'));
+const NotFound = lazyWithRetry(() => import('./pages/NotFound'));
+const ShareView = lazyWithRetry(() => import('./pages/ShareView'));
+const Register = lazyWithRetry(() => import('./pages/Register'));
+const Login = lazyWithRetry(() => import('./pages/Login'));
+const Install = lazyWithRetry(() => import('./pages/Install'));
 
 function SiteLayout({ settings }: { settings: Record<string, string> }) {
   const theme = useTheme();
@@ -103,9 +112,16 @@ export default function App() {
         if (!el) { el = document.createElement('style'); el.id = 'mortar-theme-vars'; document.head.appendChild(el); }
         el.textContent = ':root{' + vars + '}';
       }
-      // Unsaved custom CSS preview (Appearance panel opens ?preview_css=...)
+      // Unsaved custom CSS preview (Appearance panel opens ?preview_css=...).
+      // Security: the query parameter is attacker-controllable (a crafted link
+      // could inject arbitrary CSS, e.g. attribute-selector data exfiltration),
+      // so it is only honored for signed-in users and stripped of the worst
+      // primitives (@import / url() / expression) before injection.
       const previewCss = new URLSearchParams(window.location.search).get('preview_css');
-      const cssToApply = previewCss !== null && previewCss !== '' ? previewCss : (r.data.theme_custom_css || '');
+      let cssToApply = r.data.theme_custom_css || '';
+      if (previewCss !== null && previewCss !== '' && localStorage.getItem('mortar_token')) {
+        cssToApply = previewCss.replace(/@import[^;]+;?/gi, '').replace(/url\([^)]*\)/gi, 'url()').replace(/expression\([^)]*\)/gi, '');
+      }
       if (cssToApply) {
         let el = document.getElementById('mortar-theme-css') as HTMLStyleElement | null;
         if (!el) { el = document.createElement('style'); el.id = 'mortar-theme-css'; document.head.appendChild(el); }
@@ -130,5 +146,7 @@ export default function App() {
     }).catch(() => {});
   }, []);
 
-  return React.createElement(ThemeProvider, { themeName: (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('theme')) || settings.theme_name, children: React.createElement(SiteLayout, { settings }) });
+  return React.createElement(ErrorBoundary, null,
+    React.createElement(ThemeProvider, { themeName: (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('theme')) || settings.theme_name, children: React.createElement(SiteLayout, { settings }) })
+  );
 }

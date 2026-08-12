@@ -231,7 +231,7 @@ export default function AISettings() {
           const max = Math.max(...usage.byDay.map((x: any) => x.t), 1);
           return React.createElement('div', { key: d.day, className: 'flex-1 flex flex-col items-center justify-end gap-1 min-w-0' },
             React.createElement('div', { className: 'w-full max-w-6 rounded-t bg-primary-500', style: { height: Math.max(2, Math.round((d.t / max) * 64)) + 'px' }, title: d.day + ': ' + d.t + ' tokens' }),
-            React.createElement('span', { className: 'text-[9px] text-gray-400' }, d.day.slice(5)));
+            React.createElement('span', { className: 'text-[10px] text-gray-500' }, d.day.slice(5)));
         })),
       usage.recent && usage.recent.length > 0 && React.createElement('div', { className: 'mt-4 max-h-40 overflow-y-auto' },
         React.createElement('table', { className: 'w-full text-left' },

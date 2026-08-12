@@ -2723,7 +2723,7 @@ function Rs({ settings: e }) {
       g.createElement(
         "div",
         { className: "md:hidden flex justify-between items-center mt-4" },
-        g.createElement("button", { onClick: () => s(!r), className: "p-2 text-gray-600" }, r ? g.createElement(ln, { size: 20 }) : g.createElement(an, { size: 20 })),
+        g.createElement("button", { onClick: () => s(!r), className: "p-2 text-gray-600", "aria-label": N("toggle menu", e), "aria-expanded": r, "aria-controls": "mobile-nav" }, r ? g.createElement(ln, { size: 20 }) : g.createElement(an, { size: 20 })),
         g.createElement("a", { href: "/admin", className: "text-xs uppercase tracking-widest text-primary-600" }, N("admin", e))
       ),
       r && g.createElement(
@@ -2791,7 +2791,7 @@ function _s(e) {
               ),
               g.createElement(
                 "div",
-                { className: "flex items-center gap-4 text-xs uppercase tracking-widest text-gray-400 mb-4" },
+                { className: "flex items-center gap-4 text-xs uppercase tracking-widest text-gray-500 mb-4" },
                 g.createElement("span", { className: "flex items-center gap-1" }, g.createElement(on, { size: 12 }), Ss(u.publishedAt || u.createdAt)),
                 g.createElement("span", { className: "flex items-center gap-1" }, g.createElement(cn, { size: 12 }), (p = u.author) == null ? void 0 : p.username),
                 ((w = u.categories) == null ? void 0 : w[0]) && g.createElement("span", { className: "text-primary-600" }, u.categories[0].name)
@@ -2811,7 +2811,7 @@ function _s(e) {
         "div",
         { className: "flex items-center justify-center gap-4 pt-16" },
         g.createElement("button", { onClick: () => o(Math.max(1, s - 1)), disabled: s === 1, className: "px-4 py-2 text-sm uppercase tracking-widest hover:text-gray-600 disabled:opacity-40" }, "← " + N("previous", t)),
-        g.createElement("span", { className: "text-sm text-gray-400" }, N("page", t) + " " + s + " " + N("of", t) + " " + Math.ceil(r / parseInt(t.posts_per_page || "10"))),
+        g.createElement("span", { className: "text-sm text-gray-500" }, N("page", t) + " " + s + " " + N("of", t) + " " + Math.ceil(r / parseInt(t.posts_per_page || "10"))),
         g.createElement("button", { onClick: () => o(s + 1), disabled: s * parseInt(t.posts_per_page || "10") >= r, className: "px-4 py-2 text-sm uppercase tracking-widest hover:text-gray-600 disabled:opacity-40" }, N("next", t) + " →")
       )
     )

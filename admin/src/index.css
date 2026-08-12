@@ -2,7 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
+/* Admin base: 14px to match the text-sm used across the dashboard, so elements
+   without an explicit size class don't fall back to the 16px browser default */
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; font-size: 14px; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; }
 ::selection { background: color-mix(in srgb, var(--admin-primary, #2563eb) 25%, transparent); }
 
 /* --- Sidebar links (WP-style active indicator bar) --- */
@@ -69,7 +71,7 @@ a:focus-visible, button:focus-visible { outline: 2px solid color-mix(in srgb, va
 .card:hover { border-color: #e5e7eb; box-shadow: 0 2px 6px rgba(0,0,0,0.05), 0 10px 24px -8px rgba(0,0,0,0.1); }
 
 /* --- Tables --- */
-table thead th { @apply text-[11px] font-semibold uppercase tracking-wider text-gray-500; }
+table thead th { @apply text-xs font-semibold uppercase tracking-wider text-gray-600; }
 table tbody tr { transition: background-color 0.12s ease; }
 
 /* --- Scrollbars --- */
@@ -117,7 +119,7 @@ table tbody tr { transition: background-color 0.12s ease; }
 .dark .text-gray-600 { color: #d1d5db !important; }
 .dark .text-gray-500 { color: #9ca3af !important; }
 .dark .text-gray-400 { color: #9ca3af !important; }
-.dark .text-gray-300 { color: #9ca3af !important; }
+.dark .text-gray-300 { color: #d1d5db !important; }
 
 /* Surfaces */
 .dark .bg-white:not(.sidebar) { background-color: #1f2937 !important; }

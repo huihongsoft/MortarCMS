@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { Database, HardDrive, Server, Globe, User, ArrowRight, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import api from '../lib/api';
+import useSEO from '../hooks/useSEO';
 
 export default function Install() {
+  useSEO({ title: 'Install', url: '/install', noindex: true });
   const [step, setStep] = useState(1);
   const [dbType, setDbType] = useState('sqlite');
   const [dbConfig, setDbConfig] = useState({ host: 'localhost', port: '3306', user: 'root', password: '', database: 'mortar' });

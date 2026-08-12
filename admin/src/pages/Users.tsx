@@ -10,11 +10,16 @@ export default function Users() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
   const [roleFilter, setRoleFilter] = useState('');
-  useEffect(() => { api.get('/users').then(r => setUsers(r.data)); }, []);
+  const [loaded, setLoaded] = useState(false);
+  const [error, setError] = useState('');
+  useEffect(() => { api.get('/users').then(r => { setUsers(r.data); setLoaded(true); }).catch(() => { setLoaded(true); setError(t('failed to load users', getLang())); }); }, []);
   const filteredUsers = roleFilter ? users.filter((u: any) => u.role === roleFilter) : users;
 
-  async function updateRole(id: string, role: string) { await api.put(`/users/${id}`, { role }); setUsers(users.map((u: any) => u.id === id ? { ...u, role } : u)); }
-  async function del(id: string) { if (!confirm(t('delete this user?', getLang()))) return; await api.delete(`/users/${id}`); setUsers(users.filter((u: any) => u.id !== id)); }
+  async function updateRole(id: string, role: string) {
+    try { await api.put(`/users/${id}`, { role }); setUsers(users.map((u: any) => u.id === id ? { ...u, role } : u)); }
+    catch (e: any) { alert(e.response?.data?.error || t('update failed', getLang())); }
+  }
+  async function del(id: string) { if (!confirm(t('delete this user?', getLang()))) return; try { await api.delete(`/users/${id}`); setUsers(users.filter((u: any) => u.id !== id)); } catch (e: any) { alert(e.response?.data?.error || t('delete failed', getLang())); } }
 
   async function createUser() {
     const u = (document.getElementById('new-username') as HTMLInputElement).value;
@@ -22,8 +27,10 @@ export default function Users() {
     const p = (document.getElementById('new-password') as HTMLInputElement).value;
     const r = (document.getElementById('new-role') as HTMLSelectElement).value;
     if (!u || !e || !p) return alert(t('fill all fields', getLang()));
-    await api.post('/auth/register', { username: u, email: e, password: p, role: r });
-    window.location.reload();
+    try {
+      await api.post('/auth/register', { username: u, email: e, password: p, role: r });
+      window.location.reload();
+    } catch (err: any) { alert(err.response?.data?.error || t('create failed', getLang())); }
   }
 
   const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatar || '');
@@ -105,7 +112,7 @@ export default function Users() {
         )
       ),
       // Right column: user table
-      React.createElement('div', { className: 'card overflow-hidden lg:col-span-2' },
+      React.createElement('div', { className: 'card overflow-x-auto lg:col-span-2' },
         // Role filter tabs (WordPress user role filter)
         React.createElement('div', { className: 'flex items-center gap-1 p-3 border-b border-gray-100 dark:border-gray-700 flex-wrap' },
           ['', ...roles].map(r => React.createElement('button', {
@@ -114,7 +121,9 @@ export default function Users() {
             className: 'px-3 py-1 text-xs rounded-lg border ' + (roleFilter === r ? 'border-primary-400 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 text-gray-500 hover:text-gray-700'),
           }, r ? t(r, getLang()) : t('all roles', getLang()))),
         ),
-        filteredUsers.length === 0
+        error ? React.createElement('p', { className: 'text-sm text-red-500 p-6' }, error)
+        : !loaded ? React.createElement('p', { className: 'text-sm text-gray-400 p-6' }, t('loading...', getLang()))
+        : filteredUsers.length === 0
           ? React.createElement('p', { className: 'text-sm text-gray-400 p-6' }, t('no users', getLang()))
           : React.createElement('table', { className: 'w-full' },
               React.createElement('thead', null, React.createElement('tr', { className: 'border-b border-gray-200 bg-gray-50 dark:bg-gray-800' },

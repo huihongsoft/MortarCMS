@@ -6,6 +6,7 @@ import api from '../lib/api';
 
 export default function Comments() {
   const [comments, setComments] = useState<any[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const toast = useToast();
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState(() => new URLSearchParams(window.location.search).get('status') || '');
@@ -26,7 +27,7 @@ export default function Comments() {
     fetchComments();
   }
   useEffect(() => { fetchComments(); }, [filter]);
-  async function fetchComments() { const r = await api.get(`/comments/admin?limit=50&status=${filter}`); setComments(r.data.comments); }
+  async function fetchComments() { try { const r = await api.get(`/comments/admin?limit=50&status=${filter}`); setComments(r.data.comments); setLoaded(true); } catch { setLoaded(true); } }
   async function updateStatus(id: string, status: string) { await api.put(`/comments/${id}`, { status }); fetchComments(); }
   async function del(id: string) { if (!confirm(t('delete?', getLang()))) return; await api.delete('/comments/' + id); fetchComments(); }
   async function bulkAction(act: string) { if (selected.size === 0) return; await api.post('/comments/bulk-action', { ids: Array.from(selected), action: act }); toast.toast(selected.size + ' ' + t('comments', getLang()) + ' ' + act); setSelected(new Set()); fetchComments(); }
@@ -77,7 +78,8 @@ export default function Comments() {
           }, t('apply', getLang()))
         )))
     ),
-    comments.length === 0 ? React.createElement('p', { className: 'text-gray-500' }, t('no comments yet', getLang()))
+    !loaded ? React.createElement('p', { className: 'text-gray-500' }, t('loading...', getLang()))
+    : comments.length === 0 ? React.createElement('p', { className: 'text-gray-500' }, t('no comments yet', getLang()))
     : React.createElement('div', { className: 'space-y-2' }, comments.map((c: any) =>
         React.createElement('div', { key: c.id, className: 'card p-3 flex items-start gap-3' },
           // Selection checkbox — left side

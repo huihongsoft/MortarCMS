@@ -49,7 +49,7 @@ export default function TS17Header({ settings }: { settings: Record<string, stri
             : React.createElement(Link, { to: '/login', className: 'text-gray-600 hover:text-gray-900' }, t('sign in')),
           React.createElement('a', { href: '/admin', className: 'text-gray-900 font-medium hover:text-gray-600' }, t('admin', settings)),
         ),
-        React.createElement('button', { onClick: () => setMenuOpen(!menuOpen), className: 'md:hidden p-2 text-gray-600' }, menuOpen ? React.createElement(X, { size: 20 }) : React.createElement(Menu, { size: 20 })),
+        React.createElement('button', { onClick: () => setMenuOpen(!menuOpen), className: 'md:hidden p-2 text-gray-600', 'aria-label': t('toggle menu', settings), 'aria-expanded': menuOpen, 'aria-controls': 'mobile-nav' }, menuOpen ? React.createElement(X, { size: 20 }) : React.createElement(Menu, { size: 20 })),
       ),
       menuOpen && React.createElement('div', { className: 'md:hidden border-t border-gray-100 px-4 py-3 space-y-2' },
         React.createElement(Link, { to: '/', className: 'block text-sm text-gray-700 py-1' }, t('home', settings)),

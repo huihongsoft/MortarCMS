@@ -50,7 +50,9 @@ router.get('/comments', (_req: AuthRequest, res: Response) => {
 
     const items = comments.map((c: any) => {
       const link = siteUrl + '/post/' + esc(c.postSlug) + '#comment-' + c.id;
-      const desc = '<![CDATA[' + (c.author || 'Anonymous') + ' 评论于 《' + c.postTitle + '》：<br>' + (c.content || '').replace(/</g, '&lt;') + ']]>';
+      // Escape ]]> so a comment can never terminate the CDATA block and inject XML
+      const cdata = (s: string) => esc(s).replace(/\]\]>/g, ']]&gt;');
+      const desc = '<![CDATA[' + cdata(c.author || 'Anonymous') + ' 评论于 《' + cdata(c.postTitle) + '》：<br>' + cdata(c.content || '') + ']]>';
       const date = new Date(c.createdAt).toUTCString();
       return '<item><title>评论于《' + esc(c.postTitle) + '》</title><link>' + link + '</link><guid>' + link + '</guid><description>' + desc + '</description><pubDate>' + date + '</pubDate></item>';
     }).join('');

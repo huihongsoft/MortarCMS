@@ -32,11 +32,11 @@ export default function Posts() {
   }, [filter]);
 
   useEffect(() => { api.get('/posts/admin?limit=1').then(r => setCounts(c => ({...c, all: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=published&limit=1').then(r => setCounts(c => ({...c, published: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=draft&limit=1').then(r => setCounts(c => ({...c, draft: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=trash&limit=1').then(r => setCounts(c => ({...c, trash: r.data.total || 0}))).catch(()=>{}); }, []);
-  useEffect(() => { fetchPosts(); }, [page, filter]);
+  useEffect(() => { fetchPosts(); }, [page, filter, sortBy, sortDir]);
 
   async function fetchPosts() {
     setLoading(true);
-    try { const r = await api.get(`/posts/admin?page=${page}&limit=15&status=${filter}`); setPosts(r.data.posts); setTotal(r.data.total); } catch {} finally { setLoading(false); }
+    try { const r = await api.get(`/posts/admin?page=${page}&limit=15&status=${filter}&sortBy=${sortBy}&sortDir=${sortDir}`); setPosts(r.data.posts); setTotal(r.data.total); } catch {} finally { setLoading(false); }
   }
 
   async function deletePost(id: string) { if (!confirm(t('delete this post', getLang()))) return; await api.delete(`/posts/${id}`); fetchPosts(); }
@@ -165,8 +165,8 @@ export default function Posts() {
         description: t('start writing and share your first post', getLang()),
         action: React.createElement('button', { onClick: () => navigate('/posts/new'), className: 'btn-primary text-sm' }, React.createElement(Plus, { size: 15 }), t('new post', getLang())),
       })
-    : React.createElement('div', { className: 'card overflow-hidden' },
-        React.createElement('table', { className: 'w-full' },
+    : React.createElement('div', { className: 'card overflow-x-auto' },
+        React.createElement('table', { className: 'w-full min-w-[720px]' },
           React.createElement('thead', null, React.createElement('tr', { className: 'border-b border-gray-200 bg-gray-50' },
             React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700', onClick: () => { setSortBy('title'); setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); } }, t('title', getLang()) + (sortBy === 'title' ? (sortDir === 'asc' ? ' \u2191' : ' \u2193') : '')),
             React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('author', getLang())),

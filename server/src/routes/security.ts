@@ -23,8 +23,10 @@ router.get('/audit', authenticate, requireCap('manage_options'), (req: AuthReque
     // 1. JWT secret
     if (process.env.JWT_SECRET) {
       checks.push({ id: 'jwt_secret', label: 'JWT secret configured', status: 'ok', detail: 'JWT_SECRET is set — sessions survive restarts.', advice: 'Keep it secret and rotate on compromise.' });
+    } else if (isProd) {
+      checks.push({ id: 'jwt_secret', label: 'JWT secret configured', status: 'fail', detail: 'JWT_SECRET is not set — the server refuses to start in production without it.', advice: 'Set JWT_SECRET in server/.env (long random string).' });
     } else {
-      checks.push({ id: 'jwt_secret', label: 'JWT secret configured', status: 'warn', detail: 'JWT_SECRET is not set — a random key is generated per boot, so all sessions are invalidated on restart.', advice: 'Set JWT_SECRET in server/.env (long random string).' });
+      checks.push({ id: 'jwt_secret', label: 'JWT secret configured', status: 'warn', detail: 'JWT_SECRET is not set — a dev secret is persisted in server/data/.jwt-secret so sessions survive restarts. Set JWT_SECRET before going to production.', advice: 'Set JWT_SECRET in server/.env (long random string).' });
     }
 
     // 2. Login protection (lockout + rate limit)

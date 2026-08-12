@@ -52,7 +52,30 @@ loadActivePlugins().catch(e => console.log('[Plugins] init error: ' + e.message)
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-app.use(cors());
+// CORS: same-origin requests are always allowed (the admin/frontend apps talk
+// to the API through the same origin or a dev proxy). Cross-origin requests are
+// only allowed for explicitly configured origins: CORS_ORIGINS env var
+// (comma-separated) or the site_url setting (read with a short cache).
+const siteUrlCache: { at: number; url: string } = { at: 0, url: '' };
+function configuredOrigins(): string[] {
+  const env = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+  if (Date.now() - siteUrlCache.at > 10000) {
+    siteUrlCache.at = Date.now();
+    try { siteUrlCache.url = ((db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || '').replace(/\/$/, ''); } catch { /* DB not ready */ }
+  }
+  if (siteUrlCache.url) env.push(siteUrlCache.url);
+  return env;
+}
+app.use(cors({
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // same-origin / non-browser request
+    if (configuredOrigins().includes(origin)) return cb(null, true);
+    return cb(null, false); // no ACAO header -> browser blocks the cross-origin read
+  },
+}));
+// Trust the X-Forwarded-For header only when explicitly enabled (e.g. running
+// behind nginx). req.ip is then reliable for rate limits / visit tracking.
+app.set('trust proxy', process.env.TRUST_PROXY === '1');
 // Security headers
 app.use((_req: any, res: any, next: any) => {
   res.setHeader('X-Frame-Options', 'DENY');
@@ -78,7 +101,9 @@ app.use((req, res, next) => {
     if (visitLogging !== false) {
       const p = req.path;
       if (!p.startsWith('/api') && !p.startsWith('/assets') && !p.startsWith('/admin') && !p.startsWith('/uploads') && p !== '/favicon.ico') {
-        const ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '') .split(',')[0].trim();
+        // req.ip honors TRUST_PROXY; without it the socket address is used so a
+        // spoofed X-Forwarded-For header cannot fake visitor IPs.
+        const ip = (req.ip || req.socket.remoteAddress || 'unknown').replace(/^::ffff:/, '');
         const today = new Date().toISOString().slice(0, 10);
         const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
         db.prepare('INSERT INTO Visit (id, date, ip, path) VALUES (?, ?, ?, ?)').run(id, today, ip || 'unknown', p.slice(0, 200));
@@ -116,8 +141,8 @@ app.use((req, res, next) => {
   if (active) {
     // IP whitelist bypasses maintenance (IPv6 loopback forms normalized)
     const wl = ((db.prepare("SELECT value FROM Setting WHERE key = 'maintenance_whitelist'").get() as any)?.value || '').split(/[,\s]+/).filter(Boolean);
-    let ip = (req.headers['x-forwarded-for'] as string || req.socket.remoteAddress || '').split(',')[0].trim();
-    if (ip === '::1' || ip === '::ffff:127.0.0.1') ip = '127.0.0.1';
+    let ip = (req.ip || req.socket.remoteAddress || '').replace(/^::ffff:/, '');
+    if (ip === '::1') ip = '127.0.0.1';
     if (wl.includes(ip) || wl.includes('*')) { next(); return; }
     const msg = (db.prepare("SELECT value FROM Setting WHERE key = 'maintenance_message'").get() as any)?.value || 'Under maintenance';
     return res.status(503).send('<!DOCTYPE html><html><head><title>Maintenance</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f9fafb;color:#374151}div{text-align:center;max-width:400px;padding:40px}h1{font-size:2rem;margin-bottom:1rem}p{color:#6b7280}</style></head><body><div><h1>\u{1F6E0} Under Maintenance</h1><p>' + msg + '</p></div></body></html>');
@@ -333,6 +358,31 @@ app.get('/api/schema', (_req, res) => {
   ];
   res.json({ name: 'Mortar CMS API', version: '0.1.0', endpoints });
 });
+
+// Widget registry: widgets the frontend can render plus the active
+// configuration managed from the admin Widgets panel (widgets_active /
+// widgets_config live in the Setting table, so this endpoint stays in sync).
+app.get('/api/widgets', (_req, res) => {
+  const registry = [
+    { id: 'search', name: 'Search', areas: ['sidebar'] },
+    { id: 'categories', name: 'Categories', areas: ['sidebar'] },
+    { id: 'recent_posts', name: 'Recent Posts', areas: ['sidebar'] },
+    { id: 'archives', name: 'Archives', areas: ['sidebar'] },
+    { id: 'tag_cloud', name: 'Tag Cloud', areas: ['sidebar'] },
+    { id: 'html', name: 'Custom HTML', areas: ['sidebar'] },
+  ];
+  let active: string[] = [];
+  let config: Record<string, any> = {};
+  try {
+    active = JSON.parse((db.prepare("SELECT value FROM Setting WHERE key = 'widgets_active'").get() as any)?.value || '[]');
+    config = JSON.parse((db.prepare("SELECT value FROM Setting WHERE key = 'widgets_config'").get() as any)?.value || '{}');
+  } catch {}
+  res.json({ widgets: registry, active, config });
+});
+
+// Unknown API paths must return a JSON 404 (not the SPA HTML catch-all) so
+// client code can distinguish missing endpoints from real API failures.
+app.use('/api', (_req, res) => { res.status(404).json({ error: 'Not found' }); });
 
 // Serve Admin SPA
 const adminDist = path.join(__dirname, '../../admin/dist');

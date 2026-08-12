@@ -9,12 +9,17 @@ export default function AuthorPage({ settings }: { settings: Record<string, stri
   const { username } = useParams();
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    api.get('/posts/author/' + username).then(r => setPosts(r.data.posts || [])).catch(() => {}).finally(() => setLoading(false));
+    api.get('/posts/author/' + username)
+      .then(r => setPosts(r.data.posts || []))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
   }, [username]);
 
   useSEO({
+    siteTitle: settings.site_title,
     title: username || t('author'),
     url: window.location.origin + '/author/' + username,
     jsonLd: [
@@ -34,5 +39,5 @@ export default function AuthorPage({ settings }: { settings: Record<string, stri
   });
 
   const Layout = useTheme().AuthorLayout;
-  return React.createElement(Layout, { username, posts, loading });
+  return React.createElement(Layout, { username, posts, loading, error });
 }

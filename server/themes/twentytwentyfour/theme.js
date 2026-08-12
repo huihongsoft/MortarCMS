@@ -2729,7 +2729,7 @@ function xs({ settings: e }) {
           d.createElement("a", { href: "/admin", className: "px-4 py-1.5 bg-gray-900 text-white text-xs rounded-full hover:bg-gray-700" }, R("admin", e))
         )
       ),
-      d.createElement("button", { onClick: () => s(!r), className: "md:hidden p-2 text-gray-600" }, r ? d.createElement(cn, { size: 20 }) : d.createElement(an, { size: 20 }))
+      d.createElement("button", { onClick: () => s(!r), className: "md:hidden p-2 text-gray-600", "aria-label": R("toggle menu", e), "aria-expanded": r, "aria-controls": "mobile-nav" }, r ? d.createElement(cn, { size: 20 }) : d.createElement(an, { size: 20 }))
     ),
     r && d.createElement(
       "div",

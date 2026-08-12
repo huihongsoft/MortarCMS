@@ -3,6 +3,13 @@ import db from './db';
 // Shortcode system: [tag attr="value"]content[/tag]
 type ShortcodeFn = (attrs: Record<string, string>, content: string, ctx: any) => string;
 
+// Escape dynamic text fields before they are spliced into shortcode HTML.
+// Shortcode output is rendered server-side and injected via innerHTML on the
+// frontend, so every database-sourced value must be escaped here.
+function esc(v: any): string {
+  return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
 const shortcodes = new Map<string, { fn: ShortcodeFn; desc?: string }>();
 
 export function addShortcode(name: string, fn: ShortcodeFn, desc?: string): void {
@@ -67,9 +74,9 @@ addShortcode('gallery', (attrs, _content, ctx) => {
   if (media.length === 0) return '';
   const gid = 'g-' + ids.join('-');
   const items = media.map((m: any) => {
-    const caption = m.alt || m.title || '';
+    const caption = esc(m.alt || m.title || '');
     const displayUrl = useThumb && m.thumbnail ? m.thumbnail : m.url;
-    return '<div class="gallery-item"><img loading="lazy" src="' + displayUrl + '" alt="' + caption + '" data-src="' + m.url + '" data-caption="' + caption.replace(/"/g, '&quot;') + '"></div>';
+    return '<div class="gallery-item"><img loading="lazy" src="' + esc(displayUrl) + '" alt="' + caption + '" data-src="' + esc(m.url) + '" data-caption="' + caption + '"></div>';
   }).join('');
   return '<div class="gallery" data-gallery-id="' + gid + '" style="display:grid;grid-template-columns:repeat(' + columns + ',1fr);gap:8px;">' + items + '</div>';
 }, 'Responsive image grid from the media library (ids=, columns=, size=)');
@@ -95,8 +102,9 @@ addShortcode('post-list', (attrs) => {
   const posts = db.prepare("SELECT id, title, slug, excerpt, featured, publishedAt FROM Post WHERE type = 'post' AND status = 'published' ORDER BY publishedAt DESC LIMIT ?").all(limit) as any[];
   if (posts.length === 0) return '<p class="text-gray-400 text-sm italic">No posts yet.</p>';
   const items = posts.map((p: any) => {
-    const img = p.featured ? '<img src="' + p.featured + '" alt="' + (p.title || '') + '" loading="lazy" style="width:80px;height:80px;object-fit:cover;border-radius:8px;flex-shrink:0;">' : '';
-    return '<a href="/post/' + p.slug + '" style="display:flex;gap:16px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #e5e7eb;text-decoration:none;color:inherit;">' + img + '<div><h4 style="margin:0 0 4px;font-size:15px;color:#111827;">' + (p.title || '') + '</h4><p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">' + (p.excerpt || '').substring(0, 120) + '</p></div></a>';
+    const title = esc(p.title);
+    const img = p.featured ? '<img src="' + esc(p.featured) + '" alt="' + title + '" loading="lazy" style="width:80px;height:80px;object-fit:cover;border-radius:8px;flex-shrink:0;">' : '';
+    return '<a href="/post/' + esc(p.slug) + '" style="display:flex;gap:16px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #e5e7eb;text-decoration:none;color:inherit;">' + img + '<div><h4 style="margin:0 0 4px;font-size:15px;color:#111827;">' + title + '</h4><p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">' + esc((p.excerpt || '').substring(0, 120)) + '</p></div></a>';
   }).join('');
   return '<div class="cms-rendered-post-list">' + items + '</div>';
 }, 'Latest published posts (limit=)');
@@ -104,7 +112,7 @@ addShortcode('post-list', (attrs) => {
 addShortcode('categories', () => {
   const cats = db.prepare('SELECT c.name, c.slug, COUNT(pc.postId) as cnt FROM Category c LEFT JOIN PostCategory pc ON pc.categoryId = c.id GROUP BY c.id ORDER BY c.name').all() as any[];
   if (cats.length === 0) return '<p class="text-gray-400 text-sm italic">No categories yet.</p>';
-  const items = cats.map((c: any) => '<a href="/category/' + c.slug + '" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6;text-decoration:none;color:#374151;font-size:14px;"><span>' + c.name + '</span><span style="color:#9ca3af;">' + (c.cnt || 0) + '</span></a>').join('');
+  const items = cats.map((c: any) => '<a href="/category/' + esc(c.slug) + '" style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #f3f4f6;text-decoration:none;color:#374151;font-size:14px;"><span>' + esc(c.name) + '</span><span style="color:#9ca3af;">' + (c.cnt || 0) + '</span></a>').join('');
   return '<div class="cms-rendered-categories">' + items + '</div>';
 }, 'Category list with post counts');
 
@@ -112,7 +120,7 @@ addShortcode('comments', (attrs) => {
   const limit = Math.min(parseInt(attrs.limit || '5') || 5, 20);
   const comments = db.prepare("SELECT c.author, c.content, c.createdAt, p.title as postTitle, p.slug as postSlug FROM Comment c JOIN Post p ON p.id = c.postId WHERE c.status = 'approved' ORDER BY c.createdAt DESC LIMIT ?").all(limit) as any[];
   if (comments.length === 0) return '<p class="text-gray-400 text-sm italic">No comments yet.</p>';
-  const items = comments.map((c: any) => '<div style="padding:10px 0;border-bottom:1px solid #f3f4f6;"><p style="margin:0;font-size:13px;color:#374151;">' + c.content.substring(0, 150) + '</p><p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">' + c.author + ' on <a href="/post/' + c.postSlug + '" style="color:#6b7280;text-decoration:none;">' + (c.postTitle || 'post') + '</a></p></div>').join('');
+  const items = comments.map((c: any) => '<div style="padding:10px 0;border-bottom:1px solid #f3f4f6;"><p style="margin:0;font-size:13px;color:#374151;">' + esc(c.content.substring(0, 150)) + '</p><p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">' + esc(c.author) + ' on <a href="/post/' + esc(c.postSlug) + '" style="color:#6b7280;text-decoration:none;">' + esc(c.postTitle || 'post') + '</a></p></div>').join('');
   return '<div class="cms-rendered-comments">' + items + '</div>';
 }, 'Recent approved comments (limit=)');
 
@@ -138,7 +146,8 @@ addShortcode('tag-cloud', () => {
   const items = tags.map((t: any) => {
     const ratio = (t.cnt || 1) / maxCnt;
     const size = 12 + Math.round(ratio * 16); // 12px ~ 28px
-    return '<a href="/tag/' + t.slug + '" style="display:inline-block;margin:4px 8px 4px 0;font-size:' + size + 'px;color:#6b7280;text-decoration:none;transition:color .15s;" onmouseover="this.style.color=\'#3b82f6\'" onmouseout="this.style.color=\'#6b7280\'">' + t.name + '</a>';
+    const name = esc(t.name);
+    return '<a href="/tag/' + esc(t.slug) + '" style="display:inline-block;margin:4px 8px 4px 0;font-size:' + size + 'px;color:#6b7280;text-decoration:none;transition:color .15s;" onmouseover="this.style.color=\'#3b82f6\'" onmouseout="this.style.color=\'#6b7280\'">' + name + '</a>';
   }).join('');
   return '<div class="cms-rendered-tag-cloud" style="line-height:2;">' + items + '</div>';
 }, 'Tag cloud sized by usage');

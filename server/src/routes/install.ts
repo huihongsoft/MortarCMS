@@ -43,8 +43,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     if (installed()) { res.status(400).json({ error: 'Already installed' }); return; }
     const { dbType, dbConfig, siteTitle, siteDescription, adminEmail, adminPassword, adminUsername } = req.body || {};
-    if (!siteTitle || !adminEmail || !adminPassword || adminPassword.length < 8) {
-      res.status(400).json({ error: 'Site title, admin email and a password of at least 8 characters are required' }); return;
+    if (!siteTitle || !adminEmail || !adminPassword) {
+      res.status(400).json({ error: 'Site title, admin email and a password are required' }); return;
+    }
+    if (adminPassword.length < 8 || !/[a-zA-Z]/.test(adminPassword) || !/\d/.test(adminPassword)) {
+      res.status(400).json({ error: 'Admin password must be at least 8 characters with letters and numbers' }); return;
     }
     // 1. Reconfigure the database driver per user choice (SQLite default / MySQL / PostgreSQL)
     let databaseUrl = '';
@@ -58,7 +61,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     const { initDB } = require('../utils/db');
     initDB();
     // 3. Create the admin account + base settings
-    const password = await bcrypt.hash(adminPassword, 10);
+    const password = await bcrypt.hash(adminPassword, 12);
     const adminId = cuid();
     const exists = db.prepare('SELECT id FROM User WHERE username = ? OR email = ?').get(adminUsername || 'admin', adminEmail) as any;
     if (!exists) db.prepare('INSERT INTO User (id, username, email, password, role) VALUES (?, ?, ?, ?, ?)').run(adminId, adminUsername || 'admin', adminEmail, password, 'admin');

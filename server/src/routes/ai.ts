@@ -105,7 +105,7 @@ router.post('/test', authenticate, requireCap('ai_manage', 'manage_options'), as
 
 // ---- Chat (no tools; permission checked against allowed roles) ----
 
-router.post('/chat', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/chat', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     const provider = getDefaultProvider();
@@ -122,7 +122,7 @@ router.post('/chat', authenticate, async (req: AuthRequest, res: Response) => {
 });
 
 // Summarize a long conversation excerpt (used to compress chat history)
-router.post('/summarize', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/summarize', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
     const now = Date.now();
     const last = lastAiRequest.get(req.user!.userId);
@@ -164,7 +164,7 @@ function buildHistoryMessages(raw: any): { role: 'user' | 'assistant'; content: 
   return out;
 }
 
-router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/assistant', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     const now = Date.now();
@@ -227,7 +227,7 @@ router.post('/assistant', authenticate, async (req: AuthRequest, res: Response) 
   }
 });
 
-router.post('/generate', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/generate', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     const provider = getDefaultProvider();
@@ -280,6 +280,29 @@ router.post('/generate', authenticate, async (req: AuthRequest, res: Response) =
 });
 
 // ---- Usage tracking ----
+
+// Hard daily budget: refuse further AI calls once the day's tokens exceed the
+// configured limit (default 500k) — independent of the alert-only check below,
+// which merely notifies admins. Result is cached briefly to avoid a SUM query
+// on every request.
+let usageCheckAt = 0;
+let usageBlocked = false;
+function usageLimitReached(): boolean {
+  if (Date.now() - usageCheckAt > 10000) {
+    usageCheckAt = Date.now();
+    try {
+      const limit = parseInt((db.prepare("SELECT value FROM Setting WHERE key = 'ai_usage_limit_daily'").get() as any)?.value || '500000') || 500000;
+      const used = (db.prepare("SELECT COALESCE(SUM(tokens),0) as t FROM AiUsage WHERE date(createdAt) = date('now')").get() as any)?.t || 0;
+      usageBlocked = used >= limit;
+    } catch { usageBlocked = false; }
+  }
+  return usageBlocked;
+}
+// Middleware applying the hard cap to every token-consuming endpoint
+function enforceUsageLimit(req: AuthRequest, res: Response, next: any): void {
+  if (usageLimitReached()) { res.status(429).json({ error: '今日 AI 用量已达上限，请明天再试或联系管理员提高限额' }); return; }
+  next();
+}
 
 function recordUsage(userId: string, kind: string, text: string, model?: string): void {
   try {
@@ -460,7 +483,7 @@ router.post('/notifications/read-all', authenticate, (req: AuthRequest, res: Res
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/task', authenticate, (req: AuthRequest, res: Response) => {
+router.post('/task', authenticate, enforceUsageLimit, (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     const message = String((req.body || {}).message || '').trim();
@@ -606,7 +629,7 @@ router.delete('/schedules/:id', authenticate, (req: AuthRequest, res: Response) 
 });
 
 // AI review of pending comments (spam detection suggestion)
-router.post('/review-comments', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/review-comments', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     const provider = getDefaultProvider();
@@ -632,7 +655,7 @@ router.post('/review-comments', authenticate, async (req: AuthRequest, res: Resp
 });
 
 // Compare two providers with the same prompt (model evaluation)
-router.post('/compare', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/compare', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
     const { prompt, providerAId, providerBId } = req.body || {};
@@ -650,7 +673,7 @@ router.post('/compare', authenticate, async (req: AuthRequest, res: Response) =>
 });
 
 // Batch translate posts into a target language (creates drafts)
-router.post('/batch-translate', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/batch-translate', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
     const provider = getDefaultProvider();

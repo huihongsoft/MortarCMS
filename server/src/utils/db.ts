@@ -88,7 +88,10 @@ const db: any = {
     workerCall('exec', { sql });
   },
   execSqlite(sql: string): void { db.raw.exec(sql); },
-  pragma(_p: string): void { /* SQLite-only; no-op for remote drivers */ },
+  pragma(p: string): void {
+    if (driver === 'sqlite' && db.raw) { try { db.raw.pragma(p); } catch {} }
+    // Remote drivers (MySQL/PostgreSQL) have no equivalent pragma — no-op.
+  },
   get driver() { return driver; },
 };
 
@@ -355,7 +358,6 @@ export function initDB(): void {
     -- Performance indexes for hot queries
     CREATE INDEX IF NOT EXISTS idx_post_status_type ON Post (status, type, publishedAt);
     CREATE INDEX IF NOT EXISTS idx_post_slug ON Post (slug);
-    CREATE INDEX IF NOT EXISTS idx_post_views ON Post (views DESC);
     CREATE INDEX IF NOT EXISTS idx_post_author ON Post (authorId);
     CREATE INDEX IF NOT EXISTS idx_comment_post_status ON Comment (postId, status);
     CREATE INDEX IF NOT EXISTS idx_comment_parent ON Comment (parentId);
@@ -406,6 +408,9 @@ export function initDB(): void {
   try { db.exec("ALTER TABLE Media ADD COLUMN width INTEGER"); } catch {}
   try { db.exec("ALTER TABLE Media ADD COLUMN height INTEGER"); } catch {}
   try { db.exec("ALTER TABLE Media ADD COLUMN srcset TEXT"); } catch {}
+  // The views index must be created after the column exists (fresh installs
+  // create the column via the ALTER TABLE migrations above).
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_post_views ON Post (views DESC)"); } catch {}
 }
 
 // Runtime driver reconfiguration (install wizard): switch SQLite <-> MySQL/PG

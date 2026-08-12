@@ -6,7 +6,7 @@ initDB();
 
 async function main() {
   console.log('Seeding database...');
-  const adminPassword = await bcrypt.hash('admin123', 10);
+  const adminPassword = await bcrypt.hash('admin123', 12);
 
   const dbIns = db as any;
 
@@ -56,6 +56,9 @@ async function main() {
   stmts.post.run(page1, 'About', 'about',
     '<h2>About Mortar CMS</h2><p>An open-source CMS combining traditional CMS ideas with modern TypeScript.</p><h3>Tech Stack</h3><ul><li><strong>Backend:</strong> Node.js, Express, SQLite</li><li><strong>Frontend:</strong> React, TypeScript, Tailwind CSS</li></ul>',
     '', 'published', 'page', adminId.id, new Date().toISOString(), 1);
+
+  // Mark the site as installed so the install-wizard gate lets it through
+  stmts.setting.run(cuid(), 'installed', '1');
 
   const count = db.prepare('SELECT COUNT(*) as cnt FROM Post').get() as any;
   console.log('Seed complete! Posts/pages:', count.cnt);

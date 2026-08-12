@@ -6,6 +6,12 @@ import { execFileSync } from 'child_process';
 import { tmpdir as osTmpDir } from 'os';
 import db from '../utils/db';
 
+// Plugins ship as TypeScript sources (server/plugins/<name>/index.ts). Register
+// tsx's CommonJS loader so `node dist/index.js` (production build) can require
+// .ts plugin entries the same way the tsx dev runtime does. In dev this is a
+// no-op (tsx already handles it).
+try { require('tsx/cjs'); } catch { /* tsx not installed — plugin loading falls back to tsx dev runtime */ }
+
 export interface PluginMeta {
   name: string;
   version: string;
@@ -67,7 +73,7 @@ export async function loadPlugin(name: string): Promise<{ ok: boolean; error?: s
     const dir = path.join(pluginsDir, name);
     const entry = path.join(dir, 'index.ts');
     if (!fs.existsSync(entry)) return { ok: false, error: 'Plugin entry not found' };
-    const mod = await import('file://' + entry);
+    const mod = require(entry) as any;
     if (typeof mod.register === 'function') mod.register();
     loaded[name] = { meta: listPlugins().find((p: any) => p.name === name) as PluginMeta, register: mod.register };
     return { ok: true };
@@ -83,7 +89,7 @@ async function runLifecycle(name: string, hook: 'activate' | 'deactivate' | 'uni
     const dir = path.join(pluginsDir, name);
     const entry = path.join(dir, 'index.ts');
     if (!fs.existsSync(entry)) return;
-    const mod = await import('file://' + entry);
+    const mod = require(entry) as any;
     if (typeof mod[hook] === 'function') await mod[hook]();
   } catch (err: any) {
     console.log('[Plugins] ' + hook + ' failed for ' + name + ': ' + err.message);
@@ -130,12 +136,29 @@ export function listMarket(): PluginMeta[] {
   return result;
 }
 
+// SSRF guard: reject URLs pointing at private / loopback / link-local hosts so
+// a malicious plugin URL cannot be used to probe the internal network or cloud
+// metadata endpoints. (Node's http.get does not follow redirects automatically,
+// and 3xx responses are rejected below, so the initial host check suffices.)
+function isPrivateHost(hostname: string): boolean {
+  const h = (hostname || '').toLowerCase().replace(/\.$/, '');
+  if (!h || h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal')) return true;
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
+    const [a, b] = h.split('.').map(Number);
+    if (a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return true;
+  }
+  return false;
+}
+
 // Download a remote plugin archive (zip or tar.gz) and install it
 export async function installFromUrl(url: string): Promise<{ ok: boolean; error?: string; name?: string }> {
   const tmpDir = path.join(osTmpDir(), 'mortar-plugin-' + Date.now());
   let archivePath: string | null = null;
   try {
     if (!/^https?:\/\//.test(url)) return { ok: false, error: 'Invalid URL' };
+    let parsed: URL;
+    try { parsed = new URL(url); } catch { return { ok: false, error: 'Invalid URL' }; }
+    if (isPrivateHost(parsed.hostname)) return { ok: false, error: 'Download from private/internal addresses is not allowed' };
     fs.mkdirSync(tmpDir, { recursive: true });
     const isGz = /\.(tar\.gz|tgz)$/i.test(url);
     const ext = isGz ? 'tar.gz' : 'zip';
@@ -177,7 +200,9 @@ export async function installFromUrl(url: string): Promise<{ ok: boolean; error?
     if (!resolvedRoot.startsWith(resolvedExtract + path.sep)) return { ok: false, error: 'Archive path traversal detected' };
     const meta = JSON.parse(fs.readFileSync(path.join(pluginRoot, 'plugin.json'), 'utf8'));
     const name = meta.name;
-    if (!name) return { ok: false, error: 'plugin.json missing name' };
+    // The name becomes a directory inside plugins/: it must be a plain slug so
+    // a crafted plugin.json can never escape the plugins directory (../ traversal).
+    if (!name || !/^[a-z0-9][a-z0-9-_]*$/i.test(name)) return { ok: false, error: 'plugin.json name must be a plain alphanumeric slug' };
     const dest = path.join(pluginsDir, name);
     if (fs.existsSync(dest)) return { ok: false, error: 'Plugin already installed: ' + name };
     fs.cpSync(pluginRoot, dest, { recursive: true });

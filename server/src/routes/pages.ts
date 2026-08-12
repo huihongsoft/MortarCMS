@@ -1,12 +1,25 @@
 import { Router, Response } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
+import rateLimit from 'express-rate-limit';
 import db, { cuid } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { uniqueSlug } from '../utils/slug';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 
 const router = Router();
+// Protected-page password guessing is brute-forced per IP
+const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, message: { error: 'Too many attempts, slow down' } });
+
+// Visual-editor CSS is rendered into a <style> tag on the public site — strip
+// dangerous primitives at write time (mirrors the guard in routes/posts.ts).
+function sanitizeVisualCss(css: string): string {
+  return String(css || '')
+    .replace(/@import[^;]+;?/gi, '')
+    .replace(/expression\([^)]*\)/gi, '')
+    .replace(/behavior\s*:[^;}]+;?/gi, '')
+    .replace(/url\(\s*(javascript|data):/gi, 'url(');
+}
 const pageSchema = z.object({ title: z.string().min(1), content: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'password', 'trash']).optional(), password: z.string().optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), meta: z.record(z.string(), z.string()).optional() });
 
 // 'password' status means "published but password protected" (WordPress style):
@@ -79,7 +92,7 @@ router.get('/slug/:slug', (req: AuthRequest, res: Response) => {
 
 // Verify a password for a protected page. On success set an httpOnly cookie
 // (hashed password, 7 days) so the visitor stays unlocked — like WordPress.
-router.post('/slug/:slug/password', (req: AuthRequest, res: Response) => {
+router.post('/slug/:slug/password', passwordLimiter, (req: AuthRequest, res: Response) => {
   try {
     const page = db.prepare('SELECT id, password FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'page') as any;
     if (!page || !page.password) { res.status(404).json({ error: 'Page not found' }); return; }
@@ -94,6 +107,8 @@ router.post('/slug/:slug/password', (req: AuthRequest, res: Response) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       sameSite: 'lax',
       path: '/',
+      // Only sent over HTTPS in production (deployments are expected to use TLS)
+      secure: process.env.NODE_ENV === 'production',
     });
     res.json({ ok: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -125,7 +140,7 @@ router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, 
     db.prepare('INSERT INTO Post (id, title, slug, content, status, password, type, authorId, parentId, menuOrder, publishedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', storeStatus, storePassword, 'page', req.user!.userId, data.parentId || null, data.menuOrder || 0, storeStatus === 'published' ? new Date().toISOString() : null);
     if (data.meta) {
       for (const [key, value] of Object.entries(data.meta)) {
-        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, value);
+        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
       }
     }
     const page = db.prepare('SELECT * FROM Post WHERE id = ?').get(id) as any;
@@ -152,7 +167,7 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest
     if (data.meta) {
       db.prepare('DELETE FROM PostMeta WHERE postId = ?').run(req.params.id);
       for (const [key, value] of Object.entries(data.meta)) {
-        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, value);
+        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
       }
     }
     if (sets.length > 0) {

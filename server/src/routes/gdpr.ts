@@ -23,7 +23,16 @@ function collectUserData(userId: string): any {
 // Content they authored stays but is anonymized; media files are deleted.
 function eraseUserData(userId: string): { mediaDeleted: number } {
   db.prepare('UPDATE Comment SET author = ?, email = ?, userId = NULL WHERE userId = ?').run('Anonymous', '', userId);
-  db.prepare('UPDATE Post SET authorId = NULL WHERE authorId = ?').run(userId);
+  // Post.authorId is NOT NULL: reassign authored posts to another admin when
+  // possible; otherwise keep a fully anonymized placeholder user row.
+  const otherAdmin = db.prepare("SELECT id FROM User WHERE role = 'admin' AND id != ? ORDER BY createdAt LIMIT 1").get(userId) as any;
+  if (otherAdmin) {
+    db.prepare('UPDATE Post SET authorId = ? WHERE authorId = ?').run(otherAdmin.id, userId);
+  } else {
+    const anonId = 'deleted-' + String(userId).replace(/[^a-z0-9]/gi, '').slice(0, 12);
+    db.prepare("UPDATE User SET username = ?, email = ?, password = ?, role = 'subscriber', bio = '', avatar = '' WHERE id = ?")
+      .run(anonId, anonId + '@local.invalid', require('crypto').randomBytes(24).toString('hex'), userId);
+  }
   const media = db.prepare('SELECT id, url FROM Media WHERE userId = ?').all(userId) as any[];
   let deleted = 0;
   for (const m of media) {
@@ -38,7 +47,9 @@ function eraseUserData(userId: string): { mediaDeleted: number } {
   db.prepare('DELETE FROM AiUsage WHERE userId = ?').run(userId);
   db.prepare('DELETE FROM AiNotification WHERE userId = ?').run(userId);
   db.prepare('DELETE FROM Activity WHERE userId = ?').run(userId);
-  db.prepare('DELETE FROM User WHERE id = ?').run(userId);
+  // The User row is only removed when authored content was reassigned; the
+  // anonymized placeholder (no other admin case) must stay for FK integrity.
+  if (otherAdmin) db.prepare('DELETE FROM User WHERE id = ?').run(userId);
   return { mediaDeleted: deleted };
 }
 

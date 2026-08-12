@@ -7,7 +7,7 @@ import { t } from '../../lib/i18n';
 
 // Default author archive template
 export default function AuthorLayout(props: any) {
-  const { username, posts, loading } = props;
+  const { username, posts, loading, error } = props;
 
   return React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-8' },
     React.createElement(Link, { to: '/', className: 'inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-6' }, React.createElement(ArrowLeft, { size: 14 }), t('back')),
@@ -19,6 +19,7 @@ export default function AuthorLayout(props: any) {
       )
     ),
     loading ? React.createElement(ListSkeleton, null)
+    : error ? React.createElement('p', { className: 'text-gray-500' }, t('author not found'))
     : posts.length === 0 ? React.createElement('p', { className: 'text-gray-500' }, t('no posts yet'))
     : React.createElement('div', { className: 'space-y-6' },
         posts.map((p: any) => React.createElement('article', { key: p.id, className: 'pb-6 border-b border-gray-100 last:border-0' },

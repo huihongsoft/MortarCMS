@@ -60,6 +60,7 @@ export default function SearchWidget() {
       }),
       React.createElement('button', {
         type: 'submit',
+        'aria-label': t('search'),
         className: 'px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors',
       }, React.createElement(Search, { size: 16 }))
     ),
@@ -74,7 +75,7 @@ export default function SearchWidget() {
         },
           React.createElement(s.type === 'page' ? File : FileText, { size: 14, className: 'text-gray-400 shrink-0' }),
           React.createElement('span', { className: 'text-sm text-gray-800 dark:text-gray-100 truncate' }, s.title),
-          React.createElement('span', { className: 'ml-auto text-[10px] uppercase text-gray-400 shrink-0' }, s.type)
+          React.createElement('span', { className: 'ml-auto text-xs uppercase text-gray-400 shrink-0' }, s.type)
         )
       )
     ),

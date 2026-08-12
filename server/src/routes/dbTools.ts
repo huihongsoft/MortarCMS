@@ -56,7 +56,11 @@ router.get('/slow-queries', authenticate, authorize('admin'), (_req: AuthRequest
 // Admin: SQLite integrity quick check
 router.get('/integrity', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
-    const result = (db.raw ? db.raw.pragma('quick_check') : []) as any[];
+    if ((db as any).driver !== 'sqlite' || !db.raw) {
+      res.json({ ok: false, detail: 'SQLite-only check — unavailable for the current driver' });
+      return;
+    }
+    const result = (db.raw.pragma('quick_check') || []) as any[];
     const ok = result.length === 1 && result[0]?.quick_check === 'ok';
     res.json({ ok, detail: result[0]?.quick_check || 'unavailable' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -68,7 +72,12 @@ router.get('/optimize', authenticate, authorize('admin'), (_req: AuthRequest, re
     db.pragma('vacuum');
     // Remote drivers have no pragma; vacuum is SQLite-only. Run equivalent maintenance.
     if ((db as any).driver !== 'sqlite') db.exec('ANALYZE');
-    const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as any[];
+    const driver = (db as any).driver || 'sqlite';
+    const tables = (driver === 'sqlite'
+      ? db.prepare("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name").all() as any[]
+      : driver === 'mysql'
+        ? db.prepare("SELECT table_name as name FROM information_schema.tables WHERE table_schema = DATABASE() ORDER BY table_name").all() as any[]
+        : db.prepare("SELECT tablename as name FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename").all() as any[]);
     const stats = tables.map((t: any) => ({
       table: t.name,
       rows: (db.prepare('SELECT COUNT(*) as cnt FROM ' + t.name).get() as any)?.cnt || 0,
@@ -120,6 +129,8 @@ router.delete('/backups/:name', authenticate, authorize('admin'), (req: AuthRequ
 // Admin: download database backup
 router.get('/backup', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
+    // Flush the WAL first so the copied file contains the latest transactions
+    db.pragma('wal_checkpoint(TRUNCATE)');
     const dbPath = require('path').join(__dirname, '../../data/mortar.db');
     const backupPath = '/tmp/mortar-backup.db';
     require('fs').copyFileSync(dbPath, backupPath);
@@ -155,6 +166,14 @@ router.post('/restore-full', authenticate, authorize('admin'), upload.single('fi
     const tmpDir = path.join(require('os').tmpdir(), 'mortar-restore-' + Date.now());
     fs.mkdirSync(tmpDir, { recursive: true });
     execFileSync('unzip', ['-q', req.file.path, '-d', tmpDir]);
+    // zip-slip guard: every entry must be a plain file in the extraction root
+    // (no nested dirs, no ../, no absolute paths) before it can overwrite uploads
+    const badEntries = fs.readdirSync(tmpDir).filter((f: string) => f === '..' || !/^[a-zA-Z0-9._-]+$/.test(f) || f.startsWith('/'));
+    if (badEntries.length > 0) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      res.status(400).json({ error: 'Invalid backup: unsafe file entries' });
+      return;
+    }
     const dbFile = path.join(tmpDir, 'mortar.db');
     if (!fs.existsSync(dbFile)) { res.status(400).json({ error: 'Invalid backup: mortar.db not found' }); return; }
     const dataDir = path.join(__dirname, '../..', 'data');

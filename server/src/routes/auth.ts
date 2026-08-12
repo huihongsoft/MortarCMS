@@ -19,7 +19,24 @@ const loginSchema = z.object({ email: z.string().email(), password: z.string() }
 
 // Login failure lockout: 5 failures -> 15 min lock per email
 const loginFailures = new Map<string, { count: number; lockedUntil: number }>();
+// Memory cap: drop the oldest entries when the map grows unbounded (attacker
+// can otherwise grow it indefinitely with random emails).
+function pruneLoginFailures(): void {
+  if (loginFailures.size <= 10000) return;
+  const now = Date.now();
+  for (const [k, rec] of loginFailures) {
+    if (loginFailures.size <= 5000) break;
+    if (rec.lockedUntil <= now) loginFailures.delete(k);
+  }
+  // Still over the cap: evict oldest-inserted entries
+  let extra = loginFailures.size - 5000;
+  for (const k of loginFailures.keys()) {
+    if (extra <= 0) break;
+    loginFailures.delete(k); extra--;
+  }
+}
 function checkLock(email: string): boolean {
+  pruneLoginFailures();
   const rec = loginFailures.get(email);
   if (!rec) return false;
   if (rec.lockedUntil > Date.now()) return true;
@@ -28,6 +45,7 @@ function checkLock(email: string): boolean {
   return false;
 }
 function recordFailure(email: string): void {
+  pruneLoginFailures();
   const before = loginFailures.get(email);
   const rec = before || { count: 0, lockedUntil: 0 };
   rec.count++;
@@ -55,14 +73,16 @@ router.post('/register', async (req: AuthRequest, res: Response) => {
     }
     const existing = db.prepare('SELECT id FROM User WHERE email = ? OR username = ?').get(data.email, data.username);
     if (existing) { res.status(409).json({ error: 'Username or email already taken' }); return; }
-    const password = await bcrypt.hash(data.password, 10);
+    const password = await bcrypt.hash(data.password, 12);
     const id = cuid();
     const role = isAdminCreate
       ? (data.role || 'author')
       : ((db.prepare("SELECT value FROM Setting WHERE key = 'default_role'").get() as any)?.value || 'author');
     const safeRole = ['admin', 'editor', 'author', 'contributor', 'subscriber'].includes(role) ? role : 'author';
     db.prepare('INSERT INTO User (id, username, email, password, role) VALUES (?, ?, ?, ?, ?)').run(id, data.username, data.email, password, safeRole);
-    const token = signToken({ userId: id, role: safeRole });
+    // Include the session version (v: 0) so "log out everywhere" also revokes
+    // tokens issued at registration time.
+    const token = signToken({ userId: id, role: safeRole, v: 0 });
     doAction('user_register', id, safeRole);
     res.status(201).json({ user: { id, username: data.username, email: data.email, role: safeRole }, token });
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
@@ -205,9 +225,10 @@ router.post('/reset-password', async (req: AuthRequest, res: Response) => {
   try {
     const { token, password } = req.body;
     if (!token || !password) { res.status(400).json({ error: 'Token and password required' }); return; }
+    if (!passwordOk(password)) { res.status(400).json({ error: 'Password must be at least 8 characters with letters and numbers' }); return; }
     const user = db.prepare('SELECT id FROM User WHERE reset_token = ? AND reset_expires > datetime(?)').get(token, new Date().toISOString()) as any;
     if (!user) { res.status(400).json({ error: 'Invalid or expired token' }); return; }
-    const hashed = await require('bcryptjs').hash(password, 10);
+    const hashed = await bcrypt.hash(password, 12);
     db.prepare("UPDATE User SET password = ?, reset_token = '', reset_expires = '' WHERE id = ?").run(hashed, user.id);
     res.json({ message: 'Password has been reset.' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }

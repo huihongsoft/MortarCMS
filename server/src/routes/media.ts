@@ -2,11 +2,17 @@ import { Router, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
+import rateLimit from 'express-rate-limit';
 import db, { cuid } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 
 const router = Router();
+
+// The public image-variant endpoint is unauthenticated (it serves <img> tags),
+// so it is rate-limited per IP to prevent anonymous CPU/disk exhaustion via
+// unique ?w=/fmt= combinations.
+const imageVariantLimiter = rateLimit({ windowMs: 60 * 1000, max: 90, standardHeaders: true, message: { error: 'Too many image requests, slow down' } });
 
 // Backfill responsive variants (thumbnail + 480/960 webp srcset) for legacy
 // uploads. Runs in the background so list requests stay fast; the DB row is
@@ -117,8 +123,10 @@ router.post('/upload', authenticate, authorize('admin', 'editor', 'author'), upl
         return;
       }
     }
-    // Sanitize SVG uploads (strip scripts and event handlers)
-    if ((req.file.mimetype || '') === 'image/svg+xml') {
+    // Sanitize SVG uploads (strip scripts and event handlers). Keyed off the
+    // file extension, not the client-supplied MIME type, so a mismatched MIME
+    // claim can never skip sanitization.
+    if (path.extname(req.file.filename).toLowerCase() === '.svg') {
       const content = fs.readFileSync(srcPath, 'utf8');
       const clean = sanitizeSvg(content);
       fs.writeFileSync(srcPath, clean);
@@ -179,11 +187,15 @@ router.get('/:id', (req: AuthRequest, res: Response) => {
 });
 
 // Responsive image endpoint: GET /api/media/:id/img?w=640&fmt=webp -> resized (disk-cached)
-router.get('/:id/img', async (req: AuthRequest, res: Response) => {
+router.get('/:id/img', imageVariantLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const media = db.prepare('SELECT * FROM Media WHERE id = ?').get(req.params.id) as any;
     if (!media || !media.mimeType?.startsWith('image/')) { res.status(404).json({ error: 'Image not found' }); return; }
-    const w = Math.min(parseInt(req.query.w as string) || 640, 2560);
+    // w must be a multiple of 16 (and capped) so an attacker cannot flood the
+    // disk with one cached variant per arbitrary width.
+    const wRaw = parseInt(req.query.w as string) || 640;
+    if (wRaw % 16 !== 0) { res.status(400).json({ error: 'w must be a multiple of 16' }); return; }
+    const w = Math.min(wRaw, 2560);
     const fmt = (req.query.fmt as string || 'jpeg').toLowerCase();
     if (!['jpeg', 'webp', 'avif'].includes(fmt)) { res.status(400).json({ error: 'fmt must be jpeg, webp or avif' }); return; }
     const srcPath = path.join(__dirname, '../..', 'uploads', media.filename);

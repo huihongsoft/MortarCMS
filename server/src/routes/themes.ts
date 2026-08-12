@@ -54,8 +54,11 @@ function activeThemeName(): string {
 
 // Theme override settings (editable in the admin Appearance panel) live under
 // theme_<name>_<key> so each theme keeps its own values.
+// The name is bound as a parameter and LIKE wildcards are escaped so a theme
+// name cannot widen the match to unrelated settings.
+function escapeLike(s: string): string { return s.replace(/[\\%_]/g, (c: string) => '\\' + c); }
 function themeOverrides(name: string): Record<string, string> {
-  const rows = db.prepare("SELECT key, value FROM Setting WHERE key LIKE 'theme_" + name + "_%'").all() as any[];
+  const rows = db.prepare("SELECT key, value FROM Setting WHERE key LIKE ? ESCAPE '\\'").all('theme_' + escapeLike(name) + '_%') as any[];
   const map: Record<string, string> = {};
   for (const r of rows) map[r.key.replace('theme_' + name + '_', '')] = r.value;
   return map;
@@ -122,9 +125,13 @@ router.post('/install', authenticate, requireCap('manage_options'), upload.singl
     if (!resolvedRoot.startsWith(resolvedTmp + path.sep)) { res.status(400).json({ error: 'Invalid archive structure' }); return; }
     const meta = JSON.parse(fs.readFileSync(path.join(root, 'theme.json'), 'utf8'));
     const name = meta.name;
-    if (!name) { res.status(400).json({ error: 'theme.json missing name' }); return; }
+    // The name is used as a directory component: it must be a plain slug so a
+    // crafted theme.json can never escape the themes directory (../ traversal).
+    if (!name || !/^[a-z0-9][a-z0-9-_]*$/i.test(name)) { res.status(400).json({ error: 'theme.json name must be a plain alphanumeric slug' }); return; }
     const dest = path.join(themesDir, name);
-    if (fs.existsSync(dest)) { res.status(400).json({ error: 'Theme already exists: ' + name }); return; }
+    if (!dest.startsWith(path.join(themesDir, '')) || fs.existsSync(dest)) {
+      res.status(400).json({ error: 'Theme already exists: ' + name }); return;
+    }
     fs.cpSync(root, dest, { recursive: true });
     try { fs.unlinkSync(req.file.path); } catch {}
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -179,7 +186,7 @@ router.delete('/:name', authenticate, requireCap('manage_options'), (req: AuthRe
     if (!fs.existsSync(dest)) { res.status(404).json({ error: 'Theme not found' }); return; }
     fs.rmSync(dest, { recursive: true, force: true });
     // Clean overrides
-    db.prepare("DELETE FROM Setting WHERE key LIKE 'theme_" + name + "_%'").run();
+    db.prepare("DELETE FROM Setting WHERE key LIKE ? ESCAPE '\\'").run('theme_' + escapeLike(name) + '_%');
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -342,7 +349,7 @@ router.post('/:name/backups/:id/restore', authenticate, requireCap('manage_optio
     if (snap.theme !== t.name) { res.status(400).json({ error: '备份不属于该主题' }); return; }
     // 1. Replace the theme's DB overrides with the snapshot's settings
     const del = db.prepare('DELETE FROM Setting WHERE key = ?');
-    for (const r of db.prepare("SELECT key FROM Setting WHERE key LIKE 'theme_" + t.name + "_%'").all() as any[]) del.run(r.key);
+    for (const r of db.prepare("SELECT key FROM Setting WHERE key LIKE ? ESCAPE '\\'").all('theme_' + escapeLike(t.name) + '_%') as any[]) del.run(r.key);
     const upsert = db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const [k, v] of Object.entries(snap.settings || {})) upsert.run(cuid(), 'theme_' + t.name + '_' + k, String(v));
     // 2. Restore theme.json from the snapshot (validated before writing; the

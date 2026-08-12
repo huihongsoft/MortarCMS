@@ -27,7 +27,7 @@ export default function TN19HomeLayout(props: any) {
               React.createElement('article', { key: p.id },
                 p.featured && React.createElement(Link, { to: '/post/' + p.slug },
                   React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full max-h-96 object-cover mb-8', loading: 'lazy' })),
-                React.createElement('div', { className: 'flex items-center gap-4 text-xs uppercase tracking-widest text-gray-400 mb-4' },
+                React.createElement('div', { className: 'flex items-center gap-4 text-xs uppercase tracking-widest text-gray-500 mb-4' },
                   React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Calendar, { size: 12 }), timeAgo(p.publishedAt || p.createdAt)),
                   React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(User, { size: 12 }), p.author?.username),
                   p.categories?.[0] && React.createElement('span', { className: 'text-primary-600' }, p.categories[0].name),
@@ -41,7 +41,7 @@ export default function TN19HomeLayout(props: any) {
           ),
       total > parseInt(settings.posts_per_page || '10') && React.createElement('div', { className: 'flex items-center justify-center gap-4 pt-16' },
         React.createElement('button', { onClick: () => setPage(Math.max(1, page - 1)), disabled: page === 1, className: 'px-4 py-2 text-sm uppercase tracking-widest hover:text-gray-600 disabled:opacity-40' }, '\u2190 ' + t('previous', settings)),
-        React.createElement('span', { className: 'text-sm text-gray-400' }, t('page', settings) + ' ' + page + ' ' + t('of', settings) + ' ' + Math.ceil(total / parseInt(settings.posts_per_page || '10'))),
+        React.createElement('span', { className: 'text-sm text-gray-500' }, t('page', settings) + ' ' + page + ' ' + t('of', settings) + ' ' + Math.ceil(total / parseInt(settings.posts_per_page || '10'))),
         React.createElement('button', { onClick: () => setPage(page + 1), disabled: page * parseInt(settings.posts_per_page || '10') >= total, className: 'px-4 py-2 text-sm uppercase tracking-widest hover:text-gray-600 disabled:opacity-40' }, t('next', settings) + ' \u2192'),
       )
     )

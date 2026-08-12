@@ -15,7 +15,12 @@ router.get('/health/detail', authenticate, requireCap('manage_options'), (_req: 
     // Database
     try {
       db.prepare('SELECT 1').get();
-      const tables = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as any[];
+      const driver = (db as any).driver || 'sqlite';
+      const tables = driver === 'sqlite'
+        ? db.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all() as any[]
+        : driver === 'mysql'
+          ? db.prepare("SELECT table_name as name FROM information_schema.tables WHERE table_schema = DATABASE()").all() as any[]
+          : db.prepare("SELECT tablename as name FROM pg_tables WHERE schemaname = 'public'").all() as any[];
       checks.database = { ok: true, tables: tables.length };
     } catch (err: any) { checks.database = { ok: false, error: err.message }; }
 
@@ -89,7 +94,7 @@ router.get('/health/detail', authenticate, requireCap('manage_options'), (_req: 
       const themes = fs.existsSync(themesDir) ? fs.readdirSync(themesDir).filter(d => fs.existsSync(path.join(themesDir, d, 'theme.json'))).length : 0;
       const plugins = fs.existsSync(pluginsDir) ? fs.readdirSync(pluginsDir).filter(d => fs.existsSync(path.join(pluginsDir, d, 'plugin.json'))).length : 0;
       const backupDir = path.join(__dirname, '..', '..', 'backups');
-      const backups = fs.existsSync(backupDir) ? fs.readdirSync(backupDir).filter(f => f.endsWith('.json') || f.endsWith('.zip')).length : 0;
+      const backups = fs.existsSync(backupDir) ? fs.readdirSync(backupDir).filter(f => f.endsWith('.json') || f.endsWith('.zip') || f.endsWith('.db')).length : 0;
       checks.ecosystem = { ok: true, themes, plugins, backups };
     } catch (err: any) { checks.ecosystem = { ok: false, error: err.message }; }
 

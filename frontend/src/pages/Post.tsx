@@ -85,6 +85,7 @@ export default function PostPage({ settings }: { settings: Record<string, string
   const seoDesc = post?.meta?._seo_desc || post?.excerpt || '';
   const ogImage = post?.meta?._seo_og_image || post?.featured;
   useSEO(post ? {
+    siteTitle: settings.site_title,
     title: seoTitle,
     description: seoDesc,
     image: cdnUrl(ogImage, settings),

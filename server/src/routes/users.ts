@@ -27,7 +27,7 @@ router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, re
     if (data.avatar !== undefined) { sets.push('avatar = ?'); vals.push(data.avatar); }
     if (data.password) {
       if (!passwordOk(data.password)) { res.status(400).json({ error: 'Password must be at least 8 characters with letters and numbers' }); return; }
-      sets.push('password = ?'); vals.push(await bcrypt.hash(data.password, 10));
+      sets.push('password = ?'); vals.push(await bcrypt.hash(data.password, 12));
     }
     if (sets.length > 0) { vals.push(req.params.id); db.prepare('UPDATE User SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
     const user = db.prepare('SELECT id, username, email, role, avatar, bio, createdAt FROM User WHERE id = ?').get(req.params.id) as any;

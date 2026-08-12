@@ -12,6 +12,7 @@ export interface MailSettings {
   pass: string;
   secure: string; // 'tls' | 'ssl' | 'none'
   from: string;
+  allowInsecureTls: boolean; // explicit opt-in for self-signed certs
 }
 
 export function getMailSettings(): MailSettings {
@@ -24,6 +25,9 @@ export function getMailSettings(): MailSettings {
     pass: row('smtp_pass'),
     secure: row('smtp_secure') || 'tls',
     from: row('smtp_from') || 'no-reply@' + siteUrl,
+    // Certificates are verified by default; only self-signed/internal SMTP
+    // servers should opt out via the smtp_allow_insecure_tls setting.
+    allowInsecureTls: row('smtp_allow_insecure_tls') === '1',
   };
 }
 
@@ -33,7 +37,7 @@ export function smtpSend(cfg: MailSettings, from: string, to: string, subject: s
     if (!cfg.host) { reject(new Error('SMTP host is not configured')); return; }
     const isSsl = cfg.secure === 'ssl' || cfg.port === 465;
     const raw = net.connect({ port: cfg.port, host: cfg.host });
-    let sock: any = isSsl ? tls.connect({ socket: raw, rejectUnauthorized: false }) : raw;
+    let sock: any = isSsl ? tls.connect({ socket: raw, rejectUnauthorized: !cfg.allowInsecureTls }) : raw;
 
     let buf = '';
     let done = false;
@@ -73,7 +77,10 @@ export function smtpSend(cfg: MailSettings, from: string, to: string, subject: s
         if (code === 354) {
           // Send the message body (headers + html) plus the terminator; the
           // next response line from the server is the DATA result (250).
-          const msg = 'From: ' + from + '\r\nTo: ' + to + '\r\nSubject: ' + subject + '\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n' + html;
+          // The subject is sanitized so user-influenced values (post titles,
+          // usernames) cannot inject extra SMTP headers via CR/LF.
+          const safeSubject = String(subject).replace(/[\r\n]+/g, ' ').trim();
+          const msg = 'From: ' + from + '\r\nTo: ' + to + '\r\nSubject: ' + safeSubject + '\r\nMIME-Version: 1.0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n' + html;
           send(msg.replace(/\r?\n/g, '\r\n') + '\r\n.');
           current = { expect: [250] };
           return;
@@ -92,7 +99,7 @@ export function smtpSend(cfg: MailSettings, from: string, to: string, subject: s
         if (!isSsl && cfg.secure === 'tls') {
           steps.push({ cmd: 'STARTTLS', expect: [220], then: () => {
             sock.removeAllListeners('data');
-            sock = tls.connect({ socket: raw, rejectUnauthorized: false });
+            sock = tls.connect({ socket: raw, rejectUnauthorized: !cfg.allowInsecureTls });
             sock.on('data', onData);
             sock.on('error', fail);
             sock.on('secureConnect', () => { buf = ''; ehlo(); run(); });

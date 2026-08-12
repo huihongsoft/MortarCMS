@@ -34,7 +34,7 @@ export default function Header({ settings }: { settings: Record<string, string> 
     }
     // Top-level item with children → hover dropdown
     return React.createElement('div', { key: item.id, className: 'relative group' },
-      React.createElement(Link, { to: item.url, className: 'text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1' }, item.label, React.createElement('span', { className: 'text-[9px]' }, '\u25be')),
+      React.createElement(Link, { to: item.url, className: 'text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1' }, item.label, React.createElement('span', { className: 'text-xs' }, '\u25be')),
       React.createElement('div', { className: 'absolute left-0 top-full pt-2 hidden group-hover:block z-50' },
         React.createElement('div', { className: 'bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px]' },
           kids.map(k => React.createElement(Link, { key: k.id, to: k.url, className: 'block px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900' }, k.label)))));
@@ -58,10 +58,10 @@ export default function Header({ settings }: { settings: Record<string, string> 
         settings.frontend_show_login !== '0' && React.createElement('a', { href: '/admin', className: 'text-sm text-primary-600 hover:text-primary-700 font-medium' }, t('admin', settings))
       ),
       React.createElement('div', { className: 'flex items-center gap-3 md:hidden' },
-        React.createElement('button', { onClick: () => setMenuOpen(!menuOpen), className: 'p-2 text-gray-600' }, menuOpen ? React.createElement(X, { size: 20 }) : React.createElement(Menu, { size: 20 }))
+        React.createElement('button', { onClick: () => setMenuOpen(!menuOpen), className: 'p-2 text-gray-600', 'aria-label': t('toggle menu', settings), 'aria-expanded': menuOpen, 'aria-controls': 'mobile-nav' }, menuOpen ? React.createElement(X, { size: 20 }) : React.createElement(Menu, { size: 20 }))
       )
     ),
-    menuOpen && React.createElement('div', { className: 'md:hidden border-t border-gray-100 bg-white px-4 py-3 space-y-1' },
+    menuOpen && React.createElement('div', { id: 'mobile-nav', className: 'md:hidden border-t border-gray-100 bg-white px-4 py-3 space-y-1' },
       React.createElement(Link, { to: '/', className: 'block text-sm text-gray-600 py-1', onClick: () => setMenuOpen(false) }, t('home', settings)),
       (() => {
         const rows: any[] = [];

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
-import { Globe, Moon, Sun, ExternalLink, LogOut, ChevronDown, Bot } from 'lucide-react';
+import { Globe, Moon, Sun, ExternalLink, LogOut, ChevronDown, Bot, Menu, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAuth } from '../lib/auth';
@@ -53,9 +53,13 @@ export default function Layout() {
     return () => window.removeEventListener('keydown', handler);
   }, [navigate]);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [primary, setPrimary] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+
+  // Close the mobile drawer when navigating to another route
+  useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
 
   // Re-trigger the fade-in animation on every route change (without remounting)
   useEffect(() => {
@@ -66,12 +70,19 @@ export default function Layout() {
     main.classList.add('page-enter');
   }, [location.pathname]);
 
-  // Apply the active theme's primary color to the admin (CSS var override)
+  // Apply the active theme's primary color to the admin (CSS var override).
+  // Also re-read it when the Appearance panel saves (mortar-settings-saved
+  // event) so the accent color updates without a manual page reload.
   useEffect(() => {
-    api.get('/settings').then(r => {
-      const c = r.data.theme_primary_color;
-      if (c) { setPrimary(c); document.documentElement.style.setProperty('--admin-primary', c); }
-    }).catch(() => {});
+    const applyPrimary = () => {
+      api.get('/settings').then(r => {
+        const c = r.data.theme_primary_color;
+        if (c) { setPrimary(c); document.documentElement.style.setProperty('--admin-primary', c); }
+      }).catch(() => {});
+    };
+    applyPrimary();
+    window.addEventListener('mortar-settings-saved', applyPrimary);
+    return () => window.removeEventListener('mortar-settings-saved', applyPrimary);
   }, []);
 
   // Close user menu on outside click
@@ -93,11 +104,23 @@ export default function Layout() {
 
   return React.createElement('div', { className: 'flex min-h-screen' },
       React.createElement('a', { href: '#main-content', className: 'skip-link' }, t('skip to content', getLang())),
-    React.createElement(Sidebar),
+    React.createElement(Sidebar, { open: sidebarOpen, onClose: () => setSidebarOpen(false) }),
+    // Mobile drawer overlay (click to dismiss)
+    sidebarOpen && React.createElement('div', {
+      className: 'fixed inset-0 bg-black/40 z-20 lg:hidden',
+      onClick: () => setSidebarOpen(false),
+      'aria-hidden': 'true',
+    }),
     React.createElement('div', { className: 'flex-1 lg:ml-64 flex flex-col min-h-screen' },
       // Admin bar (WordPress-style)
       React.createElement('header', { className: 'sticky top-0 z-40 h-12 bg-white/90 dark:bg-gray-950/90 backdrop-blur-md border-b border-gray-200 dark:border-gray-800 flex items-center justify-between px-4' },
         React.createElement('div', { className: 'flex items-center gap-3' },
+          // Mobile hamburger — the sidebar drawer is hidden below lg
+          React.createElement('button', {
+            onClick: () => setSidebarOpen(true),
+            className: 'lg:hidden p-2 -ml-1 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white rounded-lg transition-colors',
+            'aria-label': t('open menu', getLang()),
+          }, React.createElement(Menu, { size: 18 })),
           React.createElement('span', { className: 'w-5 h-5 rounded-md bg-primary-600 flex items-center justify-center text-[10px] font-bold text-white shadow-sm' }, 'M'),
           React.createElement('span', { className: 'text-gray-900 dark:text-white font-semibold text-sm' }, 'Mortar'),
           React.createElement('span', { className: 'text-gray-300 dark:text-gray-600 text-sm' }, '/'),

@@ -3,8 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { LogIn } from 'lucide-react';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
+import useSEO from '../hooks/useSEO';
 
 export default function Login() {
+  useSEO({ title: 'Login', url: '/login', noindex: true });
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

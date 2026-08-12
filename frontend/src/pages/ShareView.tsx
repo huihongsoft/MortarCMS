@@ -13,7 +13,7 @@ export default function ShareView({ settings }: { settings: Record<string, strin
     api.get('/ai/share/' + token).then(r => setData(r.data)).catch(() => setError(true));
   }, [token]);
 
-  useSEO({ title: error ? '分享不存在' : (data ? (data.username || 'AI') + ' 的 AI 对话' : 'AI 对话分享'), url: window.location.origin + '/share/ai/' + token });
+  useSEO({ siteTitle: settings.site_title, title: error ? '分享不存在' : (data ? (data.username || 'AI') + ' 的 AI 对话' : 'AI 对话分享'), url: window.location.origin + '/share/ai/' + token });
 
   if (error) return React.createElement('div', { className: 'max-w-2xl mx-auto px-4 py-20 text-center' },
     React.createElement('h1', { className: 'text-2xl font-bold text-gray-900 mb-2' }, '分享不存在'),

@@ -43,7 +43,7 @@ export default function MagazineHomeLayout(props: any) {
             categories.length === 0
               ? React.createElement('p', { className: 'text-sm text-gray-500' }, t('no categories yet', settings))
               : React.createElement('ul', { className: 'space-y-1' }, categories.map((c: any) => React.createElement('li', { key: c.id },
-                  React.createElement(Link, { to: '/category/' + c.slug, className: 'text-sm ' + (catSlug === c.slug ? 'text-red-700 font-medium' : 'text-gray-600 hover:text-red-700') }, c.name, c._count?.posts > 0 ? React.createElement('span', { className: 'text-gray-400 ml-1' }, '(' + c._count.posts + ')') : null)
+                  React.createElement(Link, { to: '/category/' + c.slug, className: 'text-sm ' + (catSlug === c.slug ? 'text-red-700 font-medium' : 'text-gray-600 hover:text-red-700') }, c.name, c._count?.posts > 0 ? React.createElement('span', { className: 'text-gray-500 ml-1' }, '(' + c._count.posts + ')') : null)
                 ))))
         ),
         // Main column

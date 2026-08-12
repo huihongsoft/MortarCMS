@@ -7,21 +7,23 @@ import { t, getLang } from '../lib/i18n';
 
 export default function Pages() {
   const [pages, setPages] = useState<any[]>([]);
-  useEffect(() => { api.get('/pages').then(r => setPages(r.data)).catch(() => {}); }, []);
+  const [loaded, setLoaded] = useState(false);
+  useEffect(() => { api.get('/pages').then(r => { setPages(r.data); setLoaded(true); }).catch(() => setLoaded(true)); }, []);
   async function del(id: string) { if (!confirm(t('delete this page', getLang()))) return; await api.delete(`/pages/${id}`); setPages(pages.filter((p: any) => p.id !== id)); }
   return React.createElement('div', null,
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
       React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('pages', getLang())),
       React.createElement(Link, { to: '/pages/new', className: 'btn-primary' }, React.createElement(Plus, { size: 16 }), t('new page', getLang()))
     ),
-    pages.length === 0 ? React.createElement(EmptyState, {
+    !loaded ? React.createElement('p', { className: 'text-gray-500' }, t('loading...', getLang()))
+    : pages.length === 0 ? React.createElement(EmptyState, {
         icon: FileText,
         title: t('no pages yet', getLang()),
         description: t('create pages for static content like about or contact', getLang()),
         action: React.createElement(Link, { to: '/pages/new', className: 'btn-primary text-sm' }, React.createElement(Plus, { size: 15 }), t('new page', getLang())),
       })
-    : React.createElement('div', { className: 'card overflow-hidden' },
-        React.createElement('table', { className: 'w-full' },
+    : React.createElement('div', { className: 'card overflow-x-auto' },
+        React.createElement('table', { className: 'w-full min-w-[640px]' },
           React.createElement('thead', null, React.createElement('tr', { className: 'border-b border-gray-200 bg-gray-50' },
             React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('title', getLang())),
             React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('status', getLang())),

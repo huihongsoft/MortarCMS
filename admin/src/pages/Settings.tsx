@@ -61,12 +61,16 @@ export default function Settings() {
   }
 
   async function saveSettings() {
-    await api.put('/settings', settings);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-    // Let the sidebar re-read dev_mode so the developer-mode menu entries
-    // appear/disappear immediately
-    window.dispatchEvent(new CustomEvent('mortar-settings-saved'));
+    try {
+      await api.put('/settings', settings);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+      // Let the sidebar re-read dev_mode so the developer-mode menu entries
+      // appear/disappear immediately
+      window.dispatchEvent(new CustomEvent('mortar-settings-saved'));
+    } catch (e: any) {
+      alert(e.response?.data?.error || t('save failed', getLang()));
+    }
   }
 
   const field = (key: string, label: string, type = 'text') =>

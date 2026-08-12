@@ -24,6 +24,7 @@ function getFileIcon(mime: string) {
 export default function Media() {
   const toast = useToast();
   const [media, setMedia] = useState<any[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<any>(null);
@@ -36,18 +37,22 @@ export default function Media() {
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { api.get('/media').then(r => setMedia(r.data.media)); }, []);
+  useEffect(() => { api.get('/media').then(r => { setMedia(r.data.media); setLoaded(true); }).catch(() => setLoaded(true)); }, []);
 
   async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files; if (!files || files.length === 0) return;
     setUploading(true);
     let done = 0;
+    let failed = 0;
     for (const file of Array.from(files)) {
-      const form = new FormData(); form.append('file', file);
-      await api.post('/media/upload', form, { onUploadProgress: (p: any) => { if (p.total) setUploadProgress(Math.round((done * 100 + (p.loaded / p.total) * 100) / files.length)); } });
+      try {
+        const form = new FormData(); form.append('file', file);
+        await api.post('/media/upload', form, { onUploadProgress: (p: any) => { if (p.total) setUploadProgress(Math.round((done * 100 + (p.loaded / p.total) * 100) / files.length)); } });
+      } catch { failed++; }
       done++;
     }
     setUploading(false); setUploadProgress(null);
+    if (failed > 0) toast.toast(t('upload failed', getLang()) + ' (' + failed + ')', 'error');
     const r = await api.get('/media'); setMedia(r.data.media);
   }
 
@@ -80,7 +85,7 @@ export default function Media() {
   }
 
   async function del(id: string) { if (!confirm(t('delete?', getLang()))) return; await api.delete('/media/' + id); setPreview(null); const r = await api.get('/media'); setMedia(r.data.media); }
-  async function bulkDelete() { if (selected.size === 0) return; await api.post('/media/bulk-delete', { ids: Array.from(selected) }); setSelected(new Set()); const r = await api.get('/media'); setMedia(r.data.media); }
+  async function bulkDelete() { if (selected.size === 0) return; if (!confirm(t('delete selected confirm', getLang()))) return; await api.post('/media/bulk-delete', { ids: Array.from(selected) }); setSelected(new Set()); const r = await api.get('/media'); setMedia(r.data.media); }
 
   // Paste-to-upload: paste an image from the clipboard
   useEffect(() => {
@@ -182,7 +187,8 @@ export default function Media() {
     genOpen && React.createElement('div', { className: 'card p-3 mb-4 flex gap-2' },
       React.createElement('input', { value: genPrompt, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setGenPrompt(e.target.value), onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter') generateImage(); }, placeholder: t('image gen prompt', getLang()), className: 'input-field flex-1 text-sm' }),
       React.createElement('button', { onClick: generateImage, disabled: genLoading || !genPrompt.trim(), className: 'btn-primary text-sm' }, React.createElement(Sparkles, { size: 14 }), genLoading ? t('generating', getLang()) + '...' : t('generate', getLang()))),
-    media.length === 0 ? React.createElement(EmptyState, {
+    !loaded ? React.createElement('p', { className: 'text-gray-500 py-8' }, t('loading...', getLang()))
+    : media.length === 0 ? React.createElement(EmptyState, {
         icon: FileImage,
         title: t('no media uploaded yet', getLang()),
         description: t('upload images, documents, audio and video to use in your content', getLang()),

@@ -11,22 +11,28 @@ const storage = multer.diskStorage({
   },
 });
 
-// Extension allowlist
-const allowedExt = /\.(jpe?g|png|gif|webp|svg|pdf|docx?|mp3|mp4|zip)$/i;
-// MIME allowlist (exact prefix match, not substring)
-const allowedMimes = [
-  'image/jpeg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
-  'application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'audio/mpeg', 'audio/mp3', 'video/mp4', 'application/zip', 'application/x-zip-compressed',
-];
+// Extension allowlist with the MIME types each extension may claim. Both the
+// extension AND a matching MIME type are required, so a file cannot smuggle
+// content under a mismatched pair (e.g. an SVG uploaded as image/png).
+const extMimeMap: Record<string, string[]> = {
+  '.jpg': ['image/jpeg'], '.jpeg': ['image/jpeg'],
+  '.png': ['image/png'], '.gif': ['image/gif'], '.webp': ['image/webp'],
+  '.svg': ['image/svg+xml'],
+  '.pdf': ['application/pdf'],
+  '.doc': ['application/msword'],
+  '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
+  '.mp3': ['audio/mpeg', 'audio/mp3'],
+  '.mp4': ['video/mp4'],
+  '.zip': ['application/zip', 'application/x-zip-compressed'],
+};
 
 export const upload = multer({
   storage,
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
   fileFilter: (_req, file, cb) => {
-    const extOk = allowedExt.test(path.extname(file.originalname));
-    const mimeOk = allowedMimes.some(m => file.mimetype.startsWith(m));
-    if (extOk && mimeOk) {
+    const allowedMimes = extMimeMap[path.extname(file.originalname).toLowerCase()];
+    const mimeOk = allowedMimes?.some(m => file.mimetype.startsWith(m));
+    if (mimeOk) {
       cb(null, true);
     } else {
       cb(new Error('File type not allowed'));

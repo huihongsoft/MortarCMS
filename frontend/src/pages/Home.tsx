@@ -37,6 +37,7 @@ export default function Home({ settings }: { settings: Record<string, string> })
 
   const siteOrigin = settings.site_url || window.location.origin;
   useSEO({
+    siteTitle: settings.site_title,
     title: frontPage ? frontPage.title : catSlug ? (isTagPage ? t('tag', settings) + ': ' : isTypePage ? '' : '') + catSlug.replace(/-/g, ' ') : settings.site_title || undefined,
     description: frontPage ? frontPage.excerpt || '' : settings.site_description || '',
     url: siteOrigin + '/' + (catSlug ? (isTagPage ? 'tag/' : isTypePage ? 'type/' : 'category/') + catSlug : ''),

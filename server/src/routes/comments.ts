@@ -31,16 +31,18 @@ router.post('/', (req: AuthRequest, res: Response) => {
       const parent = db.prepare('SELECT author, email, content FROM Comment WHERE id = ?').get(data.parentId) as any;
       if (parent?.email) {
         try {
+          // All user-supplied values are HTML-escaped before entering the email
+          const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
           const siteTitle = (db.prepare("SELECT value FROM Setting WHERE key = 'site_title'").get() as any)?.value || 'Mortar';
           const siteUrl = (db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || '';
           const replyHtml = '<div style="font-family:sans-serif;max-width:520px;margin:0 auto;">' +
-            '<h2 style="color:#2563eb;">' + siteTitle + ' · 评论回复通知</h2>' +
-            '<p style="color:#374151;">你在《' + post.title + '》的评论收到了新回复：</p>' +
+            '<h2 style="color:#2563eb;">' + esc(siteTitle) + ' · 评论回复通知</h2>' +
+            '<p style="color:#374151;">你在《' + esc(post.title) + '》的评论收到了新回复：</p>' +
             '<div style="border-left:3px solid #e5e7eb;padding:8px 16px;margin:12px 0;color:#6b7280;">' +
-            '<strong style="color:#111827;">' + (parent.author || '') + '</strong>：' + String(parent.content || '').slice(0, 200) + '</div>' +
+            '<strong style="color:#111827;">' + esc(parent.author || '') + '</strong>：' + esc(String(parent.content || '').slice(0, 200)) + '</div>' +
             '<div style="border-left:3px solid #2563eb;padding:8px 16px;margin:12px 0;color:#111827;">' +
-            '<strong>' + (data.author || 'Anonymous') + '</strong>：' + String(data.content || '').slice(0, 200) + '</div>' +
-            '<p style="color:#9ca3af;font-size:12px;">前往 <a href="' + siteUrl + '/post/' + post.slug + '#comments">' + siteTitle + '</a> 查看完整讨论</p></div>';
+            '<strong>' + esc(data.author || 'Anonymous') + '</strong>：' + esc(String(data.content || '').slice(0, 200)) + '</div>' +
+            '<p style="color:#9ca3af;font-size:12px;">前往 <a href="' + esc(siteUrl) + '/post/' + esc(post.slug) + '#comments">' + esc(siteTitle) + '</a> 查看完整讨论</p></div>';
           void sendEmail(parent.email, '有人在《' + post.title + '》回复了你的评论', replyHtml);
         } catch {}
       }
@@ -51,7 +53,8 @@ router.post('/', (req: AuthRequest, res: Response) => {
     try {
       const adminEmail = (db.prepare("SELECT value FROM Setting WHERE key = 'admin_email'").get() as any)?.value;
       if (adminEmail) {
-        const tpl = renderTemplate('comment_notification', { post_title: post.title, comment: data.content });
+        const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+        const tpl = renderTemplate('comment_notification', { post_title: esc(post.title), comment: esc(data.content) });
         if (tpl) void sendEmail(adminEmail, tpl.subject, tpl.html);
       }
     } catch {}

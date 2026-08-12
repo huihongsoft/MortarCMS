@@ -60,7 +60,7 @@ const groups: { title: string; items: { to: string; icon: any; label: string; ro
   },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ open = true, onClose }: { open?: boolean; onClose?: () => void }) {
   const { user, logout } = useAuth();
   // Diagnostic entries (activity log, API docs) only show in developer mode
   // (toggled in Settings > General)
@@ -76,7 +76,10 @@ export default function Sidebar() {
     return () => window.removeEventListener('mortar-settings-saved', load);
   }, []);
 
-  return React.createElement('aside', { className: 'sidebar w-64 bg-white dark:bg-gray-900 flex flex-col h-screen fixed left-0 top-0 z-30 border-r border-gray-200 dark:border-gray-800' },
+  return React.createElement('aside', {
+    className: 'sidebar w-64 bg-white dark:bg-gray-900 flex flex-col h-screen fixed left-0 top-0 z-30 border-r border-gray-200 dark:border-gray-800 transform transition-transform duration-200 ' + (open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'),
+    'aria-label': t('admin navigation', getLang()),
+  },
     // Logo row: same height (h-12) as the top admin bar on the right
     React.createElement('div', { className: 'h-12 flex items-center px-5 border-b border-gray-100 dark:border-gray-800' },
       React.createElement('div', { className: 'flex items-center gap-2' },
@@ -87,7 +90,7 @@ export default function Sidebar() {
     React.createElement('nav', { className: 'flex-1 px-3 py-4 overflow-y-auto' },
       groups.map(g =>
         React.createElement('div', { key: g.title, className: 'mb-4' },
-          React.createElement('p', { className: 'px-4 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-gray-400 dark:text-gray-500' }, g.title),
+          React.createElement('p', { className: 'px-4 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500' }, g.title),
           React.createElement('div', { className: 'space-y-0.5' },
             g.items.filter(l => (!l.role || user?.role === 'admin' || l.role === user?.role) && (!l.devModeOnly || devMode)).map(link =>
               React.createElement(NavLink, {

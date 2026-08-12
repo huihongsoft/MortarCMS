@@ -81,8 +81,10 @@ export function loadTheme(name?: string): Promise<Theme> {
       return theme;
     })
     .catch((e) => {
+      // Do NOT cache the failure: the theme may be fixed/rebuilt server-side,
+      // so a later navigation retries instead of being stuck on default.
       console.warn('[Theme] Failed to load "' + key + '", falling back to default:', e);
-      cache[key] = defaultTheme;
+      delete loading[key];
       return defaultTheme;
     });
   return loading[key];

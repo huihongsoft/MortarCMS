@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { UserPlus } from 'lucide-react';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
+import useSEO from '../hooks/useSEO';
 
 export default function Register() {
-  const navigate = useNavigate();
+  useSEO({ title: 'Register', url: '/register', noindex: true });
   const [form, setForm] = useState({ username: '', email: '', password: '', confirm: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -61,7 +62,7 @@ export default function Register() {
         pwdScore > 0 && React.createElement('div', { className: 'flex items-center gap-2 mt-1.5' },
           React.createElement('div', { className: 'flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden' },
             React.createElement('div', { className: 'h-full rounded-full transition-all ' + (pwdScore >= 4 ? 'bg-green-500' : pwdScore >= 3 ? 'bg-yellow-500' : 'bg-red-500'), style: { width: (pwdScore / 5) * 100 + '%' } })),
-          React.createElement('span', { className: 'text-[10px] ' + (pwdScore >= 4 ? 'text-green-600' : pwdScore >= 3 ? 'text-yellow-600' : 'text-red-500') }, t('password strength') + ': ' + pwdScore + '/5'))
+          React.createElement('span', { className: 'text-xs ' + (pwdScore >= 4 ? 'text-green-600' : pwdScore >= 3 ? 'text-yellow-600' : 'text-red-500') }, t('password strength') + ': ' + pwdScore + '/5'))
       ),
       React.createElement('div', null,
         React.createElement('label', { htmlFor: 'reg-confirm', className: 'block text-sm font-medium text-gray-700 mb-1' }, t('confirm new password')),

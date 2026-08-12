@@ -46,7 +46,7 @@ export default function TT1Header({ settings }: { settings: Record<string, strin
           React.createElement('a', { href: '/admin', className: 'text-sm text-white bg-orange-600 hover:bg-orange-500 px-4 py-1.5 rounded-full' }, t('admin', settings)),
         )
       ),
-      React.createElement('button', { onClick: () => setMenuOpen(!menuOpen), className: 'md:hidden p-2 text-gray-600' }, menuOpen ? React.createElement(X, { size: 20 }) : React.createElement(Menu, { size: 20 })),
+      React.createElement('button', { onClick: () => setMenuOpen(!menuOpen), className: 'md:hidden p-2 text-gray-600', 'aria-label': t('toggle menu', settings), 'aria-expanded': menuOpen, 'aria-controls': 'mobile-nav' }, menuOpen ? React.createElement(X, { size: 20 }) : React.createElement(Menu, { size: 20 })),
     ),
     menuOpen && React.createElement('div', { className: 'md:hidden border-t border-gray-100 px-4 py-3 space-y-2' },
       React.createElement(Link, { to: '/', className: 'block text-sm text-gray-700 py-1' }, t('home', settings)),

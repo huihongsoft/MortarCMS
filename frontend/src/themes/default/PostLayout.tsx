@@ -6,6 +6,7 @@ import RelatedPosts from '../../components/RelatedPosts';
 import SocialShare from '../../components/SocialShare';
 import Toc from '../../components/Toc';
 import { cdnUrl, cdnHtml } from '../../lib/cdn';
+import { sanitizeCss } from '../../lib/safeCss';
 import { embedContent } from '../../lib/embed';
 import { gravatarUrl } from '../../lib/gravatar';
 import { timeAgo, readingTime } from '../../lib/time';
@@ -24,7 +25,7 @@ export default function PostLayout(props: any) {
   const pageContent = parts[curPage - 1] || '';
   const pageNav = pageCount > 1 && React.createElement('nav', { className: 'flex items-center justify-center gap-3 mt-8 pt-6 border-t border-gray-100' },
     curPage > 1 && React.createElement(Link, { to: '/post/' + slug + (curPage - 1 > 1 ? '?page=' + (curPage - 1) : ''), className: 'text-sm text-gray-500 hover:text-primary-600' }, '← ' + t('previous', settings)),
-    React.createElement('span', { className: 'text-sm text-gray-400' }, t('page', settings) + ' ' + curPage + ' / ' + pageCount),
+    React.createElement('span', { className: 'text-sm text-gray-500' }, t('page', settings) + ' ' + curPage + ' / ' + pageCount),
     curPage < pageCount && React.createElement(Link, { to: '/post/' + slug + '?page=' + (curPage + 1), className: 'text-sm text-gray-500 hover:text-primary-600' }, t('next', settings) + ' →')
   );
 
@@ -43,7 +44,7 @@ export default function PostLayout(props: any) {
         React.createElement('img', { src: gravatarUrl(c.email || ''), alt: '', className: 'w-8 h-8 rounded-full' }),
         React.createElement('div', null,
           React.createElement('p', { className: 'font-medium text-sm text-gray-900' }, c.author),
-          React.createElement('p', { className: 'text-xs text-gray-400' }, new Date(c.createdAt).toLocaleDateString()))),
+          React.createElement('p', { className: 'text-xs text-gray-500' }, new Date(c.createdAt).toLocaleDateString()))),
       React.createElement('p', { className: 'text-sm text-gray-700 leading-relaxed' }, c.content),
       (c.children || []).map((child: any) => (
         React.createElement('div', { key: child.id, className: 'ml-8 mt-3 pl-4 border-l-2 border-gray-100' },
@@ -82,7 +83,7 @@ export default function PostLayout(props: any) {
         style: { background: 'color-mix(in srgb, var(--primary-color, #2563eb) 10%, transparent)', color: 'var(--primary-color, #2563eb)' },
       }, React.createElement(Folder, { size: 11 }), category.name),
       React.createElement('h1', { className: 'text-3xl sm:text-4xl font-bold text-gray-900 leading-tight tracking-tight mb-4' },
-        post.format && post.format !== 'standard' ? React.createElement('span', { className: 'block text-xs font-normal text-gray-400 mb-1 uppercase tracking-wider' }, post.format) : null,
+        post.format && post.format !== 'standard' ? React.createElement('span', { className: 'block text-xs font-normal text-gray-500 mb-1 uppercase tracking-wider' }, post.format) : null,
         post.title),
       React.createElement('div', { className: 'flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-gray-500 border-y border-gray-100 py-3' },
         React.createElement('span', { className: 'flex items-center gap-1.5' },
@@ -109,14 +110,14 @@ export default function PostLayout(props: any) {
     ),
 
     // Content + table of contents
-    post.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: post.meta._visual_css } }),
+    post.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(post.meta._visual_css) } }),
     React.createElement(Toc, { containerRef: contentRef, settings }),
     React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none mb-12', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(pageContent)), settings) } }),
     pageNav,
 
     // Tags
     post.tags?.length > 0 && React.createElement('div', { className: 'flex flex-wrap items-center gap-2 mb-10' },
-      React.createElement(Tag, { size: 15, className: 'text-gray-400' }),
+      React.createElement(Tag, { size: 15, className: 'text-gray-500' }),
       post.tags.map((tg: any) => React.createElement(Link, { key: tg.tagId, to: '/tag/' + tg.slug, className: 'px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors' }, tg.name))
     ),
 
@@ -130,7 +131,7 @@ export default function PostLayout(props: any) {
     author && React.createElement('div', { className: 'flex items-start gap-4 p-6 rounded-2xl bg-gray-50 mb-10' },
       React.createElement('img', { src: gravatarUrl(author?.email || ''), alt: '', className: 'w-14 h-14 rounded-full flex-shrink-0' }),
       React.createElement('div', null,
-        React.createElement('p', { className: 'text-xs text-gray-400 mb-0.5' }, t('written by', settings)),
+        React.createElement('p', { className: 'text-xs text-gray-500 mb-0.5' }, t('written by', settings)),
         React.createElement(Link, { to: '/author/' + author.username, className: 'font-semibold text-gray-900 hover:text-primary-600' }, author.username),
         author.bio && React.createElement('p', { className: 'text-sm text-gray-600 mt-1.5 leading-relaxed' }, author.bio)
       )
@@ -146,7 +147,7 @@ export default function PostLayout(props: any) {
     React.createElement('section', { className: 'border-t border-gray-100 pt-8' },
       React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-5' }, t('comments', settings) + (comments.length ? ' (' + comments.length + ')' : '')),
       comments.length === 0 && !submitted && React.createElement('div', { className: 'text-center py-6 rounded-2xl bg-gray-50 mb-6' },
-        React.createElement('p', { className: 'text-sm text-gray-400' }, t('no comments yet', settings) + '. ' + t('be the first to share your thoughts', settings) + '!')),
+        React.createElement('p', { className: 'text-sm text-gray-500' }, t('no comments yet', settings) + '. ' + t('be the first to share your thoughts', settings) + '!')),
       commentList,
       submitted && React.createElement('p', { className: 'text-sm text-green-600 mb-4' }, t('comment submitted and pending review', settings)),
       commentFormEl

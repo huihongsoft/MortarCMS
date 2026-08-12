@@ -235,4 +235,22 @@ export function registerBuiltinTasks(): void {
       } catch {}
     },
   });
+
+  registerTask({
+    id: 'prune_visits',
+    name: 'Prune visit logs',
+    desc: 'Deletes visit records (which store raw visitor IPs) older than 180 days — GDPR retention',
+    intervalMs: 86_400_000,
+    fn: () => {
+      try {
+        let retentionDays = 180;
+        try {
+          retentionDays = Math.max(7, parseInt((db.prepare("SELECT value FROM Setting WHERE key = 'visit_retention_days'").get() as any)?.value || '180') || 180);
+        } catch {}
+        const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString().slice(0, 10);
+        const r = db.prepare('DELETE FROM Visit WHERE date < ?').run(cutoff);
+        if (r.changes > 0) console.log('[Task] Pruned ' + r.changes + ' visit records (retention ' + retentionDays + 'd)');
+      } catch {}
+    },
+  });
 }

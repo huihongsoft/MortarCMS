@@ -44,8 +44,8 @@ export default function CategoryLayout(props: any) {
                     React.createElement('h2', { className: 'text-xl font-bold text-gray-900 hover:text-primary-600 mb-2' }, p.format && p.format !== 'standard' ? React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded' }, formatIcon(p.format), p.format.charAt(0).toUpperCase() + p.format.slice(1)) : null, p.sticky ? React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle' }, '\u2605 ' + t('featured', settings)) : null, p.title)
                   ),
                   p.excerpt && React.createElement('p', { className: 'text-gray-600 text-sm leading-relaxed' }, p.excerpt),
-                  React.createElement('span', { className: 'inline-flex items-center gap-1 text-xs text-gray-400' }, readingTime(p.content)),
-                  (p.commentCount > 0) && React.createElement('span', { className: 'inline-flex items-center gap-1 text-xs text-gray-400' }, React.createElement(MessageSquare, { size: 12 }), '' + p.commentCount),
+                  React.createElement('span', { className: 'inline-flex items-center gap-1 text-xs text-gray-500' }, readingTime(p.content)),
+                  (p.commentCount > 0) && React.createElement('span', { className: 'inline-flex items-center gap-1 text-xs text-gray-500' }, React.createElement(MessageSquare, { size: 12 }), '' + p.commentCount),
                   React.createElement(Link, { to: '/post/' + p.slug, className: 'inline-block mt-3 text-sm font-medium text-primary-600 hover:text-primary-700' }, t('read more', settings)),
                 ))
               ),
@@ -73,7 +73,7 @@ export default function CategoryLayout(props: any) {
             categories.length === 0
               ? React.createElement('p', { className: 'text-sm text-gray-500' }, t('no categories yet', settings))
               : React.createElement('ul', { className: 'space-y-1' }, categories.map((c: any) => React.createElement('li', { key: c.id },
-                  React.createElement(Link, { to: '/category/' + c.slug, className: 'text-sm ' + (catSlug === c.slug ? 'text-primary-600 font-medium' : 'text-gray-600 hover:text-primary-600') }, c.name, c._count?.posts > 0 ? React.createElement('span', { className: 'text-gray-400 ml-1' }, '(' + c._count.posts + ')') : null)
+                  React.createElement(Link, { to: '/category/' + c.slug, className: 'text-sm ' + (catSlug === c.slug ? 'text-primary-600 font-medium' : 'text-gray-600 hover:text-primary-600') }, c.name, c._count?.posts > 0 ? React.createElement('span', { className: 'text-gray-500 ml-1' }, '(' + c._count.posts + ')') : null)
                 ))))
         )
       )

@@ -10,14 +10,19 @@ export default function SearchPage({ settings }: { settings: Record<string, stri
   const query = sp.get('q') || '';
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     if (!query) { setLoading(false); return; }
-    api.get('/posts?search=' + encodeURIComponent(query) + '&limit=20').then(r => setPosts(r.data.posts || [])).catch(() => {}).finally(() => setLoading(false));
+    setError(false);
+    api.get('/posts?search=' + encodeURIComponent(query) + '&limit=20')
+      .then(r => setPosts(r.data.posts || []))
+      .catch(() => setError(true))
+      .finally(() => setLoading(false));
   }, [query]);
 
-  useSEO({ title: query ? t('search') + ': ' + query : t('search'), url: window.location.origin + '/search' });
+  useSEO({ siteTitle: settings.site_title, title: query ? t('search') + ': ' + query : t('search'), url: window.location.origin + '/search?q=' + encodeURIComponent(query) });
 
   const Layout = useTheme().SearchLayout;
-  return React.createElement(Layout, { query, posts, loading });
+  return React.createElement(Layout, { query, posts, loading, error });
 }

@@ -49,10 +49,13 @@ export function mdToHtml(md: string): string {
     if (inQuote) { out.push('<blockquote>' + quoteBuf.join('') + '</blockquote>'); inQuote = false; quoteBuf = []; }
   };
 
+  // Block dangerous URL schemes in markdown links/images (javascript:, data:, vbscript:)
+  const safeUrl = (u: string): string => /^(javascript|data|vbscript):/i.test(u.trim()) ? '#' : u;
+
   const inline = (s: string): string => {
     let t = esc(s);
-    t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+["']([^"']*)["'])?\)/g, (_f, alt: string, url: string, title: string) => '<img src="' + url + '" alt="' + alt + '"' + (title ? ' title="' + title + '"' : '') + ' loading="lazy">');
-    t = t.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+["']([^"']*)["'])?\)/g, (_f, text: string, url: string, title: string) => '<a href="' + url + '"' + (title ? ' title="' + title + '"' : '') + '>' + text + '</a>');
+    t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)(?:\s+["']([^"']*)["'])?\)/g, (_f, alt: string, url: string, title: string) => '<img src="' + safeUrl(url) + '" alt="' + alt + '"' + (title ? ' title="' + title + '"' : '') + ' loading="lazy">');
+    t = t.replace(/\[([^\]]+)\]\(([^)\s]+)(?:\s+["']([^"']*)["'])?\)/g, (_f, text: string, url: string, title: string) => '<a href="' + safeUrl(url) + '"' + (title ? ' title="' + title + '"' : '') + '>' + text + '</a>');
     t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
     t = t.replace(/\*([^*]+)\*/g, '<em>$1</em>');
     t = t.replace(/~~([^~]+)~~/g, '<del>$1</del>');

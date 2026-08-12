@@ -22,6 +22,7 @@ export default function PageView({ settings }: { settings: Record<string, string
   }, [slug]);
 
   useSEO(page && !page.protected && !page.private ? {
+    siteTitle: settings.site_title,
     title: page.title,
     description: page.excerpt || '',
     image: page.featured || undefined,

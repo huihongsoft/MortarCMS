@@ -15,6 +15,10 @@ export default function CookieConsent({ settings }: { settings?: Record<string, 
       onClick: () => { localStorage.setItem('cookie_consent', '1'); setHidden(true); },
       className: 'px-4 py-1.5 bg-primary-600 hover:bg-primary-700 rounded-lg text-white font-medium whitespace-nowrap'
     }, t('accept')),
-    React.createElement('a', { href: '/page/' + policySlug, className: 'text-gray-400 hover:text-white underline whitespace-nowrap' }, t('privacy policy'))
+    React.createElement('button', {
+      onClick: () => { localStorage.setItem('cookie_consent', '0'); setHidden(true); },
+      className: 'px-4 py-1.5 border border-gray-600 hover:border-gray-400 rounded-lg text-gray-300 hover:text-white whitespace-nowrap'
+    }, t('decline')),
+    React.createElement('a', { href: '/page/' + policySlug, className: 'text-gray-300 hover:text-white underline whitespace-nowrap' }, t('privacy policy'))
   );
 }

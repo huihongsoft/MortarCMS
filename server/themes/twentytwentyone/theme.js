@@ -1883,7 +1883,7 @@ const Ge = "1.19.0", Et = 64 * 1024, { isFunction: xe } = i, hs = (e) => encodeU
       maxContentLength: I,
       maxBodyLength: we
     } = Jt(d);
-    const ce = i.isNumber(I) && I > -1, Le = i.isNumber(we) && we > -1, Yt = (_) => i.hasOwnProp(d, _) ? d[_] : void 0;
+    const ce = i.isNumber(I) && I > -1, Le = i.isNumber(we) && we > -1, Yt = (A) => i.hasOwnProp(d, A) ? d[A] : void 0;
     let et = s || fetch;
     $ = $ ? ($ + "").toLowerCase() : "text";
     let V = ss(
@@ -1901,29 +1901,29 @@ const Ge = "1.19.0", Et = 64 * 1024, { isFunction: xe } = i, hs = (e) => encodeU
       P
     );
     try {
-      let _;
+      let A;
       const B = Yt("auth");
       if (B) {
         const E = i.getSafeProp(B, "username") || "", v = i.getSafeProp(B, "password") || "";
-        _ = {
+        A = {
           username: E,
           password: v
         };
       }
       if (gs(b)) {
         const E = new URL(b, C.origin);
-        if (!_ && (E.username || E.password)) {
+        if (!A && (E.username || E.password)) {
           const v = xt(E.username), J = xt(E.password);
-          _ = {
+          A = {
             username: v,
             password: J
           };
         }
         (E.username || E.password) && (E.username = "", E.password = "", b = E.href);
       }
-      if (_ && (W.delete("authorization"), W.set(
+      if (A && (W.delete("authorization"), W.set(
         "Authorization",
-        "Basic " + btoa(hs((_.username || "") + ":" + (_.password || "")))
+        "Basic " + btoa(hs((A.username || "") + ":" + (A.password || "")))
       )), ce && typeof b == "string" && b.startsWith("data:") && ms(b) > I)
         throw new h(
           "maxContentLength size of " + I + " exceeded",
@@ -2052,12 +2052,12 @@ const Ge = "1.19.0", Et = 64 * 1024, { isFunction: xe } = i, hs = (e) => encodeU
           request: P
         });
       });
-    } catch (_) {
+    } catch (A) {
       if (X && X(), V && V.aborted && V.reason instanceof h) {
         const B = V.reason;
-        throw B.config = d, P && (B.request = P), _ !== B && Object.defineProperty(B, "cause", {
+        throw B.config = d, P && (B.request = P), A !== B && Object.defineProperty(B, "cause", {
           __proto__: null,
-          value: _,
+          value: A,
           writable: !0,
           enumerable: !1,
           configurable: !0
@@ -2065,25 +2065,25 @@ const Ge = "1.19.0", Et = 64 * 1024, { isFunction: xe } = i, hs = (e) => encodeU
       }
       if (ue)
         throw P && !ue.request && (ue.request = P), ue;
-      if (_ instanceof h)
-        throw P && !_.request && (_.request = P), _;
-      if (_ && _.name === "TypeError" && /Load failed|fetch/i.test(_.message)) {
+      if (A instanceof h)
+        throw P && !A.request && (A.request = P), A;
+      if (A && A.name === "TypeError" && /Load failed|fetch/i.test(A.message)) {
         const B = new h(
           "Network Error",
           h.ERR_NETWORK,
           d,
           P,
-          _ && _.response
+          A && A.response
         );
         throw Object.defineProperty(B, "cause", {
           __proto__: null,
-          value: _.cause || _,
+          value: A.cause || A,
           writable: !0,
           enumerable: !1,
           configurable: !0
         }), B;
       }
-      throw h.from(_, _ && _.code, d, P, _ && _.response);
+      throw h.from(A, A && A.code, d, P, A && A.response);
     }
   };
 }, bs = /* @__PURE__ */ new Map(), Xt = (e) => {
@@ -2714,7 +2714,7 @@ const _s = {
   "comment failed": "评论提交失败，请稍后重试",
   "table of contents": "目录"
 };
-function A(e, t) {
+function _(e, t) {
   if (t != null && t.translations_override)
     try {
       const s = JSON.parse(t.translations_override)[e];
@@ -2749,8 +2749,8 @@ function As({ settings: e }) {
       m.createElement(
         "div",
         { className: "hidden md:flex items-center gap-6" },
-        m.createElement(U, { to: "/", className: "text-sm text-gray-700 hover:text-orange-600" }, A("home", e)),
-        t.filter((c) => !(c.url === "/" && (c.label.toLowerCase() === "home" || c.label === A("home", e)))).map((c) => m.createElement(U, { key: c.id, to: c.url, className: "text-sm text-gray-700 hover:text-orange-600" }, c.label)),
+        m.createElement(U, { to: "/", className: "text-sm text-gray-700 hover:text-orange-600" }, _("home", e)),
+        t.filter((c) => !(c.url === "/" && (c.label.toLowerCase() === "home" || c.label === _("home", e)))).map((c) => m.createElement(U, { key: c.id, to: c.url, className: "text-sm text-gray-700 hover:text-orange-600" }, c.label)),
         m.createElement(
           "div",
           { className: "flex items-center gap-4" },
@@ -2758,25 +2758,25 @@ function As({ settings: e }) {
             m.Fragment,
             null,
             m.createElement("span", { className: "text-sm text-gray-600" }, o.username),
-            m.createElement("button", { onClick: l, className: "text-sm text-gray-400 hover:text-gray-600" }, A("logout"))
+            m.createElement("button", { onClick: l, className: "text-sm text-gray-400 hover:text-gray-600" }, _("logout"))
           ) : m.createElement(
             m.Fragment,
             null,
-            m.createElement(U, { to: "/login", className: "text-sm text-gray-700 hover:text-orange-600" }, A("sign in")),
-            m.createElement(U, { to: "/register", className: "text-sm text-gray-700 hover:text-orange-600" }, A("register", e))
+            m.createElement(U, { to: "/login", className: "text-sm text-gray-700 hover:text-orange-600" }, _("sign in")),
+            m.createElement(U, { to: "/register", className: "text-sm text-gray-700 hover:text-orange-600" }, _("register", e))
           ),
-          m.createElement("a", { href: "/admin", className: "text-sm text-white bg-orange-600 hover:bg-orange-500 px-4 py-1.5 rounded-full" }, A("admin", e))
+          m.createElement("a", { href: "/admin", className: "text-sm text-white bg-orange-600 hover:bg-orange-500 px-4 py-1.5 rounded-full" }, _("admin", e))
         )
       ),
-      m.createElement("button", { onClick: () => s(!r), className: "md:hidden p-2 text-gray-600" }, r ? m.createElement(mn, { size: 20 }) : m.createElement(fn, { size: 20 }))
+      m.createElement("button", { onClick: () => s(!r), className: "md:hidden p-2 text-gray-600", "aria-label": _("toggle menu", e), "aria-expanded": r, "aria-controls": "mobile-nav" }, r ? m.createElement(mn, { size: 20 }) : m.createElement(fn, { size: 20 }))
     ),
     r && m.createElement(
       "div",
       { className: "md:hidden border-t border-gray-100 px-4 py-3 space-y-2" },
-      m.createElement(U, { to: "/", className: "block text-sm text-gray-700 py-1" }, A("home", e)),
-      t.filter((c) => !(c.url === "/" && (c.label.toLowerCase() === "home" || c.label === A("home", e)))).map((c) => m.createElement(U, { key: c.id, to: c.url, className: "block text-sm text-gray-700 py-1" }, c.label)),
-      o ? m.createElement("button", { onClick: l, className: "block text-sm text-gray-400 py-1" }, A("logout")) : m.createElement(U, { to: "/login", className: "block text-sm text-gray-700 py-1" }, A("sign in")),
-      m.createElement("a", { href: "/admin", className: "block text-sm text-orange-600 font-medium py-1" }, A("admin", e))
+      m.createElement(U, { to: "/", className: "block text-sm text-gray-700 py-1" }, _("home", e)),
+      t.filter((c) => !(c.url === "/" && (c.label.toLowerCase() === "home" || c.label === _("home", e)))).map((c) => m.createElement(U, { key: c.id, to: c.url, className: "block text-sm text-gray-700 py-1" }, c.label)),
+      o ? m.createElement("button", { onClick: l, className: "block text-sm text-gray-400 py-1" }, _("logout")) : m.createElement(U, { to: "/login", className: "block text-sm text-gray-700 py-1" }, _("sign in")),
+      m.createElement("a", { href: "/admin", className: "block text-sm text-orange-600 font-medium py-1" }, _("admin", e))
     )
   );
 }
@@ -2793,7 +2793,7 @@ function Ns() {
   return m.createElement(
     "div",
     { className: "rounded-lg border border-gray-200 p-4" },
-    m.createElement("h3", { className: "text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider" }, A("tag cloud")),
+    m.createElement("h3", { className: "text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider" }, _("tag cloud")),
     m.createElement(
       "div",
       { className: "flex flex-wrap gap-1.5" },
@@ -2805,7 +2805,7 @@ function Ns() {
           to: "/tag/" + r.slug,
           className: "inline-block px-2 py-0.5 bg-gray-100 hover:bg-primary-100 rounded-full text-gray-600 hover:text-primary-700 transition-colors",
           style: { fontSize: s + "rem" },
-          title: (((a = r._count) == null ? void 0 : a.posts) || 0) + " " + A("posts")
+          title: (((a = r._count) == null ? void 0 : a.posts) || 0) + " " + _("posts")
         }, r.name + " (" + (((l = r._count) == null ? void 0 : l.posts) || 0) + ")");
       })
     )
@@ -2819,7 +2819,7 @@ function Ts() {
   }, []), e.length === 0 ? null : m.createElement(
     "div",
     { className: "rounded-lg border border-gray-200 p-4" },
-    m.createElement("h3", { className: "text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider" }, A("recent posts")),
+    m.createElement("h3", { className: "text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider" }, _("recent posts")),
     m.createElement(
       "ul",
       { className: "space-y-2" },
@@ -2863,7 +2863,7 @@ function Ps() {
   return m.createElement(
     "div",
     { ref: c, className: "rounded-lg border border-gray-200 p-4 relative" },
-    m.createElement("h3", { className: "text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider" }, A("search")),
+    m.createElement("h3", { className: "text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider" }, _("search")),
     m.createElement(
       "form",
       { onSubmit: f, className: "flex gap-2" },
@@ -2874,12 +2874,13 @@ function Ps() {
         onFocus: () => {
           n.length > 0 && o(!0);
         },
-        placeholder: A("search placeholder"),
-        "aria-label": A("search posts"),
+        placeholder: _("search placeholder"),
+        "aria-label": _("search posts"),
         className: "flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary-500 focus:border-primary-500 outline-none"
       }),
       m.createElement("button", {
         type: "submit",
+        "aria-label": _("search"),
         className: "px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
       }, m.createElement(dn, { size: 16 }))
     ),
@@ -2900,11 +2901,11 @@ function Ps() {
           },
           m.createElement(g.type === "page" ? un : cn, { size: 14, className: "text-gray-400 shrink-0" }),
           m.createElement("span", { className: "text-sm text-gray-800 dark:text-gray-100 truncate" }, g.title),
-          m.createElement("span", { className: "ml-auto text-[10px] uppercase text-gray-400 shrink-0" }, g.type)
+          m.createElement("span", { className: "ml-auto text-xs uppercase text-gray-400 shrink-0" }, g.type)
         )
       )
     ),
-    s && a && n.length === 0 && m.createElement("div", { className: "absolute left-4 right-4 top-[calc(100%-8px)] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 px-3 py-2 text-xs text-gray-400" }, A("searching") + "…")
+    s && a && n.length === 0 && m.createElement("div", { className: "absolute left-4 right-4 top-[calc(100%-8px)] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-xl z-50 px-3 py-2 text-xs text-gray-400" }, _("searching") + "…")
   );
 }
 function Cs() {
@@ -2917,7 +2918,7 @@ function Cs() {
   return m.createElement(
     "div",
     { className: "rounded-lg border border-gray-200 p-4" },
-    m.createElement("h3", { className: "text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider" }, A("archives")),
+    m.createElement("h3", { className: "text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider" }, _("archives")),
     m.createElement(
       "ul",
       { className: "space-y-1" },
@@ -2963,7 +2964,7 @@ function Us(e) {
     l && m.createElement(
       "div",
       { className: "py-12 text-center border-b border-gray-200" },
-      m.createElement("h1", { className: "text-3xl font-bold text-gray-900 capitalize" }, (u ? A("tag", t) + ": " : "") + (l || "").replace(/-/g, " "))
+      m.createElement("h1", { className: "text-3xl font-bold text-gray-900 capitalize" }, (u ? _("tag", t) + ": " : "") + (l || "").replace(/-/g, " "))
     ),
     m.createElement(
       "div",
@@ -2974,7 +2975,7 @@ function Us(e) {
         m.createElement(
           "div",
           { className: "lg:col-span-2 space-y-8" },
-          n.length === 0 ? m.createElement("p", { className: "text-gray-500 text-center py-16" }, A(a ? "failed to load posts" : "no posts yet", t)) : n.map(
+          n.length === 0 ? m.createElement("p", { className: "text-gray-500 text-center py-16" }, _(a ? "failed to load posts" : "no posts yet", t)) : n.map(
             (c) => {
               var f, p;
               return m.createElement(
@@ -2987,7 +2988,7 @@ function Us(e) {
                 ),
                 m.createElement(
                   "div",
-                  { className: "flex items-center gap-3 text-xs text-gray-400 mb-3" },
+                  { className: "flex items-center gap-3 text-xs text-gray-500 mb-3" },
                   m.createElement("span", { className: "flex items-center gap-1" }, m.createElement(ln, { size: 12 }), Ls(c.publishedAt || c.createdAt)),
                   m.createElement("span", { className: "flex items-center gap-1" }, m.createElement(pn, { size: 12 }), (f = c.author) == null ? void 0 : f.username),
                   ((p = c.categories) == null ? void 0 : p[0]) && m.createElement("span", { className: "text-orange-600" }, c.categories[0].name)
@@ -2998,16 +2999,16 @@ function Us(e) {
                   m.createElement("h2", { className: "text-2xl font-medium tracking-tight text-gray-900 hover:text-orange-600 mb-3" }, c.title)
                 ),
                 c.excerpt && m.createElement("p", { className: "text-gray-500 text-sm leading-relaxed mb-4" }, c.excerpt),
-                m.createElement(U, { to: "/post/" + c.slug, className: "inline-block text-sm font-medium text-orange-600 hover:text-orange-500" }, A("read more", t), " →")
+                m.createElement(U, { to: "/post/" + c.slug, className: "inline-block text-sm font-medium text-orange-600 hover:text-orange-500" }, _("read more", t), " →")
               );
             }
           ),
           r > parseInt(t.posts_per_page || "10") && m.createElement(
             "div",
             { className: "flex items-center justify-center gap-4 pt-4" },
-            m.createElement("button", { onClick: () => o(Math.max(1, s - 1)), disabled: s === 1, className: "px-4 py-2 border border-gray-300 rounded-full text-sm hover:bg-gray-50 disabled:opacity-40" }, "← " + A("previous", t)),
-            m.createElement("span", { className: "text-sm text-gray-400" }, A("page", t) + " " + s + " " + A("of", t) + " " + Math.ceil(r / parseInt(t.posts_per_page || "10"))),
-            m.createElement("button", { onClick: () => o(s + 1), disabled: s * parseInt(t.posts_per_page || "10") >= r, className: "px-4 py-2 border border-gray-300 rounded-full text-sm hover:bg-gray-50 disabled:opacity-40" }, A("next", t) + " →")
+            m.createElement("button", { onClick: () => o(Math.max(1, s - 1)), disabled: s === 1, className: "px-4 py-2 border border-gray-300 rounded-full text-sm hover:bg-gray-50 disabled:opacity-40" }, "← " + _("previous", t)),
+            m.createElement("span", { className: "text-sm text-gray-500" }, _("page", t) + " " + s + " " + _("of", t) + " " + Math.ceil(r / parseInt(t.posts_per_page || "10"))),
+            m.createElement("button", { onClick: () => o(s + 1), disabled: s * parseInt(t.posts_per_page || "10") >= r, className: "px-4 py-2 border border-gray-300 rounded-full text-sm hover:bg-gray-50 disabled:opacity-40" }, _("next", t) + " →")
           )
         ),
         m.createElement(

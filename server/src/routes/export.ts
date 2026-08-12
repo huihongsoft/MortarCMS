@@ -12,7 +12,13 @@ router.get('/export', authenticate, authorize('admin'), (_req: AuthRequest, res:
     data.categories = db.prepare("SELECT * FROM Category").all();
     data.tags = db.prepare("SELECT * FROM Tag").all();
     data.users = db.prepare("SELECT id, username, email, role, bio FROM User").all();
-    data.settings = db.prepare("SELECT key, value FROM Setting").all();
+    // Never export credentials/secrets: SMTP password, JWT secret, AI provider
+    // API keys and webhook tokens would leak the whole installation if the
+    // export file fell into the wrong hands.
+    const SECRET_KEYS = ['smtp_pass', 'jwt_secret', 'ai_providers', 'ai_bindings', 'reset_token'];
+    const SECRET_PREFIXES = ['jwt_', 'market_', 'ai_binding_'];
+    data.settings = (db.prepare("SELECT key, value FROM Setting").all() as any[])
+      .filter((s: any) => !SECRET_KEYS.includes(s.key) && !SECRET_PREFIXES.some(p => s.key.startsWith(p)));
     data.menus = db.prepare("SELECT * FROM Menu").all();
     data.comments = db.prepare("SELECT * FROM Comment").all();
     data.media = db.prepare("SELECT * FROM Media").all();

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye, Sparkles } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { useToast } from '../lib/toast';
 import RichEditor from '../components/RichEditor';
 import VisualEditor from '../components/VisualEditor';
@@ -205,7 +206,9 @@ export default function PostEditor() {
         aiError && React.createElement('p', { className: 'text-xs text-red-600 mb-2' }, aiError),
         aiResult && React.createElement('div', null,
           React.createElement('div', { className: 'max-h-48 overflow-y-auto bg-gray-50 rounded-lg p-3 text-xs text-gray-700 prose prose-sm max-w-none' },
-            React.createElement('div', { dangerouslySetInnerHTML: { __html: aiResult } })),
+            // AI output is sanitized before rendering: model output can be
+            // influenced by prompt injection embedded in user content
+            React.createElement('div', { dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(aiResult, { USE_PROFILES: { html: true } }) } })),
           React.createElement('div', { className: 'flex flex-wrap gap-1.5 mt-2' },
             aiResult.startsWith('SEO') ? React.createElement('button', { onClick: applySeoResult, className: 'btn-primary text-xs' }, t('apply seo', getLang()))
             : /摘要/.test(aiResult) && aiResult.length < 400 ? React.createElement('button', { onClick: applySummary, className: 'btn-primary text-xs' }, t('apply as excerpt', getLang()))

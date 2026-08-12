@@ -26,7 +26,7 @@ export default function TT1HomeLayout(props: any) {
                 React.createElement('article', { key: p.id, className: 'bg-white rounded-3xl border border-gray-100 shadow-sm p-8 hover:shadow-md transition-shadow' },
                   p.featured && React.createElement(Link, { to: '/post/' + p.slug },
                     React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full h-52 object-cover rounded-2xl mb-6', loading: 'lazy' })),
-                  React.createElement('div', { className: 'flex items-center gap-3 text-xs text-gray-400 mb-3' },
+                  React.createElement('div', { className: 'flex items-center gap-3 text-xs text-gray-500 mb-3' },
                     React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Calendar, { size: 12 }), timeAgo(p.publishedAt || p.createdAt)),
                     React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(User, { size: 12 }), p.author?.username),
                     p.categories?.[0] && React.createElement('span', { className: 'text-orange-600' }, p.categories[0].name),
@@ -39,7 +39,7 @@ export default function TT1HomeLayout(props: any) {
               ),
           total > parseInt(settings.posts_per_page || '10') && React.createElement('div', { className: 'flex items-center justify-center gap-4 pt-4' },
             React.createElement('button', { onClick: () => setPage(Math.max(1, page - 1)), disabled: page === 1, className: 'px-4 py-2 border border-gray-300 rounded-full text-sm hover:bg-gray-50 disabled:opacity-40' }, '\u2190 ' + t('previous', settings)),
-            React.createElement('span', { className: 'text-sm text-gray-400' }, t('page', settings) + ' ' + page + ' ' + t('of', settings) + ' ' + Math.ceil(total / parseInt(settings.posts_per_page || '10'))),
+            React.createElement('span', { className: 'text-sm text-gray-500' }, t('page', settings) + ' ' + page + ' ' + t('of', settings) + ' ' + Math.ceil(total / parseInt(settings.posts_per_page || '10'))),
             React.createElement('button', { onClick: () => setPage(page + 1), disabled: page * parseInt(settings.posts_per_page || '10') >= total, className: 'px-4 py-2 border border-gray-300 rounded-full text-sm hover:bg-gray-50 disabled:opacity-40' }, t('next', settings) + ' \u2192'),
           )
         ),

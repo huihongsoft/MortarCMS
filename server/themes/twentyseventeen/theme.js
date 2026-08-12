@@ -2776,7 +2776,7 @@ function As({ settings: e }) {
           ) : m.createElement(v, { to: "/login", className: "text-gray-600 hover:text-gray-900" }, A("sign in")),
           m.createElement("a", { href: "/admin", className: "text-gray-900 font-medium hover:text-gray-600" }, A("admin", e))
         ),
-        m.createElement("button", { onClick: () => s(!r), className: "md:hidden p-2 text-gray-600" }, r ? m.createElement(mn, { size: 20 }) : m.createElement(fn, { size: 20 }))
+        m.createElement("button", { onClick: () => s(!r), className: "md:hidden p-2 text-gray-600", "aria-label": A("toggle menu", e), "aria-expanded": r, "aria-controls": "mobile-nav" }, r ? m.createElement(mn, { size: 20 }) : m.createElement(fn, { size: 20 }))
       ),
       r && m.createElement(
         "div",
@@ -2889,6 +2889,7 @@ function Ps() {
       }),
       m.createElement("button", {
         type: "submit",
+        "aria-label": A("search"),
         className: "px-3 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 transition-colors"
       }, m.createElement(dn, { size: 16 }))
     ),
@@ -2909,7 +2910,7 @@ function Ps() {
           },
           m.createElement(y.type === "page" ? un : cn, { size: 14, className: "text-gray-400 shrink-0" }),
           m.createElement("span", { className: "text-sm text-gray-800 dark:text-gray-100 truncate" }, y.title),
-          m.createElement("span", { className: "ml-auto text-[10px] uppercase text-gray-400 shrink-0" }, y.type)
+          m.createElement("span", { className: "ml-auto text-xs uppercase text-gray-400 shrink-0" }, y.type)
         )
       )
     ),
@@ -2970,7 +2971,7 @@ function Ls(e) {
                   { className: "flex items-center gap-3 text-xs text-gray-500 mb-3" },
                   m.createElement("span", { className: "flex items-center gap-1" }, m.createElement(ln, { size: 12 }), Ds(c.publishedAt || c.createdAt)),
                   m.createElement("span", { className: "flex items-center gap-1" }, m.createElement(pn, { size: 12 }), (f = c.author) == null ? void 0 : f.username),
-                  ((p = c.categories) == null ? void 0 : p[0]) && m.createElement("span", { className: "text-gray-400" }, c.categories[0].name)
+                  ((p = c.categories) == null ? void 0 : p[0]) && m.createElement("span", { className: "text-gray-500" }, c.categories[0].name)
                 ),
                 m.createElement(
                   v,
@@ -2986,7 +2987,7 @@ function Ls(e) {
             "div",
             { className: "flex items-center justify-center gap-4 pt-4" },
             m.createElement("button", { onClick: () => o(Math.max(1, s - 1)), disabled: s === 1, className: "px-4 py-2 border border-gray-300 rounded-full text-sm hover:bg-gray-50 disabled:opacity-40" }, "← " + A("previous", t)),
-            m.createElement("span", { className: "text-sm text-gray-400" }, A("page", t) + " " + s + " " + A("of", t) + " " + Math.ceil(r / parseInt(t.posts_per_page || "10"))),
+            m.createElement("span", { className: "text-sm text-gray-500" }, A("page", t) + " " + s + " " + A("of", t) + " " + Math.ceil(r / parseInt(t.posts_per_page || "10"))),
             m.createElement("button", { onClick: () => o(s + 1), disabled: s * parseInt(t.posts_per_page || "10") >= r, className: "px-4 py-2 border border-gray-300 rounded-full text-sm hover:bg-gray-50 disabled:opacity-40" }, A("next", t) + " →")
           )
         ),

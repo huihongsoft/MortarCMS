@@ -61,27 +61,23 @@ router.put('/', authenticate, authorize('admin'), (req: AuthRequest, res: Respon
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Public: system health check
+// Public: system health check (minimal — no memory/uptime/statistics so a
+// public endpoint cannot leak instance details to anonymous visitors)
 router.get('/health', (req: AuthRequest, res: Response) => {
   try {
     const db_test = db.prepare('SELECT 1').get();
-    const postCount = (db.prepare("SELECT COUNT(*) as cnt FROM Post WHERE type='post'").get() as any)?.cnt || 0;
-    const userCount = (db.prepare('SELECT COUNT(*) as cnt FROM User').get() as any)?.cnt || 0;
-    const mediaCount = (db.prepare('SELECT COUNT(*) as cnt FROM Media').get() as any)?.cnt || 0;
     res.json({
       status: 'healthy',
       version: '0.1.0',
       database: !!db_test ? 'connected' : 'error',
-      stats: { posts: postCount, users: userCount, media: mediaCount },
-      memory: process.memoryUsage(),
-      uptime: process.uptime(),
       timestamp: new Date().toISOString(),
     });
   } catch (err: any) { res.status(500).json({ status: 'error', error: err.message }); }
 });
 
-// Public: site info
-router.get('/info', (req: AuthRequest, res: Response) => {
+// Admin-only: site info (node version, platform, memory, table counts — these
+// details are useful for diagnostics but must not be exposed publicly)
+router.get('/info', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const driver = (db as any).driver || 'sqlite';
     // Dialect-aware table listing
@@ -94,12 +90,19 @@ router.get('/info', (req: AuthRequest, res: Response) => {
     const settings = db.prepare('SELECT key, value FROM Setting').all() as any[];
     const cfg: Record<string, string> = {};
     settings.forEach((s: any) => { cfg[s.key] = s.value; });
+    // Real theme data instead of hardcoded defaults (matches the Appearance panel)
+    let themeAvailable: string[] = ['default'];
+    try {
+      themeAvailable = require('fs').existsSync(require('path').join(__dirname, '../..', 'themes'))
+        ? require('fs').readdirSync(require('path').join(__dirname, '../..', 'themes')).filter((d: string) => require('fs').existsSync(require('path').join(__dirname, '../..', 'themes', d, 'theme.json')))
+        : ['default'];
+    } catch {}
     res.json({
       site: { title: cfg.site_title, url: cfg.site_url, version: '0.1.0' },
       php: { version: process.version, platform: process.platform, arch: process.arch },
       database: { tables: tables.length, posts: postCount, engine: driver === 'sqlite' ? 'SQLite' : driver === 'mysql' ? 'MySQL/MariaDB' : 'PostgreSQL', size: '—' },
       server: { uptime: Math.floor(process.uptime()), memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB' },
-      themes: { active: 'default', available: ['default'] },
+      themes: { active: activeThemeName(), available: themeAvailable },
     });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

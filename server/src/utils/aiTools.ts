@@ -1016,12 +1016,30 @@ register('analyze_image', '分析媒体库中的一张图片：描述内容、�
   const provider = getDefaultProvider();
   if (!provider) return { error: '未配置 AI 服务商' };
   if (provider.vision !== true) return { error: '当前服务商未开启视觉能力（需支持图片输入的模型，如 gpt-4o）。请在 AI 设置中为该服务商启用「视觉」' };
-  const imgUrl = String(args.url).startsWith('http') ? String(args.url) : 'http://localhost:3001' + String(args.url);
-  // Download and base64 the image for the vision request
-  const imgRes = await fetch(imgUrl).catch(() => null);
-  if (!imgRes || !imgRes.ok) return { error: '无法读取图片' };
-  const buf = Buffer.from(await imgRes.arrayBuffer());
-  const mime = imgRes.headers.get('content-type') || 'image/png';
+  // SSRF guard: the image must live in this site's own /uploads/ directory.
+  // Absolute URLs pointing at the site itself are normalized to a local path;
+  // everything else (arbitrary http(s) URLs) is refused so the AI tool can
+  // never be used to probe internal networks or cloud metadata endpoints.
+  const imgArg = String(args.url || '');
+  let localPath: string | null = null;
+  if (imgArg.startsWith('/uploads/')) {
+    localPath = imgArg;
+  } else {
+    try {
+      const u = new URL(imgArg);
+      const siteUrl = ((db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || '');
+      const hosts: string[] = [];
+      if (siteUrl) { try { hosts.push(new URL(siteUrl).hostname); } catch {} }
+      hosts.push('localhost', '127.0.0.1');
+      if (hosts.includes(u.hostname) && u.pathname.startsWith('/uploads/')) localPath = u.pathname;
+    } catch { /* not a URL — falls through to refusal below */ }
+  }
+  if (!localPath) return { error: '仅支持本站 /uploads/ 目录中的图片' };
+  const filePath = path.join(__dirname, '../..', localPath);
+  if (!filePath.startsWith(path.join(__dirname, '../..', 'uploads'))) return { error: '仅支持本站 /uploads/ 目录中的图片' };
+  if (!fs.existsSync(filePath)) return { error: '无法读取图片' };
+  const buf = fs.readFileSync(filePath);
+  const mime = 'image/' + (path.extname(filePath).slice(1).toLowerCase() === 'jpg' ? 'jpeg' : path.extname(filePath).slice(1).toLowerCase() || 'png');
   const res = await fetch(provider.baseUrl.replace(/\/$/, '') + '/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + provider.apiKey },

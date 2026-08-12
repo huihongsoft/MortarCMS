@@ -18,6 +18,7 @@ export default function ArchivePage({ settings }: { settings: Record<string, str
 
   const monthLabel = MONTHS[parseInt(month || '1') - 1] + ' ' + year;
   useSEO({
+    siteTitle: settings.site_title,
     title: monthLabel + ' ' + t('archive'),
     url: window.location.origin + '/archive/' + year + '/' + month,
     jsonLd: [
