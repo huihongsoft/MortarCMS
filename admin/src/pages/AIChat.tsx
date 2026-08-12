@@ -452,6 +452,14 @@ export default function AIChat() {
     return () => clearInterval(iv);
   }, [taskDetail?.id, taskDetail?.status]);
 
+  // Steps that already appeared while the task was running: they are expanded
+  // once on first appearance, then left fully under user control (polling
+  // re-renders must not force them open again).
+  const seenStepsRef = useRef(0);
+  useEffect(() => {
+    if (taskDetail) seenStepsRef.current = taskDetail.steps?.length || 0;
+  }, [taskDetail?.steps?.length]);
+
   async function fetchTasks() {
     try {
       const r = await api.get('/ai/tasks');
@@ -1082,10 +1090,23 @@ export default function AIChat() {
                 taskDetail.steps.map((st: any, i: number) =>
                   st.type === 'think'
                     ? React.createElement('div', { key: i, className: 'text-xs text-gray-600 dark:text-gray-300' }, '💭 ' + String(st.content || '').slice(0, 300))
-                    : React.createElement('details', { key: i, open: taskDetail.status === 'running', className: 'text-xs text-gray-600 dark:text-gray-300' },
-                        React.createElement('summary', { className: 'cursor-pointer' }, '🔧 ' + st.name + ' ' + JSON.stringify(st.args || {}).slice(0, 100)),
-                        st.output !== undefined && renderToolOutput(String(st.output).slice(0, 2000))
-                      )
+                    : (() => {
+                        const running = taskDetail.status === 'running';
+                        // New steps start expanded while the task runs; the open
+                        // attribute is then left unset so the user can freely
+                        // collapse/expand them without polling resetting the state.
+                        const initOpen = running && i >= seenStepsRef.current;
+                        // When the task finishes, rebuild the details (key change)
+                        // so every tool output is collapsed by default.
+                        return React.createElement('details', {
+                          key: i + (running ? '' : '-final'),
+                          open: initOpen ? true : undefined,
+                          className: 'text-xs text-gray-600 dark:text-gray-300',
+                        },
+                          React.createElement('summary', { className: 'cursor-pointer' }, '🔧 ' + st.name + ' ' + JSON.stringify(st.args || {}).slice(0, 100)),
+                          st.output !== undefined && renderToolOutput(String(st.output).slice(0, 2000))
+                        );
+                      })()
                 )
               ),
               taskDetail.result && React.createElement('div', { className: 'text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 rounded-lg p-2.5 max-h-52 overflow-y-auto' }, renderMd(taskDetail.result))
@@ -1205,12 +1226,15 @@ export default function AIChat() {
             m.tools && m.tools.length > 0 && React.createElement('div', { className: 'mb-2 flex flex-wrap gap-1' },
               m.tools.map((tool, j) => React.createElement('span', { key: j, className: 'text-[10px] px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-100 dark:border-purple-500/30' }, '⚡ ' + tool))),
             m.role === 'assistant' && m.toolResults && m.toolResults.length > 0 && React.createElement('div', { className: 'mb-1 space-y-0.5' },
-              m.toolResults.map((tr: any, ti: number) =>
-                React.createElement('details', { key: ti, open: busy && i === messages.length - 1, className: 'text-[10px] rounded-lg bg-gray-50 dark:bg-gray-800/60 px-2 py-1' },
+              m.toolResults.map((tr: any, ti: number) => {
+                const active = busy && i === messages.length - 1;
+                // Expanded while the run is in progress, collapsed by default
+                // once the run finishes (key change rebuilds the details).
+                return React.createElement('details', { key: ti + (active ? '' : '-final'), open: active ? true : undefined, className: 'text-[10px] rounded-lg bg-gray-50 dark:bg-gray-800/60 px-2 py-1' },
                   React.createElement('summary', { className: 'cursor-pointer text-gray-500 dark:text-gray-400' }, '🔧 ' + tr.name + ' ' + t('result', getLang())),
                   renderToolOutput(String(tr.output || ''))
-                )
-              )),
+                );
+              })),
             m.role === 'assistant' && !m.content && busy
               ? React.createElement('div', { className: 'flex gap-1 py-1' },
                   [0, 1, 2].map(d => React.createElement('span', { key: d, className: 'w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce', style: { animationDelay: d * 0.15 + 's' } })))
