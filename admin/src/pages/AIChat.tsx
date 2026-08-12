@@ -1086,30 +1086,41 @@ export default function AIChat() {
                 React.createElement('span', { className: 'px-1.5 py-0.5 text-[10px] rounded-full font-medium ' + (taskDetail.status === 'done' ? 'bg-green-100 text-green-700' : taskDetail.status === 'failed' ? 'bg-red-100 text-red-700' : taskDetail.status === 'cancelled' ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-700 animate-pulse') }, t(taskDetail.status, getLang())),
                 taskDetail.error && React.createElement('span', { className: 'text-xs text-red-600 break-words' }, '✗ ' + taskDetail.error)
               ),
-              taskDetail.steps && taskDetail.steps.length > 0 && React.createElement('div', { className: 'space-y-1.5 max-h-56 overflow-y-auto mb-2' },
-                taskDetail.steps.map((st: any, i: number) =>
-                  st.type === 'think'
-                    ? React.createElement('div', { key: i, className: 'text-xs text-gray-600 dark:text-gray-300' }, '💭 ' + String(st.content || '').slice(0, 300))
-                    : (() => {
-                        const running = taskDetail.status === 'running';
-                        // New steps start expanded while the task runs; the open
-                        // attribute is then left unset so the user can freely
-                        // collapse/expand them without polling resetting the state.
-                        const initOpen = running && i >= seenStepsRef.current;
-                        // When the task finishes, rebuild the details (key change)
-                        // so every tool output is collapsed by default.
-                        return React.createElement('details', {
-                          key: i + (running ? '' : '-final'),
-                          open: initOpen ? true : undefined,
-                          className: 'text-xs text-gray-600 dark:text-gray-300',
-                        },
-                          React.createElement('summary', { className: 'cursor-pointer' }, '🔧 ' + st.name + ' ' + JSON.stringify(st.args || {}).slice(0, 100)),
-                          st.output !== undefined && renderToolOutput(String(st.output).slice(0, 2000))
-                        );
-                      })()
+              // The task report comes first so it is immediately visible;
+              // the execution trace (tool calls + results) is folded away
+              // below it and expands only while the task is running.
+              taskDetail.result && React.createElement('div', { className: 'text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 rounded-lg p-3' }, renderMd(taskDetail.result)),
+              taskDetail.steps && taskDetail.steps.length > 0 && React.createElement('details', {
+                key: 'trace-' + (taskDetail.status === 'running' ? 'open' : 'done'),
+                open: taskDetail.status === 'running' ? true : undefined,
+                className: 'mt-2 text-xs',
+              },
+                React.createElement('summary', { className: 'cursor-pointer text-gray-500 dark:text-gray-400 font-medium' },
+                  taskDetail.status === 'running' ? '⏳ ' + t('execution in progress', getLang()) : t('execution trace', getLang()) + ' (' + taskDetail.steps.length + ')'),
+                React.createElement('div', { className: 'mt-1.5 space-y-1.5 max-h-64 overflow-y-auto' },
+                  taskDetail.steps.map((st: any, i: number) =>
+                    st.type === 'think'
+                      ? React.createElement('div', { key: i, className: 'text-xs text-gray-600 dark:text-gray-300' }, '💭 ' + String(st.content || '').slice(0, 160))
+                      : (() => {
+                          const running = taskDetail.status === 'running';
+                          // New steps start expanded while the task runs; the open
+                          // attribute is then left unset so the user can freely
+                          // collapse/expand them without polling resetting the state.
+                          const initOpen = running && i >= seenStepsRef.current;
+                          // When the task finishes, rebuild the details (key change)
+                          // so every tool output is collapsed by default.
+                          return React.createElement('details', {
+                            key: i + (running ? '' : '-final'),
+                            open: initOpen ? true : undefined,
+                            className: 'text-xs text-gray-600 dark:text-gray-300',
+                          },
+                            React.createElement('summary', { className: 'cursor-pointer' }, '🔧 ' + st.name + ' ' + JSON.stringify(st.args || {}).slice(0, 100)),
+                            st.output !== undefined && renderToolOutput(String(st.output).slice(0, 2000))
+                          );
+                        })()
+                  )
                 )
-              ),
-              taskDetail.result && React.createElement('div', { className: 'text-xs text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 rounded-lg p-2.5 max-h-52 overflow-y-auto' }, renderMd(taskDetail.result))
+              )
             )
           : React.createElement('div', { className: 'h-full flex flex-col items-center justify-center text-center' },
               React.createElement(ListChecks, { size: 36, className: 'text-gray-300 dark:text-gray-600 mb-3' }),

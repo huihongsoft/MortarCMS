@@ -412,7 +412,7 @@ async function runTask(taskId: string, userId: string, role: string, username: s
 
       const result = await chatComplete(provider, msgs, { tools });
       finalText = result.content;
-      if (result.content) steps.push({ type: 'think', content: result.content.slice(0, 500), ts: Date.now() });
+      if (result.content) steps.push({ type: 'think', content: result.content.slice(0, 160), ts: Date.now() });
       updateTask(taskId, { steps: JSON.stringify(steps) });
 
       if (!result.toolCalls.length) break;
