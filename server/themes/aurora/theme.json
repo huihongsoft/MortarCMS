@@ -1,0 +1,30 @@
+{
+  "name": "aurora",
+  "version": "1.0.0",
+  "description": "A minimal, editorial theme inspired by modern product brands — generous whitespace, large type, hairline borders and an indigo accent.",
+  "author": "Mortar Team",
+  "settings": {
+    "primary_color": "#6366f1",
+    "background": "#ffffff",
+    "text_color": "#0f172a",
+    "link_color": "#6366f1",
+    "heading_font": "system",
+    "body_font": "system",
+    "sidebar_position": "right",
+    "posts_per_row": "1",
+    "heading_cap": "1",
+    "heading_max": "36"
+  },
+  "settingsSchema": [
+    { "key": "primary_color", "label": "主色调", "type": "color", "default": "#6366f1" },
+    { "key": "background", "label": "背景色", "type": "color", "default": "#ffffff" },
+    { "key": "text_color", "label": "文字颜色", "type": "color", "default": "#0f172a" },
+    { "key": "link_color", "label": "链接颜色", "type": "color", "default": "#6366f1" },
+    { "key": "heading_font", "label": "标题字体", "type": "select", "options": ["system", "serif", "mono"], "default": "system" },
+    { "key": "body_font", "label": "正文字体", "type": "select", "options": ["system", "serif", "mono"], "default": "system" },
+    { "key": "sidebar_position", "label": "侧边栏位置", "type": "select", "options": ["left", "right"], "default": "right" },
+    { "key": "heading_cap", "label": "标题起始级别", "type": "select", "options": ["1", "2"], "default": "1" },
+    { "key": "heading_max", "label": "标题最大字号", "type": "number", "default": 36 }
+  ],
+  "custom_css": ""
+}

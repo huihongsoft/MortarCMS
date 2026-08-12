@@ -11,11 +11,11 @@ npx esbuild esm/react.js --bundle --format=esm --minify --define:process.env.NOD
 npx esbuild esm/router.js --bundle --format=esm --external:react --external:react-dom --outfile=public/esm-router.js
 echo "=== Building Themes (standalone bundles) ==="
 rm -rf dist/themes
-for t in default magazine twentytwentyfour twentytwentyone twentynineteen twentyseventeen; do
+for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen twentytwentyone twentynineteen twentyseventeen; do
   THEME_NAME=$t npx vite build --config vite.themes.config.ts
 done
 # Copy theme bundles into server/themes for unified runtime loading
-for t in default magazine twentytwentyfour twentytwentyone twentynineteen twentyseventeen; do
+for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen twentytwentyone twentynineteen twentyseventeen; do
   mkdir -p ../server/themes/$t
   cp dist/themes/$t.js ../server/themes/$t/theme.js
 done

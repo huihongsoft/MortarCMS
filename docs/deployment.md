@@ -39,8 +39,8 @@ cd frontend
 npx vite build
 npx esbuild esm/react.js --bundle --format=esm --minify --define:process.env.NODE_ENV=\"production\" --outfile=public/esm-react.js
 npx esbuild esm/router.js --bundle --format=esm --external:react --external:react-dom --outfile=public/esm-router.js
-for t in default magazine twentytwentyfour twentytwentyone twentynineteen twentyseventeen; do THEME_NAME=$t npx vite build --config vite.themes.config.ts >/dev/null 2>&1; done
-for t in default magazine twentytwentyfour twentytwentyone twentynineteen twentyseventeen; do cp dist/themes/$t.js ../server/themes/$t/theme.js; done
+for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen twentytwentyone twentynineteen twentyseventeen; do THEME_NAME=$t npx vite build --config vite.themes.config.ts >/dev/null 2>&1; done
+for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen twentytwentyone twentynineteen twentyseventeen; do cp dist/themes/$t.js ../server/themes/$t/theme.js; done
 npx vite build >/dev/null 2>&1   # final dist incl. ESM bundles
 cd ..
 

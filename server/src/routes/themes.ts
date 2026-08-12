@@ -148,7 +148,7 @@ router.post('/rebuild', authenticate, requireCap('manage_options'), (req: AuthRe
       res.status(400).json({ error: 'Frontend source not found on this server (' + frontendDir + ')' });
       return;
     }
-    const builtin = ['default', 'magazine', 'twentytwentyfour', 'twentytwentyone', 'twentynineteen', 'twentyseventeen'];
+    const builtin = ['default', 'magazine', 'aurora', 'twentytwentyfour', 'twentytwentyone', 'twentynineteen', 'twentyseventeen'];
     const results: string[] = [];
     for (const t of builtin) {
       // Skip themes that aren't installed on this server (user may have deleted them)

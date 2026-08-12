@@ -130,7 +130,7 @@ build_all() {
   (cd frontend && npx esbuild esm/react.js --bundle --format=esm --minify --define:process.env.NODE_ENV=\"production\" --outfile=public/esm-react.js) || err "esm-react 构建失败"
   (cd frontend && npx esbuild esm/router.js --bundle --format=esm --external:react --external:react-dom --outfile=public/esm-router.js) || err "esm-router 构建失败"
   # 主题 bundle
-  for t in default magazine twentytwentyfour twentytwentyone twentynineteen twentyseventeen; do
+  for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen twentytwentyone twentynineteen twentyseventeen; do
     (cd frontend && THEME_NAME=$t npx vite build --config vite.themes.config.ts >/dev/null 2>&1)
     cp frontend/dist/themes/$t.js server/themes/$t/theme.js 2>/dev/null || true
   done
