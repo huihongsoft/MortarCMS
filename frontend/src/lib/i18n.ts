@@ -127,14 +127,16 @@ export function t(key: string, settings?: Record<string, string>): string {
       if (typeof v === 'string' && v) return v;
     } catch {}
   }
-  // Visitor preference wins; otherwise fall back to the site default language
-  const lang = localStorage.getItem('mortar_lang') || settings?.site_lang || 'en';
+  // Visitor preference wins; otherwise fall back to the site default language.
+  // The site defaults to Chinese (site_lang empty/'' means zh); set
+  // site_lang=en to make the frontend English by default.
+  const lang = localStorage.getItem('mortar_lang') || settings?.site_lang || 'zh';
   if (lang === 'zh') return zh[key] || key;
   return key;
 }
 
 export function getSiteLang(settings?: Record<string, string>): string {
-  return localStorage.getItem('mortar_lang') || settings?.site_lang || 'en';
+  return localStorage.getItem('mortar_lang') || settings?.site_lang || 'zh';
 }
 
 export function setLang(lang: string): void {

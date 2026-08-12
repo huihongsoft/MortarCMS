@@ -1063,7 +1063,9 @@ export function t(key: string, lang?: string): string {
 }
 
 export function getLang(): string {
-  return localStorage.getItem('mortar_lang') || 'en';
+  // Default to Chinese (the site's primary audience); visitors can switch
+  // to English via the admin bar language toggle.
+  return localStorage.getItem('mortar_lang') || 'zh';
 }
 
 export function setLang(lang: string) {
