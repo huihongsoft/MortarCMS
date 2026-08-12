@@ -106,7 +106,9 @@ GET    /api/security/audit          security diagnostics (Site Health style)
 ```
 GET    /api/settings                public (sensitive keys filtered) + theme merge
 PUT    /api/settings                admin
-GET    /api/settings/info           system info (driver-aware)
+GET    /api/settings/info           admin only: system info (driver-aware)
+GET    /api/settings/health         public: minimal health (no memory/stats)
+GET    /api/widgets                 widget registry + active configuration
 GET    /api/health | /api/health/detail
 GET    /api/db/backup               database download
 GET    /api/db/backup-full          database + uploads zip

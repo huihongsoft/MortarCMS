@@ -4,7 +4,7 @@
 #  A modern WordPress-style CMS with built-in AI assistant & visual builder
 #
 #  用法:
-#     curl -fsSL https://raw.githubusercontent.com/huihongsoft/mortar/main/install.sh | bash
+#     curl -fsSL https://raw.githubusercontent.com/huihongsoft/MortarCMS/main/install.sh | bash
 #     或（已在仓库目录内）:  bash install.sh
 #
 #  可选参数:
@@ -26,7 +26,7 @@ warn()  { echo -e "${YELLOW}[ ! ]${NC} $1"; }
 err()   { echo -e "${RED}[ ✘ ]${NC} $1"; exit 1; }
 
 # ---------- 参数解析 ----------
-REPO_URL="https://github.com/huihongsoft/mortar.git"
+REPO_URL="https://github.com/huihongsoft/MortarCMS.git"
 PORT="${MORTAR_PORT:-3001}"
 INSTALL_DIR="${MORTAR_DIR:-}"
 SERVICE=1

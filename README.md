@@ -4,9 +4,10 @@
   <p align="center">AI 驱动的现代化开源 CMS · 内置 AI 助理 / 可视化拖拽建站 / RBAC 权限体系 / 插件与主题生态</p>
   <p align="center"><em>AI-powered modern open-source CMS — built-in AI assistant, drag-and-drop visual builder, RBAC permissions, plugins & themes</em></p>
   <p align="center">
-    <a href="https://github.com/huihongsoft/mortar"><img src="https://img.shields.io/github/stars/huihongsoft/mortar?style=social" alt="GitHub stars" /></a>
-    <a href="https://github.com/huihongsoft/mortar/fork"><img src="https://img.shields.io/github/forks/huihongsoft/mortar?style=social" alt="GitHub forks" /></a>
-    <a href="https://github.com/huihongsoft/mortar/issues"><img src="https://img.shields.io/github/issues/huihongsoft/mortar" alt="GitHub issues" /></a>
+    <a href="https://github.com/huihongsoft/MortarCMS"><img src="https://img.shields.io/github/stars/huihongsoft/MortarCMS?style=social" alt="GitHub stars" /></a>
+    <a href="https://github.com/huihongsoft/MortarCMS/fork"><img src="https://img.shields.io/github/forks/huihongsoft/MortarCMS?style=social" alt="GitHub forks" /></a>
+    <a href="https://github.com/huihongsoft/MortarCMS/issues"><img src="https://img.shields.io/github/issues/huihongsoft/MortarCMS" alt="GitHub issues" /></a>
+    <a href="https://github.com/huihongsoft/MortarCMS/releases"><img src="https://img.shields.io/github/v/release/huihongsoft/MortarCMS?label=release" alt="Release" /></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-CC%20BY--NC--SA%204.0-orange.svg" alt="License" /></a>
     <img src="https://img.shields.io/badge/TypeScript-5.x-3178c6.svg" alt="TypeScript" />
     <img src="https://img.shields.io/badge/Express-4.x-259dff.svg" alt="Express" />
@@ -22,7 +23,7 @@
 ## 🚀 一键安装 (One-click Install)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/huihongsoft/mortar/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/huihongsoft/MortarCMS/main/install.sh | bash
 ```
 
 自动完成：环境检测 → 拉取代码 → 安装依赖 → 构建 → 注册系统服务（systemd / launchd）→ 健康检查。
@@ -117,8 +118,14 @@ curl -fsSL https://raw.githubusercontent.com/huihongsoft/mortar/main/install.sh 
 
 ### Security
 - JWT auth with server-side logout (token blacklist), 2FA (TOTP) with login challenge
-- Login lockout + rate limiting, password strength policy
-- Security headers, upload MIME allowlist + content verification, GDPR export/erase
+- **JWT_SECRET required in production** (fail-fast startup) — the key is never
+  stored in the database, so a backup can never be used to forge sessions
+- Login lockout + rate limiting, password strength policy, bcrypt cost 12
+- Upload extension↔MIME consistency checks (no mimetype spoofing), SVG
+  sanitization, content magic-byte verification
+- SSRF guards (plugin installs, AI image analysis), CORS origin whitelist,
+  TRUST_PROXY support, AI daily usage hard cap, SMTP TLS verification
+- Security headers, GDPR export/erase with content reassignment
 - Installation wizard with database selection — anonymous reset is blocked (admin only)
 
 ## 🚀 Quick Start
@@ -130,7 +137,7 @@ curl -fsSL https://raw.githubusercontent.com/huihongsoft/mortar/main/install.sh 
 ### Install & run — 方式 A：一键安装（推荐）
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/huihongsoft/mortar/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/huihongsoft/MortarCMS/main/install.sh | bash
 ```
 
 自动完成：环境检测 → 拉取代码 → 安装依赖 → 构建 → 注册系统服务（systemd / launchd）→ 健康检查。
@@ -140,7 +147,7 @@ curl -fsSL https://raw.githubusercontent.com/huihongsoft/mortar/main/install.sh 
 
 ```bash
 # 1. 获取代码
-git clone https://github.com/huihongsoft/mortar.git && cd mortar
+git clone https://github.com/huihongsoft/MortarCMS.git && cd mortar
 
 # 2. 安装依赖（三个工作区）
 (cd server   && npm install --no-audit --no-fund)
