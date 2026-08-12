@@ -34,19 +34,23 @@ export default function TagLayout(props: any) {
               : React.createElement('div', { className: 'text-center py-20' }, React.createElement('div', { className: 'text-6xl mb-4' }, '\u{1F4DD}'), React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-2' }, t('no posts yet', settings)), React.createElement('p', { className: 'text-sm text-gray-500' }, t('check back later for new content', settings)))
             : React.createElement('div', { className: 'space-y-12' },
                 posts.map((p: any) => React.createElement('article', { key: p.id, className: 'pb-12 border-b border-gray-100 last:border-0' },
-                  p.featured && React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full h-48 object-cover rounded-lg mb-4', loading: 'lazy' }),
-                  React.createElement('div', { className: 'flex items-center gap-4 text-xs text-gray-500 mb-3' },
+                  p.featured && React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full h-48 object-cover rounded-lg mb-5', loading: 'lazy' }),
+                  React.createElement('div', { className: 'flex items-center gap-4 text-xs text-gray-500 mb-4' },
                     React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Calendar, { size: 12 }), timeAgo(p.publishedAt || p.createdAt)),
                     React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(User, { size: 12 }), React.createElement(Link, { to: '/author/' + (p.author?.username || ''), className: 'hover:text-primary-600' }, p.author?.username)),
                     p.categories?.[0] && React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Folder, { size: 12 }), p.categories[0].name)
                   ),
                   React.createElement(Link, { to: '/post/' + p.slug },
-                    React.createElement('h2', { className: 'text-xl font-bold text-gray-900 hover:text-primary-600 mb-2' }, p.format && p.format !== 'standard' ? React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded' }, formatIcon(p.format), p.format.charAt(0).toUpperCase() + p.format.slice(1)) : null, p.sticky ? React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle' }, '\u2605 ' + t('featured', settings)) : null, p.title)
+                    React.createElement('h2', { className: 'text-xl font-bold text-gray-900 hover:text-primary-600 mb-3' }, p.format && p.format !== 'standard' ? React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded' }, formatIcon(p.format), p.format.charAt(0).toUpperCase() + p.format.slice(1)) : null, p.sticky ? React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle' }, '\u2605 ' + t('featured', settings)) : null, p.title)
                   ),
-                  p.excerpt && React.createElement('p', { className: 'text-gray-600 text-sm leading-relaxed' }, p.excerpt),
-                  React.createElement('span', { className: 'inline-flex items-center gap-1 text-xs text-gray-500' }, readingTime(p.content)),
-                  (p.commentCount > 0) && React.createElement('span', { className: 'inline-flex items-center gap-1 text-xs text-gray-500' }, React.createElement(MessageSquare, { size: 12 }), '' + p.commentCount),
-                  React.createElement(Link, { to: '/post/' + p.slug, className: 'inline-block mt-3 text-sm font-medium text-primary-600 hover:text-primary-700' }, t('read more', settings)),
+                  p.excerpt && React.createElement('p', { className: 'text-gray-600 text-sm leading-relaxed mb-4' }, p.excerpt),
+                  React.createElement('div', { className: 'flex items-center justify-between gap-3' },
+                    React.createElement('div', { className: 'flex items-center gap-3 text-xs text-gray-500' },
+                      React.createElement('span', { className: 'inline-flex items-center gap-1' }, readingTime(p.content)),
+                      (p.commentCount > 0) && React.createElement('span', { className: 'inline-flex items-center gap-1' }, React.createElement(MessageSquare, { size: 12 }), '' + p.commentCount)
+                    ),
+                    React.createElement(Link, { to: '/post/' + p.slug, className: 'inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700' }, t('read more', settings))
+                  ),
                 ))
               ),
           total > parseInt(settings.posts_per_page || '10') && React.createElement('div', { className: 'flex items-center justify-center gap-4 pt-4' },
