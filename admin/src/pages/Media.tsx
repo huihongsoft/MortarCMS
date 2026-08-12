@@ -25,22 +25,34 @@ function getFileIconInfo(mime: string): { icon: any; color: string } {
   return { icon: File, color: 'text-gray-400' };
 }
 
+// Detect whether an image URL truly decodes. The <img> onerror event does NOT
+// fire for decode failures (corrupt/truncated files load with HTTP 200 but
+// never render) — img.decode() rejects in that case.
+function useImageDecode(src: string | null): boolean {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    setFailed(false);
+    if (!src) return;
+    const img = new Image();
+    img.onload = () => { if (typeof img.decode === 'function') img.decode().catch(() => setFailed(true)); };
+    img.onerror = () => setFailed(true);
+    img.src = src;
+  }, [src]);
+  return failed;
+}
+
 // Image tile with graceful fallback: thumbnail -> original -> type icon.
-// Broken thumbnails (e.g. async generation failed) no longer render as a
-// broken image — the user always sees something meaningful.
 function MediaThumb({ m }: { m: any }) {
   const [src, setSrc] = useState<string | null>(m.thumbnail || m.url);
-  const [failed, setFailed] = useState(false);
-  if (failed) {
+  const decodeFailed = useImageDecode(src);
+  useEffect(() => {
+    if (decodeFailed && src !== m.url) setSrc(m.url); // retry with the original
+  }, [decodeFailed, src, m.url]);
+  if (decodeFailed && src === m.url) {
     const fi = getFileIconInfo(m.mimeType);
     return React.createElement(fi.icon, { size: 40, className: fi.color });
   }
-  return React.createElement('img', {
-    src: src as string,
-    alt: m.alt || m.original,
-    className: 'w-full h-full object-cover',
-    onError: () => { if (src !== m.url) setSrc(m.url); else setFailed(true); },
-  });
+  return React.createElement('img', { src: src as string, alt: m.alt || m.original, className: 'w-full h-full object-cover' });
 }
 
 export default function Media() {
@@ -51,6 +63,8 @@ export default function Media() {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<any>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
+  // Decode-verify the preview image (onerror alone misses corrupt files)
+  const previewBad = useImageDecode(preview?.mimeType?.startsWith('image/') && !previewFailed ? preview.url : null);
   const [aiAnalyzing, setAiAnalyzing] = useState<string | null>(null);
   const [aiAnalysis, setAiAnalysis] = useState<Record<string, string>>({});
   const [genPrompt, setGenPrompt] = useState('');
@@ -252,7 +266,7 @@ export default function Media() {
         ),
         // Preview area
         React.createElement('div', { className: 'bg-gray-100 flex items-center justify-center p-4', style: { minHeight: '200px', maxHeight: '400px' } },
-          preview.mimeType?.startsWith('image/') && !previewFailed ? React.createElement('img', { src: preview.url, alt: preview.alt || preview.original, className: 'max-w-full max-h-80 object-contain rounded', onError: () => setPreviewFailed(true) })
+          preview.mimeType?.startsWith('image/') && !previewFailed && !previewBad ? React.createElement('img', { src: preview.url, alt: preview.alt || preview.original, className: 'max-w-full max-h-80 object-contain rounded' })
           : preview.mimeType?.startsWith('video/') ? React.createElement('video', { src: preview.url, controls: true, className: 'max-w-full max-h-80 rounded' })
           : preview.mimeType?.startsWith('audio/') ? React.createElement('audio', { src: preview.url, controls: true, className: 'w-full' })
           : React.createElement('div', { className: 'text-center' },

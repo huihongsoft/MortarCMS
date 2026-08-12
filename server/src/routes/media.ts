@@ -143,6 +143,9 @@ router.post('/upload', authenticate, authorize('admin', 'editor', 'author'), upl
       let meta;
       try {
         meta = await sharp(srcPath).metadata();
+        // metadata() only reads the file header — a truncated/corrupt image can
+        // pass it but never renders in browsers. Do a full decode pass instead.
+        await sharp(srcPath).resize({ width: 16 }).toBuffer();
       } catch {
         // Not a decodable image — reject instead of storing arbitrary content
         fs.unlinkSync(srcPath);
