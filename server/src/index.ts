@@ -153,7 +153,10 @@ app.use((req, res, next) => {
 app.use(express.json({ limit: '10mb' }));
 
 // Install wizard gate:
-// - Not installed: only /install and /api/install respond (everything else -> 503 / redirect)
+// - Not installed: only /install, /api/install and static assets respond
+//   (everything else -> 503 / redirect). Static assets MUST pass through so
+//   the install-wizard SPA can load its CSS/JS bundles — otherwise the wizard
+//   page whitescreens with MIME errors (assets 302-redirected to /install).
 // - Installed: /install bounces to the home page (no stale wizard UI)
 app.use((req, res, next) => {
   try {
@@ -161,6 +164,10 @@ app.use((req, res, next) => {
     if (req.path.startsWith('/api/install')) return next();
     if (!installed) {
       if (req.path.startsWith('/api/')) { res.status(503).json({ error: 'Mortar is not installed yet' }); return; }
+      // Static asset pass-through (SPA bundles, theme bundles, uploads, favicon)
+      if (req.path.startsWith('/assets') || req.path.startsWith('/admin/assets') || req.path.startsWith('/themes') ||
+          req.path === '/esm-react.js' || req.path === '/esm-react-dom.js' || req.path === '/esm-router.js' ||
+          req.path === '/favicon.ico' || req.path.startsWith('/uploads')) return next();
       if (req.path === '/install' || req.path.startsWith('/install/')) return next();
       res.redirect('/install');
       return;
