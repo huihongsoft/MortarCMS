@@ -472,8 +472,11 @@ export default function AIChat() {
     if (!msg || busy) return;
     setInput('');
     try {
-      await api.post('/ai/task', { message: msg });
+      const r = await api.post('/ai/task', { message: msg });
+      const newId = r.data?.id;
       setTab('tasks');
+      // Switch to the task just created so the running task is in view
+      if (newId) openTask(newId);
       setTimeout(fetchTasks, 500);
     } catch (e: any) { setError(e.response?.data?.error || '任务创建失败'); }
   }
@@ -1079,7 +1082,7 @@ export default function AIChat() {
                 taskDetail.steps.map((st: any, i: number) =>
                   st.type === 'think'
                     ? React.createElement('div', { key: i, className: 'text-xs text-gray-600 dark:text-gray-300' }, '💭 ' + String(st.content || '').slice(0, 300))
-                    : React.createElement('details', { key: i, className: 'text-xs text-gray-600 dark:text-gray-300' },
+                    : React.createElement('details', { key: i, open: taskDetail.status === 'running', className: 'text-xs text-gray-600 dark:text-gray-300' },
                         React.createElement('summary', { className: 'cursor-pointer' }, '🔧 ' + st.name + ' ' + JSON.stringify(st.args || {}).slice(0, 100)),
                         st.output !== undefined && renderToolOutput(String(st.output).slice(0, 2000))
                       )
@@ -1203,7 +1206,7 @@ export default function AIChat() {
               m.tools.map((tool, j) => React.createElement('span', { key: j, className: 'text-[10px] px-2 py-0.5 rounded-full bg-purple-50 dark:bg-purple-500/20 text-purple-600 dark:text-purple-300 border border-purple-100 dark:border-purple-500/30' }, '⚡ ' + tool))),
             m.role === 'assistant' && m.toolResults && m.toolResults.length > 0 && React.createElement('div', { className: 'mb-1 space-y-0.5' },
               m.toolResults.map((tr: any, ti: number) =>
-                React.createElement('details', { key: ti, className: 'text-[10px] rounded-lg bg-gray-50 dark:bg-gray-800/60 px-2 py-1' },
+                React.createElement('details', { key: ti, open: busy && i === messages.length - 1, className: 'text-[10px] rounded-lg bg-gray-50 dark:bg-gray-800/60 px-2 py-1' },
                   React.createElement('summary', { className: 'cursor-pointer text-gray-500 dark:text-gray-400' }, '🔧 ' + tr.name + ' ' + t('result', getLang())),
                   renderToolOutput(String(tr.output || ''))
                 )
