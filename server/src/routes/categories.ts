@@ -5,7 +5,7 @@ import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { slugify } from '../utils/slug';
 
 const router = Router();
-const categorySchema = z.object({ name: z.string().min(1), description: z.string().optional(), parentId: z.string().optional() });
+const categorySchema = z.object({ name: z.string().min(1).max(50), description: z.string().max(500).optional(), parentId: z.string().optional() });
 
 router.get('/', (req: AuthRequest, res: Response) => {
   try {

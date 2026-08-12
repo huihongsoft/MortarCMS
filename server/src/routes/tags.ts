@@ -5,7 +5,7 @@ import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { slugify } from '../utils/slug';
 
 const router = Router();
-const tagSchema = z.object({ name: z.string().min(1) });
+const tagSchema = z.object({ name: z.string().min(1).max(50) });
 
 router.get('/', (req: AuthRequest, res: Response) => {
   try {

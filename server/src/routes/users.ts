@@ -6,7 +6,7 @@ import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { passwordOk } from './auth';
 
 const router = Router();
-const updateUserSchema = z.object({ username: z.string().min(3).optional(), email: z.string().email().optional(), role: z.string().optional(), password: z.string().min(6).optional(), bio: z.string().optional(), avatar: z.string().optional() });
+const updateUserSchema = z.object({ username: z.string().min(3).max(30).optional(), email: z.string().email().max(254).optional(), role: z.string().max(20).optional(), password: z.string().min(6).max(128).optional(), bio: z.string().max(500).optional(), avatar: z.string().max(500).optional() });
 
 router.get('/', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {

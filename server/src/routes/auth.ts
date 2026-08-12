@@ -14,8 +14,10 @@ const router = Router();
 function passwordOk(pw: string): boolean {
   return pw.length >= 8 && /[a-zA-Z]/.test(pw) && /\d/.test(pw);
 }
-const registerSchema = z.object({ username: z.string().min(3).max(30), email: z.string().email(), password: z.string().min(8), role: z.string().optional() });
-const loginSchema = z.object({ email: z.string().email(), password: z.string() });
+// password max 128: bcrypt only uses the first 72 bytes, so longer inputs
+// would be silently truncated — reject them instead of hashing a surprise.
+const registerSchema = z.object({ username: z.string().min(3).max(30), email: z.string().email().max(254), password: z.string().min(8).max(128), role: z.string().max(20).optional() });
+const loginSchema = z.object({ email: z.string().email().max(254), password: z.string().max(128) });
 
 // Login failure lockout: 5 failures -> 15 min lock per email
 const loginFailures = new Map<string, { count: number; lockedUntil: number }>();
