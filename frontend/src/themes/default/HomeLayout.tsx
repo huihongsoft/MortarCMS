@@ -7,6 +7,10 @@ import PopularPostsWidget from '../../components/PopularPostsWidget';
 import ArchiveWidget from '../../components/ArchiveWidget';
 import SearchWidget from '../../components/SearchWidget';
 import LinksWidget from '../../components/LinksWidget';
+import RecentCommentsWidget from '../../components/RecentCommentsWidget';
+import CalendarWidget from '../../components/CalendarWidget';
+import PagesWidget from '../../components/PagesWidget';
+import RssWidget from '../../components/RssWidget';
 import { cdnUrl } from '../../lib/cdn';
 import { timeAgo, readingTime } from '../../lib/time';
 import { t } from '../../lib/i18n';
@@ -68,6 +72,10 @@ export default function HomeLayout(props: any) {
               has('tag_cloud') && React.createElement(TagCloudWidget),
               has('archives') && React.createElement(ArchiveWidget),
               has('links') && React.createElement(LinksWidget),
+              has('recent_comments') && React.createElement(RecentCommentsWidget),
+              has('calendar') && React.createElement(CalendarWidget),
+              has('pages') && React.createElement(PagesWidget),
+              has('rss') && React.createElement(RssWidget),
               has('html') && cfg.html?.html && React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
                 cfg.html.title && React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider' }, cfg.html.title),
                 React.createElement('div', { dangerouslySetInnerHTML: { __html: cfg.html.html } })

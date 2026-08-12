@@ -8,6 +8,17 @@ import { renderTemplate, sendEmail } from '../utils/mailer';
 const router = Router();
 const commentSchema = z.object({ content: z.string().min(1), author: z.string().optional(), email: z.string().optional().or(z.literal('')), website: z.string().optional().or(z.literal('')), parentId: z.string().optional(), postId: z.string(), subscribe: z.boolean().optional() });
 
+// Public: latest approved comments across posts (for the Recent Comments widget)
+router.get('/recent', (req: AuthRequest, res: Response) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit as string) || 5, 20);
+    const rows = db.prepare(
+      "SELECT c.id, c.author, c.content, c.createdAt, p.title as postTitle, p.slug as postSlug FROM Comment c JOIN Post p ON p.id = c.postId WHERE c.status = 'approved' ORDER BY c.createdAt DESC LIMIT ?"
+    ).all(limit) as any[];
+    res.json(rows);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/post/:postId', (req: AuthRequest, res: Response) => {
   try {
     const comments = db.prepare('SELECT id, content, author, website, status, postId, parentId, userId, createdAt FROM Comment WHERE postId = ? AND status = ? AND parentId IS NULL ORDER BY createdAt DESC').all(req.params.postId, 'approved') as any[];

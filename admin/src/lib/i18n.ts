@@ -695,6 +695,8 @@ const zh: Record<string, string> = {
   'uninstall plugin': '卸载插件',
   'uninstalled': '已卸载',
   'unknown': '未知',
+'rss feed': 'RSS 订阅',
+'calendar': '日历',
 'archive': '压缩包',
 'unknown type': '未知类型',
 'copy url': '复制链接',

@@ -374,8 +374,12 @@ app.get('/api/widgets', (_req, res) => {
     { id: 'search', name: 'Search', areas: ['sidebar'] },
     { id: 'categories', name: 'Categories', areas: ['sidebar'] },
     { id: 'recent_posts', name: 'Recent Posts', areas: ['sidebar'] },
+    { id: 'recent_comments', name: 'Recent Comments', areas: ['sidebar'] },
     { id: 'archives', name: 'Archives', areas: ['sidebar'] },
+    { id: 'calendar', name: 'Calendar', areas: ['sidebar'] },
     { id: 'tag_cloud', name: 'Tag Cloud', areas: ['sidebar'] },
+    { id: 'pages', name: 'Pages', areas: ['sidebar'] },
+    { id: 'rss', name: 'RSS Feed', areas: ['sidebar'] },
     { id: 'html', name: 'Custom HTML', areas: ['sidebar'] },
   ];
   let active: string[] = [];

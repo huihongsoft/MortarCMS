@@ -8,8 +8,12 @@ const availableWidgets = [
   { id: 'search', name: t('search', getLang()), desc: t('a search form for your site', getLang()) },
   { id: 'categories', name: t('categories', getLang()), desc: t('a list of post categories', getLang()) },
   { id: 'recent_posts', name: t('recent posts', getLang()), desc: t('your most recent posts', getLang()) },
+  { id: 'recent_comments', name: t('recent comments', getLang()), desc: t('the latest comments across your site', getLang()) },
   { id: 'archives', name: t('archives', getLang()), desc: t('a monthly archive of your posts', getLang()) },
+  { id: 'calendar', name: t('calendar', getLang()), desc: t('a monthly calendar linking to archives', getLang()) },
   { id: 'tag_cloud', name: t('tag cloud', getLang()), desc: t('a cloud of your most used tags', getLang()) },
+  { id: 'pages', name: t('pages', getLang()), desc: t('a list of your published pages', getLang()) },
+  { id: 'rss', name: t('rss feed', getLang()), desc: t('a link to subscribe via RSS', getLang()) },
   { id: 'html', name: t('custom html', getLang()), desc: t('free-form html block', getLang()) },
 ];
 
