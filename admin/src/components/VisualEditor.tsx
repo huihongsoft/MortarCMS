@@ -1040,7 +1040,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           </div>
           ${ps?.onPasswordChange ? `
           <div class="ve-guten-field" style="margin-top:8px;">
-            <input type="password" data-field="password" value="${ps?.password || ''}" class="ve-guten-input" placeholder="${__('password protect this page')}" />
+            <input type="password" data-field="password" value="${ps?.password || ''}" autocomplete="new-password" class="ve-guten-input" placeholder="${__('password protect this page')}" />
             <span class="ve-guten-field-hint">${__('visitors need this password to view the page; clear it to remove protection')}</span>
           </div>` : ''}
         </div>

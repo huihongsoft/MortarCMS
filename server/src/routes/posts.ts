@@ -125,6 +125,9 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
     }
     db.prepare('UPDATE Post SET views = views + 1 WHERE id = ?').run(post.id);
     const enriched = enrichPost(post);
+    // Never expose the protection password to the public API
+    enriched.hasPassword = !!post.password;
+    delete enriched.password;
     enriched.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', enriched.content || '', enriched), enriched));
     res.json(enriched);
   } catch (err: any) { res.status(500).json({ error: err.message }); }

@@ -345,7 +345,7 @@ export default function PostEditor() {
         ),
         React.createElement('div', { className: 'mt-3' },
           React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('password protected', getLang())),
-          React.createElement('input', { type: 'password', value: password, onChange: e => setPassword(e.target.value), placeholder: t('password protect this page', getLang()), className: 'input-field text-xs' })
+          React.createElement('input', { type: 'password', value: password, onChange: e => setPassword(e.target.value), placeholder: t('password protect this page', getLang()), autoComplete: 'new-password', className: 'input-field text-xs' })
         ),
       ),
       React.createElement('div', { className: 'card p-4' },
