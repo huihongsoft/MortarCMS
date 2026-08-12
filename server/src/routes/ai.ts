@@ -959,6 +959,8 @@ router.delete('/bindings/:id', authenticate, (req: AuthRequest, res: Response) =
 
 // ---- Webhook entry: WeChat/DingTalk bots post here ----
 // Accepts { message } (simplified) or WeChat-style { Content } / DingTalk-style { text: { content } }
+// Webhook endpoints consume AI tokens on every call — bound them per IP
+const webhookLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, message: { error: 'Too many webhook calls, slow down' } });
 router.post('/webhook/:token', webhookLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const binding = getBindings().find(b => b.token === req.params.token);
