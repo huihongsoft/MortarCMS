@@ -6,6 +6,19 @@
 /* Body background/text follow the active theme's variables (dark themes etc.),
    falling back to light defaults. Custom theme CSS can still override. */
 body { font-family: var(--body-font); background-color: var(--background, #ffffff); color: var(--text-color, #1f2937); }
+/* Article/prose content follows the theme text color too — otherwise dark
+   themes keep Tailwind's dark-gray prose text on a dark background. */
+.prose, .prose-gray { color: var(--text-color, inherit); }
+.prose h1, .prose h2, .prose h3, .prose h4, .prose h5, .prose h6,
+.prose strong, .prose b, .prose th, .prose blockquote { color: var(--text-color, inherit); }
+.prose li, .prose td { color: var(--text-color, inherit); }
+.prose a { color: var(--link-color, inherit); }
+.prose code {
+  background: color-mix(in srgb, var(--text-color, #f3f4f6) 10%, transparent);
+  color: var(--text-color, inherit);
+}
+.prose pre { background: color-mix(in srgb, var(--text-color, #f3f4f6) 8%, transparent); }
+.prose pre code { background: transparent; }
 h1, h2, h3, h4, h5, h6 { font-family: var(--heading-font); }
 
 
