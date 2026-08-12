@@ -25,6 +25,22 @@ function getFileIconInfo(mime: string): { icon: any; color: string } {
   return { icon: File, color: 'text-gray-400' };
 }
 
+// Localized label for a MIME type (shown in the preview modal)
+function mimeLabel(mime: string): string {
+  if (!mime) return t('unknown type', getLang());
+  if (mime.startsWith('image/')) return t('image', getLang());
+  if (mime.startsWith('video/')) return t('video', getLang());
+  if (mime.startsWith('audio/')) return t('audio', getLang());
+  if (mime.includes('pdf')) return 'PDF';
+  if (mime.includes('zip') || mime.includes('compressed') || mime.includes('tar')) return t('archive', getLang());
+  if (mime.includes('document') || mime.includes('word')) return 'Word';
+  if (mime.includes('spreadsheet') || mime.includes('excel')) return 'Excel';
+  return mime;
+}
+
+// Absolute URL for media links / copy-to-clipboard (path -> full site URL)
+const fullMediaUrl = (u: string): string => (u && u.startsWith('http') ? u : window.location.origin + u);
+
 // Detect whether an image URL truly decodes. The <img> onerror event does NOT
 // fire for decode failures (corrupt/truncated files load with HTTP 200 but
 // never render) — img.decode() rejects in that case.
@@ -249,7 +265,7 @@ export default function Media() {
             React.createElement('p', { className: 'text-xs text-gray-600 truncate' }, m.original),
             React.createElement('p', { className: 'text-xs text-gray-400' }, formatSize(m.size)),
             React.createElement('div', { className: 'flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity' },
-              React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); navigator.clipboard.writeText(m.url); }, className: 'p-1 text-gray-400 hover:text-primary-600' }, React.createElement(Copy, { size: 14 })),
+              React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); navigator.clipboard.writeText(fullMediaUrl(m.url)); }, className: 'p-1 text-gray-400 hover:text-primary-600' }, React.createElement(Copy, { size: 14 })),
               React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); del(m.id); }, className: 'p-1 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 }))
             )
           )
@@ -271,15 +287,15 @@ export default function Media() {
           : preview.mimeType?.startsWith('audio/') ? React.createElement('audio', { src: preview.url, controls: true, className: 'w-full' })
           : React.createElement('div', { className: 'text-center' },
               React.createElement((() => { const fi = getFileIconInfo(preview.mimeType); return fi.icon; })(), { size: 64, className: getFileIconInfo(preview.mimeType).color + ' mx-auto mb-2' }),
-              React.createElement('p', { className: 'text-sm text-gray-500' }, preview.mimeType || t('unknown type', getLang())))
+              React.createElement('p', { className: 'text-sm text-gray-500' }, mimeLabel(preview.mimeType)))
         ),
         // Details
         React.createElement('div', { className: 'p-4 space-y-3' },
-          // URL with copy
+          // URL with copy (absolute URL, not just the path)
           React.createElement('div', { className: 'flex items-center gap-2' },
-            React.createElement('input', { type: 'text', value: preview.url, readOnly: true, className: 'input-field text-xs flex-1', onFocus: (e: React.FocusEvent<HTMLInputElement>) => e.target.select() }),
-            React.createElement('button', { onClick: () => navigator.clipboard.writeText(preview.url), className: 'btn-secondary text-xs' }, React.createElement(Copy, { size: 14 }), t('copy', getLang())),
-            React.createElement('a', { href: preview.url, target: '_blank', rel: 'noopener', className: 'btn-secondary text-xs', download: preview.original }, React.createElement(Download, { size: 14 }))
+            React.createElement('input', { type: 'text', value: fullMediaUrl(preview.url), readOnly: true, className: 'input-field text-xs flex-1', onFocus: (e: React.FocusEvent<HTMLInputElement>) => e.target.select() }),
+            React.createElement('button', { onClick: () => navigator.clipboard.writeText(fullMediaUrl(preview.url)), className: 'btn-secondary text-xs' }, React.createElement(Copy, { size: 14 }), t('copy', getLang())),
+            React.createElement('a', { href: fullMediaUrl(preview.url), target: '_blank', rel: 'noopener', className: 'btn-secondary text-xs', download: preview.original }, React.createElement(Download, { size: 14 }))
           ),
           // Metadata grid
           React.createElement('div', { className: 'grid grid-cols-2 gap-3 text-sm' },
@@ -288,7 +304,7 @@ export default function Media() {
               React.createElement('p', { className: 'text-gray-700 truncate' }, preview.filename)),
             React.createElement('div', null,
               React.createElement('p', { className: 'text-xs text-gray-400' }, t('type', getLang())),
-              React.createElement('p', { className: 'text-gray-700' }, preview.mimeType || '-')),
+              React.createElement('p', { className: 'text-gray-700' }, mimeLabel(preview.mimeType))),
             React.createElement('div', null,
               React.createElement('p', { className: 'text-xs text-gray-400 flex items-center gap-1' }, React.createElement(Hash, { size: 12 }), t('size', getLang())),
               React.createElement('p', { className: 'text-gray-700' }, formatSize(preview.size))),
@@ -312,9 +328,9 @@ export default function Media() {
           React.createElement('button', { onClick: saveMeta, className: 'btn-secondary text-xs w-full' }, React.createElement(Copy, { size: 14 }), t('save changes', getLang())),
           // Actions
           React.createElement('div', { className: 'flex gap-2 pt-3 border-t border-gray-100' },
-            React.createElement('a', { href: preview.url, target: '_blank', rel: 'noopener', className: 'btn-secondary text-xs' }, t('view full size', getLang())),
+            React.createElement('a', { href: fullMediaUrl(preview.url), target: '_blank', rel: 'noopener', className: 'btn-secondary text-xs' }, t('view full size', getLang())),
             React.createElement('button', { onClick: () => del(preview.id), className: 'btn-danger text-xs' }, React.createElement(Trash2, { size: 14 }), t('delete permanently', getLang())),
-            React.createElement('button', { onClick: () => { navigator.clipboard.writeText(preview.url); }, className: 'btn-secondary text-xs' }, React.createElement(Copy, { size: 14 }), t('copy url', getLang()))
+            React.createElement('button', { onClick: () => { navigator.clipboard.writeText(fullMediaUrl(preview.url)); }, className: 'btn-secondary text-xs' }, React.createElement(Copy, { size: 14 }), t('copy url', getLang()))
           )
         )
       )
