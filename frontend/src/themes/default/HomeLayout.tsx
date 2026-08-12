@@ -35,8 +35,8 @@ export default function HomeLayout(props: any) {
             ? loadError
               ? React.createElement('div', { className: 'text-center py-20' }, React.createElement('div', { className: 'text-6xl mb-4' }, '\u26A0\uFE0F'), React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-2' }, t('failed to load posts', settings)), React.createElement('p', { className: 'text-sm text-gray-500' }, t('please try again later', settings)))
               : React.createElement('div', { className: 'text-center py-20' }, React.createElement('div', { className: 'text-6xl mb-4' }, '\u{1F4DD}'), React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-2' }, t('no posts yet', settings)), React.createElement('p', { className: 'text-sm text-gray-500' }, t('check back later for new content', settings)))
-            : React.createElement('div', { className: 'space-y-8' },
-                posts.map((p: any) => React.createElement('article', { key: p.id, className: 'pb-8 border-b border-gray-100 last:border-0' },
+            : React.createElement('div', { className: 'space-y-12' },
+                posts.map((p: any) => React.createElement('article', { key: p.id, className: 'pb-12 border-b border-gray-100 last:border-0' },
                   p.featured && React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full h-48 object-cover rounded-lg mb-4', loading: 'lazy', decoding: 'async',
                     sizes: '(min-width: 900px) 512px, 100vw',
                     srcSet: p.srcset ? Object.entries(p.srcset).map(([w, u]) => (cdnUrl(u as string, settings) as string) + ' ' + w + 'w').join(', ') : undefined }),
