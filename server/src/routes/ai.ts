@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import db, { cuid } from '../utils/db';
 import { uniqueSlug } from '../utils/slug';
 import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
@@ -958,7 +959,7 @@ router.delete('/bindings/:id', authenticate, (req: AuthRequest, res: Response) =
 
 // ---- Webhook entry: WeChat/DingTalk bots post here ----
 // Accepts { message } (simplified) or WeChat-style { Content } / DingTalk-style { text: { content } }
-router.post('/webhook/:token', async (req: AuthRequest, res: Response) => {
+router.post('/webhook/:token', webhookLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const binding = getBindings().find(b => b.token === req.params.token);
     if (!binding) { res.status(404).json({ error: '无效的绑定令牌' }); return; }

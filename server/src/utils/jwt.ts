@@ -18,7 +18,7 @@ const SECRET_FILE = path.join(__dirname, '../../data/.jwt-secret');
 
 let cachedSecret: string | null = null;
 
-function loadSecret(): string {
+export function loadSecret(): string {
   if (cachedSecret) return cachedSecret;
 
   if (process.env.JWT_SECRET) {

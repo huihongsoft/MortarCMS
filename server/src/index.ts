@@ -152,6 +152,25 @@ app.use((req, res, next) => {
 
 app.use(express.json({ limit: '10mb' }));
 
+// Production error sanitizer: routes commonly respond with err.message (SQL
+// fragments, file paths, stack traces). In production, any error payload that
+// looks internal is replaced with a generic message so diagnostics never leak
+// to remote clients. Dev keeps full messages for debugging.
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    const origJson = res.json.bind(res);
+    res.json = (body: any) => {
+      if (body && typeof body === 'object' && typeof body.error === 'string') {
+        if (/(sqlite|better-sqlite|syntax error|ENOENT|EACCES|EPERM|at \S+\.ts:|\.js:\d+|Cannot read|TypeError|ReferenceError|ERR_|SELECT |INSERT |UPDATE |DELETE FROM)/i.test(body.error)) {
+          body.error = 'Internal server error';
+        }
+      }
+      return origJson(body);
+    };
+    next();
+  });
+}
+
 // Install wizard gate:
 // - Not installed: only /install, /api/install and static assets respond
 //   (everything else -> 503 / redirect). Static assets MUST pass through so

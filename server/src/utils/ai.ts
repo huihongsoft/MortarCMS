@@ -49,18 +49,55 @@ export const PROVIDER_PRESETS = [
   { id: 'custom', name: '自定义 (OpenAI 兼容)', type: 'openai', baseUrl: '', model: '' },
 ];
 
+// Provider API keys are encrypted at rest (AES-256-GCM) so a database backup
+// or export leak does not expose credentials. The key is derived from the
+// JWT secret (which is never stored in the DB). Legacy plaintext values are
+// detected and transparently migrated on the next save.
+import crypto from 'crypto';
+import { loadSecret } from './jwt';
+
+const PROVIDERS_ENC = 'enc:v1:';
+
+function providerKey(): Buffer {
+  return crypto.createHash('sha256').update(loadSecret()).digest();
+}
+
+function encryptProviders(providers: AIProvider[]): string {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', providerKey(), iv);
+  const enc = Buffer.concat([cipher.update(JSON.stringify(providers), 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return PROVIDERS_ENC + Buffer.concat([iv, tag, enc]).toString('base64');
+}
+
+function decryptProviders(value: string): AIProvider[] | null {
+  try {
+    const raw = Buffer.from(value.slice(PROVIDERS_ENC.length), 'base64');
+    const iv = raw.subarray(0, 12);
+    const tag = raw.subarray(12, 28);
+    const data = raw.subarray(28);
+    const decipher = crypto.createDecipheriv('aes-256-gcm', providerKey(), iv);
+    decipher.setAuthTag(tag);
+    const list = JSON.parse(Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8'));
+    return Array.isArray(list) ? list : null;
+  } catch { return null; }
+}
+
 export function getProviders(): AIProvider[] {
   const row = db.prepare("SELECT value FROM Setting WHERE key = 'ai_providers'").get() as any;
   if (!row?.value) return [];
+  const raw = String(row.value);
   try {
-    const list = JSON.parse(row.value) as AIProvider[];
+    const list = raw.startsWith(PROVIDERS_ENC)
+      ? decryptProviders(raw)
+      : JSON.parse(raw) as AIProvider[]; // legacy plaintext
     return Array.isArray(list) ? list : [];
   } catch { return []; }
 }
 
 export function saveProviders(providers: AIProvider[]): void {
   db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, 'ai_providers', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-    .run('ai_providers', JSON.stringify(providers));
+    .run('ai_providers', encryptProviders(providers));
 }
 
 export function getDefaultProvider(): AIProvider | null {
