@@ -82,8 +82,17 @@ app.use((_req: any, res: any, next: any) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  // HSTS on HTTPS deployments (browsers ignore it over plain HTTP)
+  if (process.env.NODE_ENV === 'production') {
+    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  }
   next();
 });
+
+// Global API abuse floor: generous per-IP cap so a single client cannot
+// hammer public endpoints (feed, sitemap, search...). Specific endpoints
+// (auth, comments, passwords, AI) keep their own tighter limits.
+app.use('/api', rateLimit({ windowMs: 60 * 1000, max: 600, standardHeaders: true, message: { error: 'Too many requests, slow down' } }));
 app.use(resolveSite);
 // Visit tracking (PV/UV): record page views for non-API, non-asset requests.
 // Respects the visit_logging privacy setting (checked with a short cache).
@@ -161,7 +170,7 @@ if (process.env.NODE_ENV === 'production') {
     const origJson = res.json.bind(res);
     res.json = (body: any) => {
       if (body && typeof body === 'object' && typeof body.error === 'string') {
-        if (/(sqlite|better-sqlite|syntax error|ENOENT|EACCES|EPERM|at \S+\.ts:|\.js:\d+|Cannot read|TypeError|ReferenceError|ERR_|SELECT |INSERT |UPDATE |DELETE FROM)/i.test(body.error)) {
+        if (/(sqlite|better-sqlite|syntax error|no such column|no such table|constraint failed|malformed|ambiguous|ENOENT|EACCES|EPERM|at \S+\.ts:|\.js:\d+|Cannot read|TypeError|ReferenceError|ERR_|SELECT |INSERT |UPDATE |DELETE FROM)/i.test(body.error)) {
           body.error = 'Internal server error';
         }
       }
