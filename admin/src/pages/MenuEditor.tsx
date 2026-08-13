@@ -99,7 +99,6 @@ export default function MenuEditor() {
         React.createElement('button', { onClick: () => navigate('/menus'), className: 'p-2 text-gray-400 hover:text-gray-600' }, React.createElement(ArrowLeft, { size: 20 })),
         React.createElement('div', null,
           React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('edit menu', getLang()) + ': ' + menuName),
-          React.createElement('button', { onClick: startEditMenu, className: 'inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 14 }), t('edit menu info', getLang())),
         ),
       ),
       React.createElement('button', { onClick: saveMenu, className: 'btn-primary' }, React.createElement(Save, { size: 16 }), t('save menu', getLang()))
@@ -167,7 +166,11 @@ export default function MenuEditor() {
       React.createElement('div', { className: 'space-y-4' },        )
       ),
       React.createElement('div', { className: 'space-y-4' },
-        editingIdx === -1 ? React.createElement('div', { className: 'card p-4' },
+        React.createElement('div', { className: 'flex gap-1' },
+          React.createElement('button', { onClick: () => { setEditingIdx(null); setShowAdd(true); }, className: 'flex-1 px-3 py-2 rounded-t-lg text-xs font-medium border border-b-0 ' + (editingIdx === -1 ? 'border-gray-200 text-gray-500 bg-gray-50' : 'border-gray-200 text-gray-700 bg-white') }, t('add item', getLang())),
+          React.createElement('button', { onClick: startEditMenu, className: 'flex-1 px-3 py-2 rounded-t-lg text-xs font-medium border border-b-0 ' + (editingIdx === -1 ? 'border-gray-200 text-gray-700 bg-white' : 'border-gray-200 text-gray-500 bg-gray-50') }, t('edit menu info', getLang())),
+        ),
+        editingIdx === -1 ? React.createElement('div', { className: 'card p-4 rounded-tl-none' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('edit menu info', getLang())),
           React.createElement('div', { className: 'space-y-3' },
             React.createElement('div', null,
