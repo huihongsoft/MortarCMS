@@ -2737,23 +2737,23 @@ Q.getAdapter = Ra.getAdapter;
 Q.HttpStatusCode = Dr;
 Q.default = Q;
 const {
-  Axios: Ji,
-  AxiosError: Xi,
-  CanceledError: Yi,
-  isCancel: Ki,
-  CancelToken: Zi,
-  VERSION: Qi,
-  all: ec,
-  Cancel: tc,
-  isAxiosError: rc,
-  spread: nc,
-  toFormData: ac,
-  AxiosHeaders: sc,
-  HttpStatusCode: oc,
-  formToJSON: lc,
-  getAdapter: ic,
-  mergeConfig: cc,
-  create: mc
+  Axios: Xi,
+  AxiosError: Yi,
+  CanceledError: Ki,
+  isCancel: Zi,
+  CancelToken: Qi,
+  VERSION: ec,
+  all: tc,
+  Cancel: rc,
+  isAxiosError: nc,
+  spread: ac,
+  toFormData: sc,
+  AxiosHeaders: oc,
+  HttpStatusCode: lc,
+  formToJSON: ic,
+  getAdapter: cc,
+  mergeConfig: mc,
+  create: uc
 } = Q, we = Q.create({ baseURL: "/api", withCredentials: !0 });
 we.interceptors.request.use((e) => {
   const t = localStorage.getItem("mortar_token");
@@ -4941,8 +4941,16 @@ function Ma() {
   }, t;
 }
 var Ua = Ma();
-function Bi(e) {
+function Bi() {
+  const [e, t] = a.useState(Date.now());
+  return a.useEffect(() => {
+    const r = setInterval(() => t(Date.now()), 6e4);
+    return () => clearInterval(r);
+  }, []), e;
+}
+function ji(e) {
   var A, E, H;
+  Bi();
   const { settings: t, post: r, comments: n, submitted: s, commentForm: o, submitComment: i, setCommentForm: c, commentError: f, slug: d } = e, u = String((r == null ? void 0 : r.content) || "").split(/<!--\s*nextpage\s*-->/i), [y] = ts(), b = u.length, k = Math.max(1, Math.min(b, parseInt(y.get("page") || "1", 10) || 1)), P = u[k - 1] || "", B = b > 1 && a.createElement(
     "nav",
     { className: "flex items-center justify-center gap-3 mt-8 pt-6 border-t border-gray-100" },
@@ -5102,7 +5110,7 @@ function Bi(e) {
     )
   );
 }
-function ji(e) {
+function qi(e) {
   var s;
   const { settings: t, page: r } = e, n = Ir(null);
   return La(n, [r == null ? void 0 : r.content]), r ? a.createElement(
@@ -5120,7 +5128,7 @@ function ji(e) {
     )
   ) : null;
 }
-const uc = { name: "default", typography: { cap: 2, max: 24 }, Header: Cl, Footer: Dl, HomeLayout: Bl, CategoryLayout: Wl, TagLayout: Gl, ArchiveLayout: Xl, SearchLayout: Yl, AuthorLayout: Zl, PostLayout: Bi, PageLayout: ji };
+const dc = { name: "default", typography: { cap: 2, max: 24 }, Header: Cl, Footer: Dl, HomeLayout: Bl, CategoryLayout: Wl, TagLayout: Gl, ArchiveLayout: Xl, SearchLayout: Yl, AuthorLayout: Zl, PostLayout: ji, PageLayout: qi };
 export {
-  uc as default
+  dc as default
 };

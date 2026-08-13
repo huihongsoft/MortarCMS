@@ -14,8 +14,21 @@ import { t } from '../../lib/i18n';
 import { useContentImageEnhancer } from '../../lib/imageEnhance';
 import DOMPurify from 'dompurify';
 
+// Re-render every minute so relative times stay current without reloading
+function useTimeTick(): number {
+  const [tick, setTick] = React.useState(Date.now());
+  React.useEffect(() => {
+    const iv = setInterval(() => setTick(Date.now()), 60000);
+    return () => clearInterval(iv);
+  }, []);
+  return tick;
+}
+
+
+
 // Default single-post template — WordPress-style layout
 export default function PostLayout(props: any) {
+  useTimeTick();
   const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug } = props;
   // WordPress-style multi-page posts: split content on <!--nextpage-->
   const parts = String(post?.content || '').split(/<!--\s*nextpage\s*-->/i);

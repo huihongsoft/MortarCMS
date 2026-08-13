@@ -2435,23 +2435,23 @@ $.getAdapter = uo.getAdapter;
 $.HttpStatusCode = Rn;
 $.default = $;
 const {
-  Axios: kl,
-  AxiosError: vl,
-  CanceledError: Cl,
-  isCancel: Ll,
-  CancelToken: Dl,
-  VERSION: Pl,
-  all: Il,
-  Cancel: Ml,
-  isAxiosError: Ul,
-  spread: Fl,
-  toFormData: zl,
-  AxiosHeaders: Bl,
-  HttpStatusCode: Hl,
-  formToJSON: jl,
-  getAdapter: ql,
-  mergeConfig: Wl,
-  create: $l
+  Axios: vl,
+  AxiosError: Cl,
+  CanceledError: Ll,
+  isCancel: Dl,
+  CancelToken: Pl,
+  VERSION: Il,
+  all: Ml,
+  Cancel: Ul,
+  isAxiosError: Fl,
+  spread: zl,
+  toFormData: Bl,
+  AxiosHeaders: Hl,
+  HttpStatusCode: jl,
+  formToJSON: ql,
+  getAdapter: Wl,
+  mergeConfig: $l,
+  create: Vl
 } = $, he = $.create({ baseURL: "/api", withCredentials: !0 });
 he.interceptors.request.use((e) => {
   const t = localStorage.getItem("mortar_token");
@@ -4530,8 +4530,16 @@ function ko() {
   }, t;
 }
 var vo = ko();
-function _l(e) {
+function _l() {
+  const [e, t] = s.useState(Date.now());
+  return s.useEffect(() => {
+    const n = setInterval(() => t(Date.now()), 6e4);
+    return () => clearInterval(n);
+  }, []), e;
+}
+function Tl(e) {
   var y, O;
+  _l();
   const { settings: t, post: n, comments: r, submitted: o, commentForm: a, submitComment: l, setCommentForm: c, commentError: m, slug: h } = e, d = vn(null), p = n.author, g = "w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 text-sm transition-shadow", _ = n.content || "", v = r.map((N) => s.createElement(
     "div",
     { key: N.id, className: "py-6 border-b border-gray-100 last:border-0" },
@@ -4623,7 +4631,7 @@ function _l(e) {
     )
   );
 }
-function Tl(e) {
+function Nl(e) {
   var h;
   const { settings: t, page: n, submitted: r, commentForm: o, setCommentForm: a, submitComment: l, commentError: c } = e, m = vn(null);
   return s.createElement(
@@ -4636,7 +4644,7 @@ function Tl(e) {
     s.createElement("div", { ref: m, className: "prose prose-gray prose-lg max-w-none", dangerouslySetInnerHTML: { __html: wo(So(vo.sanitize(n.content || "")), t) } })
   );
 }
-const Vl = {
+const Gl = {
   name: "aurora",
   typography: { cap: 1, max: 36 },
   Header: si,
@@ -4647,9 +4655,9 @@ const Vl = {
   ArchiveLayout: Fi,
   SearchLayout: zi,
   AuthorLayout: Bi,
-  PostLayout: _l,
-  PageLayout: Tl
+  PostLayout: Tl,
+  PageLayout: Nl
 };
 export {
-  Vl as default
+  Gl as default
 };

@@ -12,8 +12,21 @@ import { timeAgo, readingTime } from '../../lib/time';
 import { t } from '../../lib/i18n';
 import DOMPurify from 'dompurify';
 
+// Re-render every minute so relative times stay current without reloading
+function useTimeTick(): number {
+  const [tick, setTick] = React.useState(Date.now());
+  React.useEffect(() => {
+    const iv = setInterval(() => setTick(Date.now()), 60000);
+    return () => clearInterval(iv);
+  }, []);
+  return tick;
+}
+
+
+
 // Aurora post: centered, large type, editorial prose
 export default function PostLayout(props: any) {
+  useTimeTick();
   const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug } = props;
   const contentRef = useRef<HTMLDivElement>(null);
   const author = post.author;
