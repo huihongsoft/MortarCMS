@@ -42,26 +42,44 @@ export default function MenuEditor() {
 
   // HTML5 drag-to-reorder (WordPress menu drag behaviour)
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [dropTargetIdx, setDropTargetIdx] = useState<number | null>(null);
   const [menuName, setMenuName] = useState('');
   const [menuLocation, setMenuLocation] = useState('primary');
   const [menuSiteId, setMenuSiteId] = useState('');
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<{ label: string; url: string; parentId: string }>({ label: '', url: '', parentId: '' });
   const [sites, setSites] = useState<any[]>([]);
+  // Drop a dragged item onto another item to make it a CHILD of that item
+  // (reordering is done with the up/down arrows). Cycle guard: you cannot
+  // drop an item onto itself or onto one of its own descendants.
+  function isDescendant(id: string, ancestorId: string | null): boolean {
+    if (!ancestorId) return false;
+    if (id === ancestorId) return true;
+    const parent = items.find((it: any) => it.id === ancestorId);
+    return parent ? isDescendant(id, parent.parentId) : false;
+  }
   function onDrop(targetIdx: number) {
-    if (dragIdx === null || dragIdx === targetIdx) { setDragIdx(null); return; }
-    const next = [...items];
-    const [moved] = next.splice(dragIdx, 1);
-    next.splice(targetIdx, 0, moved);
+    if (dragIdx === null || dragIdx === targetIdx) { setDragIdx(null); setDropTargetIdx(null); return; }
+    const dragged = items[dragIdx];
+    const target = items[targetIdx];
+    if (!dragged || !target || isDescendant(dragged.id, target.id)) { setDragIdx(null); setDropTargetIdx(null); return; }
+    const next = items.map((it: any, i: number) => i === dragIdx ? { ...it, parentId: target.id } : it);
     setItems(next);
     setDragIdx(null);
+    setDropTargetIdx(null);
+  }
+  function onDragOverItem(targetIdx: number) {
+    if (dragIdx === null || dragIdx === targetIdx) return;
+    const dragged = items[dragIdx];
+    const target = items[targetIdx];
+    if (dragged && target && !isDescendant(dragged.id, target.id)) setDropTargetIdx(targetIdx);
   }
 
-  function startAddChild(itemIdx: number) {
-    const it = items[itemIdx];
+  // The 新增 button next to 编辑 adds a top-level menu item (one level up)
+  function startAddTop() {
     setEditingIdx(null);
     setShowAdd(true);
-    setNewItem({ type: 'custom', label: '', url: '', pageId: '', categoryId: '', parentId: it.id });
+    setNewItem({ type: 'custom', label: '', url: '', pageId: '', categoryId: '', parentId: '' });
   }
 
   // editingIdx === -1: editing the MENU itself (name/location/site)
@@ -121,10 +139,11 @@ export default function MenuEditor() {
                   key: item.id,
                   draggable: true,
                   onDragStart: () => setDragIdx(itemIdx),
-                  onDragOver: (e: React.DragEvent) => e.preventDefault(),
+                  onDragOver: (e: React.DragEvent) => { e.preventDefault(); onDragOverItem(itemIdx); },
                   onDrop: () => onDrop(itemIdx),
+                  onDragLeave: () => setDropTargetIdx(null),
                   onClick: (e: React.MouseEvent) => e.stopPropagation(),
-                  className: 'flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-grab ' + (isChild ? 'ml-6 pl-6 border-l-4 border-l-indigo-200' : '') + ' ' + (dragIdx === itemIdx ? 'opacity-50' : '') + ' ' + (editingIdx === itemIdx ? 'ring-2 ring-primary-400' : ''),
+                  className: 'flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-grab ' + (isChild ? 'ml-6 pl-6 border-l-4 border-l-indigo-200' : '') + ' ' + (dragIdx === itemIdx ? 'opacity-50' : '') + ' ' + (editingIdx === itemIdx ? 'ring-2 ring-primary-400' : '') + ' ' + (dropTargetIdx === itemIdx ? 'ring-2 ring-indigo-400 bg-indigo-50' : ''),
                 },
                   React.createElement('div', { className: 'flex flex-col gap-0.5' },
                     React.createElement('button', { onClick: () => moveItem(itemIdx, -1), className: 'p-0.5 text-gray-300 hover:text-gray-500 leading-none' }, '\u25b2'),
@@ -151,7 +170,7 @@ export default function MenuEditor() {
                     )
                   ),
                   !isChild && React.createElement('button', { onClick: () => startEdit(itemIdx), className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 12 }), t('edit', getLang())),
-                  !isChild && React.createElement('button', { onClick: () => startAddChild(itemIdx), className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Plus, { size: 12 }), t('add sub item', getLang())),
+                  !isChild && React.createElement('button', { onClick: startAddTop, className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Plus, { size: 12 }), t('add item', getLang())),
                   React.createElement('button', { onClick: () => removeItem(itemIdx), className: 'p-1 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 }))
                 ));
               };
