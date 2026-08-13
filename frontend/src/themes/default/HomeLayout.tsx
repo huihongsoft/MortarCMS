@@ -14,6 +14,7 @@ import RssWidget from '../../components/RssWidget';
 import { cdnUrl } from '../../lib/cdn';
 import { timeAgo, readingTime } from '../../lib/time';
 import { t } from '../../lib/i18n';
+import Carousel from '../../components/Carousel';
 
 // Re-render every minute so relative times ("7h ago") stay current
 // without a page reload.
@@ -43,6 +44,12 @@ export default function HomeLayout(props: any) {
       React.createElement('h1', { className: 'text-3xl font-bold text-gray-900 capitalize' }, (isTagPage ? t('tag', settings) + ': ' : '') + (catSlug || '').replace(/-/g, ' '))
     ),
     React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-8' },
+    (() => {
+      const slides: any[] = (() => { try { return JSON.parse(settings.carousel_items || '[]'); } catch { return []; } })();
+      const items = (Array.isArray(slides) ? slides : []).filter((c: any) => c && c.image);
+      return items.length > 0 ? React.createElement('div', { className: 'mb-12' }, React.createElement(Carousel, { items, settings })) : null;
+    })(),
+
       React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-8' + (settings.theme_sidebar_position === 'left' ? ' [direction:rtl] [&>*]:[direction:ltr]' : '') },
         React.createElement('div', { className: 'lg:col-span-2' },
           posts.length === 0

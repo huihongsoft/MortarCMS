@@ -2675,6 +2675,7 @@ const _s = {
   posts: "文章",
   navigate: "导航",
   "rss feed": "RSS 订阅",
+  slide: "幻灯片",
   "admin login": "后台登录",
   "signing in": "登录中",
   "sign in to continue": "登录以继续访问",

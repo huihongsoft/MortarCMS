@@ -21,9 +21,12 @@ export default function Appearance() {
 	const [backupBusy, setBackupBusy] = useState(false);
 	// Developer tools (theme file editor) only show in developer mode
 	const [devMode, setDevMode] = useState(false);
+	const [carouselItems, setCarouselItems] = useState<{ image: string; title: string; link: string; alt: string }[]>([]);
+	const [carouselDirty, setCarouselDirty] = useState(false);
 	useEffect(() => {
 		const load = () => api.get('/settings').then(r => {
 			setDevMode(r.data?.dev_mode === '1');
+			try { const items = JSON.parse(r.data?.carousel_items || '[]'); setCarouselItems(Array.isArray(items) ? items : []); } catch { setCarouselItems([]); }
 		}).catch(() => {});
 		load();
 		window.addEventListener('mortar-settings-saved', load);
@@ -125,6 +128,15 @@ export default function Appearance() {
     if (settings.favicon !== undefined) identity.favicon = settings.favicon;
     if (Object.keys(identity).length > 0) await api.put('/settings', identity);
     setSaved(true); setTimeout(() => setSaved(false), 2000);
+  }
+
+  async function saveCarousel() {
+    try {
+      await api.put('/settings', { carousel_items: JSON.stringify(carouselItems.filter(c => c.image.trim())) });
+      setCarouselDirty(false);
+      setSaved(true); setTimeout(() => setSaved(false), 2000);
+      window.dispatchEvent(new Event('mortar-settings-saved'));
+    } catch (e: any) { alert(e.response?.data?.error || t('save failed', getLang())); }
   }
 
   function openSectionEditor(location: string) {
@@ -313,6 +325,25 @@ export default function Appearance() {
           )
         ),
       ),
+
+      // Homepage carousel (hero banner)
+      React.createElement('div', { className: 'card p-6 mb-6' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-1 uppercase tracking-wider' }, t('homepage carousel', getLang())),
+        React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t('carousel hint', getLang())),
+        carouselItems.map((c, i) => React.createElement('div', { key: i, className: 'border border-gray-200 rounded-lg p-3 mb-3 space-y-2 bg-gray-50/50' },
+          React.createElement('div', { className: 'flex items-center gap-2' },
+            React.createElement('span', { className: 'text-xs text-gray-400 w-6' }, i + 1 + '.'),
+            React.createElement('input', { value: c.image, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...carouselItems]; n[i] = { ...n[i], image: e.target.value }; setCarouselItems(n); setCarouselDirty(true); }, className: 'input-field text-xs flex-1', placeholder: t('image url', getLang()) + ' (https://... 或 /uploads/...)', 'aria-label': t('image url', getLang()) }),
+            React.createElement('button', { onClick: () => { setCarouselItems(carouselItems.filter((_, j) => j !== i)); setCarouselDirty(true); }, className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()), 'aria-label': t('delete', getLang()) }, React.createElement('span', null, '✕'))),
+          React.createElement('input', { value: c.title, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...carouselItems]; n[i] = { ...n[i], title: e.target.value }; setCarouselItems(n); setCarouselDirty(true); }, className: 'input-field text-xs', placeholder: t('title', getLang()), 'aria-label': t('title', getLang()) }),
+          React.createElement('input', { value: c.link, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...carouselItems]; n[i] = { ...n[i], link: e.target.value }; setCarouselItems(n); setCarouselDirty(true); }, className: 'input-field text-xs', placeholder: t('link', getLang()) + ' (/post/xxx)', 'aria-label': t('link', getLang()) }),
+        )),
+        React.createElement('div', { className: 'flex gap-2' },
+          React.createElement('button', { onClick: () => { setCarouselItems([...carouselItems, { image: '', title: '', link: '', alt: '' }]); setCarouselDirty(true); }, className: 'btn-secondary text-sm' }, '+ ' + t('add slide', getLang())),
+          React.createElement('button', { onClick: saveCarousel, disabled: !carouselDirty, className: 'btn-primary text-sm disabled:opacity-40' }, t('save carousel', getLang())),
+        ),
+      ),
+
       // Custom CSS
       React.createElement('div', { className: 'card p-6 mb-6' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('custom css', getLang())),
