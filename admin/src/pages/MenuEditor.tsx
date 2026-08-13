@@ -16,7 +16,8 @@ export default function MenuEditor() {
   const [editParent, setEditParent] = useState<{ id: string; parentId: string } | null>(null);
 
   useEffect(() => {
-    api.get('/menus').then(r => { const m = r.data.find((x: any) => x.id === id); if (m) { setMenu(m); setItems(m.items || []); } });
+    api.get('/menus').then(r => { const m = r.data.find((x: any) => x.id === id); if (m) { setMenu(m); setItems(m.items || []); setMenuName(m.name || ''); setMenuLocation(m.location || 'primary'); setMenuSiteId(m.siteId || ''); } });
+    api.get('/sites').then(r => setSites(r.data?.sites || r.data || []));
     api.get('/pages').then(r => setPages(r.data.filter((p: any) => p.status === 'published')));
     api.get('/categories').then(r => setCategories(r.data));
   }, [id]);
@@ -41,6 +42,10 @@ export default function MenuEditor() {
 
   // HTML5 drag-to-reorder (WordPress menu drag behaviour)
   const [dragIdx, setDragIdx] = useState<number | null>(null);
+  const [menuName, setMenuName] = useState('');
+  const [menuLocation, setMenuLocation] = useState('primary');
+  const [menuSiteId, setMenuSiteId] = useState('');
+  const [sites, setSites] = useState<any[]>([]);
   function onDrop(targetIdx: number) {
     if (dragIdx === null || dragIdx === targetIdx) { setDragIdx(null); return; }
     const next = [...items];
@@ -51,7 +56,7 @@ export default function MenuEditor() {
   }
 
   async function saveMenu() {
-    await api.put('/menus/' + id, { items });
+    await api.put('/menus/' + id, { items, name: menuName, location: menuLocation, siteId: menuSiteId || null });
     navigate('/menus');
   }
 
@@ -61,7 +66,21 @@ export default function MenuEditor() {
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
       React.createElement('div', { className: 'flex items-center gap-3' },
         React.createElement('button', { onClick: () => navigate('/menus'), className: 'p-2 text-gray-400 hover:text-gray-600' }, React.createElement(ArrowLeft, { size: 20 })),
-        React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('edit menu', getLang()) + ': ' + menu.name)
+        React.createElement('div', null,
+          React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('edit menu', getLang())),
+          React.createElement('div', { className: 'flex flex-wrap items-center gap-2 mt-2' },
+            React.createElement('input', { value: menuName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setMenuName(e.target.value), className: 'input-field text-sm w-48', placeholder: t('menu name', getLang()), 'aria-label': t('menu name', getLang()) }),
+            React.createElement('select', { value: menuLocation, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setMenuLocation(e.target.value), className: 'input-field text-sm', 'aria-label': t('location', getLang()) },
+              React.createElement('option', { value: 'primary' }, t('primary (header)', getLang())),
+              React.createElement('option', { value: 'footer' }, t('footer', getLang())),
+              React.createElement('option', { value: 'sidebar' }, t('sidebar', getLang()))
+            ),
+            sites.length > 0 && React.createElement('select', { value: menuSiteId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setMenuSiteId(e.target.value), className: 'input-field text-sm', 'aria-label': t('site', getLang()) },
+              React.createElement('option', { value: '' }, t('global (all sites)', getLang())),
+              sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name))
+            ),
+          ),
+        ),
       ),
       React.createElement('button', { onClick: saveMenu, className: 'btn-primary' }, React.createElement(Save, { size: 16 }), t('save menu', getLang()))
     ),

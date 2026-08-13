@@ -38,9 +38,11 @@ router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, 
 // Admin: update menu
 router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
   try {
-    const { name, items } = req.body;
-    if (name) db.prepare('UPDATE Menu SET name = ? WHERE id = ?').run(name, req.params.id);
+    const { name, items, location, siteId } = req.body;
+    if (name !== undefined) db.prepare('UPDATE Menu SET name = ? WHERE id = ?').run(name, req.params.id);
     if (items) db.prepare('UPDATE Menu SET items = ? WHERE id = ?').run(JSON.stringify(items), req.params.id);
+    if (location !== undefined) db.prepare('UPDATE Menu SET location = ? WHERE id = ?').run(location, req.params.id);
+    if (siteId !== undefined) db.prepare('UPDATE Menu SET siteId = ? WHERE id = ?').run(siteId || null, req.params.id);
     res.json(db.prepare('SELECT * FROM Menu WHERE id = ?').get(req.params.id));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

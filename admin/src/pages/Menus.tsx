@@ -72,7 +72,7 @@ export default function Menus() {
               )
             ),
             React.createElement('div', { className: 'flex items-center gap-2' },
-              React.createElement(Link, { to: '/menus/' + m.id + '/edit', className: 'p-2 text-gray-400 hover:text-primary-600' }, React.createElement(Edit2, { size: 16 })),
+              React.createElement(Link, { to: '/menus/' + m.id + '/edit', className: 'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 14 }), t('edit', getLang())),
               React.createElement('button', { onClick: () => deleteMenu(m.id), className: 'p-2 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 16 }))
             )
           )
