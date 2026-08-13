@@ -38,7 +38,7 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
   // override the theme's declared defaults.
   const headingCap = settings.theme_heading_cap === '1' ? 1 : (settings.theme_heading_cap === '2' ? 2 : (theme.typography?.cap || 2));
   const headingMax = parseInt(settings.theme_heading_max, 10) || theme.typography?.max || 24;
-  const headingStyle = React.createElement('style', { key: 'theme-typography', dangerouslySetInnerHTML: { __html: headingCss({ cap: headingCap, max: headingMax }) } });
+  const headingStyle = React.createElement('style', { key: 'theme-typography', dangerouslySetInnerHTML: { __html: ':root{--heading-max-size:' + headingMax + 'px}' + headingCss({ cap: headingCap, max: headingMax }) } });
   return React.createElement('div', { className: 'min-h-screen flex flex-col' },
       headingStyle,
       React.createElement(AdminBar),

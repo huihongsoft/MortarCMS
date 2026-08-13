@@ -90,7 +90,7 @@ export default function PostLayout(props: any) {
 
     // Header: title + meta (category lives in the meta row below)
     React.createElement('header', { className: 'mb-8' },
-      React.createElement('h1', { className: 'text-3xl sm:text-4xl font-bold text-gray-900 leading-tight tracking-tight mb-4' },
+      React.createElement('h1', { className: 'font-bold text-gray-900 leading-tight tracking-tight mb-4', style: { fontSize: 'var(--heading-max-size, 36px)' } },
         post.format && post.format !== 'standard' ? React.createElement('span', { className: 'block text-xs font-normal text-gray-500 mb-1 uppercase tracking-wider' }, post.format) : null,
         post.title),
       React.createElement('div', { className: 'flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-gray-500 border-y border-gray-100 py-3' },

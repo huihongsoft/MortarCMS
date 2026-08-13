@@ -3492,7 +3492,7 @@ function jl(e) {
                 a.createElement(
                   U,
                   { to: "/post/" + u.slug },
-                  a.createElement("h2", { className: "text-xl font-bold text-gray-900 hover:text-primary-600 mb-3" }, u.format && u.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, Bl(u.format), u.format.charAt(0).toUpperCase() + u.format.slice(1)) : null, u.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + y("featured", t)) : null, u.title)
+                  a.createElement("h2", { className: "font-bold text-gray-900 hover:text-primary-600 mb-3", style: { fontSize: "var(--heading-max-size, 24px)" } }, u.format && u.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, Bl(u.format), u.format.charAt(0).toUpperCase() + u.format.slice(1)) : null, u.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + y("featured", t)) : null, u.title)
                 ),
                 a.createElement(
                   "div",
@@ -3624,7 +3624,7 @@ function $l(e) {
                 a.createElement(
                   U,
                   { to: "/post/" + f.slug },
-                  a.createElement("h2", { className: "text-xl font-bold text-gray-900 hover:text-primary-600 mb-3" }, f.format && f.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, Wl(f.format), f.format.charAt(0).toUpperCase() + f.format.slice(1)) : null, f.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + y("featured", t)) : null, f.title)
+                  a.createElement("h2", { className: "font-bold text-gray-900 hover:text-primary-600 mb-3", style: { fontSize: "var(--heading-max-size, 24px)" } }, f.format && f.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, Wl(f.format), f.format.charAt(0).toUpperCase() + f.format.slice(1)) : null, f.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + y("featured", t)) : null, f.title)
                 ),
                 a.createElement(
                   "div",
@@ -3739,7 +3739,7 @@ function Jl(e) {
                 a.createElement(
                   U,
                   { to: "/post/" + f.slug },
-                  a.createElement("h2", { className: "text-xl font-bold text-gray-900 hover:text-primary-600 mb-3" }, f.format && f.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, Gl(f.format), f.format.charAt(0).toUpperCase() + f.format.slice(1)) : null, f.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + y("featured", t)) : null, f.title)
+                  a.createElement("h2", { className: "font-bold text-gray-900 hover:text-primary-600 mb-3", style: { fontSize: "var(--heading-max-size, 24px)" } }, f.format && f.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, Gl(f.format), f.format.charAt(0).toUpperCase() + f.format.slice(1)) : null, f.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + y("featured", t)) : null, f.title)
                 ),
                 a.createElement(
                   "div",
@@ -5093,7 +5093,7 @@ function qi(e) {
       { className: "mb-8" },
       a.createElement(
         "h1",
-        { className: "text-3xl sm:text-4xl font-bold text-gray-900 leading-tight tracking-tight mb-4" },
+        { className: "font-bold text-gray-900 leading-tight tracking-tight mb-4", style: { fontSize: "var(--heading-max-size, 36px)" } },
         r.format && r.format !== "standard" ? a.createElement("span", { className: "block text-xs font-normal text-gray-500 mb-1 uppercase tracking-wider" }, r.format) : null,
         r.title
       ),

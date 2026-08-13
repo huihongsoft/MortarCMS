@@ -73,7 +73,7 @@ export default function PostLayout(props: any) {
     React.createElement(Breadcrumbs, { items: [{ label: t('blog', settings), to: '/' }, { label: post.title || t('post', settings) }] }),
     React.createElement('article', null,
       post.format && post.format !== 'standard' && React.createElement('span', { className: 'inline-block text-xs font-medium uppercase tracking-[0.2em] text-indigo-600 mb-4' }, post.format),
-      React.createElement('h1', { className: 'text-3xl sm:text-5xl font-bold tracking-tight text-gray-900 leading-tight mb-6' }, post.title),
+      React.createElement('h1', { className: 'font-bold tracking-tight text-gray-900 leading-tight mb-6', style: { fontSize: 'var(--heading-max-size, 36px)' } }, post.title),
       React.createElement('div', { className: 'flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-gray-500 py-5 border-y border-gray-900/[0.06] mb-10' },
         React.createElement('span', { className: 'flex items-center gap-2' }, React.createElement(User, { size: 15 }), React.createElement(Link, { to: '/author/' + (author?.username || ''), className: 'font-medium text-gray-700 hover:text-gray-900 transition-colors' }, author?.username)),
         React.createElement('span', { className: 'flex items-center gap-2' }, React.createElement(Calendar, { size: 15 }), timeAgo(post.publishedAt || post.createdAt)),

@@ -54,7 +54,7 @@ export default function HomeLayout(props: any) {
                   p.featured && React.createElement(Link, { to: '/post/' + p.slug, className: 'block overflow-hidden rounded-2xl mb-8' },
                     React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full aspect-[16/9] object-cover transition-transform duration-500 hover:scale-[1.02]', loading: 'lazy', decoding: 'async' })),
                   React.createElement(Link, { to: '/post/' + p.slug },
-                    React.createElement('h2', { className: 'text-2xl sm:text-3xl font-bold tracking-tight text-gray-900 hover:text-indigo-600 transition-colors mb-4' }, p.title)),
+                    React.createElement('h2', { className: 'font-bold tracking-tight text-gray-900 hover:text-indigo-600 transition-colors mb-4', style: { fontSize: 'var(--heading-max-size, 30px)' } }, p.title)),
                   React.createElement('div', { className: 'flex items-center gap-4 text-xs text-gray-500 mb-4' },
                     React.createElement('span', { className: 'flex items-center gap-1.5' }, React.createElement(Calendar, { size: 13 }), timeAgo(p.publishedAt || p.createdAt)),
                     React.createElement('span', { className: 'flex items-center gap-1.5' }, React.createElement(User, { size: 13 }), React.createElement(Link, { to: '/author/' + (p.author?.username || ''), className: 'hover:text-gray-900 transition-colors' }, p.author?.username)),
