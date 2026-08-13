@@ -32,7 +32,7 @@ export default function StatusBar() {
   return React.createElement('footer', { className: 'relative z-50 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 px-4 lg:px-8 py-2.5' },
     React.createElement('div', { className: 'flex flex-wrap items-center justify-between gap-x-6 gap-y-1 text-xs text-gray-500' },
       React.createElement('div', { className: 'flex flex-wrap items-center gap-x-5 gap-y-1' },
-        React.createElement('span', { className: 'text-gray-400' }, '© ' + now.getFullYear() + ' ' + (info?.site?.title || 'Mortar')),
+        React.createElement('span', { className: 'text-gray-400' }, '© ' + now.getFullYear() + ' MortarCMS'),
         info?.site && item(Server, React.createElement(React.Fragment, null,
           React.createElement('span', { className: 'font-medium text-gray-700' }, info.site.title),
           ' · v' + info.site.version)),
