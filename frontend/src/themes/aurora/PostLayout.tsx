@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { Link } from 'react-router-dom';
-import { Calendar, User, Clock, MessageSquare, ChevronLeft, Folder, Tag as TagIcon } from 'lucide-react';
+import { Calendar, User, Clock, MessageSquare, Folder, Tag as TagIcon  } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import RelatedPosts from '../../components/RelatedPosts';
 import SocialShare from '../../components/SocialShare';
@@ -71,7 +71,6 @@ export default function PostLayout(props: any) {
 
   return React.createElement('div', { className: 'max-w-3xl mx-auto px-6 py-14' },
     React.createElement(Breadcrumbs, { items: [{ label: t('blog', settings), to: '/' }, { label: post.title || t('post', settings) }] }),
-    React.createElement(Link, { to: '/', className: 'inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900 mb-10 transition-colors' }, React.createElement(ChevronLeft, { size: 15 }), t('back to home', settings)),
     React.createElement('article', null,
       post.format && post.format !== 'standard' && React.createElement('span', { className: 'inline-block text-xs font-medium uppercase tracking-[0.2em] text-indigo-600 mb-4' }, post.format),
       React.createElement('h1', { className: 'text-3xl sm:text-5xl font-bold tracking-tight text-gray-900 leading-tight mb-6' }, post.title),
