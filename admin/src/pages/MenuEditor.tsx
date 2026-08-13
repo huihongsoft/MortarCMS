@@ -106,7 +106,10 @@ export default function MenuEditor() {
     React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
       React.createElement('div', { className: 'lg:col-span-2' },
         React.createElement('div', { className: 'card p-4' },
-          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4' }, t('menu items', getLang())),
+          React.createElement('div', { className: 'flex items-center justify-between mb-4' },
+            React.createElement('h3', { className: 'text-sm font-semibold text-gray-900' }, t('menu items', getLang())),
+            React.createElement('button', { onClick: startEditMenu, className: 'inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 12 }), t('edit', getLang())),
+          ),
           items.length === 0 ? React.createElement('p', { className: 'text-sm text-gray-400 py-4' }, t('no menu items yet', getLang()))
           : React.createElement('div', { className: 'space-y-1', onClick: () => setEditingIdx(null) }, (() => {
               const topItems = items.filter((it: any) => !it.parentId);
@@ -166,11 +169,7 @@ export default function MenuEditor() {
       React.createElement('div', { className: 'space-y-4' },        )
       ),
       React.createElement('div', { className: 'space-y-4' },
-        React.createElement('div', { className: 'flex gap-1' },
-          React.createElement('button', { onClick: () => { setEditingIdx(null); setShowAdd(true); }, className: 'flex-1 px-3 py-2 rounded-t-lg text-xs font-medium border border-b-0 ' + (editingIdx === -1 ? 'border-gray-200 text-gray-500 bg-gray-50' : 'border-gray-200 text-gray-700 bg-white') }, t('add item', getLang())),
-          React.createElement('button', { onClick: startEditMenu, className: 'flex-1 px-3 py-2 rounded-t-lg text-xs font-medium border border-b-0 ' + (editingIdx === -1 ? 'border-gray-200 text-gray-700 bg-white' : 'border-gray-200 text-gray-500 bg-gray-50') }, t('edit menu info', getLang())),
-        ),
-        editingIdx === -1 ? React.createElement('div', { className: 'card p-4 rounded-tl-none' },
+        editingIdx === -1 ? React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('edit menu info', getLang())),
           React.createElement('div', { className: 'space-y-3' },
             React.createElement('div', null,
