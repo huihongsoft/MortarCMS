@@ -8,6 +8,7 @@ export default function Footer({ settings }: { settings: Record<string, string> 
   const [menuItems, setMenuItems] = useState<any[]>([]);
   useEffect(() => { api.get('/menus/location/footer').then(r => setMenuItems(r.data.items || [])).catch(() => {}); }, []);
   const topLevel = menuItems.filter((i: any) => !i.parentId);
+  const childrenOf = (pid: string) => menuItems.filter((i: any) => i.parentId === pid);
   return React.createElement('footer', { className: 'bg-gray-50 border-t border-gray-200 mt-16' },
     React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-8' },
       React.createElement('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-6 mb-6' },
@@ -30,7 +31,11 @@ export default function Footer({ settings }: { settings: Record<string, string> 
           React.createElement('h4', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('menu', settings)),
           React.createElement('ul', { className: 'space-y-1' },
             topLevel.map((mi: any) => React.createElement('li', { key: mi.id },
-              React.createElement(Link, { to: mi.url, className: 'text-sm text-gray-500 hover:text-gray-700' }, mi.label))))
+              React.createElement(Link, { to: mi.url, className: 'text-sm font-medium text-gray-700 hover:text-gray-900' }, mi.label),
+              childrenOf(mi.id).length > 0 && React.createElement('ul', { className: 'mt-1 ml-3 pl-2 border-l border-gray-200 space-y-1' },
+                childrenOf(mi.id).map((ch: any) => React.createElement('li', { key: ch.id },
+                  React.createElement(Link, { to: ch.url, className: 'text-sm text-gray-500 hover:text-gray-700' }, ch.label))))
+            )))
         ),
         React.createElement('div', null,
           React.createElement('h4', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('admin', settings)),
