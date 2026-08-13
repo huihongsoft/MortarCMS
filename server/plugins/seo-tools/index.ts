@@ -1,10 +1,12 @@
-import { addFilter } from '../../src/utils/hooks';
+// SEO Tools plugin.
+//
+// Note: this plugin used to inject a "min read" line at the top of post
+// content via the post_content filter, but the frontend already shows an
+// accurate, localized reading time in the post meta row (CJK-aware). The
+// plugin injection was redundant and its word-count was English-only, so
+// Chinese articles always read "1 min read". The filter is removed — the
+// plugin remains registered so enabled plugin lists keep working.
 
 export function register() {
-  addFilter('post_content', (html: string, post: any) => {
-    if (!html) return html;
-    const words = html.replace(/<[^>]*>/g, ' ').trim().split(/\s+/).filter(Boolean).length;
-    const minutes = Math.max(1, Math.round(words / 200));
-    return '<div style="display:flex;align-items:center;gap:8px;color:#6b7280;font-size:12px;margin-bottom:16px;">\u23F1 ' + minutes + ' min read (seo-tools plugin)</div>' + html;
-  }, 10, 'seo-tools');
+  // no-op: reading time is rendered by the frontend meta row
 }
