@@ -253,9 +253,9 @@ export default function Appearance() {
       const schema = activeMeta?.settingsSchema || [];
       if (schema.length === 0) return null;
       return React.createElement('details', { className: 'card p-6 mb-6' },
-        React.createElement('summary', { className: 'cursor-pointer list-none flex items-center justify-between' },
+        React.createElement('summary', { className: 'cursor-pointer select-none list-none flex items-center justify-between py-0.5 -my-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 px-2 -mx-2 transition-colors' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('theme custom settings', getLang())),
-          React.createElement('span', { className: 'text-gray-400 text-xs transition-transform ve-arrow' }, '\u25BE')),
+          React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),
         React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4' },
           schema.map((f: any) =>
             React.createElement('div', { key: f.key },
@@ -330,9 +330,9 @@ export default function Appearance() {
 
       // Homepage carousel (hero banner)
       React.createElement('details', { className: 'card p-6 mb-6' },
-        React.createElement('summary', { className: 'cursor-pointer list-none flex items-center justify-between' },
+        React.createElement('summary', { className: 'cursor-pointer select-none list-none flex items-center justify-between py-0.5 -my-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 px-2 -mx-2 transition-colors' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('homepage carousel', getLang())),
-          React.createElement('span', { className: 'text-gray-400 text-xs transition-transform ve-arrow' }, '\u25BE')),
+          React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),
         React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t('carousel hint', getLang())),
         carouselItems.map((c, i) => React.createElement('div', { key: i, className: 'border border-gray-200 rounded-lg p-3 mb-3 space-y-2 bg-gray-50/50' },
           React.createElement('div', { className: 'flex items-center gap-2' },
@@ -350,9 +350,9 @@ export default function Appearance() {
 
       // Custom CSS
       React.createElement('details', { className: 'card p-6 mb-6' },
-        React.createElement('summary', { className: 'cursor-pointer list-none flex items-center justify-between' },
+        React.createElement('summary', { className: 'cursor-pointer select-none list-none flex items-center justify-between py-0.5 -my-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 px-2 -mx-2 transition-colors' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('custom css', getLang())),
-          React.createElement('span', { className: 'text-gray-400 text-xs transition-transform ve-arrow' }, '\u25BE')),
+          React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),
         React.createElement('p', { className: 'text-xs text-gray-400 mb-2' }, t('custom css hint', getLang())),
         React.createElement('textarea', {
           value: customCss,
@@ -370,9 +370,9 @@ export default function Appearance() {
       // Theme backups (snapshots of settings + custom CSS, rollback point for
       // panel edits and AI apply_theme_style calls)
       React.createElement('details', { className: 'card p-6 mb-6' },
-        React.createElement('summary', { className: 'cursor-pointer list-none flex items-center justify-between' },
+        React.createElement('summary', { className: 'cursor-pointer select-none list-none flex items-center justify-between py-0.5 -my-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 px-2 -mx-2 transition-colors' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('theme backups', getLang())),
-          React.createElement('span', { className: 'text-gray-400 text-xs transition-transform ve-arrow' }, '\u25BE')),
+          React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),
         React.createElement('p', { className: 'text-xs text-gray-400 mb-3' }, t('theme backups hint', getLang())),
         React.createElement('div', { className: 'flex gap-2 mb-4' },
           React.createElement('input', { value: backupName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setBackupName(e.target.value), placeholder: t('backup name placeholder', getLang()), className: 'input-field flex-1' }),
@@ -395,9 +395,9 @@ export default function Appearance() {
       ),
       // Theme Sections (visual hook editor)
       React.createElement('details', { className: 'card p-6 mb-6' },
-        React.createElement('summary', { className: 'cursor-pointer list-none flex items-center justify-between' },
+        React.createElement('summary', { className: 'cursor-pointer select-none list-none flex items-center justify-between py-0.5 -my-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 px-2 -mx-2 transition-colors' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, 'Theme Sections'),
-          React.createElement('span', { className: 'text-gray-400 text-xs transition-transform ve-arrow' }, '\u25BE')),
+          React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),
         React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, 'Visually design custom sections injected at key theme locations.'),
         React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3' },
           HOOK_LOCATIONS.map(loc => {
