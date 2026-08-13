@@ -88,7 +88,7 @@ export default function HomeLayout(props: any) {
               ),
             );
           })(),
-          React.createElement('div', null,
+          React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
             React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('categories', settings)),
             categories.length === 0
               ? React.createElement('p', { className: 'text-sm text-gray-500' }, t('no categories yet', settings))
