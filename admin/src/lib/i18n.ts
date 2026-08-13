@@ -698,6 +698,7 @@ const zh: Record<string, string> = {
 'edit item': '编辑菜单项',
 'edit menu info': '编辑菜单信息',
 'add sub item': '新增子菜单',
+'drop here to make top level': '拖到此处设为顶级菜单',
 'uptime': '运行',
 'save carousel': '保存轮播',
 'add slide': '添加一页',

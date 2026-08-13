@@ -195,7 +195,22 @@ export default function MenuEditor() {
               // orphans (invalid parent refs) at the end
               items.forEach((it: any, idx: number) => { if (it.parentId && !items.some((x: any) => x.id === it.parentId)) renderRow(it, idx, false); });
               return rows;
-            })())
+            })()),
+          // Visible drop zone: drag an item here to move it back to top level
+          dragIdx !== null && React.createElement('div', {
+            onDragOver: (e: React.DragEvent) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDropTargetIdx(-2); },
+            onDragLeave: () => setDropTargetIdx(null),
+            onDrop: (e: React.DragEvent) => {
+              e.preventDefault();
+              if (dragIdx !== null) {
+                const next = items.map((it: any, i: number) => i === dragIdx ? { ...it, parentId: null } : it);
+                setItems(next);
+              }
+              setDragIdx(null);
+              setDropTargetIdx(null);
+            },
+            className: 'mt-3 rounded-lg border-2 border-dashed p-3 text-center text-xs transition-colors ' + (dropTargetIdx === -2 ? 'border-indigo-400 bg-indigo-50 text-indigo-600' : 'border-gray-300 text-gray-400'),
+          }, '\u2913 ' + t('drop here to make top level', getLang())),
         )
       ),
       React.createElement('div', { className: 'w-full sm:w-80 flex-shrink-0 space-y-4' },
