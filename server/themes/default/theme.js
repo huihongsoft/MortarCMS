@@ -5087,15 +5087,10 @@ function qi(e) {
     "article",
     { className: "max-w-3xl mx-auto px-4 py-8" },
     a.createElement(Da, { items: [{ label: y("blog", t), to: "/" }, { label: r.title || y("post", t) }] }),
-    // Header: category chip + title + meta
+    // Header: title + meta (category lives in the meta row below)
     a.createElement(
       "header",
       { className: "mb-8" },
-      x && a.createElement(U, {
-        to: "/category/" + x.slug,
-        className: "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium mb-4",
-        style: { background: "color-mix(in srgb, var(--primary-color, #2563eb) 10%, transparent)", color: "var(--primary-color, #2563eb)" }
-      }, a.createElement(Qt, { size: 11 }), x.name),
       a.createElement(
         "h1",
         { className: "text-3xl sm:text-4xl font-bold text-gray-900 leading-tight tracking-tight mb-4" },
@@ -5112,6 +5107,12 @@ function qi(e) {
           a.createElement(U, { to: "/author/" + ((O == null ? void 0 : O.username) || ""), className: "font-medium text-gray-700 hover:text-primary-600" }, O == null ? void 0 : O.username)
         ),
         a.createElement("span", { className: "flex items-center gap-1.5" }, a.createElement(Fe, { size: 14 }), Xe(r.publishedAt || r.createdAt)),
+        x && a.createElement(
+          "span",
+          { className: "flex items-center gap-1.5" },
+          a.createElement(Qt, { size: 14 }),
+          a.createElement(U, { to: "/category/" + x.slug, className: "hover:text-primary-600" }, x.name)
+        ),
         a.createElement("span", { className: "flex items-center gap-1.5" }, a.createElement(os, { size: 14 }), nr(r.content || "")),
         r.commentCount > 0 && a.createElement("span", { className: "flex items-center gap-1.5" }, a.createElement(_t, { size: 14 }), r.commentCount)
       )

@@ -88,13 +88,8 @@ export default function PostLayout(props: any) {
   return React.createElement('article', { className: 'max-w-3xl mx-auto px-4 py-8' },
     React.createElement(Breadcrumbs, { items: [{ label: t('blog', settings), to: '/' }, { label: post.title || t('post', settings) }] }),
 
-    // Header: category chip + title + meta
+    // Header: title + meta (category lives in the meta row below)
     React.createElement('header', { className: 'mb-8' },
-      category && React.createElement(Link, {
-        to: '/category/' + category.slug,
-        className: 'inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium mb-4',
-        style: { background: 'color-mix(in srgb, var(--primary-color, #2563eb) 10%, transparent)', color: 'var(--primary-color, #2563eb)' },
-      }, React.createElement(Folder, { size: 11 }), category.name),
       React.createElement('h1', { className: 'text-3xl sm:text-4xl font-bold text-gray-900 leading-tight tracking-tight mb-4' },
         post.format && post.format !== 'standard' ? React.createElement('span', { className: 'block text-xs font-normal text-gray-500 mb-1 uppercase tracking-wider' }, post.format) : null,
         post.title),
@@ -103,6 +98,9 @@ export default function PostLayout(props: any) {
           React.createElement('img', { src: gravatarUrl(author?.email || ''), alt: '', className: 'w-6 h-6 rounded-full' }),
           React.createElement(Link, { to: '/author/' + (author?.username || ''), className: 'font-medium text-gray-700 hover:text-primary-600' }, author?.username)),
         React.createElement('span', { className: 'flex items-center gap-1.5' }, React.createElement(Calendar, { size: 14 }), timeAgo(post.publishedAt || post.createdAt)),
+        category && React.createElement('span', { className: 'flex items-center gap-1.5' },
+          React.createElement(Folder, { size: 14 }),
+          React.createElement(Link, { to: '/category/' + category.slug, className: 'hover:text-primary-600' }, category.name)),
         React.createElement('span', { className: 'flex items-center gap-1.5' }, React.createElement(Clock, { size: 14 }), readingTime(post.content || '')),
         post.commentCount > 0 && React.createElement('span', { className: 'flex items-center gap-1.5' }, React.createElement(MessageSquare, { size: 14 }), post.commentCount))
     ),
