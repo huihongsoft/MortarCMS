@@ -1,9 +1,13 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import api from '../../lib/api';
 import { t, getSiteLang, setLang } from '../../lib/i18n';
 
 export default function Footer({ settings }: { settings: Record<string, string> }) {
   const currentLang = getSiteLang(settings);
+  const [menuItems, setMenuItems] = useState<any[]>([]);
+  useEffect(() => { api.get('/menus/location/footer').then(r => setMenuItems(r.data.items || [])).catch(() => {}); }, []);
+  const topLevel = menuItems.filter((i: any) => !i.parentId);
   return React.createElement('footer', { className: 'bg-gray-50 border-t border-gray-200 mt-16' },
     React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-8' },
       React.createElement('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-6 mb-6' },
@@ -21,6 +25,12 @@ export default function Footer({ settings }: { settings: Record<string, string> 
             React.createElement('li', null, React.createElement(Link, { to: '/page/about', className: 'text-sm text-gray-500 hover:text-gray-700' }, t('about', settings))),
             React.createElement('li', null, React.createElement(Link, { to: '/page/' + (settings?.privacy_policy_slug || 'privacy-policy'), className: 'text-sm text-gray-500 hover:text-gray-700' }, t('privacy policy', settings)))
           )
+        ),
+        topLevel.length > 0 && React.createElement('div', null,
+          React.createElement('h4', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('menu', settings)),
+          React.createElement('ul', { className: 'space-y-1' },
+            topLevel.map((mi: any) => React.createElement('li', { key: mi.id },
+              React.createElement(Link, { to: mi.url, className: 'text-sm text-gray-500 hover:text-gray-700' }, mi.label))))
         ),
         React.createElement('div', null,
           React.createElement('h4', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('admin', settings)),

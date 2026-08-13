@@ -2642,6 +2642,7 @@ const Es = {
   posts: "文章",
   navigate: "导航",
   "rss feed": "RSS 订阅",
+  menu: "菜单",
   online: "在线",
   tags: "标签",
   slide: "幻灯片",

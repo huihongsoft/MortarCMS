@@ -1,4 +1,4 @@
-import o, { useState as X, useEffect as ge, forwardRef as Hr, createElement as Nn, useRef as Gt } from "react";
+import o, { useState as V, useEffect as he, forwardRef as Hr, createElement as Nn, useRef as Gt } from "react";
 import { Link as D, useNavigate as Va } from "react-router-dom";
 function jr(e, t) {
   return function() {
@@ -1729,16 +1729,16 @@ const Mn = "1.19.0", wr = 64 * 1024, { isFunction: zt } = u, Js = (e) => encodeU
       headers: ie,
       withCredentials: Me = "same-origin",
       fetchOptions: Re,
-      maxContentLength: pe,
+      maxContentLength: ge,
       maxBodyLength: Ge
     } = la(y);
-    const _e = u.isNumber(pe) && pe > -1, Ue = u.isNumber(Ge) && Ge > -1, St = (z) => u.hasOwnProp(y, z) ? y[z] : void 0;
+    const _e = u.isNumber(ge) && ge > -1, Ue = u.isNumber(Ge) && Ge > -1, St = (z) => u.hasOwnProp(y, z) ? y[z] : void 0;
     let At = a || fetch;
     Ee = Ee ? (Ee + "").toLowerCase() : "text";
     let Te = Us(
       [P, F && F.toAbortSignal()],
       j
-    ), G = null;
+    ), J = null;
     const U = Te && Te.unsubscribe && (() => {
       Te.unsubscribe();
     });
@@ -1747,24 +1747,24 @@ const Mn = "1.19.0", wr = 64 * 1024, { isFunction: zt } = u, Js = (e) => encodeU
       "Request body larger than maxBodyLength limit",
       w.ERR_BAD_REQUEST,
       y,
-      G
+      J
     );
     try {
       let z;
       const le = St("auth");
       if (le) {
-        const S = u.getSafeProp(le, "username") || "", J = u.getSafeProp(le, "password") || "";
+        const S = u.getSafeProp(le, "username") || "", X = u.getSafeProp(le, "password") || "";
         z = {
           username: S,
-          password: J
+          password: X
         };
       }
       if (Xs(R)) {
         const S = new URL(R, Q.origin);
         if (!z && (S.username || S.password)) {
-          const J = _r(S.username), xe = _r(S.password);
+          const X = _r(S.username), xe = _r(S.password);
           z = {
-            username: J,
+            username: X,
             password: xe
           };
         }
@@ -1773,25 +1773,25 @@ const Mn = "1.19.0", wr = 64 * 1024, { isFunction: zt } = u, Js = (e) => encodeU
       if (z && (ie.delete("authorization"), ie.set(
         "Authorization",
         "Basic " + btoa(Js((z.username || "") + ":" + (z.password || "")))
-      )), _e && typeof R == "string" && R.startsWith("data:") && Gs(R) > pe)
+      )), _e && typeof R == "string" && R.startsWith("data:") && Gs(R) > ge)
         throw new w(
-          "maxContentLength size of " + pe + " exceeded",
+          "maxContentLength size of " + ge + " exceeded",
           w.ERR_BAD_RESPONSE,
           y,
-          G
+          J
         );
       if (Ue && k !== "get" && k !== "head") {
         const S = await L(N);
         if (typeof S == "number" && isFinite(S) && (Oe = S, S > Ge))
           throw Rt();
       }
-      const Je = Ue && (u.isReadableStream(N) || u.isStream(N)), lt = (S, J, xe) => br(
+      const Je = Ue && (u.isReadableStream(N) || u.isStream(N)), lt = (S, X, xe) => br(
         S,
         wr,
         (ne) => {
           if (Ue && ne > Ge)
             throw Fe = Rt();
-          J && J(ne);
+          X && X(ne);
         },
         xe
       );
@@ -1801,8 +1801,8 @@ const Mn = "1.19.0", wr = 64 * 1024, { isFunction: zt } = u, Js = (e) => encodeU
             method: "POST",
             body: N,
             duplex: "half"
-          }), J;
-          if (u.isFormData(N) && (J = S.headers.get("content-type")) && ie.setContentType(J), S.body) {
+          }), X;
+          if (u.isFormData(N) && (X = S.headers.get("content-type")) && ie.setContentType(X), S.body) {
             const [xe, ne] = Ie && pr(
               Oe,
               Vt(hr(Ie))
@@ -1817,7 +1817,7 @@ const Mn = "1.19.0", wr = 64 * 1024, { isFunction: zt } = u, Js = (e) => encodeU
           "Stream request bodies are not supported by the current fetch implementation",
           w.ERR_NOT_SUPPORT,
           y,
-          G
+          J
         );
       u.isString(Me) || (Me = Me ? "include" : "omit");
       const Zt = m && "credentials" in s.prototype;
@@ -1835,17 +1835,17 @@ const Mn = "1.19.0", wr = 64 * 1024, { isFunction: zt } = u, Js = (e) => encodeU
         duplex: "half",
         credentials: Zt ? Me : void 0
       };
-      G = m && new s(R, ct);
-      let I = await (m ? At(G, Re) : At(R, ct));
+      J = m && new s(R, ct);
+      let I = await (m ? At(J, Re) : At(R, ct));
       const Xe = oe.from(I.headers);
       if (_e) {
         const S = u.toFiniteNumber(Xe.getContentLength());
-        if (S != null && S > pe)
+        if (S != null && S > ge)
           throw new w(
-            "maxContentLength size of " + pe + " exceeded",
+            "maxContentLength size of " + ge + " exceeded",
             w.ERR_BAD_RESPONSE,
             y,
-            G
+            J
           );
       }
       const B = _ && (Ee === "stream" || Ee === "response");
@@ -1854,18 +1854,18 @@ const Mn = "1.19.0", wr = 64 * 1024, { isFunction: zt } = u, Js = (e) => encodeU
         ["status", "statusText", "headers"].forEach((ve) => {
           S[ve] = I[ve];
         });
-        const J = u.toFiniteNumber(Xe.getContentLength()), [xe, ne] = be && pr(
-          J,
+        const X = u.toFiniteNumber(Xe.getContentLength()), [xe, ne] = be && pr(
+          X,
           Vt(hr(be), !0)
         ) || [];
         let ut = 0;
         const mt = (ve) => {
-          if (_e && (ut = ve, ut > pe))
+          if (_e && (ut = ve, ut > ge))
             throw new w(
-              "maxContentLength size of " + pe + " exceeded",
+              "maxContentLength size of " + ge + " exceeded",
               w.ERR_BAD_RESPONSE,
               y,
-              G
+              J
             );
           xe && xe(ve);
         };
@@ -1883,28 +1883,28 @@ const Mn = "1.19.0", wr = 64 * 1024, { isFunction: zt } = u, Js = (e) => encodeU
       );
       if (_e && !_ && !B) {
         let S;
-        if (fe != null && (typeof fe.byteLength == "number" ? S = fe.byteLength : typeof fe.size == "number" ? S = fe.size : typeof fe == "string" && (S = typeof r == "function" ? new r().encode(fe).byteLength : fe.length)), typeof S == "number" && S > pe)
+        if (fe != null && (typeof fe.byteLength == "number" ? S = fe.byteLength : typeof fe.size == "number" ? S = fe.size : typeof fe == "string" && (S = typeof r == "function" ? new r().encode(fe).byteLength : fe.length)), typeof S == "number" && S > ge)
           throw new w(
-            "maxContentLength size of " + pe + " exceeded",
+            "maxContentLength size of " + ge + " exceeded",
             w.ERR_BAD_RESPONSE,
             y,
-            G
+            J
           );
       }
-      return !B && U && U(), await new Promise((S, J) => {
-        sa(S, J, {
+      return !B && U && U(), await new Promise((S, X) => {
+        sa(S, X, {
           data: fe,
           headers: oe.from(I.headers),
           status: I.status,
           statusText: I.statusText,
           config: y,
-          request: G
+          request: J
         });
       });
     } catch (z) {
       if (U && U(), Te && Te.aborted && Te.reason instanceof w) {
         const le = Te.reason;
-        throw le.config = y, G && (le.request = G), z !== le && Object.defineProperty(le, "cause", {
+        throw le.config = y, J && (le.request = J), z !== le && Object.defineProperty(le, "cause", {
           __proto__: null,
           value: z,
           writable: !0,
@@ -1913,15 +1913,15 @@ const Mn = "1.19.0", wr = 64 * 1024, { isFunction: zt } = u, Js = (e) => encodeU
         }), le;
       }
       if (Fe)
-        throw G && !Fe.request && (Fe.request = G), Fe;
+        throw J && !Fe.request && (Fe.request = J), Fe;
       if (z instanceof w)
-        throw G && !z.request && (z.request = G), z;
+        throw J && !z.request && (z.request = J), z;
       if (z && z.name === "TypeError" && /Load failed|fetch/i.test(z.message)) {
         const le = new w(
           "Network Error",
           w.ERR_NETWORK,
           y,
-          G,
+          J,
           z && z.response
         );
         throw Object.defineProperty(le, "cause", {
@@ -1932,7 +1932,7 @@ const Mn = "1.19.0", wr = 64 * 1024, { isFunction: zt } = u, Js = (e) => encodeU
           configurable: !0
         }), le;
       }
-      throw w.from(z, z && z.code, y, G, z && z.response);
+      throw w.from(z, z && z.code, y, J, z && z.response);
     }
   };
 }, Ks = /* @__PURE__ */ new Map(), ua = (e) => {
@@ -2452,8 +2452,8 @@ const {
   getAdapter: $l,
   mergeConfig: Vl,
   create: Gl
-} = $, he = $.create({ baseURL: "/api", withCredentials: !0 });
-he.interceptors.request.use((e) => {
+} = $, pe = $.create({ baseURL: "/api", withCredentials: !0 });
+pe.interceptors.request.use((e) => {
   const t = localStorage.getItem("mortar_token");
   return t && (e.headers.Authorization = "Bearer " + t), e;
 });
@@ -2524,6 +2524,7 @@ const ai = {
   posts: "文章",
   navigate: "导航",
   "rss feed": "RSS 订阅",
+  menu: "菜单",
   online: "在线",
   tags: "标签",
   slide: "幻灯片",
@@ -2589,15 +2590,15 @@ function pa(e) {
   return localStorage.getItem("mortar_lang") || (e == null ? void 0 : e.site_lang) || "zh";
 }
 function oi({ settings: e }) {
-  const [t, n] = X([]), [r, a] = X(!1), [s, l] = X(null), [c, m] = X(!1);
-  ge(() => {
-    he.get("/menus/location/primary").then((_) => n(_.data.items || [])).catch(() => {
-    }), localStorage.getItem("mortar_token") && he.get("/auth/me").then((_) => l(_.data)).catch(() => localStorage.removeItem("mortar_token"));
+  const [t, n] = V([]), [r, a] = V(!1), [s, l] = V(null), [c, m] = V(!1);
+  he(() => {
+    pe.get("/menus/location/primary").then((_) => n(_.data.items || [])).catch(() => {
+    }), localStorage.getItem("mortar_token") && pe.get("/auth/me").then((_) => l(_.data)).catch(() => localStorage.removeItem("mortar_token"));
     const h = () => m(window.scrollY > 8);
     return window.addEventListener("scroll", h, { passive: !0 }), () => window.removeEventListener("scroll", h);
   }, []);
   function g() {
-    he.post("/auth/logout").catch(() => {
+    pe.post("/auth/logout").catch(() => {
     }), localStorage.removeItem("mortar_token"), window.location.href = "/";
   }
   const d = (h) => t.filter((_) => (_.parentId || null) === h && !(_.url === "/" && (_.label.toLowerCase() === "home" || _.label === E("home", e)))), p = (h) => {
@@ -2672,7 +2673,12 @@ function oi({ settings: e }) {
   );
 }
 function si({ settings: e }) {
-  const t = (/* @__PURE__ */ new Date()).getFullYear();
+  const t = (/* @__PURE__ */ new Date()).getFullYear(), [n, r] = V([]);
+  he(() => {
+    pe.get("/menus/location/footer").then((s) => r(s.data.items || [])).catch(() => {
+    });
+  }, []);
+  const a = n.filter((s) => !s.parentId);
   return o.createElement(
     "footer",
     { className: "border-t border-gray-900/[0.06] mt-24" },
@@ -2687,10 +2693,14 @@ function si({ settings: e }) {
       ),
       o.createElement(
         "nav",
-        { className: "flex items-center gap-6 text-sm text-gray-500" },
-        o.createElement(D, { to: "/", className: "hover:text-gray-900 transition-colors" }, E("home", e)),
-        e.privacy_policy_slug && o.createElement(D, { to: "/page/" + e.privacy_policy_slug, className: "hover:text-gray-900 transition-colors" }, E("privacy policy", e)),
-        o.createElement(D, { to: "/api/feed/rss", className: "hover:text-gray-900 transition-colors", target: "_blank", rel: "noopener" }, "RSS")
+        { className: "flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-500" },
+        a.length > 0 ? a.map((s) => o.createElement(D, { key: s.id, to: s.url, className: "hover:text-gray-900 transition-colors" }, s.label)) : o.createElement(
+          o.Fragment,
+          null,
+          o.createElement(D, { to: "/", className: "hover:text-gray-900 transition-colors" }, E("home", e)),
+          e.privacy_policy_slug && o.createElement(D, { to: "/page/" + e.privacy_policy_slug, className: "hover:text-gray-900 transition-colors" }, E("privacy policy", e)),
+          o.createElement(D, { to: "/api/feed/rss", className: "hover:text-gray-900 transition-colors", target: "_blank", rel: "noopener" }, "RSS")
+        )
       ),
       o.createElement("p", { className: "text-xs text-gray-400" }, "© " + t + " " + (e.site_title || "Mortar"))
     )
@@ -2978,9 +2988,9 @@ const zn = Z("User", [
   ["circle", { cx: "12", cy: "7", r: "4", key: "17ys0d" }]
 ]);
 function _i() {
-  const [e, t] = X([]);
-  if (ge(() => {
-    he.get("/tags").then((r) => t(r.data)).catch(() => {
+  const [e, t] = V([]);
+  if (he(() => {
+    pe.get("/tags").then((r) => t(r.data)).catch(() => {
     });
   }, []), e.length === 0) return null;
   const n = Math.max(...e.map((r) => {
@@ -3009,9 +3019,9 @@ function _i() {
   );
 }
 function Ti() {
-  const [e, t] = X([]);
-  return ge(() => {
-    he.get("/posts?limit=5").then((n) => t(n.data.posts || [])).catch(() => {
+  const [e, t] = V([]);
+  return he(() => {
+    pe.get("/posts?limit=5").then((n) => t(n.data.posts || [])).catch(() => {
     });
   }, []), e.length === 0 ? null : o.createElement(
     "div",
@@ -3029,9 +3039,9 @@ function Ti() {
   );
 }
 function Ni() {
-  const [e, t] = X([]);
-  return ge(() => {
-    he.get("/posts/popular?limit=5").then((n) => t(n.data || [])).catch(() => {
+  const [e, t] = V([]);
+  return he(() => {
+    pe.get("/posts/popular?limit=5").then((n) => t(n.data || [])).catch(() => {
     });
   }, []), e.length === 0 ? null : o.createElement(
     "div",
@@ -3053,9 +3063,9 @@ function Ni() {
   );
 }
 function Si() {
-  const [e, t] = X([]);
-  if (ge(() => {
-    he.get("/posts/archives").then((r) => t(r.data)).catch(() => {
+  const [e, t] = V([]);
+  if (he(() => {
+    pe.get("/posts/archives").then((r) => t(r.data)).catch(() => {
     });
   }, []), e.length === 0) return null;
   const n = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -3082,8 +3092,8 @@ function Si() {
   );
 }
 function Ai() {
-  const [e, t] = X(""), [n, r] = X([]), [a, s] = X(!1), [l, c] = X(!1), m = Va(), g = Gt(null);
-  ge(() => {
+  const [e, t] = V(""), [n, r] = V([]), [a, s] = V(!1), [l, c] = V(!1), m = Va(), g = Gt(null);
+  he(() => {
     const h = e.trim();
     if (h.length < 2) {
       r([]), s(!1);
@@ -3091,7 +3101,7 @@ function Ai() {
     }
     c(!0);
     const _ = setTimeout(() => {
-      he.get("/posts/suggest", { params: { q: h } }).then((v) => {
+      pe.get("/posts/suggest", { params: { q: h } }).then((v) => {
         var L;
         r(((L = v.data) == null ? void 0 : L.suggestions) || []), s(!0);
       }).catch(() => {
@@ -3099,7 +3109,7 @@ function Ai() {
       }).finally(() => c(!1));
     }, 250);
     return () => clearTimeout(_);
-  }, [e]), ge(() => {
+  }, [e]), he(() => {
     const h = (_) => {
       g.current && !g.current.contains(_.target) && s(!1);
     };
@@ -3159,9 +3169,9 @@ function Ai() {
   );
 }
 function Ri() {
-  const [e, t] = X([]);
-  return ge(() => {
-    he.get("/links").then((n) => t(n.data || [])).catch(() => {
+  const [e, t] = V([]);
+  return he(() => {
+    pe.get("/links").then((n) => t(n.data || [])).catch(() => {
     });
   }, []), e.length === 0 ? null : o.createElement(
     "div",
@@ -3186,9 +3196,9 @@ function Ri() {
   );
 }
 function Oi() {
-  const [e, t] = X([]);
-  return ge(() => {
-    he.get("/comments/recent?limit=5").then((n) => t(n.data || [])).catch(() => {
+  const [e, t] = V([]);
+  return he(() => {
+    pe.get("/comments/recent?limit=5").then((n) => t(n.data || [])).catch(() => {
     });
   }, []), e.length === 0 ? null : o.createElement(
     "div",
@@ -3231,9 +3241,9 @@ function vi() {
   );
 }
 function ki() {
-  const [e, t] = X([]);
-  return ge(() => {
-    he.get("/pages/public").then((n) => t(n.data || [])).catch(() => {
+  const [e, t] = V([]);
+  return he(() => {
+    pe.get("/pages/public").then((n) => t(n.data || [])).catch(() => {
     });
   }, []), e.length === 0 ? null : o.createElement(
     "div",
@@ -3297,8 +3307,8 @@ function wa(e) {
   return t ? s + " 分钟阅读" : s + " min read";
 }
 function Di({ items: e, settings: t }) {
-  const [n, r] = X(0), [a, s] = X(!1), l = Gt(null);
-  if (ge(() => {
+  const [n, r] = V(0), [a, s] = V(!1), l = Gt(null);
+  if (he(() => {
     if (!(e.length <= 1))
       return l.current = setInterval(() => {
         r((p) => (p + 1) % e.length);
@@ -3686,8 +3696,8 @@ function qi(e) {
   return e.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^a-z0-9\u4e00-\u9fa5-]/g, "").slice(0, 80);
 }
 function Wi({ containerRef: e, settings: t }) {
-  const [n, r] = X([]), [a, s] = X(!0);
-  if (ge(() => {
+  const [n, r] = V([]), [a, s] = V(!0);
+  if (he(() => {
     const c = e.current;
     if (!c) return;
     const m = c.querySelectorAll("h2, h3"), g = [], d = /* @__PURE__ */ new Set();
@@ -3799,8 +3809,8 @@ kn || (kn = function(t) {
     r[a - 1] = arguments[a];
   return new t(...r);
 });
-const nt = V(Array.prototype.forEach), Qi = V(Array.prototype.lastIndexOf), Or = V(Array.prototype.pop), rt = V(Array.prototype.push), el = V(Array.prototype.splice), Pe = Array.isArray, bt = V(String.prototype.toLowerCase), En = V(String.prototype.toString), vr = V(String.prototype.match), gt = V(String.prototype.replace), kr = V(String.prototype.indexOf), tl = V(String.prototype.trim), nl = V(Number.prototype.toString), rl = V(Boolean.prototype.toString), Cr = typeof BigInt > "u" ? null : V(BigInt.prototype.toString), Lr = typeof Symbol > "u" ? null : V(Symbol.prototype.toString), K = V(Object.prototype.hasOwnProperty), yt = V(Object.prototype.toString), Y = V(RegExp.prototype.test), He = al(TypeError);
-function V(e) {
+const nt = G(Array.prototype.forEach), Qi = G(Array.prototype.lastIndexOf), Or = G(Array.prototype.pop), rt = G(Array.prototype.push), el = G(Array.prototype.splice), Pe = Array.isArray, bt = G(String.prototype.toLowerCase), En = G(String.prototype.toString), vr = G(String.prototype.match), gt = G(String.prototype.replace), kr = G(String.prototype.indexOf), tl = G(String.prototype.trim), nl = G(Number.prototype.toString), rl = G(Boolean.prototype.toString), Cr = typeof BigInt > "u" ? null : G(BigInt.prototype.toString), Lr = typeof Symbol > "u" ? null : G(Symbol.prototype.toString), K = G(Object.prototype.hasOwnProperty), yt = G(Object.prototype.toString), Y = G(RegExp.prototype.test), He = al(TypeError);
+function G(e) {
   return function(t) {
     t instanceof RegExp && (t.lastIndex = 0);
     for (var n = arguments.length, r = new Array(n > 1 ? n - 1 : 0), a = 1; a < n; a++)
@@ -3878,9 +3888,9 @@ function we(e, t) {
     const r = Zi(e, t);
     if (r) {
       if (r.get)
-        return V(r.get);
+        return G(r.get);
       if (typeof r.value == "function")
-        return V(r.value);
+        return G(r.value);
     }
     e = Ki(e);
   }
@@ -3980,7 +3990,7 @@ function Oa() {
     } finally {
       ie--;
     }
-  }, pe = function(i) {
+  }, ge = function(i) {
     Me(), ie++;
     try {
       return j.createScriptURL(i);
@@ -3989,7 +3999,7 @@ function Oa() {
     }
   }, Ge = function() {
     return Ee || (Ie = _l(p, a), Ee = !0), Ie;
-  }, _e = n, Ue = _e.implementation, St = _e.createNodeIterator, At = _e.createDocumentFragment, Te = _e.getElementsByTagName, G = r.importNode;
+  }, _e = n, Ue = _e.implementation, St = _e.createNodeIterator, At = _e.createDocumentFragment, Te = _e.getElementsByTagName, J = r.importNode;
   let U = Br();
   t.isSupported = typeof Aa == "function" && typeof y == "function" && Ue && Ue.createHTMLDocument !== void 0;
   const Oe = ul, Fe = ml, Rt = fl, z = dl, le = pl, Je = hl, lt = gl, Zt = bl;
@@ -4016,7 +4026,7 @@ function Oa() {
       enumerable: !0,
       value: !1
     }
-  })), J = null, xe = null;
+  })), X = null, xe = null;
   const ne = Object.seal(at(null, {
     tagCheck: {
       writable: !0,
@@ -4105,13 +4115,13 @@ function Oa() {
       base: Gn
     }), Ne = De(i, "FORBID_CONTENTS", nn, {
       transform: q
-    }), J = De(i, "FORBID_TAGS", ae({}), {
+    }), X = De(i, "FORBID_TAGS", ae({}), {
       transform: q
     }), xe = De(i, "FORBID_ATTR", ae({}), {
       transform: q
     }), Ke = K(i, "USE_PROFILES") ? i.USE_PROFILES && typeof i.USE_PROFILES == "object" ? ae(i.USE_PROFILES) : i.USE_PROFILES : !1, ut = i.ALLOW_ARIA_ATTR !== !1, mt = i.ALLOW_DATA_ATTR !== !1, ve = i.ALLOW_UNKNOWN_PROTOCOLS || !1, jn = i.ALLOW_SELF_CLOSE_IN_ATTR !== !1, ke = i.SAFE_FOR_TEMPLATES || !1, Ce = i.SAFE_FOR_XML !== !1, ze = i.WHOLE_DOCUMENT || !1, Ye = i.RETURN_DOM || !1, kt = i.RETURN_DOM_FRAGMENT || !1, Ct = i.RETURN_TRUSTED_TYPE || !1, en = i.FORCE_BODY || !1, qn = i.SANITIZE_DOM !== !1, Wn = i.SANITIZE_NAMED_PROPS || !1, tn = i.KEEP_CONTENT !== !1, Lt = i.IN_PLACE || !1, ct = il(i.ALLOWED_URI_REGEXP) ? i.ALLOWED_URI_REGEXP : Ur, Ze = typeof i.NAMESPACE == "string" ? i.NAMESPACE : Se, sn = K(i, "MATHML_TEXT_INTEGRATION_POINTS") && i.MATHML_TEXT_INTEGRATION_POINTS && typeof i.MATHML_TEXT_INTEGRATION_POINTS == "object" ? ae(i.MATHML_TEXT_INTEGRATION_POINTS) : M({}, Xn), ln = K(i, "HTML_INTEGRATION_POINTS") && i.HTML_INTEGRATION_POINTS && typeof i.HTML_INTEGRATION_POINTS == "object" ? ae(i.HTML_INTEGRATION_POINTS) : M({}, Yn);
     const f = K(i, "CUSTOM_ELEMENT_HANDLING") && i.CUSTOM_ELEMENT_HANDLING && typeof i.CUSTOM_ELEMENT_HANDLING == "object" ? ae(i.CUSTOM_ELEMENT_HANDLING) : at(null);
-    if (S = at(null), K(f, "tagNameCheck") && Kn(f.tagNameCheck) && (S.tagNameCheck = f.tagNameCheck), K(f, "attributeNameCheck") && Kn(f.attributeNameCheck) && (S.attributeNameCheck = f.attributeNameCheck), K(f, "allowCustomizedBuiltInElements") && typeof f.allowCustomizedBuiltInElements == "boolean" && (S.allowCustomizedBuiltInElements = f.allowCustomizedBuiltInElements), te(S), ke && (mt = !1), kt && (Ye = !0), Ke && (I = M({}, Pr), B = at(null), Ke.html === !0 && (M(I, Dr), M(B, Ir)), Ke.svg === !0 && (M(I, xn), M(B, Tn), M(B, Bt)), Ke.svgFilters === !0 && (M(I, wn), M(B, Tn), M(B, Bt)), Ke.mathMl === !0 && (M(I, _n), M(B, Mr), M(B, Bt))), ne.tagCheck = null, ne.attributeCheck = null, K(i, "ADD_TAGS") && (typeof i.ADD_TAGS == "function" ? ne.tagCheck = i.ADD_TAGS : Pe(i.ADD_TAGS) && (I === Xe && (I = ae(I)), M(I, i.ADD_TAGS, q))), K(i, "ADD_ATTR") && (typeof i.ADD_ATTR == "function" ? ne.attributeCheck = i.ADD_ATTR : Pe(i.ADD_ATTR) && (B === fe && (B = ae(B)), M(B, i.ADD_ATTR, q))), K(i, "ADD_URI_SAFE_ATTR") && Pe(i.ADD_URI_SAFE_ATTR) && M(rn, i.ADD_URI_SAFE_ATTR, q), K(i, "FORBID_CONTENTS") && Pe(i.FORBID_CONTENTS) && (Ne === nn && (Ne = ae(Ne)), M(Ne, i.FORBID_CONTENTS, q)), K(i, "ADD_FORBID_CONTENTS") && Pe(i.ADD_FORBID_CONTENTS) && (Ne === nn && (Ne = ae(Ne)), M(Ne, i.ADD_FORBID_CONTENTS, q)), tn && (I["#text"] = !0), ze && M(I, ["html", "head", "body"]), I.table && (M(I, ["tbody"]), delete J.tbody), i.TRUSTED_TYPES_POLICY) {
+    if (S = at(null), K(f, "tagNameCheck") && Kn(f.tagNameCheck) && (S.tagNameCheck = f.tagNameCheck), K(f, "attributeNameCheck") && Kn(f.attributeNameCheck) && (S.attributeNameCheck = f.attributeNameCheck), K(f, "allowCustomizedBuiltInElements") && typeof f.allowCustomizedBuiltInElements == "boolean" && (S.allowCustomizedBuiltInElements = f.allowCustomizedBuiltInElements), te(S), ke && (mt = !1), kt && (Ye = !0), Ke && (I = M({}, Pr), B = at(null), Ke.html === !0 && (M(I, Dr), M(B, Ir)), Ke.svg === !0 && (M(I, xn), M(B, Tn), M(B, Bt)), Ke.svgFilters === !0 && (M(I, wn), M(B, Tn), M(B, Bt)), Ke.mathMl === !0 && (M(I, _n), M(B, Mr), M(B, Bt))), ne.tagCheck = null, ne.attributeCheck = null, K(i, "ADD_TAGS") && (typeof i.ADD_TAGS == "function" ? ne.tagCheck = i.ADD_TAGS : Pe(i.ADD_TAGS) && (I === Xe && (I = ae(I)), M(I, i.ADD_TAGS, q))), K(i, "ADD_ATTR") && (typeof i.ADD_ATTR == "function" ? ne.attributeCheck = i.ADD_ATTR : Pe(i.ADD_ATTR) && (B === fe && (B = ae(B)), M(B, i.ADD_ATTR, q))), K(i, "ADD_URI_SAFE_ATTR") && Pe(i.ADD_URI_SAFE_ATTR) && M(rn, i.ADD_URI_SAFE_ATTR, q), K(i, "FORBID_CONTENTS") && Pe(i.FORBID_CONTENTS) && (Ne === nn && (Ne = ae(Ne)), M(Ne, i.FORBID_CONTENTS, q)), K(i, "ADD_FORBID_CONTENTS") && Pe(i.ADD_FORBID_CONTENTS) && (Ne === nn && (Ne = ae(Ne)), M(Ne, i.ADD_FORBID_CONTENTS, q)), tn && (I["#text"] = !0), ze && M(I, ["html", "head", "body"]), I.table && (M(I, ["tbody"]), delete X.tbody), i.TRUSTED_TYPES_POLICY) {
       if (typeof i.TRUSTED_TYPES_POLICY.createHTML != "function")
         throw He('TRUSTED_TYPES_POLICY configuration option must provide a "createHTML" hook.');
       if (typeof i.TRUSTED_TYPES_POLICY.createScriptURL != "function")
@@ -4345,7 +4355,7 @@ function Oa() {
   const Ha = function(i, f) {
     return !!(Ce && i.hasChildNodes() && !pt(i.firstElementChild) && Y(Fr, i.textContent) && Y(Fr, i.innerHTML) || Ce && i.namespaceURI === Se && f === "style" && pt(i.firstElementChild) || i.nodeType === de.processingInstruction || Ce && i.nodeType === de.comment && Y(zr, i.data));
   }, ja = function(i, f, b) {
-    if (!J[f] && or(f) && (S.tagNameCheck instanceof RegExp && Y(S.tagNameCheck, f) || S.tagNameCheck instanceof Function && S.tagNameCheck(f)))
+    if (!X[f] && or(f) && (S.tagNameCheck instanceof RegExp && Y(S.tagNameCheck, f) || S.tagNameCheck instanceof Function && S.tagNameCheck(f)))
       return !1;
     if (tn && !Ne[f]) {
       const A = y(i), O = T(i);
@@ -4373,7 +4383,7 @@ function Oa() {
       return Lt && dt(i), !0;
     if (Ha(i, b))
       return Le(i), !0;
-    if (J[b] || !(ne.tagCheck instanceof Function && ne.tagCheck(b)) && !I[b]) {
+    if (X[b] || !(ne.tagCheck instanceof Function && ne.tagCheck(b)) && !I[b]) {
       const O = ja(i, b, f);
       return O === !1 && Ae(U.afterSanitizeElements, i, null), O;
     }
@@ -4422,7 +4432,7 @@ function Oa() {
         case "TrustedHTML":
           return Re(A);
         case "TrustedScriptURL":
-          return pe(A);
+          return ge(A);
       }
     return A;
   }, $a = function(i, f, b, A) {
@@ -4536,7 +4546,7 @@ function Oa() {
       const ce = P ? P(x) : x.nodeName;
       if (typeof ce == "string") {
         const ue = q(ce);
-        if (!I[ue] || J[ue])
+        if (!I[ue] || X[ue])
           throw It(x), He("root node is forbidden and cannot be sanitized in-place");
       }
       if (Ut(x))
@@ -4576,7 +4586,7 @@ function Oa() {
           O.appendChild(f.firstChild);
       else
         O = f;
-      return (B.shadowroot || B.shadowrootmode) && (O = G.call(r, O, !0)), O;
+      return (B.shadowroot || B.shadowrootmode) && (O = J.call(r, O, !0)), O;
     }
     let W = ze ? f.outerHTML : f.innerHTML;
     return ze && I["!doctype"] && f.ownerDocument && f.ownerDocument.doctype && f.ownerDocument.doctype.name && Y(yl, f.ownerDocument.doctype.name) && (W = "<!DOCTYPE " + f.ownerDocument.doctype.name + `>
