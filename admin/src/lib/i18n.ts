@@ -696,6 +696,7 @@ const zh: Record<string, string> = {
   'uninstalled': '已卸载',
   'unknown': '未知',
 'edit item': '编辑菜单项',
+'edit menu info': '编辑菜单信息',
 'add sub item': '新增子菜单',
 'uptime': '运行',
 'save carousel': '保存轮播',

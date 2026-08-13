@@ -64,20 +64,30 @@ export default function MenuEditor() {
     setNewItem({ type: 'custom', label: '', url: '', pageId: '', categoryId: '', parentId: it.id });
   }
 
+  // editingIdx === -1: editing the MENU itself (name/location/site)
+  // editingIdx >= 0: editing a menu item's label/url/parent
   function startEdit(idx: number) {
-    const it = items[idx];
     setEditingIdx(idx);
-    setEditForm({ label: it.label || '', url: it.url || '', parentId: it.parentId || '' });
+    if (idx >= 0) {
+      const it = items[idx];
+      setEditForm({ label: it.label || '', url: it.url || '', parentId: it.parentId || '' });
+    }
   }
+  function startEditMenu() { startEdit(-1); }
   function saveEdit() {
     if (editingIdx === null) return;
+    if (editingIdx === -1) { setEditingIdx(null); return; } // menu info saved via saveMenuNow
     const next = items.map((it, i) => i === editingIdx ? { ...it, label: editForm.label, url: editForm.url || '#', parentId: editForm.parentId || null } : it);
     setItems(next);
     setEditingIdx(null);
   }
 
-  async function saveMenu() {
+  async function saveMenuNow() {
     await api.put('/menus/' + id, { items, name: menuName, location: menuLocation, siteId: menuSiteId || null });
+  }
+
+  async function saveMenu() {
+    await saveMenuNow();
     navigate('/menus');
   }
 
@@ -88,19 +98,8 @@ export default function MenuEditor() {
       React.createElement('div', { className: 'flex items-center gap-3' },
         React.createElement('button', { onClick: () => navigate('/menus'), className: 'p-2 text-gray-400 hover:text-gray-600' }, React.createElement(ArrowLeft, { size: 20 })),
         React.createElement('div', null,
-          React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('edit menu', getLang())),
-          React.createElement('div', { className: 'flex flex-wrap items-center gap-2 mt-2' },
-            React.createElement('input', { value: menuName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setMenuName(e.target.value), className: 'input-field text-sm w-48', placeholder: t('menu name', getLang()), 'aria-label': t('menu name', getLang()) }),
-            React.createElement('select', { value: menuLocation, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setMenuLocation(e.target.value), className: 'input-field text-sm', 'aria-label': t('location', getLang()) },
-              React.createElement('option', { value: 'primary' }, t('primary (header)', getLang())),
-              React.createElement('option', { value: 'footer' }, t('footer', getLang())),
-              React.createElement('option', { value: 'sidebar' }, t('sidebar', getLang()))
-            ),
-            sites.length > 0 && React.createElement('select', { value: menuSiteId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setMenuSiteId(e.target.value), className: 'input-field text-sm', 'aria-label': t('site', getLang()) },
-              React.createElement('option', { value: '' }, t('global (all sites)', getLang())),
-              sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name))
-            ),
-          ),
+          React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('edit menu', getLang()) + ': ' + menuName),
+          React.createElement('button', { onClick: startEditMenu, className: 'inline-flex items-center gap-1.5 mt-2 px-3 py-1.5 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 14 }), t('edit menu info', getLang())),
         ),
       ),
       React.createElement('button', { onClick: saveMenu, className: 'btn-primary' }, React.createElement(Save, { size: 16 }), t('save menu', getLang()))
@@ -149,8 +148,8 @@ export default function MenuEditor() {
                         items.filter(it => it.id !== item.id).map(it => React.createElement('option', { key: it.id, value: it.id }, it.label)))
                     )
                   ),
-                  React.createElement('button', { onClick: () => startEdit(itemIdx), className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 12 }), t('edit', getLang())),
-                  React.createElement('button', { onClick: () => startAddChild(itemIdx), className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Plus, { size: 12 }), t('add sub item', getLang())),
+                  !isChild && React.createElement('button', { onClick: () => startEdit(itemIdx), className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 12 }), t('edit', getLang())),
+                  !isChild && React.createElement('button', { onClick: () => startAddChild(itemIdx), className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Plus, { size: 12 }), t('add sub item', getLang())),
                   React.createElement('button', { onClick: () => removeItem(itemIdx), className: 'p-1 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 }))
                 ));
               };
@@ -168,7 +167,30 @@ export default function MenuEditor() {
       React.createElement('div', { className: 'space-y-4' },        )
       ),
       React.createElement('div', { className: 'space-y-4' },
-        editingIdx !== null ? React.createElement('div', { className: 'card p-4' },
+        editingIdx === -1 ? React.createElement('div', { className: 'card p-4' },
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('edit menu info', getLang())),
+          React.createElement('div', { className: 'space-y-3' },
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('menu name', getLang())),
+              React.createElement('input', { value: menuName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setMenuName(e.target.value), className: 'input-field text-sm' })),
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('location', getLang())),
+              React.createElement('select', { value: menuLocation, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setMenuLocation(e.target.value), className: 'input-field text-sm' },
+                React.createElement('option', { value: 'primary' }, t('primary (header)', getLang())),
+                React.createElement('option', { value: 'footer' }, t('footer', getLang())),
+                React.createElement('option', { value: 'sidebar' }, t('sidebar', getLang())))),
+            sites.length > 0 && React.createElement('div', null,
+              React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('site', getLang())),
+              React.createElement('select', { value: menuSiteId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setMenuSiteId(e.target.value), className: 'input-field text-sm' },
+                React.createElement('option', { value: '' }, t('global (all sites)', getLang())),
+                sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name)))),
+            React.createElement('div', { className: 'flex gap-2' },
+              React.createElement('button', { onClick: async () => { await saveMenuNow(); setEditingIdx(null); }, className: 'btn-primary flex-1 justify-center' }, React.createElement(Save, { size: 14 }), t('save', getLang())),
+              React.createElement('button', { onClick: () => setEditingIdx(null), className: 'btn-secondary' }, t('cancel', getLang()))
+            )
+          )
+        )
+        : editingIdx !== null ? React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('edit item', getLang())),
           React.createElement('div', { className: 'space-y-3' },
             React.createElement('input', { value: editForm.label, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, label: e.target.value }), placeholder: t('label', getLang()), className: 'input-field' }),
