@@ -129,7 +129,20 @@ export default function MenuEditor() {
             React.createElement('button', { onClick: startEditMenu, className: 'inline-flex items-center gap-1 px-2.5 py-1.5 rounded text-xs font-medium border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 12 }), t('edit', getLang())),
           ),
           items.length === 0 ? React.createElement('p', { className: 'text-sm text-gray-400 py-4' }, t('no menu items yet', getLang()))
-          : React.createElement('div', { className: 'space-y-1', onClick: () => setEditingIdx(null) }, (() => {
+          : React.createElement('div', {
+              className: 'space-y-1 min-h-[120px]',
+              onClick: () => setEditingIdx(null),
+              // Drop on the empty area of the list to move the item back to top level
+              onDragOver: (e: React.DragEvent) => { if (e.target === e.currentTarget) e.preventDefault(); },
+              onDrop: (e: React.DragEvent) => {
+                if (e.target === e.currentTarget && dragIdx !== null) {
+                  const next = items.map((it: any, i: number) => i === dragIdx ? { ...it, parentId: null } : it);
+                  setItems(next);
+                  setDragIdx(null);
+                  setDropTargetIdx(null);
+                }
+              },
+            }, (() => {
               const topItems = items.filter((it: any) => !it.parentId);
               const childrenOf = (pid: string) => items.filter((it: any) => it.parentId === pid);
               const rows: React.ReactNode[] = [];
@@ -140,7 +153,7 @@ export default function MenuEditor() {
                   draggable: true,
                   onDragStart: () => setDragIdx(itemIdx),
                   onDragOver: (e: React.DragEvent) => { e.preventDefault(); onDragOverItem(itemIdx); },
-                  onDrop: () => onDrop(itemIdx),
+                  onDrop: (e: React.DragEvent) => { e.stopPropagation(); onDrop(itemIdx); },
                   onDragLeave: () => setDropTargetIdx(null),
                   onClick: (e: React.MouseEvent) => e.stopPropagation(),
                   className: 'flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-grab ' + (isChild ? 'ml-6 pl-6 border-l-4 border-l-indigo-200' : '') + ' ' + (dragIdx === itemIdx ? 'opacity-50' : '') + ' ' + (editingIdx === itemIdx ? 'ring-2 ring-primary-400' : '') + ' ' + (dropTargetIdx === itemIdx ? 'ring-2 ring-indigo-400 bg-indigo-50' : ''),
