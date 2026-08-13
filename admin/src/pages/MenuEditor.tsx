@@ -116,7 +116,7 @@ export default function MenuEditor() {
                   onDragOver: (e: React.DragEvent) => e.preventDefault(),
                   onDrop: () => onDrop(itemIdx),
                   onClick: (e: React.MouseEvent) => e.stopPropagation(),
-                  className: 'flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-grab ' + (isChild ? 'ml-8' : '') + ' ' + (dragIdx === itemIdx ? 'opacity-50' : '') + ' ' + (editingIdx === itemIdx ? 'ring-2 ring-primary-400' : ''),
+                  className: 'flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-grab ' + (isChild ? 'ml-6 pl-6 border-l-4 border-l-indigo-200' : '') + ' ' + (dragIdx === itemIdx ? 'opacity-50' : '') + ' ' + (editingIdx === itemIdx ? 'ring-2 ring-primary-400' : ''),
                 },
                   React.createElement('div', { className: 'flex flex-col gap-0.5' },
                     React.createElement('button', { onClick: () => moveItem(itemIdx, -1), className: 'p-0.5 text-gray-300 hover:text-gray-500 leading-none' }, '\u25b2'),
