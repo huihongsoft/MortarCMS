@@ -103,8 +103,8 @@ export default function MenuEditor() {
       ),
       React.createElement('button', { onClick: saveMenu, className: 'btn-primary' }, React.createElement(Save, { size: 16 }), t('save menu', getLang()))
     ),
-    React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-6' },
-      React.createElement('div', { className: 'md:col-span-2' },
+    React.createElement('div', { className: 'flex flex-col sm:flex-row gap-6 items-start' },
+      React.createElement('div', { className: 'flex-1 min-w-0 w-full overflow-x-auto' },
         React.createElement('div', { className: 'card p-4' },
           React.createElement('div', { className: 'flex items-center justify-between mb-4' },
             React.createElement('h3', { className: 'text-sm font-semibold text-gray-900' }, t('menu items', getLang())),
@@ -166,9 +166,7 @@ export default function MenuEditor() {
             })())
         )
       ),
-      React.createElement('div', { className: 'space-y-4' },        )
-      ),
-      React.createElement('div', { className: 'space-y-4' },
+      React.createElement('div', { className: 'w-full sm:w-80 flex-shrink-0 space-y-4' },
         editingIdx === -1 ? React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('edit menu info', getLang())),
           React.createElement('div', { className: 'space-y-3' },
