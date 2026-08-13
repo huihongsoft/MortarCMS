@@ -2642,6 +2642,10 @@ const Es = {
   posts: "文章",
   navigate: "导航",
   "rss feed": "RSS 订阅",
+  "admin login": "后台登录",
+  "signing in": "登录中",
+  "sign in to continue": "登录以继续访问",
+  "welcome back": "欢迎回来",
   pages: "页面",
   "get the latest posts in your feed reader": "通过 RSS 阅读器订阅最新文章",
   on: "评论于",
@@ -2694,10 +2698,10 @@ function R(e, t) {
       if (typeof s == "string" && s) return s;
     } catch {
     }
-  return (localStorage.getItem("mortar_lang") || (t == null ? void 0 : t.site_lang) || "en") === "zh" && Es[e] || e;
+  return (localStorage.getItem("mortar_lang") || (t == null ? void 0 : t.site_lang) || "zh") === "zh" && Es[e] || e;
 }
 function xs(e) {
-  return localStorage.getItem("mortar_lang") || (e == null ? void 0 : e.site_lang) || "en";
+  return localStorage.getItem("mortar_lang") || (e == null ? void 0 : e.site_lang) || "zh";
 }
 function Rs({ settings: e }) {
   const [t, n] = Le([]), [r, s] = Le(!1), [o, a] = Le(null);

@@ -1,5 +1,5 @@
 import a, { forwardRef as Qn, createElement as vr, useState as le, useEffect as Ne, useRef as Ir } from "react";
-import { Link as F, useNavigate as es, useSearchParams as ts } from "react-router-dom";
+import { Link as z, useNavigate as es, useSearchParams as ts } from "react-router-dom";
 /**
  * @license lucide-react v0.460.0 - ISC
  *
@@ -2026,7 +2026,7 @@ const jr = "1.19.0", Cn = 64 * 1024, { isFunction: jt } = m, bl = (e) => encodeU
       cancelToken: A,
       timeout: E,
       onDownloadProgress: H,
-      onUploadProgress: z,
+      onUploadProgress: F,
       responseType: q,
       headers: J,
       withCredentials: T = "same-origin",
@@ -2097,7 +2097,7 @@ const jr = "1.19.0", Cn = 64 * 1024, { isFunction: jt } = m, bl = (e) => encodeU
         },
         Te
       );
-      if (b && M !== "get" && M !== "head" && (z || Ye)) {
+      if (b && M !== "get" && M !== "head" && (F || Ye)) {
         if (Ce = Ce ?? await C(J, U), Ce !== 0 || Ye) {
           let D = new o(O, {
             method: "POST",
@@ -2105,9 +2105,9 @@ const jr = "1.19.0", Cn = 64 * 1024, { isFunction: jt } = m, bl = (e) => encodeU
             duplex: "half"
           }), ne;
           if (m.isFormData(U) && (ne = D.headers.get("content-type")) && J.setContentType(ne), D.body) {
-            const [Te, me] = z && Tn(
+            const [Te, me] = F && Tn(
               Ce,
-              Kt(Sn(z))
+              Kt(Sn(F))
             ) || [];
             U = ut(D.body, Te, me);
           }
@@ -2826,6 +2826,10 @@ const Ol = {
   posts: "文章",
   navigate: "导航",
   "rss feed": "RSS 订阅",
+  "admin login": "后台登录",
+  "signing in": "登录中",
+  "sign in to continue": "登录以继续访问",
+  "welcome back": "欢迎回来",
   pages: "页面",
   "get the latest posts in your feed reader": "通过 RSS 阅读器订阅最新文章",
   on: "评论于",
@@ -2878,10 +2882,10 @@ function g(e, t) {
       if (typeof s == "string" && s) return s;
     } catch {
     }
-  return (localStorage.getItem("mortar_lang") || (t == null ? void 0 : t.site_lang) || "en") === "zh" && Ol[e] || e;
+  return (localStorage.getItem("mortar_lang") || (t == null ? void 0 : t.site_lang) || "zh") === "zh" && Ol[e] || e;
 }
 function Wr(e) {
-  return localStorage.getItem("mortar_lang") || (e == null ? void 0 : e.site_lang) || "en";
+  return localStorage.getItem("mortar_lang") || (e == null ? void 0 : e.site_lang) || "zh";
 }
 function kl(e) {
   localStorage.setItem("mortar_lang", e), window.location.reload();
@@ -2898,17 +2902,17 @@ function Cl({ settings: e }) {
   }
   const f = (u) => t.filter((y) => (y.parentId || null) === u && !(y.url === "/" && (y.label.toLowerCase() === "home" || y.label === g("home", e)))), d = (u) => {
     const y = f(u.id);
-    return y.length === 0 ? a.createElement(F, { key: u.id, to: u.url, className: "text-sm text-gray-600 hover:text-gray-900" }, u.label) : a.createElement(
+    return y.length === 0 ? a.createElement(z, { key: u.id, to: u.url, className: "text-sm text-gray-600 hover:text-gray-900" }, u.label) : a.createElement(
       "div",
       { key: u.id, className: "relative group" },
-      a.createElement(F, { to: u.url, className: "text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1" }, u.label, a.createElement("span", { className: "text-xs" }, "▾")),
+      a.createElement(z, { to: u.url, className: "text-sm text-gray-600 hover:text-gray-900 inline-flex items-center gap-1" }, u.label, a.createElement("span", { className: "text-xs" }, "▾")),
       a.createElement(
         "div",
         { className: "absolute left-0 top-full pt-2 hidden group-hover:block z-50" },
         a.createElement(
           "div",
           { className: "bg-white border border-gray-200 rounded-lg shadow-lg py-1 min-w-[160px]" },
-          y.map((b) => a.createElement(F, { key: b.id, to: b.url, className: "block px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900" }, b.label))
+          y.map((b) => a.createElement(z, { key: b.id, to: b.url, className: "block px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 hover:text-gray-900" }, b.label))
         )
       )
     );
@@ -2919,11 +2923,11 @@ function Cl({ settings: e }) {
     a.createElement(
       "div",
       { className: "max-w-5xl mx-auto px-4 h-16 flex items-center justify-between" },
-      a.createElement(F, { to: "/", className: "text-xl font-bold text-gray-900 tracking-tight" }, e.site_title || "Mortar"),
+      a.createElement(z, { to: "/", className: "text-xl font-bold text-gray-900 tracking-tight" }, e.site_title || "Mortar"),
       a.createElement(
         "div",
         { className: "hidden md:flex items-center gap-6" },
-        a.createElement(F, { to: "/", className: "text-sm text-gray-600 hover:text-gray-900" }, g("home", e)),
+        a.createElement(z, { to: "/", className: "text-sm text-gray-600 hover:text-gray-900" }, g("home", e)),
         f(null).map(d),
         o ? a.createElement(
           "div",
@@ -2933,8 +2937,8 @@ function Cl({ settings: e }) {
         ) : a.createElement(
           a.Fragment,
           null,
-          e.frontend_show_login !== "0" && a.createElement(F, { to: "/login", className: "text-sm text-gray-600 hover:text-gray-900" }, g("sign in")),
-          a.createElement(F, { to: "/register", className: "text-sm text-gray-600 hover:text-gray-900" }, g("register", e))
+          e.frontend_show_login !== "0" && a.createElement(z, { to: "/login", className: "text-sm text-gray-600 hover:text-gray-900" }, g("sign in")),
+          a.createElement(z, { to: "/register", className: "text-sm text-gray-600 hover:text-gray-900" }, g("register", e))
         ),
         e.frontend_show_login !== "0" && a.createElement("a", { href: "/admin", className: "text-sm text-primary-600 hover:text-primary-700 font-medium" }, g("admin", e))
       ),
@@ -2947,11 +2951,11 @@ function Cl({ settings: e }) {
     n && a.createElement(
       "div",
       { id: "mobile-nav", className: "md:hidden border-t border-gray-100 bg-white px-4 py-3 space-y-1" },
-      a.createElement(F, { to: "/", className: "block text-sm text-gray-600 py-1", onClick: () => s(!1) }, g("home", e)),
+      a.createElement(z, { to: "/", className: "block text-sm text-gray-600 py-1", onClick: () => s(!1) }, g("home", e)),
       (() => {
         const u = [], y = (b, k) => {
           t.filter((P) => (P.parentId || null) === b && !(P.url === "/" && (P.label.toLowerCase() === "home" || P.label === g("home", e)))).forEach((P) => {
-            u.push(a.createElement(F, { key: P.id, to: P.url, className: "block text-sm text-gray-600 py-1", style: { paddingLeft: 8 + k * 14 }, onClick: () => s(!1) }, P.label)), y(P.id, k + 1);
+            u.push(a.createElement(z, { key: P.id, to: P.url, className: "block text-sm text-gray-600 py-1", style: { paddingLeft: 8 + k * 14 }, onClick: () => s(!1) }, P.label)), y(P.id, k + 1);
           });
         };
         return y(null, 0), u;
@@ -2961,8 +2965,8 @@ function Cl({ settings: e }) {
         null,
         a.createElement("span", { className: "block text-sm text-gray-600 py-1" }, o.username),
         a.createElement("button", { onClick: c, className: "block text-sm text-gray-400 py-1" }, g("logout"))
-      ) : e.frontend_show_login !== "0" && a.createElement(F, { to: "/login", className: "block text-sm text-gray-600 py-1", onClick: () => s(!1) }, g("sign in")),
-      a.createElement(F, { to: "/register", className: "block text-sm text-gray-600 py-1", onClick: () => s(!1) }, g("register", e)),
+      ) : e.frontend_show_login !== "0" && a.createElement(z, { to: "/login", className: "block text-sm text-gray-600 py-1", onClick: () => s(!1) }, g("sign in")),
+      a.createElement(z, { to: "/register", className: "block text-sm text-gray-600 py-1", onClick: () => s(!1) }, g("register", e)),
       e.frontend_show_login !== "0" && a.createElement("a", { href: "/admin", className: "block text-sm text-primary-600 font-medium py-1" }, g("admin", e))
     )
   );
@@ -2985,8 +2989,8 @@ function Dl({ settings: e }) {
           a.createElement(
             "ul",
             { className: "space-y-1" },
-            a.createElement("li", null, a.createElement(F, { to: "/", className: "text-sm text-gray-500 hover:text-gray-700" }, g("home", e))),
-            a.createElement("li", null, a.createElement(F, { to: "/search", className: "text-sm text-gray-500 hover:text-gray-700" }, g("search", e))),
+            a.createElement("li", null, a.createElement(z, { to: "/", className: "text-sm text-gray-500 hover:text-gray-700" }, g("home", e))),
+            a.createElement("li", null, a.createElement(z, { to: "/search", className: "text-sm text-gray-500 hover:text-gray-700" }, g("search", e))),
             a.createElement("li", null, a.createElement("a", { href: "/api/feed/rss", className: "text-sm text-gray-500 hover:text-gray-700" }, g("rss feed", e)))
           )
         ),
@@ -2997,8 +3001,8 @@ function Dl({ settings: e }) {
           a.createElement(
             "ul",
             { className: "space-y-1" },
-            a.createElement("li", null, a.createElement(F, { to: "/page/about", className: "text-sm text-gray-500 hover:text-gray-700" }, g("about", e))),
-            a.createElement("li", null, a.createElement(F, { to: "/page/" + ((e == null ? void 0 : e.privacy_policy_slug) || "privacy-policy"), className: "text-sm text-gray-500 hover:text-gray-700" }, g("privacy policy", e)))
+            a.createElement("li", null, a.createElement(z, { to: "/page/about", className: "text-sm text-gray-500 hover:text-gray-700" }, g("about", e))),
+            a.createElement("li", null, a.createElement(z, { to: "/page/" + ((e == null ? void 0 : e.privacy_policy_slug) || "privacy-policy"), className: "text-sm text-gray-500 hover:text-gray-700" }, g("privacy policy", e)))
           )
         ),
         a.createElement(
@@ -3060,15 +3064,15 @@ function $r() {
       "div",
       { className: "flex flex-wrap gap-1.5" },
       e.map((n) => {
-        var o, i, c;
+        var o, i, c, f;
         const s = 0.65 + (((o = n._count) == null ? void 0 : o.posts) || 0) / r * 0.35;
-        return a.createElement(F, {
+        return n.slug ? a.createElement(z, {
           key: n.id,
           to: "/tag/" + n.slug,
           className: "inline-block px-2 py-0.5 bg-gray-100 hover:bg-primary-100 rounded-full text-gray-600 hover:text-primary-700 transition-colors",
           style: { fontSize: s + "rem" },
-          title: (((i = n._count) == null ? void 0 : i.posts) || 0) + " " + g("posts")
-        }, n.name + " (" + (((c = n._count) == null ? void 0 : c.posts) || 0) + ")");
+          title: (((c = n._count) == null ? void 0 : c.posts) || 0) + " " + g("posts")
+        }, n.name + " (" + (((f = n._count) == null ? void 0 : f.posts) || 0) + ")") : a.createElement("span", { key: n.id, className: "inline-block px-2 py-0.5 bg-gray-100 rounded-full text-gray-600", style: { fontSize: s + "rem" } }, n.name + " (" + (((i = n._count) == null ? void 0 : i.posts) || 0) + ")");
       })
     )
   );
@@ -3088,7 +3092,7 @@ function Vr() {
       e.map((r) => a.createElement(
         "li",
         { key: r.id },
-        a.createElement(F, { to: "/post/" + r.slug, className: "text-sm text-gray-600 hover:text-primary-600 line-clamp-1" }, r.title)
+        a.createElement(z, { to: "/post/" + r.slug, className: "text-sm text-gray-600 hover:text-primary-600 line-clamp-1" }, r.title)
       ))
     )
   );
@@ -3110,7 +3114,7 @@ function Gr() {
           "li",
           { key: r.id, className: "flex items-start gap-2" },
           a.createElement("span", { className: "text-xs font-bold text-gray-300 mt-0.5 w-4" }, n + 1),
-          a.createElement(F, { to: "/post/" + r.slug, className: "text-sm text-gray-600 hover:text-primary-600 line-clamp-1" }, r.title),
+          a.createElement(z, { to: "/post/" + r.slug, className: "text-sm text-gray-600 hover:text-primary-600 line-clamp-1" }, r.title),
           r.views > 0 && a.createElement("span", { className: "text-xs text-gray-400 ml-auto shrink-0" }, r.views + " " + g("views"))
         )
       )
@@ -3137,7 +3141,7 @@ function Jr() {
           "li",
           { key: n.month },
           a.createElement(
-            F,
+            z,
             { to: "/archive/" + s + "/" + o, className: "text-sm text-gray-600 hover:text-primary-600" },
             r[parseInt(o) - 1] + " " + s + " (" + n.count + ")"
           )
@@ -3267,7 +3271,7 @@ function Ll() {
         { key: r.id, className: "text-xs text-gray-600 leading-snug" },
         a.createElement("span", { className: "font-medium text-gray-800" }, r.author || g("anonymous")),
         " " + g("on") + " ",
-        a.createElement(F, { to: "/post/" + r.postSlug + "#comments", className: "text-primary-600 hover:underline" }, r.postTitle),
+        a.createElement(z, { to: "/post/" + r.postSlug + "#comments", className: "text-primary-600 hover:underline" }, r.postTitle),
         a.createElement("p", { className: "text-gray-500 mt-0.5 line-clamp-2" }, r.content)
       ))
     )
@@ -3277,7 +3281,7 @@ function Pl() {
   const e = /* @__PURE__ */ new Date(), t = e.getFullYear(), r = e.getMonth(), n = new Date(t, r, 1).getDay(), s = new Date(t, r + 1, 0).getDate(), o = e.getDate(), i = ["日", "一", "二", "三", "四", "五", "六"], c = [];
   for (let f = 0; f < n; f++) c.push(a.createElement("div", { key: "b" + f }));
   for (let f = 1; f <= s; f++)
-    c.push(a.createElement(F, {
+    c.push(a.createElement(z, {
       key: f,
       to: "/archive/" + t + "/" + String(r + 1).padStart(2, "0"),
       className: "flex items-center justify-center h-7 text-xs rounded " + (f === o ? "bg-primary-600 text-white font-medium" : "text-gray-600 hover:bg-gray-100"),
@@ -3310,7 +3314,7 @@ function Il() {
       e.map((r) => a.createElement(
         "li",
         { key: r.id },
-        a.createElement(F, { to: "/page/" + r.slug, className: "text-sm text-gray-600 hover:text-primary-600" }, r.title)
+        a.createElement(z, { to: "/page/" + r.slug, className: "text-sm text-gray-600 hover:text-primary-600" }, r.title)
       ))
     )
   );
@@ -3409,7 +3413,7 @@ function Bl(e) {
                   srcSet: u.srcset ? Object.entries(u.srcset).map(([P, B]) => it(B, t) + " " + P + "w").join(", ") : void 0
                 }),
                 a.createElement(
-                  F,
+                  z,
                   { to: "/post/" + u.slug },
                   a.createElement("h2", { className: "text-xl font-bold text-gray-900 hover:text-primary-600 mb-3" }, u.format && u.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, Hl(u.format), u.format.charAt(0).toUpperCase() + u.format.slice(1)) : null, u.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + g("featured", t)) : null, u.title)
                 ),
@@ -3417,7 +3421,7 @@ function Bl(e) {
                   "div",
                   { className: "flex items-center gap-4 text-xs text-gray-500 mb-4" },
                   a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Fe, { size: 12 }), Xe(u.publishedAt || u.createdAt)),
-                  a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Mr, { size: 12 }), a.createElement(F, { to: "/author/" + (((y = u.author) == null ? void 0 : y.username) || ""), className: "hover:text-primary-600" }, (b = u.author) == null ? void 0 : b.username)),
+                  a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Mr, { size: 12 }), a.createElement(z, { to: "/author/" + (((y = u.author) == null ? void 0 : y.username) || ""), className: "hover:text-primary-600" }, (b = u.author) == null ? void 0 : b.username)),
                   ((k = u.categories) == null ? void 0 : k[0]) && a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Zt, { size: 12 }), u.categories[0].name)
                 ),
                 u.excerpt && a.createElement("p", { className: "text-gray-600 text-sm leading-relaxed mb-4" }, u.excerpt),
@@ -3430,7 +3434,7 @@ function Bl(e) {
                     a.createElement("span", { className: "inline-flex items-center gap-1" }, rr(u.content)),
                     u.commentCount > 0 && a.createElement("span", { className: "inline-flex items-center gap-1" }, a.createElement(_t, { size: 12 }), "" + u.commentCount)
                   ),
-                  a.createElement(F, { to: "/post/" + u.slug, className: "inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700" }, g("read more", t))
+                  a.createElement(z, { to: "/post/" + u.slug, className: "inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700" }, g("read more", t))
                 )
               );
             })
@@ -3491,7 +3495,7 @@ function Bl(e) {
               return a.createElement(
                 "li",
                 { key: u.id },
-                a.createElement(F, { to: "/category/" + u.slug, className: "text-sm " + (c === u.slug ? "text-primary-600 font-medium" : "text-gray-600 hover:text-primary-600") }, u.name, ((y = u._count) == null ? void 0 : y.posts) > 0 ? a.createElement("span", { className: "text-gray-500 ml-1" }, "(" + u._count.posts + ")") : null)
+                a.createElement(z, { to: "/category/" + u.slug, className: "text-sm " + (c === u.slug ? "text-primary-600 font-medium" : "text-gray-600 hover:text-primary-600") }, u.name, ((y = u._count) == null ? void 0 : y.posts) > 0 ? a.createElement("span", { className: "text-gray-500 ml-1" }, "(" + u._count.posts + ")") : null)
               );
             }))
           )
@@ -3541,7 +3545,7 @@ function Wl(e) {
                 { key: d.id, className: "pb-12 border-b border-gray-100 last:border-0" },
                 d.featured && a.createElement("img", { src: it(d.featured, t), alt: d.title, className: "w-full h-48 object-cover rounded-lg mb-5", loading: "lazy" }),
                 a.createElement(
-                  F,
+                  z,
                   { to: "/post/" + d.slug },
                   a.createElement("h2", { className: "text-xl font-bold text-gray-900 hover:text-primary-600 mb-3" }, d.format && d.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, ql(d.format), d.format.charAt(0).toUpperCase() + d.format.slice(1)) : null, d.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + g("featured", t)) : null, d.title)
                 ),
@@ -3549,7 +3553,7 @@ function Wl(e) {
                   "div",
                   { className: "flex items-center gap-4 text-xs text-gray-500 mb-4" },
                   a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Fe, { size: 12 }), Xe(d.publishedAt || d.createdAt)),
-                  a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Mr, { size: 12 }), a.createElement(F, { to: "/author/" + (((u = d.author) == null ? void 0 : u.username) || ""), className: "hover:text-primary-600" }, (y = d.author) == null ? void 0 : y.username)),
+                  a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Mr, { size: 12 }), a.createElement(z, { to: "/author/" + (((u = d.author) == null ? void 0 : u.username) || ""), className: "hover:text-primary-600" }, (y = d.author) == null ? void 0 : y.username)),
                   ((b = d.categories) == null ? void 0 : b[0]) && a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Zt, { size: 12 }), d.categories[0].name)
                 ),
                 d.excerpt && a.createElement("p", { className: "text-gray-600 text-sm leading-relaxed mb-4" }, d.excerpt),
@@ -3562,7 +3566,7 @@ function Wl(e) {
                     a.createElement("span", { className: "inline-flex items-center gap-1" }, rr(d.content)),
                     d.commentCount > 0 && a.createElement("span", { className: "inline-flex items-center gap-1" }, a.createElement(_t, { size: 12 }), "" + d.commentCount)
                   ),
-                  a.createElement(F, { to: "/post/" + d.slug, className: "inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700" }, g("read more", t))
+                  a.createElement(z, { to: "/post/" + d.slug, className: "inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700" }, g("read more", t))
                 )
               );
             })
@@ -3606,7 +3610,7 @@ function Wl(e) {
               return a.createElement(
                 "li",
                 { key: d.id },
-                a.createElement(F, { to: "/category/" + d.slug, className: "text-sm " + (c === d.slug ? "text-primary-600 font-medium" : "text-gray-600 hover:text-primary-600") }, d.name, ((u = d._count) == null ? void 0 : u.posts) > 0 ? a.createElement("span", { className: "text-gray-500 ml-1" }, "(" + d._count.posts + ")") : null)
+                a.createElement(z, { to: "/category/" + d.slug, className: "text-sm " + (c === d.slug ? "text-primary-600 font-medium" : "text-gray-600 hover:text-primary-600") }, d.name, ((u = d._count) == null ? void 0 : u.posts) > 0 ? a.createElement("span", { className: "text-gray-500 ml-1" }, "(" + d._count.posts + ")") : null)
               );
             }))
           )
@@ -3656,7 +3660,7 @@ function Gl(e) {
                 { key: d.id, className: "pb-12 border-b border-gray-100 last:border-0" },
                 d.featured && a.createElement("img", { src: it(d.featured, t), alt: d.title, className: "w-full h-48 object-cover rounded-lg mb-5", loading: "lazy" }),
                 a.createElement(
-                  F,
+                  z,
                   { to: "/post/" + d.slug },
                   a.createElement("h2", { className: "text-xl font-bold text-gray-900 hover:text-primary-600 mb-3" }, d.format && d.format !== "standard" ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded" }, Vl(d.format), d.format.charAt(0).toUpperCase() + d.format.slice(1)) : null, d.sticky ? a.createElement("span", { className: "inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle" }, "★ " + g("featured", t)) : null, d.title)
                 ),
@@ -3664,7 +3668,7 @@ function Gl(e) {
                   "div",
                   { className: "flex items-center gap-4 text-xs text-gray-500 mb-4" },
                   a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Fe, { size: 12 }), Xe(d.publishedAt || d.createdAt)),
-                  a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Mr, { size: 12 }), a.createElement(F, { to: "/author/" + (((u = d.author) == null ? void 0 : u.username) || ""), className: "hover:text-primary-600" }, (y = d.author) == null ? void 0 : y.username)),
+                  a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Mr, { size: 12 }), a.createElement(z, { to: "/author/" + (((u = d.author) == null ? void 0 : u.username) || ""), className: "hover:text-primary-600" }, (y = d.author) == null ? void 0 : y.username)),
                   ((b = d.categories) == null ? void 0 : b[0]) && a.createElement("span", { className: "flex items-center gap-1" }, a.createElement(Zt, { size: 12 }), d.categories[0].name)
                 ),
                 d.excerpt && a.createElement("p", { className: "text-gray-600 text-sm leading-relaxed mb-4" }, d.excerpt),
@@ -3677,7 +3681,7 @@ function Gl(e) {
                     a.createElement("span", { className: "inline-flex items-center gap-1" }, rr(d.content)),
                     d.commentCount > 0 && a.createElement("span", { className: "inline-flex items-center gap-1" }, a.createElement(_t, { size: 12 }), "" + d.commentCount)
                   ),
-                  a.createElement(F, { to: "/post/" + d.slug, className: "inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700" }, g("read more", t))
+                  a.createElement(z, { to: "/post/" + d.slug, className: "inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700" }, g("read more", t))
                 )
               );
             })
@@ -3721,7 +3725,7 @@ function Gl(e) {
               return a.createElement(
                 "li",
                 { key: d.id },
-                a.createElement(F, { to: "/category/" + d.slug, className: "text-sm " + (c === d.slug ? "text-primary-600 font-medium" : "text-gray-600 hover:text-primary-600") }, d.name, ((u = d._count) == null ? void 0 : u.posts) > 0 ? a.createElement("span", { className: "text-gray-500 ml-1" }, "(" + d._count.posts + ")") : null)
+                a.createElement(z, { to: "/category/" + d.slug, className: "text-sm " + (c === d.slug ? "text-primary-600 font-medium" : "text-gray-600 hover:text-primary-600") }, d.name, ((u = d._count) == null ? void 0 : u.posts) > 0 ? a.createElement("span", { className: "text-gray-500 ml-1" }, "(" + d._count.posts + ")") : null)
               );
             }))
           )
@@ -3736,7 +3740,7 @@ function Xl(e) {
   return a.createElement(
     "div",
     { className: "max-w-3xl mx-auto px-4 py-8" },
-    a.createElement(F, { to: "/", className: "inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-6" }, a.createElement(ta, { size: 14 }), g("back")),
+    a.createElement(z, { to: "/", className: "inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-6" }, a.createElement(ta, { size: 14 }), g("back")),
     a.createElement("h1", { className: "text-2xl font-bold text-gray-900 mb-6" }, Jl[parseInt(n || "1") - 1] + " " + r),
     a.createElement("p", { className: "text-sm text-gray-500 mb-6" }, t.total + " " + g("posts")),
     t.posts.length === 0 ? a.createElement("p", { className: "text-gray-500" }, g("no posts in this month")) : a.createElement(
@@ -3745,7 +3749,7 @@ function Xl(e) {
       t.posts.map((s) => a.createElement(
         "article",
         { key: s.id, className: "pb-6 border-b border-gray-100 last:border-0" },
-        a.createElement(F, { to: "/post/" + s.slug }, a.createElement("h2", { className: "text-lg font-bold text-gray-900 hover:text-primary-600 mb-2" }, s.title)),
+        a.createElement(z, { to: "/post/" + s.slug }, a.createElement("h2", { className: "text-lg font-bold text-gray-900 hover:text-primary-600 mb-2" }, s.title)),
         a.createElement(
           "div",
           { className: "flex items-center gap-3 text-xs text-gray-500" },
@@ -3779,7 +3783,7 @@ function Yl(e) {
       a.createElement(na, { size: 48, className: "mx-auto text-gray-300 mb-4" }),
       a.createElement("h3", { className: "text-lg font-semibold text-gray-900 mb-2" }, g("no results for") + ' "' + t + '"'),
       a.createElement("p", { className: "text-sm text-gray-500 mb-4" }, g("try different keywords")),
-      a.createElement(F, { to: "/", className: "text-primary-600 text-sm" }, "← " + g("browse all posts"))
+      a.createElement(z, { to: "/", className: "text-primary-600 text-sm" }, "← " + g("browse all posts"))
     ) : a.createElement(
       "div",
       { className: "space-y-6" },
@@ -3788,7 +3792,7 @@ function Yl(e) {
         return a.createElement(
           "article",
           { key: o.id, className: "pb-6 border-b border-gray-100 last:border-0" },
-          a.createElement(F, { to: "/post/" + o.slug }, a.createElement("h2", { className: "text-lg font-bold text-gray-900 hover:text-primary-600 mb-2" }, Mn(o.title, t))),
+          a.createElement(z, { to: "/post/" + o.slug }, a.createElement("h2", { className: "text-lg font-bold text-gray-900 hover:text-primary-600 mb-2" }, Mn(o.title, t))),
           a.createElement(
             "div",
             { className: "flex items-center gap-3 text-xs text-gray-500 mb-2" },
@@ -3827,7 +3831,7 @@ function Zl(e) {
   return a.createElement(
     "div",
     { className: "max-w-3xl mx-auto px-4 py-8" },
-    a.createElement(F, { to: "/", className: "inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-6" }, a.createElement(ta, { size: 14 }), g("back")),
+    a.createElement(z, { to: "/", className: "inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-6" }, a.createElement(ta, { size: 14 }), g("back")),
     a.createElement(
       "div",
       { className: "flex items-center gap-3 mb-8" },
@@ -3847,7 +3851,7 @@ function Zl(e) {
         return a.createElement(
           "article",
           { key: o.id, className: "pb-6 border-b border-gray-100 last:border-0" },
-          a.createElement(F, { to: "/post/" + o.slug }, a.createElement("h2", { className: "text-lg font-bold text-gray-900 hover:text-primary-600 mb-2" }, o.title)),
+          a.createElement(z, { to: "/post/" + o.slug }, a.createElement("h2", { className: "text-lg font-bold text-gray-900 hover:text-primary-600 mb-2" }, o.title)),
           a.createElement(
             "div",
             { className: "flex items-center gap-3 text-xs text-gray-500" },
@@ -3864,12 +3868,12 @@ function Ca({ items: e }) {
   return a.createElement(
     "nav",
     { className: "flex items-center gap-1 text-sm text-gray-500 mb-6", "aria-label": "Breadcrumb" },
-    a.createElement(F, { to: "/", className: "hover:text-gray-700 flex items-center gap-1" }, a.createElement(ms, { size: 14 })),
+    a.createElement(z, { to: "/", className: "hover:text-gray-700 flex items-center gap-1" }, a.createElement(ms, { size: 14 })),
     e.map((t, r) => a.createElement(
       a.Fragment,
       { key: r },
       a.createElement(ss, { size: 12, className: "text-gray-300" }),
-      r === e.length - 1 || !t.to ? a.createElement("span", { className: "text-gray-900 font-medium" }, t.label) : a.createElement(F, { to: t.to, className: "hover:text-gray-700" }, t.label)
+      r === e.length - 1 || !t.to ? a.createElement("span", { className: "text-gray-900 font-medium" }, t.label) : a.createElement(z, { to: t.to, className: "hover:text-gray-700" }, t.label)
     ))
   );
 }
@@ -3882,7 +3886,7 @@ function Ql({ postId: e, slug: t }) {
     "div",
     { className: "grid grid-cols-1 sm:grid-cols-2 gap-4" },
     r.map((s) => a.createElement(
-      F,
+      z,
       { key: s.id, to: "/post/" + s.slug, className: "group block p-4 border border-gray-200 rounded-lg hover:border-primary-300 hover:shadow-sm transition-all" },
       a.createElement("h4", { className: "text-sm font-medium text-gray-900 group-hover:text-primary-600 mb-1" }, s.title),
       a.createElement("p", { className: "text-xs text-gray-500 line-clamp-2" }, s.excerpt || "")
@@ -3981,26 +3985,26 @@ function oi() {
       function n(h, A) {
         return h << A | h >>> 32 - A;
       }
-      function s(h, A, E, H, z, q) {
-        return r(n(r(r(A, h), r(H, q)), z), E);
+      function s(h, A, E, H, F, q) {
+        return r(n(r(r(A, h), r(H, q)), F), E);
       }
-      function o(h, A, E, H, z, q, J) {
-        return s(A & E | ~A & H, h, A, z, q, J);
+      function o(h, A, E, H, F, q, J) {
+        return s(A & E | ~A & H, h, A, F, q, J);
       }
-      function i(h, A, E, H, z, q, J) {
-        return s(A & H | E & ~H, h, A, z, q, J);
+      function i(h, A, E, H, F, q, J) {
+        return s(A & H | E & ~H, h, A, F, q, J);
       }
-      function c(h, A, E, H, z, q, J) {
-        return s(A ^ E ^ H, h, A, z, q, J);
+      function c(h, A, E, H, F, q, J) {
+        return s(A ^ E ^ H, h, A, F, q, J);
       }
-      function f(h, A, E, H, z, q, J) {
-        return s(E ^ (A | ~H), h, A, z, q, J);
+      function f(h, A, E, H, F, q, J) {
+        return s(E ^ (A | ~H), h, A, F, q, J);
       }
       function d(h, A) {
         h[A >> 5] |= 128 << A % 32, h[(A + 64 >>> 9 << 4) + 14] = A;
-        var E, H, z, q, J, T = 1732584193, _ = -271733879, N = -1732584194, S = 271733878;
+        var E, H, F, q, J, T = 1732584193, _ = -271733879, N = -1732584194, S = 271733878;
         for (E = 0; E < h.length; E += 16)
-          H = T, z = _, q = N, J = S, T = o(T, _, N, S, h[E], 7, -680876936), S = o(S, T, _, N, h[E + 1], 12, -389564586), N = o(N, S, T, _, h[E + 2], 17, 606105819), _ = o(_, N, S, T, h[E + 3], 22, -1044525330), T = o(T, _, N, S, h[E + 4], 7, -176418897), S = o(S, T, _, N, h[E + 5], 12, 1200080426), N = o(N, S, T, _, h[E + 6], 17, -1473231341), _ = o(_, N, S, T, h[E + 7], 22, -45705983), T = o(T, _, N, S, h[E + 8], 7, 1770035416), S = o(S, T, _, N, h[E + 9], 12, -1958414417), N = o(N, S, T, _, h[E + 10], 17, -42063), _ = o(_, N, S, T, h[E + 11], 22, -1990404162), T = o(T, _, N, S, h[E + 12], 7, 1804603682), S = o(S, T, _, N, h[E + 13], 12, -40341101), N = o(N, S, T, _, h[E + 14], 17, -1502002290), _ = o(_, N, S, T, h[E + 15], 22, 1236535329), T = i(T, _, N, S, h[E + 1], 5, -165796510), S = i(S, T, _, N, h[E + 6], 9, -1069501632), N = i(N, S, T, _, h[E + 11], 14, 643717713), _ = i(_, N, S, T, h[E], 20, -373897302), T = i(T, _, N, S, h[E + 5], 5, -701558691), S = i(S, T, _, N, h[E + 10], 9, 38016083), N = i(N, S, T, _, h[E + 15], 14, -660478335), _ = i(_, N, S, T, h[E + 4], 20, -405537848), T = i(T, _, N, S, h[E + 9], 5, 568446438), S = i(S, T, _, N, h[E + 14], 9, -1019803690), N = i(N, S, T, _, h[E + 3], 14, -187363961), _ = i(_, N, S, T, h[E + 8], 20, 1163531501), T = i(T, _, N, S, h[E + 13], 5, -1444681467), S = i(S, T, _, N, h[E + 2], 9, -51403784), N = i(N, S, T, _, h[E + 7], 14, 1735328473), _ = i(_, N, S, T, h[E + 12], 20, -1926607734), T = c(T, _, N, S, h[E + 5], 4, -378558), S = c(S, T, _, N, h[E + 8], 11, -2022574463), N = c(N, S, T, _, h[E + 11], 16, 1839030562), _ = c(_, N, S, T, h[E + 14], 23, -35309556), T = c(T, _, N, S, h[E + 1], 4, -1530992060), S = c(S, T, _, N, h[E + 4], 11, 1272893353), N = c(N, S, T, _, h[E + 7], 16, -155497632), _ = c(_, N, S, T, h[E + 10], 23, -1094730640), T = c(T, _, N, S, h[E + 13], 4, 681279174), S = c(S, T, _, N, h[E], 11, -358537222), N = c(N, S, T, _, h[E + 3], 16, -722521979), _ = c(_, N, S, T, h[E + 6], 23, 76029189), T = c(T, _, N, S, h[E + 9], 4, -640364487), S = c(S, T, _, N, h[E + 12], 11, -421815835), N = c(N, S, T, _, h[E + 15], 16, 530742520), _ = c(_, N, S, T, h[E + 2], 23, -995338651), T = f(T, _, N, S, h[E], 6, -198630844), S = f(S, T, _, N, h[E + 7], 10, 1126891415), N = f(N, S, T, _, h[E + 14], 15, -1416354905), _ = f(_, N, S, T, h[E + 5], 21, -57434055), T = f(T, _, N, S, h[E + 12], 6, 1700485571), S = f(S, T, _, N, h[E + 3], 10, -1894986606), N = f(N, S, T, _, h[E + 10], 15, -1051523), _ = f(_, N, S, T, h[E + 1], 21, -2054922799), T = f(T, _, N, S, h[E + 8], 6, 1873313359), S = f(S, T, _, N, h[E + 15], 10, -30611744), N = f(N, S, T, _, h[E + 6], 15, -1560198380), _ = f(_, N, S, T, h[E + 13], 21, 1309151649), T = f(T, _, N, S, h[E + 4], 6, -145523070), S = f(S, T, _, N, h[E + 11], 10, -1120210379), N = f(N, S, T, _, h[E + 2], 15, 718787259), _ = f(_, N, S, T, h[E + 9], 21, -343485551), T = r(T, H), _ = r(_, z), N = r(N, q), S = r(S, J);
+          H = T, F = _, q = N, J = S, T = o(T, _, N, S, h[E], 7, -680876936), S = o(S, T, _, N, h[E + 1], 12, -389564586), N = o(N, S, T, _, h[E + 2], 17, 606105819), _ = o(_, N, S, T, h[E + 3], 22, -1044525330), T = o(T, _, N, S, h[E + 4], 7, -176418897), S = o(S, T, _, N, h[E + 5], 12, 1200080426), N = o(N, S, T, _, h[E + 6], 17, -1473231341), _ = o(_, N, S, T, h[E + 7], 22, -45705983), T = o(T, _, N, S, h[E + 8], 7, 1770035416), S = o(S, T, _, N, h[E + 9], 12, -1958414417), N = o(N, S, T, _, h[E + 10], 17, -42063), _ = o(_, N, S, T, h[E + 11], 22, -1990404162), T = o(T, _, N, S, h[E + 12], 7, 1804603682), S = o(S, T, _, N, h[E + 13], 12, -40341101), N = o(N, S, T, _, h[E + 14], 17, -1502002290), _ = o(_, N, S, T, h[E + 15], 22, 1236535329), T = i(T, _, N, S, h[E + 1], 5, -165796510), S = i(S, T, _, N, h[E + 6], 9, -1069501632), N = i(N, S, T, _, h[E + 11], 14, 643717713), _ = i(_, N, S, T, h[E], 20, -373897302), T = i(T, _, N, S, h[E + 5], 5, -701558691), S = i(S, T, _, N, h[E + 10], 9, 38016083), N = i(N, S, T, _, h[E + 15], 14, -660478335), _ = i(_, N, S, T, h[E + 4], 20, -405537848), T = i(T, _, N, S, h[E + 9], 5, 568446438), S = i(S, T, _, N, h[E + 14], 9, -1019803690), N = i(N, S, T, _, h[E + 3], 14, -187363961), _ = i(_, N, S, T, h[E + 8], 20, 1163531501), T = i(T, _, N, S, h[E + 13], 5, -1444681467), S = i(S, T, _, N, h[E + 2], 9, -51403784), N = i(N, S, T, _, h[E + 7], 14, 1735328473), _ = i(_, N, S, T, h[E + 12], 20, -1926607734), T = c(T, _, N, S, h[E + 5], 4, -378558), S = c(S, T, _, N, h[E + 8], 11, -2022574463), N = c(N, S, T, _, h[E + 11], 16, 1839030562), _ = c(_, N, S, T, h[E + 14], 23, -35309556), T = c(T, _, N, S, h[E + 1], 4, -1530992060), S = c(S, T, _, N, h[E + 4], 11, 1272893353), N = c(N, S, T, _, h[E + 7], 16, -155497632), _ = c(_, N, S, T, h[E + 10], 23, -1094730640), T = c(T, _, N, S, h[E + 13], 4, 681279174), S = c(S, T, _, N, h[E], 11, -358537222), N = c(N, S, T, _, h[E + 3], 16, -722521979), _ = c(_, N, S, T, h[E + 6], 23, 76029189), T = c(T, _, N, S, h[E + 9], 4, -640364487), S = c(S, T, _, N, h[E + 12], 11, -421815835), N = c(N, S, T, _, h[E + 15], 16, 530742520), _ = c(_, N, S, T, h[E + 2], 23, -995338651), T = f(T, _, N, S, h[E], 6, -198630844), S = f(S, T, _, N, h[E + 7], 10, 1126891415), N = f(N, S, T, _, h[E + 14], 15, -1416354905), _ = f(_, N, S, T, h[E + 5], 21, -57434055), T = f(T, _, N, S, h[E + 12], 6, 1700485571), S = f(S, T, _, N, h[E + 3], 10, -1894986606), N = f(N, S, T, _, h[E + 10], 15, -1051523), _ = f(_, N, S, T, h[E + 1], 21, -2054922799), T = f(T, _, N, S, h[E + 8], 6, 1873313359), S = f(S, T, _, N, h[E + 15], 10, -30611744), N = f(N, S, T, _, h[E + 6], 15, -1560198380), _ = f(_, N, S, T, h[E + 13], 21, 1309151649), T = f(T, _, N, S, h[E + 4], 6, -145523070), S = f(S, T, _, N, h[E + 11], 10, -1120210379), N = f(N, S, T, _, h[E + 2], 15, 718787259), _ = f(_, N, S, T, h[E + 9], 21, -343485551), T = r(T, H), _ = r(_, F), N = r(N, q), S = r(S, J);
         return [T, _, N, S];
       }
       function u(h) {
@@ -4022,15 +4026,15 @@ function oi() {
         return u(d(y(h), h.length * 8));
       }
       function k(h, A) {
-        var E, H = y(h), z = [], q = [], J;
-        for (z[15] = q[15] = void 0, H.length > 16 && (H = d(H, h.length * 8)), E = 0; E < 16; E += 1)
-          z[E] = H[E] ^ 909522486, q[E] = H[E] ^ 1549556828;
-        return J = d(z.concat(y(A)), 512 + A.length * 8), u(d(q.concat(J), 640));
+        var E, H = y(h), F = [], q = [], J;
+        for (F[15] = q[15] = void 0, H.length > 16 && (H = d(H, h.length * 8)), E = 0; E < 16; E += 1)
+          F[E] = H[E] ^ 909522486, q[E] = H[E] ^ 1549556828;
+        return J = d(F.concat(y(A)), 512 + A.length * 8), u(d(q.concat(J), 640));
       }
       function P(h) {
-        var A = "0123456789abcdef", E = "", H, z;
-        for (z = 0; z < h.length; z += 1)
-          H = h.charCodeAt(z), E += A.charAt(H >>> 4 & 15) + A.charAt(H & 15);
+        var A = "0123456789abcdef", E = "", H, F;
+        for (F = 0; F < h.length; F += 1)
+          H = h.charCodeAt(F), E += A.charAt(H >>> 4 & 15) + A.charAt(H & 15);
         return E;
       }
       function B(h) {
@@ -4299,7 +4303,7 @@ function Ma() {
     const R = r.createElement("template");
     R.content && R.content.ownerDocument && (r = R.content.ownerDocument);
   }
-  let E, H = "", z, q = !1, J = 0;
+  let E, H = "", F, q = !1, J = 0;
   const T = function() {
     if (J > 0)
       throw qe('A configured TRUSTED_TYPES_POLICY callback (createHTML or createScriptURL) must not call DOMPurify.sanitize, as that causes infinite recursion. Do not pass a policy whose callbacks wrap DOMPurify as TRUSTED_TYPES_POLICY; see the "DOMPurify and Trusted Types" section of the README.');
@@ -4318,7 +4322,7 @@ function Ma() {
       J--;
     }
   }, S = function() {
-    return q || (z = Hi(y, s), q = !0), z;
+    return q || (F = Hi(y, s), q = !0), F;
   }, Ae = r, ze = Ae.implementation, vt = Ae.createNodeIterator, Ot = Ae.createDocumentFragment, Re = Ae.getElementsByTagName, re = n.importNode;
   let V = Zn();
   t.isSupported = typeof Pa == "function" && typeof x == "function" && ze && ze.createHTMLDocument !== void 0;
@@ -4915,7 +4919,7 @@ function Ma() {
     let R = arguments.length > 0 && arguments[0] !== void 0 ? arguments[0] : {};
     fr(R), ar = !0, Ct = W, Dt = X;
   }, t.clearConfig = function() {
-    tt = null, ar = !1, Ct = null, Dt = null, E = z, H = "";
+    tt = null, ar = !1, Ct = null, Dt = null, E = F, H = "";
   }, t.isValidAttribute = function(R, l, p) {
     tt || fr({});
     const w = K(R), L = K(l);
@@ -4942,27 +4946,27 @@ function Bi(e) {
   const { settings: t, post: r, comments: n, submitted: s, commentForm: o, submitComment: i, setCommentForm: c, commentError: f, slug: d } = e, u = String((r == null ? void 0 : r.content) || "").split(/<!--\s*nextpage\s*-->/i), [y] = ts(), b = u.length, k = Math.max(1, Math.min(b, parseInt(y.get("page") || "1", 10) || 1)), P = u[k - 1] || "", B = b > 1 && a.createElement(
     "nav",
     { className: "flex items-center justify-center gap-3 mt-8 pt-6 border-t border-gray-100" },
-    k > 1 && a.createElement(F, { to: "/post/" + d + (k - 1 > 1 ? "?page=" + (k - 1) : ""), className: "text-sm text-gray-500 hover:text-primary-600" }, "← " + g("previous", t)),
+    k > 1 && a.createElement(z, { to: "/post/" + d + (k - 1 > 1 ? "?page=" + (k - 1) : ""), className: "text-sm text-gray-500 hover:text-primary-600" }, "← " + g("previous", t)),
     a.createElement("span", { className: "text-sm text-gray-500" }, g("page", t) + " " + k + " / " + b),
-    k < b && a.createElement(F, { to: "/post/" + d + "?page=" + (k + 1), className: "text-sm text-gray-500 hover:text-primary-600" }, g("next", t) + " →")
+    k < b && a.createElement(z, { to: "/post/" + d + "?page=" + (k + 1), className: "text-sm text-gray-500 hover:text-primary-600" }, g("next", t) + " →")
   ), C = Ir(null);
   La(C, [r == null ? void 0 : r.content]);
-  const x = (A = r.categories) == null ? void 0 : A[0], O = r.author, M = "w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-primary-500 bg-white", U = n.map((z) => a.createElement(
+  const x = (A = r.categories) == null ? void 0 : A[0], O = r.author, M = "w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-primary-500 bg-white", U = n.map((F) => a.createElement(
     "div",
-    { key: z.id, className: "mb-5 p-5 rounded-2xl border border-gray-100" },
+    { key: F.id, className: "mb-5 p-5 rounded-2xl border border-gray-100" },
     a.createElement(
       "div",
       { className: "flex items-center gap-2.5 mb-2" },
-      a.createElement("img", { src: qt(z.email || ""), alt: "", className: "w-8 h-8 rounded-full" }),
+      a.createElement("img", { src: qt(F.email || ""), alt: "", className: "w-8 h-8 rounded-full" }),
       a.createElement(
         "div",
         null,
-        a.createElement("p", { className: "font-medium text-sm text-gray-900" }, z.author),
-        a.createElement("p", { className: "text-xs text-gray-500" }, new Date(z.createdAt).toLocaleDateString())
+        a.createElement("p", { className: "font-medium text-sm text-gray-900" }, F.author),
+        a.createElement("p", { className: "text-xs text-gray-500" }, new Date(F.createdAt).toLocaleDateString())
       )
     ),
-    a.createElement("p", { className: "text-sm text-gray-700 leading-relaxed" }, z.content),
-    (z.children || []).map((q) => a.createElement(
+    a.createElement("p", { className: "text-sm text-gray-700 leading-relaxed" }, F.content),
+    (F.children || []).map((q) => a.createElement(
       "div",
       { key: q.id, className: "ml-8 mt-3 pl-4 border-l-2 border-gray-100" },
       a.createElement(
@@ -4982,14 +4986,14 @@ function Bi(e) {
     a.createElement(
       "div",
       { className: "grid grid-cols-1 sm:grid-cols-2 gap-3" },
-      a.createElement("input", { value: o.author, onChange: (z) => c({ ...o, author: z.target.value }), placeholder: g("name", t), "aria-label": g("name", t), className: M, autoComplete: "name" }),
-      a.createElement("input", { value: o.email, onChange: (z) => c({ ...o, email: z.target.value }), placeholder: g("email", t), type: "email", "aria-label": g("email", t), className: M, autoComplete: "email" })
+      a.createElement("input", { value: o.author, onChange: (F) => c({ ...o, author: F.target.value }), placeholder: g("name", t), "aria-label": g("name", t), className: M, autoComplete: "name" }),
+      a.createElement("input", { value: o.email, onChange: (F) => c({ ...o, email: F.target.value }), placeholder: g("email", t), type: "email", "aria-label": g("email", t), className: M, autoComplete: "email" })
     ),
-    a.createElement("textarea", { value: o.content, onChange: (z) => c({ ...o, content: z.target.value }), placeholder: g("your comment", t) + "...", "aria-label": g("your comment", t), className: M, rows: 3, required: !0 }),
+    a.createElement("textarea", { value: o.content, onChange: (F) => c({ ...o, content: F.target.value }), placeholder: g("your comment", t) + "...", "aria-label": g("your comment", t), className: M, rows: 3, required: !0 }),
     a.createElement(
       "label",
       { className: "flex items-center gap-2 text-sm text-gray-500 cursor-pointer" },
-      a.createElement("input", { type: "checkbox", checked: !!o.notifyMe, onChange: (z) => c({ ...o, notifyMe: z.target.checked }), className: "rounded border-gray-300 text-primary-600" }),
+      a.createElement("input", { type: "checkbox", checked: !!o.notifyMe, onChange: (F) => c({ ...o, notifyMe: F.target.checked }), className: "rounded border-gray-300 text-primary-600" }),
       g("notify me of replies", t)
     ),
     a.createElement("button", { type: "submit", className: "w-full py-2.5 rounded-xl text-white text-sm font-medium transition-colors", style: { background: "var(--primary-color, #2563eb)" } }, g("submit comment", t))
@@ -5002,7 +5006,7 @@ function Bi(e) {
     a.createElement(
       "header",
       { className: "mb-8" },
-      x && a.createElement(F, {
+      x && a.createElement(z, {
         to: "/category/" + x.slug,
         className: "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium mb-4",
         style: { background: "color-mix(in srgb, var(--primary-color, #2563eb) 10%, transparent)", color: "var(--primary-color, #2563eb)" }
@@ -5020,7 +5024,7 @@ function Bi(e) {
           "span",
           { className: "flex items-center gap-1.5" },
           a.createElement("img", { src: qt((O == null ? void 0 : O.email) || ""), alt: "", className: "w-6 h-6 rounded-full" }),
-          a.createElement(F, { to: "/author/" + ((O == null ? void 0 : O.username) || ""), className: "font-medium text-gray-700 hover:text-primary-600" }, O == null ? void 0 : O.username)
+          a.createElement(z, { to: "/author/" + ((O == null ? void 0 : O.username) || ""), className: "font-medium text-gray-700 hover:text-primary-600" }, O == null ? void 0 : O.username)
         ),
         a.createElement("span", { className: "flex items-center gap-1.5" }, a.createElement(Fe, { size: 14 }), Xe(r.publishedAt || r.createdAt)),
         a.createElement("span", { className: "flex items-center gap-1.5" }, a.createElement(os, { size: 14 }), rr(r.content || "")),
@@ -5040,7 +5044,7 @@ function Bi(e) {
         fetchPriority: "high",
         decoding: "async",
         sizes: "(min-width: 900px) 768px, 100vw",
-        srcSet: r.srcset ? Object.entries(r.srcset).map(([z, q]) => it(q, t) + " " + z + "w").join(", ") : void 0
+        srcSet: r.srcset ? Object.entries(r.srcset).map(([F, q]) => it(q, t) + " " + F + "w").join(", ") : void 0
       })
     ),
     // Content + table of contents
@@ -5053,13 +5057,13 @@ function Bi(e) {
       "div",
       { className: "flex flex-wrap items-center gap-2 mb-10" },
       a.createElement(hs, { size: 15, className: "text-gray-500" }),
-      r.tags.map((z) => a.createElement(F, { key: z.tagId, to: "/tag/" + z.slug, className: "px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors" }, z.name))
+      r.tags.map((F) => F.slug ? a.createElement(z, { key: F.tagId, to: "/tag/" + F.slug, className: "px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors" }, F.name) : null)
     ),
     // Share + back row (share buttons toggleable in theme settings)
     a.createElement(
       "div",
       { className: "flex items-center justify-between py-6 border-t border-gray-100 mb-10" },
-      a.createElement(F, { to: "/", className: "text-sm text-gray-500 hover:text-primary-600 flex items-center gap-1" }, a.createElement(ra, { size: 15 }), g("all posts", t)),
+      a.createElement(z, { to: "/", className: "text-sm text-gray-500 hover:text-primary-600 flex items-center gap-1" }, a.createElement(ra, { size: 15 }), g("all posts", t)),
       t.theme_show_share_buttons !== "0" && a.createElement(ei, { title: r.title, url: "/post/" + r.slug, siteUrl: t.site_url })
     ),
     // Author box
@@ -5071,7 +5075,7 @@ function Bi(e) {
         "div",
         null,
         a.createElement("p", { className: "text-xs text-gray-500 mb-0.5" }, g("written by", t)),
-        a.createElement(F, { to: "/author/" + O.username, className: "font-semibold text-gray-900 hover:text-primary-600" }, O.username),
+        a.createElement(z, { to: "/author/" + O.username, className: "font-semibold text-gray-900 hover:text-primary-600" }, O.username),
         O.bio && a.createElement("p", { className: "text-sm text-gray-600 mt-1.5 leading-relaxed" }, O.bio)
       )
     ),
@@ -5109,7 +5113,7 @@ function ji(e) {
     ((s = r.meta) == null ? void 0 : s._visual_css) && a.createElement("style", { dangerouslySetInnerHTML: { __html: Da(r.meta._visual_css) } }),
     a.createElement("div", { ref: n, className: "prose prose-gray prose-lg max-w-none", dangerouslySetInnerHTML: { __html: Ua.sanitize(r.content || "") } }),
     r.parent && a.createElement(
-      F,
+      z,
       { to: "/page/" + r.parent.slug, className: "inline-flex items-center gap-1 mt-10 text-sm text-gray-500 hover:text-primary-600" },
       a.createElement(ra, { size: 15 }),
       r.parent.title

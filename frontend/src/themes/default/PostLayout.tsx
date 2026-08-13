@@ -118,7 +118,7 @@ export default function PostLayout(props: any) {
     // Tags
     post.tags?.length > 0 && React.createElement('div', { className: 'flex flex-wrap items-center gap-2 mb-10' },
       React.createElement(Tag, { size: 15, className: 'text-gray-500' }),
-      post.tags.map((tg: any) => React.createElement(Link, { key: tg.tagId, to: '/tag/' + tg.slug, className: 'px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors' }, tg.name))
+      post.tags.map((tg: any) => tg.slug ? React.createElement(Link, { key: tg.tagId, to: '/tag/' + tg.slug, className: 'px-3 py-1 rounded-full text-xs bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors' }, tg.name) : null)
     ),
 
     // Share + back row (share buttons toggleable in theme settings)

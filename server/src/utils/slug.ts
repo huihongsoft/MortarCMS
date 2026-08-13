@@ -12,7 +12,9 @@ export function slugify(text: string): string {
     .toLowerCase()
     .trim()
     .replace(/\s+/g, '-')
-    .replace(/[^\w\-]+/g, '')
+    // Keep CJK characters — a pure-Chinese name must not produce an empty
+    // slug (that broke tag/category links with 404s).
+    .replace(/[^\w\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff\-]+/g, '')
     .replace(/\-\-+/g, '-')
     .replace(/^-+/, '')
     .replace(/-+$/, '');

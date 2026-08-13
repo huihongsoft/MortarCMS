@@ -13,6 +13,10 @@ export default function TagCloudWidget() {
     React.createElement('div', { className: 'flex flex-wrap gap-1.5' },
       tags.map((tag: any) => {
         const size = 0.65 + ((tag._count?.posts || 0) / max) * 0.35;
+        // A missing slug cannot link anywhere — render plain text
+        if (!tag.slug) {
+          return React.createElement('span', { key: tag.id, className: 'inline-block px-2 py-0.5 bg-gray-100 rounded-full text-gray-600', style: { fontSize: size + 'rem' } }, tag.name + ' (' + (tag._count?.posts || 0) + ')');
+        }
         return React.createElement(Link, {
           key: tag.id,
           to: '/tag/' + tag.slug,

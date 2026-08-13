@@ -74,7 +74,7 @@ export default function PostLayout(props: any) {
       React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none mb-14', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(pageContent)), settings) } }),
       post.tags?.length > 0 && React.createElement('div', { className: 'flex flex-wrap items-center gap-2 mb-12' },
         React.createElement(TagIcon, { size: 15, className: 'text-gray-400' }),
-        post.tags.map((tg: any) => React.createElement(Link, { key: tg.tagId, to: '/tag/' + tg.slug, className: 'px-3.5 py-1.5 rounded-full text-xs bg-gray-50 border border-gray-100 text-gray-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors' }, tg.name)),
+        post.tags.map((tg: any) => tg.slug ? React.createElement(Link, { key: tg.tagId, to: '/tag/' + tg.slug, className: 'px-3.5 py-1.5 rounded-full text-xs bg-gray-50 border border-gray-100 text-gray-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors' }, tg.name) : null),
       ),
       author && React.createElement('div', { className: 'flex items-center gap-4 p-6 rounded-2xl bg-gray-50/70 border border-gray-100 mb-12' },
         React.createElement('img', { src: gravatarUrl(author?.email || ''), alt: '', className: 'w-12 h-12 rounded-full' }),

@@ -2524,6 +2524,10 @@ const oi = {
   posts: "文章",
   navigate: "导航",
   "rss feed": "RSS 订阅",
+  "admin login": "后台登录",
+  "signing in": "登录中",
+  "sign in to continue": "登录以继续访问",
+  "welcome back": "欢迎回来",
   pages: "页面",
   "get the latest posts in your feed reader": "通过 RSS 阅读器订阅最新文章",
   on: "评论于",
@@ -2576,10 +2580,10 @@ function b(e, t) {
       if (typeof o == "string" && o) return o;
     } catch {
     }
-  return (localStorage.getItem("mortar_lang") || (t == null ? void 0 : t.site_lang) || "en") === "zh" && oi[e] || e;
+  return (localStorage.getItem("mortar_lang") || (t == null ? void 0 : t.site_lang) || "zh") === "zh" && oi[e] || e;
 }
 function po(e) {
-  return localStorage.getItem("mortar_lang") || (e == null ? void 0 : e.site_lang) || "en";
+  return localStorage.getItem("mortar_lang") || (e == null ? void 0 : e.site_lang) || "zh";
 }
 function si({ settings: e }) {
   const [t, n] = Q([]), [r, o] = Q(!1), [a, l] = Q(null), [c, m] = Q(!1);
@@ -2988,15 +2992,15 @@ function _i() {
       "div",
       { className: "flex flex-wrap gap-1.5" },
       e.map((r) => {
-        var a, l, c;
+        var a, l, c, m;
         const o = 0.65 + (((a = r._count) == null ? void 0 : a.posts) || 0) / n * 0.35;
-        return s.createElement(D, {
+        return r.slug ? s.createElement(D, {
           key: r.id,
           to: "/tag/" + r.slug,
           className: "inline-block px-2 py-0.5 bg-gray-100 hover:bg-primary-100 rounded-full text-gray-600 hover:text-primary-700 transition-colors",
           style: { fontSize: o + "rem" },
-          title: (((l = r._count) == null ? void 0 : l.posts) || 0) + " " + b("posts")
-        }, r.name + " (" + (((c = r._count) == null ? void 0 : c.posts) || 0) + ")");
+          title: (((c = r._count) == null ? void 0 : c.posts) || 0) + " " + b("posts")
+        }, r.name + " (" + (((m = r._count) == null ? void 0 : m.posts) || 0) + ")") : s.createElement("span", { key: r.id, className: "inline-block px-2 py-0.5 bg-gray-100 rounded-full text-gray-600", style: { fontSize: o + "rem" } }, r.name + " (" + (((l = r._count) == null ? void 0 : l.posts) || 0) + ")");
       })
     )
   );
@@ -4595,7 +4599,7 @@ function _l(e) {
         "div",
         { className: "flex flex-wrap items-center gap-2 mb-12" },
         s.createElement(xi, { size: 15, className: "text-gray-400" }),
-        n.tags.map((N) => s.createElement(D, { key: N.tagId, to: "/tag/" + N.slug, className: "px-3.5 py-1.5 rounded-full text-xs bg-gray-50 border border-gray-100 text-gray-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors" }, N.name))
+        n.tags.map((N) => N.slug ? s.createElement(D, { key: N.tagId, to: "/tag/" + N.slug, className: "px-3.5 py-1.5 rounded-full text-xs bg-gray-50 border border-gray-100 text-gray-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors" }, N.name) : null)
       ),
       p && s.createElement(
         "div",

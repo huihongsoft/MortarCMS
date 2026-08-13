@@ -1,12 +1,12 @@
 import c, { forwardRef as Tt, createElement as qe, useState as j, useEffect as G, useRef as or } from "react";
-import { Link as P, useNavigate as ar } from "react-router-dom";
+import { Link as k, useNavigate as ar } from "react-router-dom";
 /**
  * @license lucide-react v0.460.0 - ISC
  *
  * This source code is licensed under the ISC license.
  * See the LICENSE file in the root directory of this source tree.
  */
-const ir = (e) => e.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase(), Pt = (...e) => e.filter((t, r, n) => !!t && t.trim() !== "" && n.indexOf(t) === r).join(" ").trim();
+const ir = (e) => e.replace(/([a-z0-9])([A-Z])/g, "$1-$2").toLowerCase(), kt = (...e) => e.filter((t, r, n) => !!t && t.trim() !== "" && n.indexOf(t) === r).join(" ").trim();
 /**
  * @license lucide-react v0.460.0 - ISC
  *
@@ -49,7 +49,7 @@ const cr = Tt(
       height: t,
       stroke: e,
       strokeWidth: n ? Number(r) * 24 / Number(t) : r,
-      className: Pt("lucide", s),
+      className: kt("lucide", s),
       ...l
     },
     [
@@ -69,7 +69,7 @@ const $ = (e, t) => {
     ({ className: n, ...s }, o) => qe(cr, {
       ref: o,
       iconNode: t,
-      className: Pt(`lucide-${ir(e)}`, n),
+      className: kt(`lucide-${ir(e)}`, n),
       ...s
     })
   );
@@ -176,7 +176,7 @@ const gr = $("X", [
   ["path", { d: "M18 6 6 18", key: "1bl5f8" }],
   ["path", { d: "m6 6 12 12", key: "d8bk6v" }]
 ]);
-function kt(e, t) {
+function Pt(e, t) {
   return function() {
     return e.apply(t, arguments);
   };
@@ -220,7 +220,7 @@ const wr = Te("string"), U = Te("function"), Dt = Te("number"), le = (e) => e !=
   } catch {
     return !1;
   }
-}, Sr = I("Date"), Or = I("File"), Nr = (e) => !!(e && typeof e.uri < "u"), _r = (e) => e && typeof e.getParts < "u", Ar = I("Blob"), Tr = I("FileList"), Pr = I("Set"), kr = (e) => le(e) && U(e.pipe);
+}, Sr = I("Date"), Or = I("File"), Nr = (e) => !!(e && typeof e.uri < "u"), _r = (e) => e && typeof e.getParts < "u", Ar = I("Blob"), Tr = I("FileList"), kr = I("Set"), Pr = (e) => le(e) && U(e.pipe);
 function Cr() {
   return typeof globalThis < "u" ? globalThis : typeof self < "u" ? self : typeof window < "u" ? window : typeof global < "u" ? global : {};
 }
@@ -292,7 +292,7 @@ const Ir = (e, t, r, { allOwnKeys: n } = {}) => (he(
       // Null-proto descriptor so a polluted Object.prototype.get cannot
       // hijack defineProperty's accessor-vs-data resolution.
       __proto__: null,
-      value: kt(s, r),
+      value: Pt(s, r),
       writable: !0,
       enumerable: !0,
       configurable: !0
@@ -397,7 +397,7 @@ const nn = (e) => {
       if (!("toJSON" in n)) {
         t.add(n);
         let s;
-        if (Pr(n)) {
+        if (kr(n)) {
           s = [];
           for (const o of n) {
             const a = r(o);
@@ -446,7 +446,7 @@ const nn = (e) => {
   isBlob: Ar,
   isRegExp: Zr,
   isFunction: U,
-  isStream: kr,
+  isStream: Pr,
   isURLSearchParams: Dr,
   isTypedArray: Wr,
   isFileList: Tr,
@@ -923,7 +923,7 @@ function An(e) {
 const Tn = i.toFlatObject(i, {}, null, function(t) {
   return /^is[A-Z]/.test(t);
 });
-function Pe(e, t, r) {
+function ke(e, t, r) {
   if (!i.isObject(e))
     throw new TypeError("target must be an object");
   t = t || new FormData(), r = i.toFlatObject(
@@ -1025,7 +1025,7 @@ function ft(e) {
   });
 }
 function Ke(e, t) {
-  this._pairs = [], e && Pe(e, this, t);
+  this._pairs = [], e && ke(e, this, t);
 }
 const Ht = Ke.prototype;
 Ht.append = function(t, r) {
@@ -1037,7 +1037,7 @@ Ht.toString = function(t) {
     return r(s[0]) + "=" + r(s[1]);
   }, "").join("&");
 };
-function Pn(e) {
+function kn(e) {
   return encodeURIComponent(e).replace(/%3A/gi, ":").replace(/%24/g, "$").replace(/%2C/gi, ",").replace(/%20/g, "+");
 }
 function $t(e, t, r) {
@@ -1046,7 +1046,7 @@ function $t(e, t, r) {
   e = e || "";
   const n = i.isFunction(r) ? {
     serialize: r
-  } : r, s = i.getSafeProp(n, "encode") || Pn, o = i.getSafeProp(n, "serialize");
+  } : r, s = i.getSafeProp(n, "encode") || kn, o = i.getSafeProp(n, "serialize");
   let a;
   if (o ? a = o(t, n) : a = i.isURLSearchParams(t) ? t.toString() : new Ke(t, n).toString(s), a) {
     const l = e.indexOf("#");
@@ -1116,10 +1116,10 @@ const Xe = {
   legacyInterceptorReqResOrdering: !0,
   advertiseZstdAcceptEncoding: !1,
   validateStatusUndefinedResolves: !0
-}, kn = typeof URLSearchParams < "u" ? URLSearchParams : Ke, Cn = typeof FormData < "u" ? FormData : null, vn = typeof Blob < "u" ? Blob : null, Dn = {
+}, Pn = typeof URLSearchParams < "u" ? URLSearchParams : Ke, Cn = typeof FormData < "u" ? FormData : null, vn = typeof Blob < "u" ? Blob : null, Dn = {
   isBrowser: !0,
   classes: {
-    URLSearchParams: kn,
+    URLSearchParams: Pn,
     FormData: Cn,
     Blob: vn
   },
@@ -1137,7 +1137,7 @@ self instanceof WorkerGlobalScope && typeof self.importScripts == "function", Fn
   ...Dn
 };
 function jn(e, t) {
-  return Pe(e, new C.classes.URLSearchParams(), {
+  return ke(e, new C.classes.URLSearchParams(), {
     visitor: function(r, n, s, o) {
       return C.isNode && i.isBuffer(r) ? (this.append(n, r.toString("base64")), !1) : o.defaultVisitor.apply(this, arguments);
     },
@@ -1216,7 +1216,7 @@ const ge = {
           return jn(t, u).toString();
         if ((l = i.isFileList(t)) || n.indexOf("multipart/form-data") > -1) {
           const m = oe(this, "env"), d = m && m.FormData;
-          return Pe(
+          return ke(
             l ? { "files[]": t } : t,
             d && new d(),
             u
@@ -1914,7 +1914,7 @@ const Ze = "1.19.0", Rt = 64 * 1024, { isFunction: xe } = i, bs = (e) => encodeU
     let K = is(
       [v, A && A.toAbortSignal()],
       W
-    ), k = null;
+    ), P = null;
     const Z = K && K.unsubscribe && (() => {
       K.unsubscribe();
     });
@@ -1923,7 +1923,7 @@ const Ze = "1.19.0", Rt = 64 * 1024, { isFunction: xe } = i, bs = (e) => encodeU
       "Request body larger than maxBodyLength limit",
       h.ERR_BAD_REQUEST,
       p,
-      k
+      P
     );
     try {
       let _;
@@ -1954,7 +1954,7 @@ const Ze = "1.19.0", Rt = 64 * 1024, { isFunction: xe } = i, bs = (e) => encodeU
           "maxContentLength size of " + M + " exceeded",
           h.ERR_BAD_RESPONSE,
           p,
-          k
+          P
         );
       if (De && w !== "get" && w !== "head") {
         const R = await b(N);
@@ -1993,7 +1993,7 @@ const Ze = "1.19.0", Rt = 64 * 1024, { isFunction: xe } = i, bs = (e) => encodeU
           "Stream request bodies are not supported by the current fetch implementation",
           h.ERR_NOT_SUPPORT,
           p,
-          k
+          P
         );
       i.isString(be) || (be = be ? "include" : "omit");
       const nr = u && "credentials" in o.prototype;
@@ -2011,8 +2011,8 @@ const Ze = "1.19.0", Rt = 64 * 1024, { isFunction: xe } = i, bs = (e) => encodeU
         duplex: "half",
         credentials: nr ? be : void 0
       };
-      k = u && new o(E, nt);
-      let z = await (u ? et(k, Ye) : et(E, nt));
+      P = u && new o(E, nt);
+      let z = await (u ? et(P, Ye) : et(E, nt));
       const st = L.from(z.headers);
       if (ce) {
         const R = i.toFiniteNumber(st.getContentLength());
@@ -2021,7 +2021,7 @@ const Ze = "1.19.0", Rt = 64 * 1024, { isFunction: xe } = i, bs = (e) => encodeU
             "maxContentLength size of " + M + " exceeded",
             h.ERR_BAD_RESPONSE,
             p,
-            k
+            P
           );
       }
       const Le = x && (V === "stream" || V === "response");
@@ -2041,7 +2041,7 @@ const Ze = "1.19.0", Rt = 64 * 1024, { isFunction: xe } = i, bs = (e) => encodeU
               "maxContentLength size of " + M + " exceeded",
               h.ERR_BAD_RESPONSE,
               p,
-              k
+              P
             );
           X && X(de);
         };
@@ -2064,7 +2064,7 @@ const Ze = "1.19.0", Rt = 64 * 1024, { isFunction: xe } = i, bs = (e) => encodeU
             "maxContentLength size of " + M + " exceeded",
             h.ERR_BAD_RESPONSE,
             p,
-            k
+            P
           );
       }
       return !Le && Z && Z(), await new Promise((R, F) => {
@@ -2074,13 +2074,13 @@ const Ze = "1.19.0", Rt = 64 * 1024, { isFunction: xe } = i, bs = (e) => encodeU
           status: z.status,
           statusText: z.statusText,
           config: p,
-          request: k
+          request: P
         });
       });
     } catch (_) {
       if (Z && Z(), K && K.aborted && K.reason instanceof h) {
         const B = K.reason;
-        throw B.config = p, k && (B.request = k), _ !== B && Object.defineProperty(B, "cause", {
+        throw B.config = p, P && (B.request = P), _ !== B && Object.defineProperty(B, "cause", {
           __proto__: null,
           value: _,
           writable: !0,
@@ -2089,15 +2089,15 @@ const Ze = "1.19.0", Rt = 64 * 1024, { isFunction: xe } = i, bs = (e) => encodeU
         }), B;
       }
       if (ue)
-        throw k && !ue.request && (ue.request = k), ue;
+        throw P && !ue.request && (ue.request = P), ue;
       if (_ instanceof h)
-        throw k && !_.request && (_.request = k), _;
+        throw P && !_.request && (_.request = P), _;
       if (_ && _.name === "TypeError" && /Load failed|fetch/i.test(_.message)) {
         const B = new h(
           "Network Error",
           h.ERR_NETWORK,
           p,
-          k,
+          P,
           _ && _.response
         );
         throw Object.defineProperty(B, "cause", {
@@ -2108,7 +2108,7 @@ const Ze = "1.19.0", Rt = 64 * 1024, { isFunction: xe } = i, bs = (e) => encodeU
           configurable: !0
         }), B;
       }
-      throw h.from(_, _ && _.code, p, k, _ && _.response);
+      throw h.from(_, _ && _.code, p, P, _ && _.response);
     }
   };
 }, xs = /* @__PURE__ */ new Map(), Qt = (e) => {
@@ -2210,14 +2210,14 @@ function Me(e) {
     }
   );
 }
-const ke = {};
+const Pe = {};
 ["object", "boolean", "number", "function", "string", "symbol"].forEach((e, t) => {
-  ke[e] = function(n) {
+  Pe[e] = function(n) {
     return typeof n === e || "a" + (t < 1 ? "n " : " ") + e;
   };
 });
 const _t = {};
-ke.transitional = function(t, r, n) {
+Pe.transitional = function(t, r, n) {
   function s(o, a) {
     return "[Axios v" + Ze + "] Transitional option '" + o + "'" + a + (n ? ". " + n : "");
   }
@@ -2235,7 +2235,7 @@ ke.transitional = function(t, r, n) {
     )), t ? t(o, a, l) : !0;
   };
 };
-ke.spelling = function(t) {
+Pe.spelling = function(t) {
   return (r, n) => (console.warn(`${n} is likely a misspelling of ${t}`), !0);
 };
 function Os(e, t, r) {
@@ -2260,7 +2260,7 @@ function Os(e, t, r) {
 }
 const Oe = {
   assertOptions: Os,
-  validators: ke
+  validators: Pe
 }, D = Oe.validators;
 let ee = class {
   constructor(t) {
@@ -2585,7 +2585,7 @@ Object.entries(We).forEach(([e, t]) => {
   We[t] = e;
 });
 function tr(e) {
-  const t = new ee(e), r = kt(ee.prototype.request, t);
+  const t = new ee(e), r = Pt(ee.prototype.request, t);
   return i.extend(r, ee.prototype, t, { allOwnKeys: !0 }), i.extend(r, t, null, { allOwnKeys: !0 }), r.create = function(s) {
     return tr(ne(e, s));
   }, r;
@@ -2596,7 +2596,7 @@ T.CanceledError = ye;
 T.CancelToken = Ns;
 T.isCancel = Jt;
 T.VERSION = Ze;
-T.toFormData = Pe;
+T.toFormData = ke;
 T.AxiosError = h;
 T.Cancel = T.CanceledError;
 T.all = function(t) {
@@ -2700,6 +2700,10 @@ const Ts = {
   posts: "文章",
   navigate: "导航",
   "rss feed": "RSS 订阅",
+  "admin login": "后台登录",
+  "signing in": "登录中",
+  "sign in to continue": "登录以继续访问",
+  "welcome back": "欢迎回来",
   pages: "页面",
   "get the latest posts in your feed reader": "通过 RSS 阅读器订阅最新文章",
   on: "评论于",
@@ -2752,12 +2756,12 @@ function S(e, t) {
       if (typeof s == "string" && s) return s;
     } catch {
     }
-  return (localStorage.getItem("mortar_lang") || (t == null ? void 0 : t.site_lang) || "en") === "zh" && Ts[e] || e;
+  return (localStorage.getItem("mortar_lang") || (t == null ? void 0 : t.site_lang) || "zh") === "zh" && Ts[e] || e;
 }
-function Ps(e) {
-  return localStorage.getItem("mortar_lang") || (e == null ? void 0 : e.site_lang) || "en";
+function ks(e) {
+  return localStorage.getItem("mortar_lang") || (e == null ? void 0 : e.site_lang) || "zh";
 }
-function ks({ settings: e }) {
+function Ps({ settings: e }) {
   const [t, r] = j([]), [n, s] = j(!1), [o, a] = j(null);
   G(() => {
     q.get("/menus/location/primary").then((d) => r(d.data.items || [])).catch(() => {
@@ -2776,7 +2780,7 @@ function ks({ settings: e }) {
       "div",
       { className: "max-w-5xl mx-auto px-4 py-5 " + (u === "centered" ? "text-center" : "flex items-end justify-between") },
       c.createElement(
-        P,
+        k,
         { to: "/", className: "inline-block" },
         c.createElement("h1", { className: "text-3xl md:text-4xl font-bold tracking-tight text-gray-900", style: { fontFamily: "Georgia, serif" } }, e.site_title || "Mortar"),
         e.site_description && c.createElement("p", { className: "text-xs uppercase tracking-[0.3em] text-red-700 mt-1" }, e.site_description)
@@ -2793,8 +2797,8 @@ function ks({ settings: e }) {
         c.createElement(
           "div",
           { className: "hidden md:flex items-center gap-7" },
-          c.createElement(P, { to: "/", className: "text-sm font-medium text-gray-700 hover:text-red-700" }, S("home", e)),
-          t.filter((d) => !(d.url === "/" && (d.label.toLowerCase() === "home" || d.label === S("home", e)))).map((d) => c.createElement(P, { key: d.id, to: d.url, className: "text-sm font-medium text-gray-700 hover:text-red-700 uppercase tracking-wide" }, d.label))
+          c.createElement(k, { to: "/", className: "text-sm font-medium text-gray-700 hover:text-red-700" }, S("home", e)),
+          t.filter((d) => !(d.url === "/" && (d.label.toLowerCase() === "home" || d.label === S("home", e)))).map((d) => c.createElement(k, { key: d.id, to: d.url, className: "text-sm font-medium text-gray-700 hover:text-red-700 uppercase tracking-wide" }, d.label))
         ),
         c.createElement(
           "div",
@@ -2807,8 +2811,8 @@ function ks({ settings: e }) {
           ) : c.createElement(
             c.Fragment,
             null,
-            c.createElement(P, { to: "/login", className: "text-gray-600 hover:text-red-700" }, S("sign in")),
-            c.createElement(P, { to: "/register", className: "text-gray-600 hover:text-red-700" }, S("register", e))
+            c.createElement(k, { to: "/login", className: "text-gray-600 hover:text-red-700" }, S("sign in")),
+            c.createElement(k, { to: "/register", className: "text-gray-600 hover:text-red-700" }, S("register", e))
           ),
           c.createElement("a", { href: "/admin", className: "px-3 py-1 bg-red-700 text-white text-xs rounded hover:bg-red-800" }, S("admin", e))
         ),
@@ -2817,10 +2821,10 @@ function ks({ settings: e }) {
       n && c.createElement(
         "div",
         { className: "md:hidden border-t border-gray-100 bg-white px-4 py-3 space-y-2" },
-        c.createElement(P, { to: "/", className: "block text-sm text-gray-600 py-1" }, S("home", e)),
-        t.filter((d) => !(d.url === "/" && (d.label.toLowerCase() === "home" || d.label === S("home", e)))).map((d) => c.createElement(P, { key: d.id, to: d.url, className: "block text-sm text-gray-600 py-1" }, d.label)),
-        o ? c.createElement("button", { onClick: l, className: "block text-sm text-gray-400 py-1" }, S("logout")) : c.createElement(P, { to: "/login", className: "block text-sm text-gray-600 py-1" }, S("sign in")),
-        c.createElement(P, { to: "/register", className: "block text-sm text-gray-600 py-1" }, S("register", e)),
+        c.createElement(k, { to: "/", className: "block text-sm text-gray-600 py-1" }, S("home", e)),
+        t.filter((d) => !(d.url === "/" && (d.label.toLowerCase() === "home" || d.label === S("home", e)))).map((d) => c.createElement(k, { key: d.id, to: d.url, className: "block text-sm text-gray-600 py-1" }, d.label)),
+        o ? c.createElement("button", { onClick: l, className: "block text-sm text-gray-400 py-1" }, S("logout")) : c.createElement(k, { to: "/login", className: "block text-sm text-gray-600 py-1" }, S("sign in")),
+        c.createElement(k, { to: "/register", className: "block text-sm text-gray-600 py-1" }, S("register", e)),
         c.createElement("a", { href: "/admin", className: "block text-sm text-red-700 font-medium py-1" }, S("admin", e))
       )
     )
@@ -2842,9 +2846,9 @@ function Cs({ settings: e }) {
       c.createElement(
         "div",
         { className: "flex items-center justify-center gap-6 text-sm" },
-        c.createElement(P, { to: "/", className: "hover:text-white" }, S("home", e)),
-        c.createElement(P, { to: "/search", className: "hover:text-white" }, S("search", e)),
-        c.createElement(P, { to: "/page/about", className: "hover:text-white" }, S("about", e)),
+        c.createElement(k, { to: "/", className: "hover:text-white" }, S("home", e)),
+        c.createElement(k, { to: "/search", className: "hover:text-white" }, S("search", e)),
+        c.createElement(k, { to: "/page/about", className: "hover:text-white" }, S("about", e)),
         c.createElement("a", { href: "/api/feed/rss", className: "hover:text-white" }, S("rss feed", e))
       ),
       c.createElement("p", { className: "text-center text-xs text-gray-500 mt-6" }, S("powered by", e) + " Mortar")
@@ -2869,15 +2873,15 @@ function vs() {
       "div",
       { className: "flex flex-wrap gap-1.5" },
       e.map((n) => {
-        var o, a, l;
+        var o, a, l, u;
         const s = 0.65 + (((o = n._count) == null ? void 0 : o.posts) || 0) / r * 0.35;
-        return c.createElement(P, {
+        return n.slug ? c.createElement(k, {
           key: n.id,
           to: "/tag/" + n.slug,
           className: "inline-block px-2 py-0.5 bg-gray-100 hover:bg-primary-100 rounded-full text-gray-600 hover:text-primary-700 transition-colors",
           style: { fontSize: s + "rem" },
-          title: (((a = n._count) == null ? void 0 : a.posts) || 0) + " " + S("posts")
-        }, n.name + " (" + (((l = n._count) == null ? void 0 : l.posts) || 0) + ")");
+          title: (((l = n._count) == null ? void 0 : l.posts) || 0) + " " + S("posts")
+        }, n.name + " (" + (((u = n._count) == null ? void 0 : u.posts) || 0) + ")") : c.createElement("span", { key: n.id, className: "inline-block px-2 py-0.5 bg-gray-100 rounded-full text-gray-600", style: { fontSize: s + "rem" } }, n.name + " (" + (((a = n._count) == null ? void 0 : a.posts) || 0) + ")");
       })
     )
   );
@@ -2897,7 +2901,7 @@ function Ds() {
       e.map((r) => c.createElement(
         "li",
         { key: r.id },
-        c.createElement(P, { to: "/post/" + r.slug, className: "text-sm text-gray-600 hover:text-primary-600 line-clamp-1" }, r.title)
+        c.createElement(k, { to: "/post/" + r.slug, className: "text-sm text-gray-600 hover:text-primary-600 line-clamp-1" }, r.title)
       ))
     )
   );
@@ -2919,7 +2923,7 @@ function Ls() {
           "li",
           { key: r.id, className: "flex items-start gap-2" },
           c.createElement("span", { className: "text-xs font-bold text-gray-300 mt-0.5 w-4" }, n + 1),
-          c.createElement(P, { to: "/post/" + r.slug, className: "text-sm text-gray-600 hover:text-primary-600 line-clamp-1" }, r.title),
+          c.createElement(k, { to: "/post/" + r.slug, className: "text-sm text-gray-600 hover:text-primary-600 line-clamp-1" }, r.title),
           r.views > 0 && c.createElement("span", { className: "text-xs text-gray-400 ml-auto shrink-0" }, r.views + " " + S("views"))
         )
       )
@@ -2946,7 +2950,7 @@ function Us() {
           "li",
           { key: n.month },
           c.createElement(
-            P,
+            k,
             { to: "/archive/" + s + "/" + o, className: "text-sm text-gray-600 hover:text-primary-600" },
             r[parseInt(o) - 1] + " " + s + " (" + n.count + ")"
           )
@@ -3072,7 +3076,7 @@ function Ms(e) {
   return new Date(r ? t.replace(" ", "T") + "Z" : t).getTime();
 }
 function At(e) {
-  const t = Ps() === "zh", r = Date.now(), n = Ms(e), s = r - n, o = Math.floor(s / 6e4);
+  const t = ks() === "zh", r = Date.now(), n = Ms(e), s = r - n, o = Math.floor(s / 6e4);
   if (o < 1) return t ? "刚刚" : "just now";
   if (o < 60) return t ? o + " 分钟前" : o + "m ago";
   const a = Math.floor(o / 60);
@@ -3131,7 +3135,7 @@ function qs(e) {
               return c.createElement(
                 "li",
                 { key: b.id },
-                c.createElement(P, { to: "/category/" + b.slug, className: "text-sm " + (l === b.slug ? "text-red-700 font-medium" : "text-gray-600 hover:text-red-700") }, b.name, ((g = b._count) == null ? void 0 : g.posts) > 0 ? c.createElement("span", { className: "text-gray-500 ml-1" }, "(" + b._count.posts + ")") : null)
+                c.createElement(k, { to: "/category/" + b.slug, className: "text-sm " + (l === b.slug ? "text-red-700 font-medium" : "text-gray-600 hover:text-red-700") }, b.name, ((g = b._count) == null ? void 0 : g.posts) > 0 ? c.createElement("span", { className: "text-gray-500 ml-1" }, "(" + b._count.posts + ")") : null)
               );
             }))
           )
@@ -3159,12 +3163,12 @@ function qs(e) {
                   ((O = f.categories) == null ? void 0 : O[0]) && c.createElement("span", { className: "flex items-center gap-1" }, c.createElement(fr, { size: 12 }), f.categories[0].name)
                 ),
                 c.createElement(
-                  P,
+                  k,
                   { to: "/post/" + f.slug },
                   c.createElement("h2", { className: "text-2xl font-bold text-gray-900 hover:text-red-700 mb-2", style: d }, f.title)
                 ),
                 f.excerpt && c.createElement("p", { className: "text-gray-600 text-sm leading-relaxed" }, f.excerpt),
-                c.createElement(P, { to: "/post/" + f.slug, className: "inline-block mt-3 text-sm font-medium text-red-700 hover:text-red-800" }, S("read more", t))
+                c.createElement(k, { to: "/post/" + f.slug, className: "inline-block mt-3 text-sm font-medium text-red-700 hover:text-red-800" }, S("read more", t))
               )
             ),
             // Rest of posts: list with left border
@@ -3174,7 +3178,7 @@ function qs(e) {
                 "article",
                 { key: b.id, className: "border-l-4 border-red-700 pl-4 py-2" },
                 c.createElement(
-                  P,
+                  k,
                   { to: "/post/" + b.slug },
                   c.createElement("h3", { className: "text-lg font-bold text-gray-900 hover:text-red-700", style: d }, b.title)
                 ),
@@ -3200,7 +3204,7 @@ function qs(e) {
     )
   );
 }
-const uo = { name: "magazine", typography: { cap: 1, max: 30 }, Header: ks, Footer: Cs, HomeLayout: qs };
+const uo = { name: "magazine", typography: { cap: 1, max: 30 }, Header: Ps, Footer: Cs, HomeLayout: qs };
 export {
   uo as default
 };
