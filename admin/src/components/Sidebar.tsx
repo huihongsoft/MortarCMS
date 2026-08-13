@@ -77,7 +77,7 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
   }, []);
 
   return React.createElement('aside', {
-    className: 'sidebar w-64 bg-white dark:bg-gray-900 flex flex-col h-screen fixed left-0 top-0 z-30 border-r border-gray-200 dark:border-gray-800 transform transition-transform duration-200 ' + (open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'),
+    className: 'sidebar w-64 bg-white dark:bg-gray-900 flex flex-col fixed left-0 top-0 bottom-9 z-30 border-r border-gray-200 dark:border-gray-800 transform transition-transform duration-200 ' + (open ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'),
     'aria-label': t('admin navigation', getLang()),
   },
     // Logo row: same height (h-12) as the top admin bar on the right

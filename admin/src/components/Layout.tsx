@@ -103,7 +103,7 @@ export default function Layout() {
   };
   const isDark = () => document.documentElement.classList.contains('dark');
 
-  return React.createElement('div', { className: 'flex flex-col min-h-screen' },
+  return React.createElement('div', { className: 'flex flex-col h-screen overflow-hidden' },
     React.createElement('div', { className: 'flex flex-1 min-h-0' },
       React.createElement('a', { href: '#main-content', className: 'skip-link' }, t('skip to content', getLang())),
     React.createElement(Sidebar, { open: sidebarOpen, onClose: () => setSidebarOpen(false) }),
@@ -150,7 +150,7 @@ export default function Layout() {
           ),
         ),
       ),
-      React.createElement('main', { ref: mainRef, id: 'main-content', role: 'main', tabIndex: -1, className: 'flex-1 p-4 lg:p-8 bg-gray-50 dark:bg-gray-900' },
+      React.createElement('main', { ref: mainRef, id: 'main-content', role: 'main', tabIndex: -1, className: 'flex-1 p-4 lg:p-8 bg-gray-50 dark:bg-gray-900 overflow-y-auto' },
         React.createElement(Outlet)
       ),
       // Floating AI assistant shortcut (Ctrl+K)
