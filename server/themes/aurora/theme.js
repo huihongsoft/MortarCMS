@@ -3443,7 +3443,7 @@ function Ii(e) {
         ),
         o.createElement(
           "aside",
-          { className: "space-y-10" },
+          { className: "space-y-4" },
           (() => {
             var _;
             const d = (() => {
