@@ -150,14 +150,14 @@ export default function Layout() {
           ),
         ),
       ),
-      React.createElement('main', { ref: mainRef, id: 'main-content', role: 'main', tabIndex: -1, className: 'flex-1 p-4 lg:p-8 pb-16 bg-gray-50 dark:bg-gray-900 overflow-y-auto' },
+      React.createElement('main', { ref: mainRef, id: 'main-content', role: 'main', tabIndex: -1, className: 'flex-1 p-4 lg:px-8 lg:pt-8 pb-16 bg-gray-50 dark:bg-gray-900 overflow-y-auto' },
         React.createElement(Outlet)
       ),
       // Floating AI assistant shortcut (Ctrl+K)
       !location.pathname.startsWith('/ai') && React.createElement('button', {
         onClick: () => navigate('/ai'),
         title: 'AI 助理 (Ctrl+K)',
-        className: 'fixed bottom-6 right-6 z-40 w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 hover:scale-105 transition-transform',
+        className: 'fixed bottom-14 right-6 z-40 w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 hover:scale-105 transition-transform',
       }, React.createElement(Bot, { size: 22 })),
     ),
     ),
