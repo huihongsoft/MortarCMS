@@ -57,6 +57,13 @@ export default function MenuEditor() {
     setDragIdx(null);
   }
 
+  function startAddChild(itemIdx: number) {
+    const it = items[itemIdx];
+    setEditingIdx(null);
+    setShowAdd(true);
+    setNewItem({ type: 'custom', label: '', url: '', pageId: '', categoryId: '', parentId: it.id });
+  }
+
   function startEdit(idx: number) {
     const it = items[idx];
     setEditingIdx(idx);
@@ -143,6 +150,7 @@ export default function MenuEditor() {
                     )
                   ),
                   React.createElement('button', { onClick: () => startEdit(itemIdx), className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 12 }), t('edit', getLang())),
+                  React.createElement('button', { onClick: () => startAddChild(itemIdx), className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Plus, { size: 12 }), t('add sub item', getLang())),
                   React.createElement('button', { onClick: () => removeItem(itemIdx), className: 'p-1 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 }))
                 ));
               };
@@ -175,7 +183,9 @@ export default function MenuEditor() {
           )
         )
         : React.createElement('div', { className: 'card p-4' },
-          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('add item', getLang())),      )
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, newItem.parentId
+            ? t('add sub item', getLang()) + ' → ' + (items.find((it: any) => it.id === newItem.parentId)?.label || '')
+            : t('add item', getLang())),      )
     )
   );
 }
