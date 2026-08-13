@@ -150,7 +150,7 @@ export default function Layout() {
           ),
         ),
       ),
-      React.createElement('main', { ref: mainRef, id: 'main-content', role: 'main', tabIndex: -1, className: 'flex-1 p-4 lg:p-8 bg-gray-50 dark:bg-gray-900 overflow-y-auto' },
+      React.createElement('main', { ref: mainRef, id: 'main-content', role: 'main', tabIndex: -1, className: 'flex-1 p-4 lg:p-8 pb-16 bg-gray-50 dark:bg-gray-900 overflow-y-auto' },
         React.createElement(Outlet)
       ),
       // Floating AI assistant shortcut (Ctrl+K)
