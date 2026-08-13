@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import StatusBar from './StatusBar';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Globe, Moon, Sun, ExternalLink, LogOut, ChevronDown, Bot, Menu, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -151,6 +152,7 @@ export default function Layout() {
       React.createElement('main', { ref: mainRef, id: 'main-content', role: 'main', tabIndex: -1, className: 'flex-1 p-4 lg:p-8 bg-gray-50 dark:bg-gray-900' },
         React.createElement(Outlet)
       ),
+      React.createElement(StatusBar),
       // Floating AI assistant shortcut (Ctrl+K)
       !location.pathname.startsWith('/ai') && React.createElement('button', {
         onClick: () => navigate('/ai'),

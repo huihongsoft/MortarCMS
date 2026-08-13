@@ -695,6 +695,7 @@ const zh: Record<string, string> = {
   'uninstall plugin': '卸载插件',
   'uninstalled': '已卸载',
   'unknown': '未知',
+'uptime': '运行',
 'save carousel': '保存轮播',
 'add slide': '添加一页',
 'image url': '图片地址',
