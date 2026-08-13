@@ -1524,3 +1524,10 @@ table tbody tr { transition: background-color 0.12s ease; }
 /* NOTE: frame centering is handled by the custom zoom logic in JS
    (frames get an absolute pixel width; wrapper is left-anchored).
    Do NOT add flex/centering rules here — they fight the pixel sizing. */
+
+/* Collapsible Appearance cards: hide the native marker, space the content
+   below the summary, and rotate the arrow when open */
+details.card summary::-webkit-details-marker { display: none; }
+details.card summary { list-style: none; }
+details.card > *:not(summary) { margin-top: 0.75rem; }
+details.card[open] summary .ve-arrow { transform: rotate(180deg); }
