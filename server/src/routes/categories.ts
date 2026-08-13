@@ -10,7 +10,8 @@ const categorySchema = z.object({ name: z.string().min(1).max(50), description: 
 router.get('/', (req: AuthRequest, res: Response) => {
   try {
     const categories = db.prepare('SELECT * FROM Category ORDER BY name ASC').all() as any[];
-    categories.forEach((c: any) => { c._count = { posts: (db.prepare('SELECT COUNT(*) as cnt FROM PostCategory WHERE categoryId = ?').get(c.id) as any)?.cnt || 0 }; });
+    // Count only published posts so category lists match the category page
+    categories.forEach((c: any) => { c._count = { posts: (db.prepare("SELECT COUNT(*) as cnt FROM PostCategory pc JOIN Post p ON p.id = pc.postId WHERE pc.categoryId = ? AND p.type = 'post' AND p.status = 'published'").get(c.id) as any)?.cnt || 0 }; });
     res.json(categories);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

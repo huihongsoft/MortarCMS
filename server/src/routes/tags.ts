@@ -10,7 +10,8 @@ const tagSchema = z.object({ name: z.string().min(1).max(50) });
 router.get('/', (req: AuthRequest, res: Response) => {
   try {
     const tags = db.prepare('SELECT * FROM Tag ORDER BY name ASC').all() as any[];
-    tags.forEach((t: any) => { t._count = { posts: (db.prepare('SELECT COUNT(*) as cnt FROM PostTag WHERE tagId = ?').get(t.id) as any)?.cnt || 0 }; });
+    // Count only published posts so the tag cloud matches the tag page
+    tags.forEach((t: any) => { t._count = { posts: (db.prepare("SELECT COUNT(*) as cnt FROM PostTag pt JOIN Post p ON p.id = pt.postId WHERE pt.tagId = ? AND p.type = 'post' AND p.status = 'published'").get(t.id) as any)?.cnt || 0 }; });
     res.json(tags);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
