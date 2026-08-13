@@ -59,7 +59,6 @@ export default function Dashboard() {
   ];
 
   return React.createElement('div', null,
-    React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 mb-4' }, t('dashboard', getLang())),
     // Welcome banner with quick actions
     React.createElement('div', { className: 'rounded-2xl p-6 mb-6 text-white shadow-lg', style: { background: 'linear-gradient(135deg,#2563eb,#7c3aed)' } },
       React.createElement('div', { className: 'flex flex-col lg:flex-row lg:items-center gap-4 justify-between' },
