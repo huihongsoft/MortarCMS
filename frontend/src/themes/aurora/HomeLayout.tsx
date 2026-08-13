@@ -73,7 +73,7 @@ export default function HomeLayout(props: any) {
                 ),
               ),
         ),
-        React.createElement('aside', { className: 'space-y-10' },
+        React.createElement('aside', { className: 'space-y-4' },
           (() => {
             const activeWidgets: string[] = (() => { try { return JSON.parse(settings.widgets_active || '[]'); } catch { return []; } })();
             const cfg: Record<string, { title?: string; html?: string }> = (() => { try { return JSON.parse(settings.widgets_config || '{}'); } catch { return {}; } })();
