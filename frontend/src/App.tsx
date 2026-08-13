@@ -1,5 +1,4 @@
 import React, { useEffect, useState, Suspense, lazy } from 'react';
-import StatusBar from './components/StatusBar';
 import ReadingProgress from './components/ReadingProgress';
 import AdminBar from './components/AdminBar';
 import ThemeSection from './components/ThemeSection';
@@ -76,8 +75,6 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
       React.createElement(ScrollToTop),
       React.createElement(CookieConsent, { settings }),
       React.createElement(theme.Footer, { settings }),
-      // Footer status bar: site stats, clock and online indicator
-      React.createElement(StatusBar, { settings }),
       React.createElement(ThemeSection, { settings, location: 'after_footer' })
   );
 }

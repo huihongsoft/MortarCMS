@@ -103,7 +103,8 @@ export default function Layout() {
   };
   const isDark = () => document.documentElement.classList.contains('dark');
 
-  return React.createElement('div', { className: 'flex min-h-screen' },
+  return React.createElement('div', { className: 'flex flex-col min-h-screen' },
+    React.createElement('div', { className: 'flex flex-1 min-h-0' },
       React.createElement('a', { href: '#main-content', className: 'skip-link' }, t('skip to content', getLang())),
     React.createElement(Sidebar, { open: sidebarOpen, onClose: () => setSidebarOpen(false) }),
     // Mobile drawer overlay (click to dismiss)
@@ -152,7 +153,6 @@ export default function Layout() {
       React.createElement('main', { ref: mainRef, id: 'main-content', role: 'main', tabIndex: -1, className: 'flex-1 p-4 lg:p-8 bg-gray-50 dark:bg-gray-900' },
         React.createElement(Outlet)
       ),
-      React.createElement(StatusBar),
       // Floating AI assistant shortcut (Ctrl+K)
       !location.pathname.startsWith('/ai') && React.createElement('button', {
         onClick: () => navigate('/ai'),
@@ -160,5 +160,7 @@ export default function Layout() {
         className: 'fixed bottom-6 right-6 z-40 w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 hover:scale-105 transition-transform',
       }, React.createElement(Bot, { size: 22 })),
     ),
+    ),
+    React.createElement(StatusBar),
   );
 }

@@ -2826,6 +2826,8 @@ const Ol = {
   posts: "文章",
   navigate: "导航",
   "rss feed": "RSS 订阅",
+  online: "在线",
+  tags: "标签",
   slide: "幻灯片",
   "admin login": "后台登录",
   "signing in": "登录中",

@@ -86,18 +86,6 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Public: lightweight site stats for the footer status bar
-router.get('/site-stats', (req: AuthRequest, res: Response) => {
-  try {
-    const posts = (db.prepare("SELECT COUNT(*) as c FROM Post WHERE type = 'post' AND status = 'published'").get() as any)?.c || 0;
-    const pages = (db.prepare("SELECT COUNT(*) as c FROM Post WHERE type = 'page' AND status = 'published'").get() as any)?.c || 0;
-    const categories = (db.prepare('SELECT COUNT(*) as c FROM Category').get() as any)?.c || 0;
-    const tags = (db.prepare('SELECT COUNT(*) as c FROM Tag').get() as any)?.c || 0;
-    const comments = (db.prepare("SELECT COUNT(*) as c FROM Comment WHERE status = 'approved'").get() as any)?.c || 0;
-    res.json({ posts, pages, categories, tags, comments });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
-});
-
 // Search suggestions for the search widget autocomplete (lightweight, no content)
 router.get('/suggest', (req: AuthRequest, res: Response) => {
   try {
