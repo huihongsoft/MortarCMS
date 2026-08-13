@@ -13,10 +13,10 @@ export default function PageLayout(props: any) {
   const { settings, page, submitted, commentForm, setCommentForm, submitComment, commentError } = props;
   const contentRef = useRef<HTMLDivElement>(null);
 
-  return React.createElement('div', { className: 'max-w-3xl mx-auto px-6 py-14' },
+  return React.createElement('div', { className: 'max-w-5xl mx-auto px-6 py-14' },
     React.createElement(Breadcrumbs, { items: [{ label: t('blog', settings), to: '/' }, { label: page.title || t('page', settings) }] }),
     React.createElement('h1', { className: 'text-3xl sm:text-5xl font-bold tracking-tight text-gray-900 leading-tight mb-8' }, page.title),
     page.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(page.meta._visual_css) } }),
-    React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(page.content || '')), settings) } }),
+    React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-3xl mx-auto', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(page.content || '')), settings) } }),
   );
 }

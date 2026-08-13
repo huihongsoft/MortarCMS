@@ -69,7 +69,7 @@ export default function PostLayout(props: any) {
     return 'https://www.gravatar.com/avatar/' + Math.abs(h).toString(16) + '?d=identicon&s=96';
   };
 
-  return React.createElement('div', { className: 'max-w-3xl mx-auto px-6 py-14' },
+  return React.createElement('div', { className: 'max-w-5xl mx-auto px-6 py-14' },
     React.createElement(Breadcrumbs, { items: [{ label: t('blog', settings), to: '/' }, { label: post.title || t('post', settings) }] }),
     React.createElement('article', null,
       post.format && post.format !== 'standard' && React.createElement('span', { className: 'inline-block text-xs font-medium uppercase tracking-[0.2em] text-indigo-600 mb-4' }, post.format),
@@ -83,15 +83,15 @@ export default function PostLayout(props: any) {
         React.createElement('span', { className: 'flex items-center gap-2' }, React.createElement(Clock, { size: 15 }), readingTime(pageContent)),
         post.commentCount > 0 && React.createElement('span', { className: 'flex items-center gap-2' }, React.createElement(MessageSquare, { size: 15 }), post.commentCount),
       ),
-      post.featured && React.createElement('img', { src: cdnUrl(post.featured, settings), alt: post.title, className: 'w-full rounded-2xl mb-10 shadow-xl shadow-gray-900/5', loading: 'eager', fetchPriority: 'high', decoding: 'async' }),
+      post.featured && React.createElement('img', { src: cdnUrl(post.featured, settings), alt: post.title, className: 'w-full max-w-3xl mx-auto rounded-2xl mb-10 shadow-xl shadow-gray-900/5', loading: 'eager', fetchPriority: 'high', decoding: 'async' }),
       post.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(post.meta._visual_css) } }),
       React.createElement(Toc, { containerRef: contentRef, settings }),
-      React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none mb-14', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(pageContent)), settings) } }),
-      post.tags?.length > 0 && React.createElement('div', { className: 'flex flex-wrap items-center gap-2 mb-12' },
+      React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-3xl mx-auto mb-14', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(pageContent)), settings) } }),
+      post.tags?.length > 0 && React.createElement('div', { className: 'flex flex-wrap items-center gap-2 mb-12 max-w-3xl mx-auto' },
         React.createElement(TagIcon, { size: 15, className: 'text-gray-400' }),
         post.tags.map((tg: any) => tg.slug ? React.createElement(Link, { key: tg.tagId, to: '/tag/' + tg.slug, className: 'px-3.5 py-1.5 rounded-full text-xs bg-gray-50 border border-gray-100 text-gray-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors' }, tg.name) : null),
       ),
-      author && React.createElement('div', { className: 'flex items-center gap-4 p-6 rounded-2xl bg-gray-50/70 border border-gray-100 mb-12' },
+      author && React.createElement('div', { className: 'flex items-center gap-4 p-6 rounded-2xl bg-gray-50/70 border border-gray-100 mb-12 max-w-3xl mx-auto' },
         React.createElement('img', { src: gravatarUrl(author?.email || ''), alt: '', className: 'w-12 h-12 rounded-full' }),
         React.createElement('div', null,
           React.createElement(Link, { to: '/author/' + author.username, className: 'font-semibold text-gray-900 hover:text-indigo-600 transition-colors' }, author.username),
@@ -100,7 +100,7 @@ export default function PostLayout(props: any) {
       ),
       settings.theme_show_share_buttons !== '0' && React.createElement(SocialShare, { title: post.title, url: '/post/' + post.slug, siteUrl: settings.site_url }),
     ),
-    React.createElement('section', { className: 'mt-4' },
+    React.createElement('section', { className: 'mt-4 max-w-3xl mx-auto' },
       React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-2' }, t('comments', settings), post.commentCount > 0 ? ' (' + post.commentCount + ')' : ''),
       commentList.length > 0 && React.createElement('div', null, commentList),
       submitted ? React.createElement('p', { className: 'text-sm text-green-600 mt-6' }, t('comment submitted for moderation', settings))
