@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Plus, Trash2, GripVertical, Save } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, GripVertical, Save, Edit2 } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -45,6 +45,8 @@ export default function MenuEditor() {
   const [menuName, setMenuName] = useState('');
   const [menuLocation, setMenuLocation] = useState('primary');
   const [menuSiteId, setMenuSiteId] = useState('');
+  const [editingIdx, setEditingIdx] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<{ label: string; url: string; parentId: string }>({ label: '', url: '', parentId: '' });
   const [sites, setSites] = useState<any[]>([]);
   function onDrop(targetIdx: number) {
     if (dragIdx === null || dragIdx === targetIdx) { setDragIdx(null); return; }
@@ -53,6 +55,18 @@ export default function MenuEditor() {
     next.splice(targetIdx, 0, moved);
     setItems(next);
     setDragIdx(null);
+  }
+
+  function startEdit(idx: number) {
+    const it = items[idx];
+    setEditingIdx(idx);
+    setEditForm({ label: it.label || '', url: it.url || '', parentId: it.parentId || '' });
+  }
+  function saveEdit() {
+    if (editingIdx === null) return;
+    const next = items.map((it, i) => i === editingIdx ? { ...it, label: editForm.label, url: editForm.url || '#', parentId: editForm.parentId || null } : it);
+    setItems(next);
+    setEditingIdx(null);
   }
 
   async function saveMenu() {
@@ -89,66 +103,79 @@ export default function MenuEditor() {
         React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4' }, t('menu items', getLang())),
           items.length === 0 ? React.createElement('p', { className: 'text-sm text-gray-400 py-4' }, t('no menu items yet', getLang()))
-          : React.createElement('div', { className: 'space-y-1' }, items.map((item: any, idx: number) =>
-              React.createElement('div', {
-                key: item.id,
-                draggable: true,
-                onDragStart: () => setDragIdx(idx),
-                onDragOver: (e: React.DragEvent) => e.preventDefault(),
-                onDrop: () => onDrop(idx),
-                className: 'flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-grab ' + (dragIdx === idx ? 'opacity-50' : ''),
-              },
-                React.createElement('div', { className: 'flex flex-col gap-0.5' },
-                  React.createElement('button', { onClick: () => moveItem(idx, -1), className: 'p-0.5 text-gray-300 hover:text-gray-500 leading-none' }, '\u25b2'),
-                  React.createElement('button', { onClick: () => moveItem(idx, 1), className: 'p-0.5 text-gray-300 hover:text-gray-500 leading-none' }, '\u25bc')
-                ),
-                React.createElement(GripVertical, { size: 14, className: 'text-gray-300' }),
-                React.createElement('div', { className: 'flex-1 min-w-0' },
-                  React.createElement('div', { className: 'flex items-center gap-2' },
-                    item.parentId && React.createElement('span', { className: 'text-gray-300 text-xs' }, '└─'),
-                    React.createElement('span', { className: 'text-sm font-medium text-gray-900' }, item.label),
-                    item.parentId && React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-500' }, t('sub item', getLang()))),
-                  React.createElement('div', { className: 'flex items-center gap-2 mt-0.5' },
-                    React.createElement('span', { className: 'text-xs text-gray-400 truncate' }, item.url),
-                    React.createElement('select', {
-                      value: item.parentId || '',
-                      onChange: (e: React.ChangeEvent<HTMLSelectElement>) => {
-                        const next = items.map(it => it.id === item.id ? { ...it, parentId: e.target.value || null } : it);
-                        setItems(next);
+          : React.createElement('div', { className: 'space-y-1', onClick: () => setEditingIdx(null) }, (() => {
+              const topItems = items.filter((it: any) => !it.parentId);
+              const childrenOf = (pid: string) => items.filter((it: any) => it.parentId === pid);
+              const rows: React.ReactNode[] = [];
+              const renderRow = (item: any, idx: number, isChild: boolean) => {
+                const itemIdx = items.findIndex((x: any) => x.id === item.id);
+                rows.push(React.createElement('div', {
+                  key: item.id,
+                  draggable: true,
+                  onDragStart: () => setDragIdx(itemIdx),
+                  onDragOver: (e: React.DragEvent) => e.preventDefault(),
+                  onDrop: () => onDrop(itemIdx),
+                  onClick: (e: React.MouseEvent) => e.stopPropagation(),
+                  className: 'flex items-center gap-2 p-3 bg-gray-50 rounded-lg border border-gray-200 cursor-grab ' + (isChild ? 'ml-8' : '') + ' ' + (dragIdx === itemIdx ? 'opacity-50' : '') + ' ' + (editingIdx === itemIdx ? 'ring-2 ring-primary-400' : ''),
+                },
+                  React.createElement('div', { className: 'flex flex-col gap-0.5' },
+                    React.createElement('button', { onClick: () => moveItem(itemIdx, -1), className: 'p-0.5 text-gray-300 hover:text-gray-500 leading-none' }, '\u25b2'),
+                    React.createElement('button', { onClick: () => moveItem(itemIdx, 1), className: 'p-0.5 text-gray-300 hover:text-gray-500 leading-none' }, '\u25bc')
+                  ),
+                  React.createElement(GripVertical, { size: 14, className: 'text-gray-300' }),
+                  React.createElement('div', { className: 'flex-1 min-w-0' },
+                    React.createElement('div', { className: 'flex items-center gap-2' },
+                      isChild && React.createElement('span', { className: 'text-gray-300 text-xs' }, '└─'),
+                      React.createElement('span', { className: 'text-sm font-medium text-gray-900' }, item.label),
+                      isChild && React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-500' }, t('sub item', getLang()))),
+                    React.createElement('div', { className: 'flex items-center gap-2 mt-0.5' },
+                      React.createElement('span', { className: 'text-xs text-gray-400 truncate' }, item.url),
+                      React.createElement('select', {
+                        value: item.parentId || '',
+                        onChange: (e: React.ChangeEvent<HTMLSelectElement>) => {
+                          const next = items.map(it => it.id === item.id ? { ...it, parentId: e.target.value || null } : it);
+                          setItems(next);
+                        },
+                        className: 'text-[11px] border border-gray-200 rounded px-1 py-0.5 bg-white',
                       },
-                      className: 'text-[11px] border border-gray-200 rounded px-1 py-0.5 bg-white',
-                    },
-                      React.createElement('option', { value: '' }, t('top level', getLang())),
-                      items.filter(it => it.id !== item.id).map(it => React.createElement('option', { key: it.id, value: it.id }, it.label)))
-                  )
-                ),
-                React.createElement('button', { onClick: () => removeItem(idx), className: 'p-1 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 }))
-              )
-            ))
+                        React.createElement('option', { value: '' }, t('top level', getLang())),
+                        items.filter(it => it.id !== item.id).map(it => React.createElement('option', { key: it.id, value: it.id }, it.label)))
+                    )
+                  ),
+                  React.createElement('button', { onClick: () => startEdit(itemIdx), className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 12 }), t('edit', getLang())),
+                  React.createElement('button', { onClick: () => removeItem(itemIdx), className: 'p-1 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 }))
+                ));
+              };
+              topItems.forEach((parent: any) => {
+                const pIdx = items.findIndex((x: any) => x.id === parent.id);
+                renderRow(parent, pIdx, false);
+                childrenOf(parent.id).forEach((child: any) => renderRow(child, items.findIndex((x: any) => x.id === child.id), true));
+              });
+              // orphans (invalid parent refs) at the end
+              items.forEach((it: any, idx: number) => { if (it.parentId && !items.some((x: any) => x.id === it.parentId)) renderRow(it, idx, false); });
+              return rows;
+            })())
         )
       ),
+      React.createElement('div', { className: 'space-y-4' },        )
+      ),
       React.createElement('div', { className: 'space-y-4' },
-        React.createElement('div', { className: 'card p-4' },
-          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('add item', getLang())),
+        editingIdx !== null ? React.createElement('div', { className: 'card p-4' },
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('edit item', getLang())),
           React.createElement('div', { className: 'space-y-3' },
-            React.createElement('select', { value: newItem.type, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, type: e.target.value }), className: 'input-field' },
-              React.createElement('option', { value: 'page' }, t('page', getLang())), React.createElement('option', { value: 'category' }, t('category', getLang())), React.createElement('option', { value: 'custom' }, t('custom link', getLang()))
-            ),
-            React.createElement('input', { value: newItem.label, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setNewItem({ ...newItem, label: e.target.value }), placeholder: t('label', getLang()), className: 'input-field' }),
-            newItem.type === 'page' && React.createElement('select', { value: newItem.pageId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, pageId: e.target.value }), className: 'input-field' },
-              React.createElement('option', { value: '' }, t('select page', getLang()) + '...'), pages.map((p: any) => React.createElement('option', { key: p.id, value: p.id }, p.title))
-            ),
-            newItem.type === 'category' && React.createElement('select', { value: newItem.categoryId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, categoryId: e.target.value }), className: 'input-field' },
-              React.createElement('option', { value: '' }, t('select category', getLang()) + '...'), categories.map((c: any) => React.createElement('option', { key: c.id, value: c.id }, c.name))
-            ),
-            newItem.type === 'custom' && React.createElement('input', { value: newItem.url, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setNewItem({ ...newItem, url: e.target.value }), placeholder: 'URL (https://...)', className: 'input-field' }),
-            items.length > 0 && React.createElement('select', { value: newItem.parentId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, parentId: e.target.value }), className: 'input-field' },
+            React.createElement('input', { value: editForm.label, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, label: e.target.value }), placeholder: t('label', getLang()), className: 'input-field' }),
+            React.createElement('input', { value: editForm.url, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, url: e.target.value }), placeholder: 'URL (/page/xxx 或 https://...)', className: 'input-field' }),
+            items.length > 1 && React.createElement('select', { value: editForm.parentId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, parentId: e.target.value }), className: 'input-field' },
               React.createElement('option', { value: '' }, t('top level', getLang())),
-              items.map(it => React.createElement('option', { key: it.id, value: it.id }, it.label))),
-            React.createElement('button', { onClick: addItem, className: 'btn-primary w-full justify-center' }, React.createElement(Plus, { size: 16 }), t('add to menu', getLang()))
+              items.filter((it: any, i: number) => i !== editingIdx).map((it: any) => React.createElement('option', { key: it.id, value: it.id }, it.label))),
+            React.createElement('div', { className: 'flex gap-2' },
+              React.createElement('button', { onClick: saveEdit, className: 'btn-primary flex-1 justify-center' }, React.createElement(Save, { size: 14 }), t('save', getLang())),
+              React.createElement('button', { onClick: () => setEditingIdx(null), className: 'btn-secondary' }, t('cancel', getLang()))
+            )
           )
         )
-      )
+        : React.createElement('div', { className: 'card p-4' },
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('add item', getLang())),      )
     )
   );
 }
