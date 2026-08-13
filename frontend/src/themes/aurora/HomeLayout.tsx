@@ -43,7 +43,7 @@ export default function HomeLayout(props: any) {
               ? React.createElement('div', { className: 'text-center py-24' }, React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-2' }, t('failed to load posts', settings)), React.createElement('p', { className: 'text-sm text-gray-500' }, t('please try again later', settings)))
               : React.createElement('div', { className: 'text-center py-24' }, React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-2' }, t('no posts yet', settings)), React.createElement('p', { className: 'text-sm text-gray-500' }, t('check back later for new content', settings)))
             : React.createElement('div', null,
-                posts.map((p: any, idx: number) => React.createElement('article', { key: p.id, className: 'py-12 ' + (idx > 0 ? 'border-t border-gray-900/[0.06]' : '') },
+                posts.map((p: any, idx: number) => React.createElement('article', { key: p.id, className: 'pb-12 ' + (idx > 0 ? 'pt-12 border-t border-gray-900/[0.06]' : '') },
                   p.featured && React.createElement(Link, { to: '/post/' + p.slug, className: 'block overflow-hidden rounded-2xl mb-8' },
                     React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full aspect-[16/9] object-cover transition-transform duration-500 hover:scale-[1.02]', loading: 'lazy', decoding: 'async' })),
                   React.createElement(Link, { to: '/post/' + p.slug },
