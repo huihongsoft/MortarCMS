@@ -128,7 +128,7 @@ After installation, visit `http://localhost:3001/install` to complete the wizard
 ## 🚀 Quick Start
 
 ### Requirements
-- Node.js ≥ 18
+- Node.js ≥ 22
 - npm ≥ 9
 
 ### Option A — one-click install (recommended)

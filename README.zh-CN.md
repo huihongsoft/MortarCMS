@@ -125,7 +125,7 @@ curl -fsSL https://raw.githubusercontent.com/huihongsoft/MortarCMS/main/install.
 ## 🚀 快速开始
 
 ### 环境要求
-- Node.js ≥ 18
+- Node.js ≥ 22
 - npm ≥ 9
 
 ### 方式 A：一键安装（推荐）

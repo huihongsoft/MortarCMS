@@ -31,7 +31,7 @@ PORT="${MORTAR_PORT:-3001}"
 INSTALL_DIR="${MORTAR_DIR:-}"
 SERVICE=1
 SERVICE_NAME="mortar"
-NODE_MIN=18
+NODE_MIN=22
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
