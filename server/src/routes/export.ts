@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import db from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { sanitizeHtml } from '../utils/sanitize';
 
 const router = Router();
 
@@ -63,7 +64,11 @@ router.post('/import', authenticate, authorize('admin'), (req: AuthRequest, res:
       count++;
     }
     if (data.posts) for (const p of data.posts) {
-      db.prepare('INSERT OR IGNORE INTO Post (id, title, slug, content, excerpt, status, type, featured, authorId, parentId, menuOrder, sticky, password, publishedAt, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(p.id||cuid_import(), p.title, p.slug, p.content||'', p.excerpt||'', p.status||'draft', p.type||'post', p.featured||null, p.authorId, p.parentId||null, p.menuOrder||0, p.sticky||0, p.password||'', p.publishedAt||null, p.createdAt||new Date().toISOString(), p.updatedAt||new Date().toISOString());
+      // Imported content is untrusted: sanitize before storing (the file may
+      // have been tampered with after export)
+      const content = sanitizeHtml(p.content || '');
+      const excerpt = sanitizeHtml(p.excerpt || '');
+      db.prepare('INSERT OR IGNORE INTO Post (id, title, slug, content, excerpt, status, type, featured, authorId, parentId, menuOrder, sticky, password, publishedAt, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(p.id||cuid_import(), p.title, p.slug, content, excerpt, p.status||'draft', p.type||'post', p.featured||null, p.authorId, p.parentId||null, p.menuOrder||0, p.sticky||0, p.password||'', p.publishedAt||null, p.createdAt||new Date().toISOString(), p.updatedAt||new Date().toISOString());
       count++;
     }
     if (data.menus) for (const m of data.menus) {
@@ -71,7 +76,7 @@ router.post('/import', authenticate, authorize('admin'), (req: AuthRequest, res:
       count++;
     }
     if (data.comments) for (const cm of data.comments) {
-      db.prepare('INSERT OR IGNORE INTO Comment (id, content, author, email, website, postId, parentId, status, createdAt) VALUES (?,?,?,?,?,?,?,?,?)').run(cm.id||cuid_import(), cm.content||'', cm.author||'Anonymous', cm.email||'', cm.website||'', cm.postId, cm.parentId||null, cm.status||'pending', cm.createdAt||new Date().toISOString());
+      db.prepare('INSERT OR IGNORE INTO Comment (id, content, author, email, website, postId, parentId, status, createdAt) VALUES (?,?,?,?,?,?,?,?,?)').run(cm.id||cuid_import(), sanitizeHtml(cm.content||''), cm.author||'Anonymous', cm.email||'', cm.website||'', cm.postId, cm.parentId||null, cm.status||'pending', cm.createdAt||new Date().toISOString());
       count++;
     }
     if (data.media) for (const md of data.media) {

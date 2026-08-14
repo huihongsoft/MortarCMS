@@ -6,6 +6,7 @@ import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { purgeAllCaches } from '../utils/cache';
 import { execFileSync, execSync } from 'child_process';
+import { assertSafeArchive } from '../utils/archive';
 
 const router = Router();
 const themesDir = path.join(__dirname, '..', '..', 'themes');
@@ -108,6 +109,8 @@ router.post('/install', authenticate, requireCap('manage_options'), upload.singl
     if (!req.file) { res.status(400).json({ error: 'No theme zip uploaded' }); return; }
     const tmpDir = path.join(require('os').tmpdir(), 'mortar-theme-' + Date.now());
     fs.mkdirSync(tmpDir, { recursive: true });
+    // Zip-slip guard: reject traversal entries BEFORE anything hits the disk
+    assertSafeArchive(req.file.path);
     execFileSync('unzip', ['-q', req.file.path, '-d', tmpDir]);
     // Find the theme root (dir containing theme.json)
     let root: string | null = null;

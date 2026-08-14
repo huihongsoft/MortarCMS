@@ -1,26 +1,56 @@
 import { Router, Response } from 'express';
+import { z } from 'zod';
 import db, { cuid } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { verifyToken } from '../utils/jwt';
 import { SiteRequest } from '../middleware/site';
 import { activeThemeName, readTheme, themeOverrides } from './themes';
 
 const router = Router();
 
-router.get('/', (req: SiteRequest, res: Response) => {
+// Credentials / system state: never returned by the general settings GET,
+// even to admins (dedicated endpoints exist: /ai/settings, /api/db/*)
+const CRED_KEYS = new Set(['ai_providers', 'ai_bindings', 'installed', 'active_plugins']);
+const CRED_PREFIXES = ['jwt_', 'market_', 'db_'];
+// Extra keys hidden from anonymous visitors (admin-only configuration)
+const ADMIN_KEYS = new Set(['admin_email']);
+const ADMIN_PREFIXES = ['smtp_', 'custom_templates', 'maintenance_', 'ai_'];
+
+// Settings that may never be written through the generic PUT endpoint (they
+// are managed by dedicated code paths: install wizard, plugins, jwt, backups)
+const BLOCKED_KEYS = new Set(['installed', 'active_plugins', '__proto__', 'constructor', 'prototype']);
+const BLOCKED_PREFIXES = ['jwt_', 'db_', 'market_'];
+
+const putSchema = z.record(z.string().min(1).max(100), z.union([z.string().max(100000), z.number(), z.boolean()]));
+
+router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
-    // Only expose non-sensitive keys to the public
-    const SENSITIVE_PREFIXES = ['smtp_', 'jwt_', 'market_', 'active_plugins', 'custom_templates', 'maintenance_', 'ai_'];
+    // Who is asking? App-password auth already populated req.user; parse a
+    // Bearer token as well, so authenticated admins get the full view while
+    // anonymous visitors only see non-sensitive keys.
+    let role = req.user?.role || '';
+    if (!role) {
+      const header = req.headers.authorization || '';
+      if (header.startsWith('Bearer ')) {
+        const payload = verifyToken(header.slice(7));
+        role = payload?.role || '';
+      }
+    }
+    const isAdmin = role === 'admin';
+    const hidden = (key: string) => CRED_PREFIXES.some(p => key.startsWith(p)) || CRED_KEYS.has(key)
+      || (!isAdmin && (ADMIN_PREFIXES.some(p => key.startsWith(p)) || ADMIN_KEYS.has(key)));
+
     const settings = db.prepare('SELECT key, value FROM Setting').all() as any[];
     const map: Record<string, string> = {};
     settings.forEach((s: any) => {
-      if (SENSITIVE_PREFIXES.some(p => s.key.startsWith(p))) return;
+      if (hidden(s.key)) return;
       map[s.key] = s.value;
     });
     // Site-level overrides on top of global defaults
     if (req.siteId) {
       const overrides = db.prepare('SELECT key, value FROM SiteSetting WHERE siteId = ?').all(req.siteId) as any[];
       overrides.forEach((s: any) => {
-        if (SENSITIVE_PREFIXES.some(p => s.key.startsWith(p))) return;
+        if (hidden(s.key)) return;
         map[s.key] = s.value;
       });
     }
@@ -54,9 +84,13 @@ router.get('/', (req: SiteRequest, res: Response) => {
 
 router.put('/', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
-    const entries = req.body as Record<string, string>;
+    const parsed = putSchema.safeParse(req.body);
+    if (!parsed.success) { res.status(400).json({ error: 'Invalid settings payload' }); return; }
+    const entries = parsed.data;
+    const bad = Object.keys(entries).find(k => BLOCKED_KEYS.has(k) || BLOCKED_PREFIXES.some(p => k.startsWith(p)));
+    if (bad) { res.status(400).json({ error: 'Setting key is not writable via this endpoint: ' + bad }); return; }
     const upsert = db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
-    for (const [key, value] of Object.entries(entries)) upsert.run(cuid(), key, value);
+    for (const [key, value] of Object.entries(entries)) upsert.run(cuid(), key, String(value));
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -69,7 +103,7 @@ router.get('/health', (req: AuthRequest, res: Response) => {
     res.json({
       status: 'healthy',
       version: '0.1.0',
-      database: !!db_test ? 'connected' : 'error',
+      database: db_test ? 'connected' : 'error',
       timestamp: new Date().toISOString(),
     });
   } catch (err: any) { res.status(500).json({ status: 'error', error: err.message }); }

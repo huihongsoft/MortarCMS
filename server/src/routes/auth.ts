@@ -14,13 +14,22 @@ const router = Router();
 function passwordOk(pw: string): boolean {
   return pw.length >= 8 && /[a-zA-Z]/.test(pw) && /\d/.test(pw);
 }
+// Fields safe to send to the client. The User row also carries the password
+// hash, reset token and the TOTP secret — those must never leave the server.
+function toPublicUser(user: any): Record<string, unknown> {
+  return { id: user.id, username: user.username, email: user.email, role: user.role, avatar: user.avatar, bio: user.bio, createdAt: user.createdAt };
+}
 // password max 128: bcrypt only uses the first 72 bytes, so longer inputs
 // would be silently truncated — reject them instead of hashing a surprise.
 const registerSchema = z.object({ username: z.string().min(3).max(30), email: z.string().email().max(254), password: z.string().min(8).max(128), role: z.string().max(20).optional() });
 const loginSchema = z.object({ email: z.string().email().max(254), password: z.string().max(128) });
 
-// Login failure lockout: 5 failures -> 15 min lock per email
+// Login failure lockout: 5 failures -> 15 min lock per (email + IP).
+// Keying by email alone would let an attacker lock a victim out of their own
+// account by deliberately failing 5 times; per-IP scoping keeps the brute
+// force protection while removing that denial-of-service vector.
 const loginFailures = new Map<string, { count: number; lockedUntil: number }>();
+function lockKey(email: string, ip: string): string { return email.toLowerCase() + '|' + (ip || ''); }
 // Memory cap: drop the oldest entries when the map grows unbounded (attacker
 // can otherwise grow it indefinitely with random emails).
 function pruneLoginFailures(): void {
@@ -37,22 +46,23 @@ function pruneLoginFailures(): void {
     loginFailures.delete(k); extra--;
   }
 }
-function checkLock(email: string): boolean {
+function checkLock(email: string, ip: string): boolean {
   pruneLoginFailures();
-  const rec = loginFailures.get(email);
+  const rec = loginFailures.get(lockKey(email, ip));
   if (!rec) return false;
   if (rec.lockedUntil > Date.now()) return true;
   // Only clean up expired *locks*; plain failure counters must persist
-  if (rec.lockedUntil > 0 && rec.lockedUntil <= Date.now()) loginFailures.delete(email);
+  if (rec.lockedUntil > 0 && rec.lockedUntil <= Date.now()) loginFailures.delete(lockKey(email, ip));
   return false;
 }
-function recordFailure(email: string): void {
+function recordFailure(email: string, ip: string): void {
   pruneLoginFailures();
-  const before = loginFailures.get(email);
+  const key = lockKey(email, ip);
+  const before = loginFailures.get(key);
   const rec = before || { count: 0, lockedUntil: 0 };
   rec.count++;
   if (rec.count >= 5) { rec.lockedUntil = Date.now() + 15 * 60 * 1000; rec.count = 0; }
-  loginFailures.set(email, rec);
+  loginFailures.set(key, rec);
 }
 
 router.post('/register', async (req: AuthRequest, res: Response) => {
@@ -93,12 +103,13 @@ router.post('/register', async (req: AuthRequest, res: Response) => {
 router.post('/login', async (req: AuthRequest, res: Response) => {
   try {
     const data = loginSchema.parse(req.body);
-    if (checkLock(data.email)) { res.status(429).json({ error: 'Too many failed attempts, try again in 15 minutes' }); return; }
+    const ip = req.ip || '';
+    if (checkLock(data.email, ip)) { res.status(429).json({ error: 'Too many failed attempts, try again in 15 minutes' }); return; }
     const user = db.prepare('SELECT * FROM User WHERE email = ?').get(data.email) as any;
-    if (!user) { recordFailure(data.email); res.status(401).json({ error: 'Invalid credentials' }); return; }
+    if (!user) { recordFailure(data.email, ip); res.status(401).json({ error: 'Invalid credentials' }); return; }
     const valid = await bcrypt.compare(data.password, user.password);
-    if (!valid) { recordFailure(data.email); res.status(401).json({ error: 'Invalid credentials' }); return; }
-    loginFailures.delete(data.email);
+    if (!valid) { recordFailure(data.email, ip); res.status(401).json({ error: 'Invalid credentials' }); return; }
+    loginFailures.delete(lockKey(data.email, ip));
     // 2FA challenge: issue a short-lived temp token, final token comes after code verification
     if (user.two_factor_enabled) {
       const tempToken = signToken({ userId: user.id, role: user.role, type: '2fa' }, '5m');
@@ -106,9 +117,9 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
       return;
     }
     const token = signToken({ userId: user.id, role: user.role, v: (user as any).tokenVersion || 0 });
-    const { password, ...safe } = user;
     logActivity(user.id, 'login', 'User logged in');
-    res.json({ user: safe, token });
+    // Whitelist: never expose two_factor_secret / reset_token / password hash
+    res.json({ user: toPublicUser(user), token });
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
@@ -124,9 +135,8 @@ router.post('/2fa/verify', async (req: AuthRequest, res: Response) => {
     const { verifyTOTP } = require('../utils/totp');
     if (!verifyTOTP(user.two_factor_secret, String(code))) { res.status(401).json({ error: 'Invalid verification code' }); return; }
     const token = signToken({ userId: user.id, role: user.role, v: (user as any).tokenVersion || 0 });
-    const { password, ...safe } = user;
     logActivity(user.id, 'login', 'User logged in with 2FA');
-    res.json({ user: safe, token });
+    res.json({ user: toPublicUser(user), token });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

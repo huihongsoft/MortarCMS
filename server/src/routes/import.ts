@@ -5,6 +5,7 @@ import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { slugify, uniqueSlug } from '../utils/slug';
 import { parseFrontmatter, mdToHtml } from '../utils/markdown';
+import { sanitizeHtml } from '../utils/sanitize';
 
 const router = Router();
 const upload = multer({ dest: 'uploads/import-tmp/', limits: { fileSize: 50 * 1024 * 1024 } });
@@ -85,8 +86,12 @@ router.post('/wxr', authenticate, requireCap('manage_options'), upload.single('f
       slugPool.push(slug);
 
       const id = cuid();
+      // Imported content is untrusted: sanitize before it is stored and later
+      // rendered as HTML (defense in depth with the frontend's DOMPurify pass)
+      const content = sanitizeHtml(item.content);
+      const excerpt = sanitizeHtml(item.excerpt);
       db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, createdAt, updatedAt, publishedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
-        id, item.title, slug, item.content, item.excerpt, item.status === 'publish' ? 'published' : 'draft', type, authorId, now, now, item.status === 'publish' ? now : null
+        id, item.title, slug, content, excerpt, item.status === 'publish' ? 'published' : 'draft', type, authorId, now, now, item.status === 'publish' ? now : null
       );
 
       // Categories
@@ -138,7 +143,7 @@ router.post('/wxr', authenticate, requireCap('manage_options'), upload.single('f
         return r ? stripCdata(unesc(r[1])).trim() : '';
       };
         db.prepare('INSERT INTO Comment (id, content, author, email, website, status, postId, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-          cuid(), grab('wp:comment_content'), grab('wp:comment_author') || 'Anonymous', grab('wp:comment_author_email'), grab('wp:comment_author_url'), grab('wp:comment_approved') === '1' ? 'approved' : 'pending', post.id, grab('wp:comment_date_gmt') || now
+          cuid(), sanitizeHtml(grab('wp:comment_content')), grab('wp:comment_author') || 'Anonymous', grab('wp:comment_author_email'), grab('wp:comment_author_url'), grab('wp:comment_approved') === '1' ? 'approved' : 'pending', post.id, grab('wp:comment_date_gmt') || now
         );
         stats.comments++;
       }

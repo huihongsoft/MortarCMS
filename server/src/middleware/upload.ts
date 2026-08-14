@@ -35,7 +35,10 @@ export const upload = multer({
     if (mimeOk) {
       cb(null, true);
     } else {
-      cb(new Error('File type not allowed'));
+      // Client error, not a server failure: the global handler must return 400
+      const err = new Error('File type not allowed') as Error & { status: number };
+      err.status = 400;
+      cb(err);
     }
   },
 });

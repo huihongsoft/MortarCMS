@@ -1,4 +1,5 @@
 import React from 'react';
+import { sanitizeCss } from '../lib/safeCss';
 
 // Renders a theme hook section (HTML+CSS) from the settings.
 // Each section is a visual block designed via the theme Appearance editor.
@@ -12,7 +13,7 @@ export default function ThemeSection({ settings, location }: { settings: Record<
   if (!data.html && !data.css) return null;
 
   return React.createElement(React.Fragment, null,
-    data.css && React.createElement('style', { dangerouslySetInnerHTML: { __html: data.css } }),
+    data.css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(data.css) } }),
     data.html && React.createElement('div', {
       className: 'theme-section theme-section--' + location,
       dangerouslySetInnerHTML: { __html: data.html },

@@ -106,7 +106,7 @@ function sanitizeSvg(content: string): string {
     .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '')
     .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
     .replace(/javascript:/gi, '')
-    .replace(/<\!\[CDATA\[[\s\S]*?\]\]>/g, '')
+    .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '')
     .replace(/<!--[\s\S]*?-->/g, '');
 }
 

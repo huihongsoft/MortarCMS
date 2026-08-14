@@ -28,14 +28,22 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
     return;
   }
   // Session version check: if the user "logged out everywhere", older tokens
-  // carry a stale version and are rejected.
+  // carry a stale version and are rejected. A missing user row means the
+  // account was deleted — reject the token as well.
   try {
     const user = db.prepare('SELECT tokenVersion FROM User WHERE id = ?').get(payload.userId) as any;
-    if (user && payload.v !== undefined && user.tokenVersion !== payload.v) {
+    if (!user) {
+      res.status(401).json({ error: 'Invalid or expired token' });
+      return;
+    }
+    if (payload.v !== undefined && user.tokenVersion !== payload.v) {
       res.status(401).json({ error: 'Session expired' });
       return;
     }
-  } catch {}
+  } catch {
+    res.status(401).json({ error: 'Invalid or expired token' });
+    return;
+  }
 
   req.user = payload;
   next();

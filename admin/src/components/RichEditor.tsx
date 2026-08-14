@@ -277,10 +277,14 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
     if (mode === 'rich' && editor) {
       editor.chain().focus().setImage({ src: m.url, alt: m.alt || m.title || '' }).run();
     } else if (mode === 'markdown') {
-      const add = '\n\n![' + (m.alt || m.title || 'image') + '](' + m.url + ')\n\n';
+      // Escape markdown syntax chars so a crafted file name cannot break out
+      // of the image syntax and inject markup
+      const mdEsc = (s: string) => String(s ?? '').replace(/([\\[\]()])/g, '\\$1');
+      const add = '\n\n![' + mdEsc(m.alt || m.title || 'image') + '](' + mdEsc(m.url) + ')\n\n';
       setMdBuffer(b => { const nb = b + add; emit(markdownToHtml(nb)); return nb; });
     } else {
-      const add = '<img src="' + m.url + '" alt="' + (m.alt || '') + '">';
+      const escAttr = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const add = '<img src="' + escAttr(m.url) + '" alt="' + escAttr(m.alt || '') + '">';
       setHtmlBuffer(b => { const nb = b + add; emit(nb); return nb; });
     }
     setShowMedia(false);

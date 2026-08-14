@@ -8,6 +8,7 @@ import { getDefaultProvider } from './ai';
 import { userCan } from '../middleware/auth';
 import { activeThemeName, createThemeBackup } from '../routes/themes';
 import { purgeAllCaches, purgeContentCaches } from './cache';
+import { sanitizeHtml } from './sanitize';
 import type { AIToolFunction, AIToolCall } from './ai';
 
 export interface ToolContext {
@@ -27,40 +28,6 @@ export function auditToolCall(ctx: ToolContext, tool: string, args: any, output:
       new Date().toISOString()
     );
   } catch { /* audit must never break the tool */ }
-}
-
-// Whitelist HTML sanitizer for AI-generated content (XSS guard):
-// keeps common formatting tags, strips scripts/iframes/event handlers.
-// Closing tags are preserved as closing tags.
-const ALLOWED_TAGS = new Set(['p','br','h1','h2','h3','h4','ul','ol','li','strong','b','em','i','u','a','img','blockquote','code','pre','hr','table','thead','tbody','tr','th','td','span','div','figure','figcaption','small','mark','del','sub','sup','details','summary']);
-const ALLOWED_ATTRS = new Set(['href','src','alt','title','target','rel','width','height','style','colspan','rowspan']);
-
-export function sanitizeHtml(input: string): string {
-  if (!input) return '';
-  let html = String(input);
-  // Strip script/style/iframe/object/embed blocks entirely
-  html = html.replace(/<(script|style|iframe|object|embed|form|input|textarea|button|select|svg|math|link|meta|base)[\s\S]*?<\/\1>/gi, '');
-  html = html.replace(/<\/(script|style|iframe|object|embed|form|input|textarea|button|select|svg|math|link|meta|base)>/gi, '');
-  // Strip event handlers and dangerous URL schemes
-  html = html.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
-  html = html.replace(/(href|src)\s*=\s*("|')\s*(javascript|vbscript|data):/gi, '$1=$2');
-  // Keep only allowed tags (simple tag whitelist pass)
-  html = html.replace(/<\/?([a-zA-Z][a-zA-Z0-9]*)((?:\s+[a-zA-Z-]+(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?)*)\s*\/?>/g, (full, tag: string, attrsRaw: string) => {
-    const t = tag.toLowerCase();
-    if (!ALLOWED_TAGS.has(t)) return '';
-    // Rebuild allowed attributes
-    const attrs: string[] = [];
-    const re = /([a-zA-Z-]+)(?:\s*=\s*("[^"]*"|'[^']*'|[^\s>]+))?/g;
-    let m;
-    while ((m = re.exec(attrsRaw)) !== null) {
-      const name = m[1].toLowerCase();
-      if (ALLOWED_ATTRS.has(name)) {
-        attrs.push(m[1] + (m[2] ? '=' + m[2] : ''));
-      }
-    }
-    return (full.startsWith('</') ? '</' : '<') + t + (attrs.length ? ' ' + attrs.join(' ') : '') + '>';
-  });
-  return html;
 }
 
 // Map common task failures to actionable Chinese messages instead of raw
@@ -257,7 +224,7 @@ register('search_site_content', '在全站文章中检索内容，返回匹配�
 
   return scored.map(({ p, score }) => {
     // Extract a snippet around the first match
-    let snippet = '';
+    let snippet: string;
     const lower = (p.content || '').toLowerCase();
     const idx = terms.map(t => lower.indexOf(t.toLowerCase())).filter(i => i >= 0).sort((a, b) => a - b)[0];
     if (idx !== undefined && p.content) {

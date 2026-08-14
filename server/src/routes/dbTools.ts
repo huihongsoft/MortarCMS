@@ -5,6 +5,7 @@ import { execFileSync } from 'child_process';
 import db, { listSlowQueries } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
+import { assertSafeArchive } from '../utils/archive';
 
 const router = Router();
 
@@ -165,6 +166,8 @@ router.post('/restore-full', authenticate, authorize('admin'), upload.single('fi
     if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return; }
     const tmpDir = path.join(require('os').tmpdir(), 'mortar-restore-' + Date.now());
     fs.mkdirSync(tmpDir, { recursive: true });
+    // Zip-slip guard: reject traversal entries BEFORE anything hits the disk
+    assertSafeArchive(req.file.path);
     execFileSync('unzip', ['-q', req.file.path, '-d', tmpDir]);
     // zip-slip guard: every entry must be a plain file in the extraction root
     // (no nested dirs, no ../, no absolute paths) before it can overwrite uploads

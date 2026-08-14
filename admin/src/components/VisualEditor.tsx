@@ -36,6 +36,11 @@ const WPI = {
   video:      S+'<path d="M18.7 3H5.3C4 3 3 4 3 5.3v13.4C3 20 4 21 5.3 21h13.4c1.3 0 2.3-1 2.3-2.3V5.3C21 4 20 3 18.7 3zm.8 15.7c0 .4-.4.8-.8.8H5.3c-.4 0-.8-.4-.8-.8V5.3c0-.4.4-.8.8-.8h13.4c.4 0 .8.4.8.8v13.4zM10 15l5-3-5-3v6z"/>'+E,
 };
 
+// Escape values before splicing into HTML strings that become DOM content.
+// Media filenames/URLs are user-controlled, so an unescaped quote could
+// break out of an attribute and inject markup (stored XSS).
+const escAttr = (v: any) => String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
 interface VisualEditorProps {
   content: string;
   css?: string;
@@ -254,24 +259,24 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         <div class="ve-guten-header">
           <div class="ve-guten-header-left">
             ${onBack ? `<button id="ve-back-btn" class="ve-guten-icon-btn" title="${__('back to rich text')}" aria-label="${__('back to rich text')}">${WPI.arrowLeft}</button>` : ''}
-            <button id="ve-inserter-btn" class="ve-guten-icon-btn" title="Toggle block inserter" aria-label="Add block">${WPI.plus}</button>
-            <button id="ve-undo-btn" class="ve-guten-icon-btn" title="Undo" aria-label="Undo">${WPI.undo}</button>
-            <button id="ve-redo-btn" class="ve-guten-icon-btn" title="Redo" aria-label="Redo">${WPI.redo}</button>
-            <button id="ve-list-btn" class="ve-guten-icon-btn" title="Document Overview" aria-label="Document Overview">${WPI.listView}</button>
+            <button id="ve-inserter-btn" class="ve-guten-icon-btn" title="${__('toggle block inserter')}" aria-label="${__('add block')}">${WPI.plus}</button>
+            <button id="ve-undo-btn" class="ve-guten-icon-btn" title="${__('undo')}" aria-label="${__('undo')}">${WPI.undo}</button>
+            <button id="ve-redo-btn" class="ve-guten-icon-btn" title="${__('redo')}" aria-label="${__('redo')}">${WPI.redo}</button>
+            <button id="ve-list-btn" class="ve-guten-icon-btn" title="${__('document overview')}" aria-label="${__('document overview')}">${WPI.listView}</button>
           </div>
           <div class="ve-guten-header-center">
             <div class="ve-guten-block-breadcrumb" id="ve-header-breadcrumb"></div>
           </div>
           <div class="ve-guten-header-right">
             <div class="ve-guten-device-switcher" id="ve-device-switcher">
-              <button data-device="desktop" class="ve-guten-device-btn is-active" title="Desktop" aria-label="Desktop">${WPI.desktop}</button>
-              <button data-device="tablet" class="ve-guten-device-btn" title="Tablet" aria-label="Tablet">${WPI.tablet}</button>
-              <button data-device="mobile" class="ve-guten-device-btn" title="Mobile" aria-label="Mobile">${WPI.mobile}</button>
+              <button data-device="desktop" class="ve-guten-device-btn is-active" title="${__('desktop')}" aria-label="${__('desktop')}">${WPI.desktop}</button>
+              <button data-device="tablet" class="ve-guten-device-btn" title="${__('tablet')}" aria-label="${__('tablet')}">${WPI.tablet}</button>
+              <button data-device="mobile" class="ve-guten-device-btn" title="${__('mobile')}" aria-label="${__('mobile')}">${WPI.mobile}</button>
             </div>
             <button id="ve-preview-btn" class="ve-guten-text-btn${pageSettingsRef.current?.slug ? '' : ' is-disabled'}" title="${pageSettingsRef.current?.slug ? '' : __('save first to preview')}">${__('preview')}</button>
             <button id="ve-save-btn" class="ve-guten-text-btn">${__('save draft')}</button>
             <button id="ve-publish-btn" class="ve-guten-primary-btn">${__('publish')}</button>
-            <button id="ve-settings-btn" class="ve-guten-icon-btn" title="Settings" aria-label="Settings">${WPI.cog}</button>
+            <button id="ve-settings-btn" class="ve-guten-icon-btn" title="${__('settings')}" aria-label="${__('settings')}">${WPI.cog}</button>
             <button id="ve-more-btn" class="ve-guten-icon-btn" title="More options" aria-label="More options">${WPI.moreVert}</button>
           </div>
         </div>
@@ -796,7 +801,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           galleryBtn.addEventListener('click', () => {
             const items = imgs.filter((m: any) => picked.has(m.id));
             const galleryHtml = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;">' +
-              items.map((m: any) => `<img src="${m.thumbnail || m.url}" alt="${m.original || ''}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;display:block;" />`).join('') +
+              items.map((m: any) => `<img src="${escAttr(m.thumbnail || m.url)}" alt="${escAttr(m.original || '')}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;display:block;" />`).join('') +
               '</div>';
             const sel = editor.getSelected() as any;
             if (sel) { const p = sel.parent?.(); if (p) { const s = p.components(); s.add(galleryHtml, { at: s.indexOf(sel) + 1 }); } else editor.addComponents(galleryHtml); }
@@ -810,7 +815,16 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
             // placeholder — a broken file never renders as a broken image.
             const ext = String(m.original || '').split('.').pop()?.toUpperCase().replace(/[^A-Z0-9]/g, '') || 'FILE';
             const placeholder = "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='80' height='60'><rect width='100%25' height='100%25' fill='%23e5e7eb' rx='6'/><text x='50%25' y='55%25' font-size='18' fill='%239ca3af' text-anchor='middle'>" + ext + '</text></svg>';
-            item.innerHTML = `<img src="${m.thumbnail || m.url}" alt="${m.original || ''}" loading="lazy" data-orig="${m.url}" onerror="this.onerror=null;if(this.src!==this.dataset.orig)this.src=this.dataset.orig;else this.src='${placeholder}'" />`;
+            // Build the thumbnail with DOM APIs (never innerHTML): the file
+            // name is user-controlled and could break out of an attribute
+            const img = document.createElement('img');
+            img.src = m.thumbnail || m.url;
+            img.alt = m.original || '';
+            img.loading = 'lazy';
+            const origUrl = m.url || '';
+            img.dataset.orig = origUrl;
+            img.onerror = () => { img.onerror = null; if (img.src !== origUrl) img.src = origUrl; else img.src = placeholder; };
+            item.appendChild(img);
             item.addEventListener('click', () => {
               // Toggle multi-select if the gallery bar is visible; otherwise single insert
               if (galleryBtn.style.display !== 'none') {
@@ -819,7 +833,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
                 updateGalleryBtn();
                 return;
               }
-              const html = `<img src="${m.url}" alt="${m.original || ''}" style="width:100%;max-width:800px;height:auto;display:block;" />`;
+              const html = `<img src="${escAttr(m.url)}" alt="${escAttr(m.original || '')}" style="width:100%;max-width:800px;height:auto;display:block;" />`;
               const sel = editor.getSelected() as any;
               if (sel) { const p = sel.parent?.(); if (p) { const s = p.components(); s.add(html, { at: s.indexOf(sel) + 1 }); } else editor.addComponents(html); }
               else editor.addComponents(html);
@@ -1473,7 +1487,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
   useEffect(() => {
     if (saveState === 'saving') snackbarFnRef.current?.(t('saving', getLang()));
     else if (saveState === 'saved') snackbarFnRef.current?.(t('saved', getLang()));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [saveState]);
 
   // --- Sync external content changes ---
@@ -1484,7 +1498,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       try { ed.setComponents(content || ''); } catch {}
       try { ed.setStyle(css || ''); } catch {}
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [content, css]);
 
   // --- Sync pageSettings to Post tab panel ---

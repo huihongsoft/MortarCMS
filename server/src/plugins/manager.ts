@@ -5,6 +5,7 @@ import http from 'http';
 import { execFileSync } from 'child_process';
 import { tmpdir as osTmpDir } from 'os';
 import db from '../utils/db';
+import { assertSafeArchive } from '../utils/archive';
 
 // Plugins ship as TypeScript sources (server/plugins/<name>/index.ts). Register
 // tsx's CommonJS loader so `node dist/index.js` (production build) can require
@@ -178,9 +179,10 @@ export async function installFromUrl(url: string): Promise<{ ok: boolean; error?
       req.setTimeout(30000, () => req.destroy(new Error('Download timed out')));
     });
 
-    // Extract into tmpDir/extracted (zip-slip guard below)
+    // Extract into tmpDir/extracted (zip-slip guard: entries validated first)
     const extractDir = path.join(tmpDir, 'extracted');
     fs.mkdirSync(extractDir, { recursive: true });
+    assertSafeArchive(archivePath);
     if (isGz) execFileSync('tar', ['-xzf', archivePath, '-C', extractDir]);
     else execFileSync('unzip', ['-q', archivePath, '-d', extractDir]);
 

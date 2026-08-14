@@ -72,7 +72,7 @@ addShortcode('gallery', (attrs, _content, ctx) => {
     ? db.prepare('SELECT id, url, thumbnail, alt, title FROM Media WHERE id IN (' + ids.map(() => '?').join(',') + ')').all(...ids) as any[]
     : [];
   if (media.length === 0) return '';
-  const gid = 'g-' + ids.join('-');
+  const gid = esc('g-' + ids.join('-'));
   const items = media.map((m: any) => {
     const caption = esc(m.alt || m.title || '');
     const displayUrl = useThumb && m.thumbnail ? m.thumbnail : m.url;
@@ -85,14 +85,14 @@ addShortcode('gallery', (attrs, _content, ctx) => {
 addShortcode('audio', (attrs) => {
   const src = attrs.src || '';
   if (!src) return '';
-  return '<audio controls preload="none" style="width:100%;"><source src="' + src + '"></audio>';
+  return '<audio controls preload="none" style="width:100%;"><source src="' + esc(src) + '"></audio>';
 }, 'Audio player (src=)');
 
 // [video src="url"] -> video player
 addShortcode('video', (attrs) => {
   const src = attrs.src || '';
   if (!src) return '';
-  return '<video controls preload="metadata" style="width:100%;border-radius:8px;"><source src="' + src + '"></video>';
+  return '<video controls preload="metadata" style="width:100%;border-radius:8px;"><source src="' + esc(src) + '"></video>';
 }, 'Video player (src=)');
 
 // ---- CMS Data shortcodes (used by VisualEditor dynamic blocks) ----
@@ -166,9 +166,8 @@ export function renderCmsBlocks(html: string): string {
     const marker = 'data-cms="' + type + '"';
     const openRe = /<div[\s>]/gi;
     const closeRe = /<\/div\s*>/gi;
-    let pos = 0;
     let searchFrom = 0;
-    // eslint-disable-next-line no-constant-condition
+
     while (true) {
       const markerIdx = out.indexOf(marker, searchFrom);
       if (markerIdx === -1) break;
@@ -197,11 +196,10 @@ export function renderCmsBlocks(html: string): string {
         }
       }
       if (closeEnd === -1) { searchFrom = markerIdx + marker.length; continue; }
-      let rendered = '';
+      let rendered: string;
       try { rendered = sc.fn({}, '', {}); } catch { rendered = ''; }
       out = out.slice(0, openStart) + rendered + out.slice(closeEnd + '</div>'.length);
-      pos = openStart + rendered.length;
-      searchFrom = pos;
+      searchFrom = openStart + rendered.length;
     }
   }
   return out;
