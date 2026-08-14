@@ -17,7 +17,7 @@ let workerSeq = 0;
 const workerPending = new Map<number, { resolve: (v: any) => void; flag: Int32Array }>();
 
 function parseUrl(url: string) {
-  const m = url.match(/^(mysql|postgres):\/\/([^:]+):([^@]+)@([^:\/]+)(?::(\d+))?\/([^\/?]+)/);
+  const m = url.match(/^(mysql|postgres):\/\/([^:]+):([^@]+)@([^:/]+)(?::(\d+))?\/([^/?]+)/);
   if (!m) throw new Error('Invalid DATABASE_URL: expected mysql://user:pass@host:port/db or postgres://...');
   return { driver: m[1] as 'mysql' | 'postgres', user: m[2], password: m[3], host: m[4], port: parseInt(m[5] || (m[1] === 'mysql' ? '3306' : '5432')), database: m[6] };
 }

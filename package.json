@@ -13,11 +13,14 @@
     "build:admin": "cd admin && npm run build",
     "build:frontend": "cd frontend && npm run build",
     "start": "cd server && npm start",
-    "db:migrate": "cd server && npx prisma migrate dev",
-    "db:seed": "cd server && npx prisma db seed",
-    "db:studio": "cd server && npx prisma studio"
+    "lint": "eslint \"server/src/**/*.ts\" \"admin/src/**/*.{ts,tsx}\" \"frontend/src/**/*.{ts,tsx}\""
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^9.1.0",
+    "eslint": "^10.8.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.11.0",
+    "typescript-eslint": "^8.67.0"
   }
 }

@@ -291,7 +291,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs = 9000
   try {
     return await fetch(url, { ...init, signal: controller.signal });
   } catch (e: any) {
-    if (e.name === 'AbortError') throw new Error('AI 请求超时（' + Math.round(timeoutMs / 1000) + 's）');
+    if (e.name === 'AbortError') throw new Error('AI 请求超时（' + Math.round(timeoutMs / 1000) + 's）', { cause: e });
     throw e;
   } finally {
     clearTimeout(timer);

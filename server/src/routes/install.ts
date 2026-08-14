@@ -26,7 +26,7 @@ router.get('/', authenticate, requireCap('manage_options'), (_req: AuthRequest, 
   try {
     const driver = (db as any).driver || 'sqlite';
     const url = process.env.DATABASE_URL || '';
-    const m = url.match(/^(mysql|postgres):\/\/([^:]+):[^@]+@([^:\/]+)(?::(\d+))?\/([^\/?]+)/);
+    const m = url.match(/^(mysql|postgres):\/\/([^:]+):[^@]+@([^:/]+)(?::(\d+))?\/([^/?]+)/);
     res.json({
       driver,
       host: m ? m[3] : undefined,

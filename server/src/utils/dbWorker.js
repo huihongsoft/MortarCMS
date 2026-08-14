@@ -1,29 +1,10 @@
 // DB worker: runs async MySQL/PostgreSQL drivers on a dedicated thread so the
 // main thread can block (Atomics.wait) and keep the synchronous db interface.
 const { parentPort } = require('worker_threads');
+const { translateMysql, translatePg } = require('./dbDialect');
 
 let client = null;
 let driver = null;
-
-// --- SQL dialect translation (MySQL) ---
-function translateMysql(sql) {
-  // SQLite upsert -> MySQL upsert
-  sql = sql.replace(/ON CONFLICT\(([^)]+)\) DO UPDATE SET ([^;]*?)(?=\s*;|$)/g, (m, cols, setPart) => {
-    const updates = setPart.split(',').map(s => {
-      const mm = s.match(/(\w+)\s*=\s*excluded\.(\w+)/);
-      if (mm) return mm[1] + ' = VALUES(' + mm[2] + ')';
-      return s.trim();
-    }).join(', ');
-    return 'ON DUPLICATE KEY UPDATE ' + updates;
-  });
-  return sql;
-}
-
-// --- PostgreSQL: ? -> $n placeholders ---
-function translatePg(sql) {
-  let n = 0;
-  return sql.replace(/\?/g, () => '$' + (++n));
-}
 
 async function init(conn) {
   driver = conn.driver; // 'mysql' | 'postgres'

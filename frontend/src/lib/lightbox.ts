@@ -169,7 +169,7 @@ export function initLightbox() {
     e.stopPropagation();
 
     // Collect images for navigation: if in a gallery, only images in that gallery
-    let container: HTMLElement | null = null;
+    let container: HTMLElement | null;
     if (isGallery) {
       container = img.closest('.gallery') as HTMLElement;
       // Also check if gallery has a data-gallery-id for cross-gallery grouping

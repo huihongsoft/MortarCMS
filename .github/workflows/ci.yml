@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          cd server && npm ci
+          cd ../admin && npm ci
+          cd ../frontend && npm ci
+
+      - name: Lint (errors block, warnings don't)
+        run: npm run lint
+
+      - name: Typecheck server
+        run: cd server && npx tsc --noEmit
+
+      - name: Run server tests
+        run: cd server && npm test
+
+      - name: Build admin
+        run: cd admin && npx tsc -b && npx vite build
+
+      - name: Build frontend
+        run: cd frontend && npx tsc -b && npx vite build
+
+      - name: Compile server (production build)
+        run: cd server && npx tsc
+
+      - name: Install script syntax check
+        run: bash -n install.sh
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: |
+            server/dist
+            admin/dist
+            frontend/dist
+          retention-days: 7

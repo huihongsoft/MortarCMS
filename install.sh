@@ -16,7 +16,7 @@
 #     DATABASE_URL  MySQL/PostgreSQL 连接串（默认 SQLite）
 # ============================================================================
 
-set -e
+set -euo pipefail
 
 # ---------- 输出工具 ----------
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
@@ -30,6 +30,7 @@ REPO_URL="https://github.com/huihongsoft/MortarCMS.git"
 PORT="${MORTAR_PORT:-3001}"
 INSTALL_DIR="${MORTAR_DIR:-}"
 SERVICE=1
+SERVICE_NAME="mortar"
 NODE_MIN=18
 
 while [[ $# -gt 0 ]]; do
@@ -129,8 +130,8 @@ build_all() {
   # React ESM 共享（importmap 单实例）
   (cd frontend && npx esbuild esm/react.js --bundle --format=esm --minify --define:process.env.NODE_ENV=\"production\" --outfile=public/esm-react.js) || err "esm-react 构建失败"
   (cd frontend && npx esbuild esm/router.js --bundle --format=esm --external:react --external:react-dom --outfile=public/esm-router.js) || err "esm-router 构建失败"
-  # 主题 bundle
-  for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen twentytwentyone twentynineteen twentyseventeen; do
+  # 主题 bundle（frontend/src/themes/<name>/index.ts 对应的主题）
+  for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen softstore; do
     (cd frontend && THEME_NAME=$t npx vite build --config vite.themes.config.ts >/dev/null 2>&1)
     cp frontend/dist/themes/$t.js server/themes/$t/theme.js 2>/dev/null || true
   done
@@ -223,7 +224,7 @@ write_ctl() {
 #!/usr/bin/env bash
 # Mortar 管理命令: ./mortarctl.sh {start|stop|restart|status|logs}
 CMD="\$1"
-if [ "$OS" = "linux" ] && check_cmd systemctl 2>/dev/null; then
+if [ "$OS" = "linux" ] && command -v systemctl >/dev/null 2>&1; then
   case "\$CMD" in
     start) sudo systemctl start $SERVICE_NAME ;;
     stop) sudo systemctl stop $SERVICE_NAME ;;

@@ -6,13 +6,10 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "db:migrate": "prisma migrate dev",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:studio": "prisma studio",
+    "test": "vitest run",
     "test:ai": "tsx scripts/ai-regression.ts && tsx scripts/fix-test.ts"
   },
   "dependencies": {
-    "@prisma/client": "^5.22.0",
     "@types/better-sqlite3": "^9.6.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^13.0.3",
@@ -20,7 +17,7 @@
     "express": "^4.21.0",
     "express-rate-limit": "^8.6.2",
     "jsonwebtoken": "^9.0.2",
-    "multer": "^1.4.5-lts.1",
+    "multer": "^2.0.1",
     "mysql2": "^3.23.2",
     "pg": "^8.22.0",
     "sharp": "^0.35.3",
@@ -31,11 +28,11 @@
     "@types/cors": "^2.8.17",
     "@types/express": "^4.17.21",
     "@types/jsonwebtoken": "^9.0.7",
-    "@types/multer": "^1.4.12",
+    "@types/multer": "^2.0.0",
     "@types/node": "^20.0.0",
     "@types/pg": "^8.20.4",
-    "prisma": "^5.22.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.3.0"
+    "typescript": "^5.3.0",
+    "vitest": "^4.1.10"
   }
 }

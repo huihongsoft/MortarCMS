@@ -1,7 +1,7 @@
 // A CDN URL must be a plain http(s) origin — reject anything that could inject attributes
 function safeCdn(cdn: string | undefined): string | null {
   if (!cdn) return null;
-  if (/[\"'<>\s]/.test(cdn)) return null;
+  if (/["'<>\s]/.test(cdn)) return null;
   if (!/^https?:\/\/[\w.-]+(\/\S*)?$/.test(cdn)) return null;
   return cdn.replace(/\/$/, '');
 }
