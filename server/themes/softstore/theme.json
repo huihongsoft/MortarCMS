@@ -1,0 +1,20 @@
+{
+  "name": "softstore",
+  "version": "0.1.0",
+  "description": "Software-download-site theme (huirj.cn style) — icon carousel, category-tabbed software list, hot ranking sidebar.",
+  "author": "Mortar Team",
+  "settings": {
+    "primary_color": "#5066e1",
+    "background": "#f5f5f5",
+    "text_color": "#333333",
+    "link_color": "#5066e1",
+    "heading_font": "system",
+    "body_font": "system",
+    "sidebar_position": "right",
+    "posts_per_row": "1",
+    "heading_cap": "2",
+    "heading_max": "26"
+  },
+  "custom_css": ".theme-section { border-radius: 8px; overflow: hidden; }",
+  "settingsSchema": []
+}
