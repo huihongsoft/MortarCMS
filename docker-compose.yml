@@ -1,0 +1,70 @@
+# Mortar CMS — Docker Compose
+#
+# Quick start:
+#   docker compose up -d --build
+#   open http://localhost:3001/install
+#
+# Before going live, set JWT_SECRET (generate with:
+#   node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+# )
+
+services:
+  mortar:
+    build: .
+    image: mortar:latest
+    container_name: mortar
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    environment:
+      # Required in production — the server refuses to start without it
+      JWT_SECRET: change-me-to-a-long-random-string
+      PORT: "3001"
+      # Uncomment when running behind a reverse proxy:
+      # TRUST_PROXY: "1"
+      # SQLite is the default (zero config). For MySQL/PostgreSQL uncomment
+      # one of these and the matching service below:
+      # DATABASE_URL: mysql://mortar:secret@mysql:3306/mortar
+      # DATABASE_URL: postgres://mortar:secret@postgres:5432/mortar
+    volumes:
+      - mortar-data:/app/server/data
+      - mortar-uploads:/app/server/uploads
+
+  # Optional MySQL 8
+  # mysql:
+  #   image: mysql:8
+  #   restart: unless-stopped
+  #   environment:
+  #     MYSQL_ROOT_PASSWORD: secret
+  #     MYSQL_DATABASE: mortar
+  #     MYSQL_USER: mortar
+  #     MYSQL_PASSWORD: secret
+  #   volumes:
+  #     - mysql-data:/var/lib/mysql
+  #   healthcheck:
+  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 5
+
+  # Optional PostgreSQL 16
+  # postgres:
+  #   image: postgres:16-alpine
+  #   restart: unless-stopped
+  #   environment:
+  #     POSTGRES_DB: mortar
+  #     POSTGRES_USER: mortar
+  #     POSTGRES_PASSWORD: secret
+  #   volumes:
+  #     - postgres-data:/var/lib/postgresql/data
+  #   healthcheck:
+  #     test: ["CMD-SHELL", "pg_isready -U mortar"]
+  #     interval: 10s
+  #     timeout: 3s
+  #     retries: 5
+
+volumes:
+  mortar-data:
+  mortar-uploads:
+  # mysql-data:
+  # postgres-data:

@@ -140,7 +140,19 @@ curl -fsSL https://raw.githubusercontent.com/huihongsoft/MortarCMS/main/install.
 Automatically: environment check → fetch code → install dependencies → build → register a system service (systemd / launchd) → health check.
 Visit `http://localhost:3001/install` after installation to complete the wizard.
 
-### Option B — manual install
+### Option B — Docker
+
+```bash
+git clone https://github.com/huihongsoft/MortarCMS.git && cd mortar
+docker compose up -d --build
+# open http://localhost:3001/install
+```
+
+Set `JWT_SECRET` in `docker-compose.yml` before going live. SQLite is
+persisted in the `mortar-data` volume; MySQL/PostgreSQL services are included
+(commented out). See [docs/deployment.md](docs/deployment.md) for details.
+
+### Option C — manual install
 
 ```bash
 # 1. Get the code

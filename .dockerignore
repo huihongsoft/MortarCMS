@@ -1,0 +1,18 @@
+# Keep the build context small and reproducible
+.git
+.gitignore
+.DS_Store
+**/node_modules
+**/dist
+**/dist-esm
+*.tsbuildinfo
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+server/data
+server/uploads
+backups
+docs/screenshots
+.env
+mortarctl.sh

@@ -6,7 +6,7 @@
 curl -fsSL https://raw.githubusercontent.com/huihongsoft/MortarCMS/main/install.sh | bash
 ```
 
-The script handles: OS/architecture detection (Linux/macOS), Node.js ≥ 18
+The script handles: OS/architecture detection (Linux/macOS), Node.js ≥ 22
 checks, dependency installation (with npm-cache fallback), building admin /
 frontend / ESM / theme bundles / server, registering a **systemd** service
 (Linux) or **launchd** agent (macOS) with auto-restart, and a health check.
@@ -24,6 +24,47 @@ Service management:
 ./mortarctl.sh {start|stop|restart|status|logs}   # or: systemctl ... mortar
 ```
 
+## 🐳 Docker
+
+The repo ships a multi-stage `Dockerfile` and `docker-compose.yml`.
+
+**Quick start (SQLite, zero config):**
+
+```bash
+docker compose up -d --build
+open http://localhost:3001/install
+```
+
+- The image is built with **Node 22 slim** (glibc); `better-sqlite3` and
+  `sharp` use prebuilt binaries.
+- Persistence: SQLite database → `mortar-data` volume
+  (`/app/server/data`), uploads → `mortar-uploads` (`/app/server/uploads`).
+- **Set `JWT_SECRET`** before going live — the server refuses to start in
+  production without it:
+
+  ```bash
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  # put the output into docker-compose.yml → environment → JWT_SECRET
+  ```
+
+**With MySQL or PostgreSQL** — uncomment the matching service in
+`docker-compose.yml` and set `DATABASE_URL` accordingly
+(e.g. `mysql://mortar:secret@mysql:3306/mortar`).
+
+**Behind a reverse proxy:** set `TRUST_PROXY: "1"` and terminate TLS at the
+proxy, forwarding `X-Forwarded-Proto` (see the Nginx example below).
+
+**Manual build:**
+
+```bash
+docker build -t mortar .
+docker run -d -p 3001:3001 \
+  -e JWT_SECRET=<long-random-string> \
+  -v mortar-data:/app/server/data \
+  -v mortar-uploads:/app/server/uploads \
+  mortar
+```
+
 ## Production build
 
 `./build.sh` builds everything (admin, frontend, shared ESM bundles, themes)
@@ -39,8 +80,8 @@ cd frontend
 npx vite build
 npx esbuild esm/react.js --bundle --format=esm --minify --define:process.env.NODE_ENV=\"production\" --outfile=public/esm-react.js
 npx esbuild esm/router.js --bundle --format=esm --external:react --external:react-dom --outfile=public/esm-router.js
-for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen twentytwentyone twentynineteen twentyseventeen; do THEME_NAME=$t npx vite build --config vite.themes.config.ts >/dev/null 2>&1; done
-for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen twentytwentyone twentynineteen twentyseventeen; do cp dist/themes/$t.js ../server/themes/$t/theme.js; done
+for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen softstore; do THEME_NAME=$t npx vite build --config vite.themes.config.ts >/dev/null 2>&1; done
+for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen softstore; do cp dist/themes/$t.js ../server/themes/$t/theme.js; done
 npx vite build >/dev/null 2>&1   # final dist incl. ESM bundles
 cd ..
 

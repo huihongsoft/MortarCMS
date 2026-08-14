@@ -137,7 +137,19 @@ curl -fsSL https://raw.githubusercontent.com/huihongsoft/MortarCMS/main/install.
 自动完成：环境检测 → 拉取代码 → 安装依赖 → 构建 → 注册系统服务（systemd / launchd）→ 健康检查。
 安装后访问 `http://localhost:3001/install` 完成向导即可使用。
 
-### 方式 B：手动安装
+### 方式 B：Docker
+
+```bash
+git clone https://github.com/huihongsoft/MortarCMS.git && cd mortar
+docker compose up -d --build
+# 打开 http://localhost:3001/install
+```
+
+上线前请在 `docker-compose.yml` 中设置 `JWT_SECRET`。SQLite 数据持久化在
+`mortar-data` 卷；compose 文件内置（注释状态）MySQL/PostgreSQL 服务。
+详见 [docs/deployment.md](docs/deployment.md)。
+
+### 方式 C：手动安装
 
 ```bash
 # 1. 获取代码
