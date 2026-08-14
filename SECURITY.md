@@ -47,7 +47,7 @@ timeline with you.
 |------|-----------|
 | Authentication | JWT (HS256, explicit algorithms), server-side logout (token blacklist) |
 | Login | 2FA challenge (TOTP), account lockout (5 fails / 15 min), rate limiting |
-| Passwords | bcrypt (cost 10), strength policy (8+ chars, letters & numbers) |
+| Passwords | bcrypt (cost 12), strength policy (8+ chars, letters & numbers) |
 | Uploads | Extension + MIME allowlist, image content verification (sharp) |
 | Output | DOMPurify on user content, CDN URL validation, link protocol checks |
 | Headers | X-Frame-Options DENY, nosniff, Referrer-Policy, Permissions-Policy |

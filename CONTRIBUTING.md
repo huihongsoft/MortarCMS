@@ -32,12 +32,16 @@ docs/        Documentation
 
 ## Before You Submit
 
-1. **Type-check & build** — every workspace must pass:
+1. **Type-check, lint & test** — every workspace must pass:
 
    ```bash
-   cd server && npx tsc --noEmit
-   cd admin && npx tsc -b --noEmit && npx vite build
-   cd frontend && npx tsc -b --noEmit && npx vite build
+   # repo root
+   npm run lint                        # ESLint (0 errors; warnings don't block)
+   # server
+   cd server && npx tsc --noEmit && npm test   # vitest unit tests
+   # admin / frontend
+   cd admin && npx tsc -b && npx vite build
+   cd frontend && npx tsc -b && npx vite build
    ```
 
 2. **Test against SQLite** (default) — all changes must keep the default path green. If you touch the data layer, also verify a MySQL/PostgreSQL connection if available (`DATABASE_URL=...`).

@@ -76,14 +76,8 @@ curl http://localhost:3001/api/health
 
 ## Database tooling
 
-```bash
-npm run db:migrate    # prisma migrate dev (schema reference)
-npm run db:studio     # Prisma Studio in the browser
-npm run db:seed       # seed data
-```
-
 The runtime data layer is `better-sqlite3`/`mysql2`/`pg` via
-`server/src/utils/db.ts`; Prisma is kept as the schema reference.
+`server/src/utils/db.ts`; tables are created automatically on first run.
 
 ## Testing databases
 

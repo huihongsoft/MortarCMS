@@ -29,7 +29,9 @@ export/sites/security/options), **AI** (`ai_use` / `ai_manage` /
 
 ```
 GET    /api/posts                 public list (site-isolated, paginated)
+GET    /api/posts/suggest         search autocomplete
 GET    /api/posts/slug/:slug      public single (password-protected flow)
+POST   /api/posts/slug/:slug/password   unlock a protected post (cookie)
 GET    /api/posts/popular         top by views (site-isolated)
 GET    /api/posts/archives        monthly archive counts
 GET    /api/posts/author/:username
@@ -38,13 +40,14 @@ GET    /api/posts/admin           admin list (all statuses)
 POST   /api/posts                 create
 PUT    /api/posts/:id             update
 DELETE /api/posts/:id             delete
-POST   /api/posts/bulk-trash | /bulk-restore | /bulk-delete
-PUT    /api/posts/:id/sticky | /restore | /password
-POST   /api/posts/:id/clone
-GET    /api/posts/:id/revisions
+PUT    /api/posts/:id/restore
+PUT    /api/posts/:id/sticky
+POST   /api/posts/bulk-trash | /bulk-restore | /bulk-status | /bulk-delete
+POST   /api/posts/:id/lock | /unlock | /clone
+GET    /api/posts/:id/revisions | /related
 PUT    /api/posts/:id/revisions/:revId/restore
 
-GET    /api/pages | /api/pages/slug/:slug | POST/PUT/DELETE
+GET    /api/pages/public | /api/pages/slug/:slug | POST/PUT/DELETE | /slug/:slug/password | /:id/revisions
 GET    /api/categories | POST/PUT/DELETE | /bulk-delete
 GET    /api/tags | POST/PUT/DELETE | /bulk-delete
 ```
@@ -59,8 +62,9 @@ PUT    /api/comments/:id            moderate (approve/spam/trash)
 DELETE /api/comments/:id
 POST   /api/comments/bulk-action
 
-GET    /api/users | POST /api/users (admin)
+GET    /api/users                 admin list (with post counts)
 PUT    /api/users/:id | DELETE /api/users/:id
+       (new users are created via POST /api/auth/register — no /api/users POST)
 ```
 
 ## Media
