@@ -57,7 +57,7 @@ export function cacheStats(): { enabled: boolean; ttlSeconds: number; entries: n
 // Prefixes of public content endpoints the frontend renders from
 const CONTENT_PREFIXES = [
   '/api/posts', '/api/pages', '/api/menus', '/api/categories', '/api/tags',
-  '/api/links', '/api/comments/post', '/api/settings', '/api/feed', '/api/widgets',
+  '/api/links', '/api/comments', '/api/settings', '/api/feed', '/api/widgets',
 ];
 
 // Called after any content mutation (post/page/comment/media/menu/widget/taxonomy)
@@ -69,14 +69,14 @@ export function purgeContentCaches(): number {
 
 // Full flush, also drops the sitemap cache
 export function purgeAllCaches(): number {
-  let n = cacheFlush();
+  const n = cacheFlush();
   try { invalidateSitemapCache(); } catch {}
   return n;
 }
 
 // Lazily imported to avoid a static cycle (sitemap.ts only imports db)
 function invalidateSitemapCache(): void {
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const sitemap = require('../routes/sitemap') as { invalidateSitemapCache?: () => void };
   sitemap.invalidateSitemapCache?.();
 }

@@ -11,7 +11,13 @@ const updateUserSchema = z.object({ username: z.string().min(3).max(30).optional
 router.get('/', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const users = db.prepare('SELECT id, username, email, role, avatar, bio, createdAt FROM User ORDER BY createdAt DESC').all() as any[];
-    users.forEach((u: any) => { u._count = { posts: (db.prepare('SELECT COUNT(*) as cnt FROM Post WHERE authorId = ?').get(u.id) as any)?.cnt || 0 }; });
+    if (users.length > 0) {
+      // One count query for all users instead of one per user
+      const counts = new Map<string, number>();
+      (db.prepare('SELECT authorId, COUNT(*) as cnt FROM Post WHERE authorId IN (' + users.map(() => '?').join(',') + ') GROUP BY authorId').all(...users.map((u: any) => u.id)) as any[])
+        .forEach((r: any) => counts.set(r.authorId, r.cnt));
+      users.forEach((u: any) => { u._count = { posts: counts.get(u.id) || 0 }; });
+    }
     res.json(users);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

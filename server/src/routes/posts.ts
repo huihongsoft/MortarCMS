@@ -8,6 +8,7 @@ import { SiteRequest } from '../middleware/site';
 import { slugify, uniqueSlug } from '../utils/slug';
 import { applyFilters, doAction } from '../utils/hooks';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
+import { trackView } from '../utils/views';
 
 const router = Router();
 // Protected-post password guessing is brute-forced per IP
@@ -26,22 +27,69 @@ function sanitizeVisualCss(css: string): string {
 }
 const postSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), meta: z.record(z.string(), z.string()).optional() });
 
-function enrichPost(p: any) {
-  if (!p) return p;
-  p.author = db.prepare('SELECT id, username, email, avatar FROM User WHERE id = ?').get(p.authorId);
-  p.categories = db.prepare('SELECT c.id as categoryId, c.name, c.slug FROM PostCategory pc JOIN Category c ON c.id = pc.categoryId WHERE pc.postId = ?').all(p.id);
-  p.tags = db.prepare('SELECT t.id as tagId, t.name, t.slug FROM PostTag pt JOIN Tag t ON t.id = pt.tagId WHERE pt.postId = ?').all(p.id);
-  p.commentCount = (db.prepare('SELECT COUNT(*) as cnt FROM Comment WHERE postId = ?').get(p.id) as any)?.cnt || 0;
-  p.revisionCount = (db.prepare('SELECT COUNT(*) as cnt FROM Revision WHERE postId = ?').get(p.id) as any)?.cnt || 0;
-  // Load meta fields
-  const metaRows = db.prepare('SELECT key, value FROM PostMeta WHERE postId = ?').all(p.id) as any[];
-  p.meta = {};
-  metaRows.forEach((r: any) => { p.meta[r.key] = r.value; });
-  if (p.featured && p.featured.startsWith('/uploads/')) {
-    const media = db.prepare('SELECT srcset FROM Media WHERE url = ?').get(p.featured) as any;
-    if (media?.srcset) { try { p.srcset = JSON.parse(media.srcset); } catch {} }
+// Batch enrichment: one query per relation for the whole list instead of one
+// per post (a 10-post page used to run ~70 queries). Chunked so a huge
+// user-supplied limit can never exceed SQLite's variable bound.
+function enrichPost(p: any) { return enrichPosts(p ? [p] : [])[0]; }
+
+function enrichPosts(posts: any[]): any[] {
+  if (!posts || posts.length === 0) return posts || [];
+  if (posts.length > 500) {
+    const out: any[] = [];
+    for (let i = 0; i < posts.length; i += 500) out.push(...enrichPosts(posts.slice(i, i + 500)));
+    return out;
   }
-  return p;
+  const ids = posts.map((p: any) => p.id);
+  const qmarks = ids.map(() => '?').join(',');
+
+  // Authors (one query for all posts)
+  const authors = new Map<string, any>();
+  const authorIds = [...new Set(posts.map((p: any) => p.authorId).filter(Boolean))] as string[];
+  if (authorIds.length) {
+    (db.prepare('SELECT id, username, email, avatar FROM User WHERE id IN (' + authorIds.map(() => '?').join(',') + ')').all(...authorIds) as any[])
+      .forEach((u: any) => authors.set(u.id, u));
+  }
+
+  // Categories / tags per post
+  const cats = new Map<string, any[]>();
+  const tags = new Map<string, any[]>();
+  (db.prepare('SELECT pc.postId, c.id as categoryId, c.name, c.slug FROM PostCategory pc JOIN Category c ON c.id = pc.categoryId WHERE pc.postId IN (' + qmarks + ')').all(...ids) as any[])
+    .forEach((r: any) => { if (!cats.has(r.postId)) cats.set(r.postId, []); cats.get(r.postId)!.push({ categoryId: r.categoryId, name: r.name, slug: r.slug }); });
+  (db.prepare('SELECT pt.postId, t.id as tagId, t.name, t.slug FROM PostTag pt JOIN Tag t ON t.id = pt.tagId WHERE pt.postId IN (' + qmarks + ')').all(...ids) as any[])
+    .forEach((r: any) => { if (!tags.has(r.postId)) tags.set(r.postId, []); tags.get(r.postId)!.push({ tagId: r.tagId, name: r.name, slug: r.slug }); });
+
+  // Comment + revision counts
+  const comments = new Map<string, number>();
+  const revisions = new Map<string, number>();
+  (db.prepare('SELECT postId, COUNT(*) as cnt FROM Comment WHERE postId IN (' + qmarks + ') GROUP BY postId').all(...ids) as any[])
+    .forEach((r: any) => comments.set(r.postId, r.cnt));
+  (db.prepare('SELECT postId, COUNT(*) as cnt FROM Revision WHERE postId IN (' + qmarks + ') GROUP BY postId').all(...ids) as any[])
+    .forEach((r: any) => revisions.set(r.postId, r.cnt));
+
+  // Meta fields
+  const meta = new Map<string, Record<string, string>>();
+  (db.prepare('SELECT postId, key, value FROM PostMeta WHERE postId IN (' + qmarks + ')').all(...ids) as any[])
+    .forEach((r: any) => { if (!meta.has(r.postId)) meta.set(r.postId, {}); meta.get(r.postId)![r.key] = r.value; });
+
+  // Featured image srcset (only for /uploads/ featured images)
+  const featuredUrls = [...new Set(posts.map((p: any) => p.featured).filter((f: any) => f && f.startsWith('/uploads/')))] as string[];
+  const srcsets = new Map<string, string>();
+  if (featuredUrls.length) {
+    (db.prepare('SELECT url, srcset FROM Media WHERE url IN (' + featuredUrls.map(() => '?').join(',') + ')').all(...featuredUrls) as any[])
+      .forEach((m: any) => srcsets.set(m.url, m.srcset));
+  }
+
+  for (const p of posts) {
+    p.author = authors.get(p.authorId);
+    p.categories = cats.get(p.id) || [];
+    p.tags = tags.get(p.id) || [];
+    p.commentCount = comments.get(p.id) || 0;
+    p.revisionCount = revisions.get(p.id) || 0;
+    p.meta = meta.get(p.id) || {};
+    const ss = p.featured ? srcsets.get(p.featured) : undefined;
+    if (ss) { try { p.srcset = JSON.parse(ss); } catch {} }
+  }
+  return posts;
 }
 
 router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
@@ -80,7 +128,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     if (category) countParams.push(category);
     if (tag) countParams.push(tag);
     const total = (db.prepare(countSql).get(...countParams) as any)?.cnt || 0;
-    const posts = postsData.map(enrichPost);
+    const posts = enrichPosts(postsData);
     posts.forEach((p: any) => { p.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', p.content || '', p), p)); });
     res.json({ posts, total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -123,7 +171,7 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
       const canView = req.user && (['admin', 'editor'].includes(req.user.role) || (req.user.userId && req.user.userId === post.authorId));
       if (!canView) { res.status(404).json({ error: 'Post not found' }); return; }
     }
-    db.prepare('UPDATE Post SET views = views + 1 WHERE id = ?').run(post.id);
+    trackView(post.id); // batched in memory, flushed to the DB periodically
     const enriched = enrichPost(post);
     // Never expose the protection password to the public API
     enriched.hasPassword = !!post.password;
@@ -161,7 +209,7 @@ router.get('/popular', (req: AuthRequest & SiteRequest, res: Response) => {
     const limit = parseInt(req.query.limit as string) || 5;
     const now = new Date().toISOString();
     const posts = db.prepare('SELECT * FROM Post WHERE type = ? AND status = ? AND (publishedAt IS NULL OR publishedAt <= ?)' + (req.siteId ? ' AND (siteId IS NULL OR siteId = ?)' : '') + ' ORDER BY views DESC, publishedAt DESC LIMIT ?').all(...(req.siteId ? ['post', 'published', now, req.siteId, limit] : ['post', 'published', now, limit])) as any[];
-    res.json(posts.map(enrichPost));
+    res.json(enrichPosts(posts));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -179,7 +227,7 @@ router.get('/archive/:year/:month', (req: AuthRequest, res: Response) => {
     const ym = y + '-' + m;
     const posts = db.prepare('SELECT DISTINCT p.* FROM Post p WHERE ' + where + ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?').all('post', 'published', ym, now, limit, (page - 1) * limit) as any[];
     const total = (db.prepare('SELECT COUNT(DISTINCT p.id) as cnt FROM Post p WHERE ' + where).get('post', 'published', ym, now) as any)?.cnt || 0;
-    res.json({ posts: posts.map(enrichPost), total, page, totalPages: Math.ceil(total / limit), archive: { year: y, month: m } });
+    res.json({ posts: enrichPosts(posts), total, page, totalPages: Math.ceil(total / limit), archive: { year: y, month: m } });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -200,7 +248,7 @@ router.get('/author/:username', (req: AuthRequest, res: Response) => {
     const where = 'p.type = ? AND p.status = ? AND p.authorId = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)';
     const posts = db.prepare('SELECT DISTINCT p.* FROM Post p WHERE ' + where + ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?').all('post', 'published', author.id, new Date().toISOString(), limit, (page - 1) * limit) as any[];
     const total = (db.prepare('SELECT COUNT(DISTINCT p.id) as cnt FROM Post p WHERE ' + where).get('post', 'published', author.id, new Date().toISOString()) as any)?.cnt || 0;
-    res.json({ posts: posts.map(enrichPost), total, page, totalPages: Math.ceil(total / limit), author: { username: req.params.username } });
+    res.json({ posts: enrichPosts(posts), total, page, totalPages: Math.ceil(total / limit), author: { username: req.params.username } });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -228,7 +276,7 @@ router.get('/admin', authenticate, authorize('admin', 'editor', 'author'), (req:
     if (status) cntParams.push(status);
     if (search) cntParams.push('%' + search + '%');
     const total = (db.prepare(cntSql).get(...cntParams) as any)?.cnt || 0;
-    res.json({ posts: postsData.map(enrichPost), total, page, totalPages: Math.ceil(total / limit) });
+    res.json({ posts: enrichPosts(postsData), total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -430,7 +478,7 @@ router.get('/:id/related', (req: AuthRequest, res: Response) => {
     const posts = db.prepare(
       'SELECT DISTINCT p.* FROM Post p JOIN PostCategory pc ON pc.postId = p.id WHERE pc.categoryId IN (' + placeholders + ') AND p.id != ? AND p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?) ORDER BY p.publishedAt DESC LIMIT 4'
     ).all(...catIds, req.params.id, 'post', 'published', now) as any[];
-    res.json(posts.map(enrichPost));
+    res.json(enrichPosts(posts));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

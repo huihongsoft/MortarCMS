@@ -11,7 +11,13 @@ router.get('/', (req: AuthRequest, res: Response) => {
   try {
     const categories = db.prepare('SELECT * FROM Category ORDER BY name ASC').all() as any[];
     // Count only published posts so category lists match the category page
-    categories.forEach((c: any) => { c._count = { posts: (db.prepare("SELECT COUNT(*) as cnt FROM PostCategory pc JOIN Post p ON p.id = pc.postId WHERE pc.categoryId = ? AND p.type = 'post' AND p.status = 'published'").get(c.id) as any)?.cnt || 0 }; });
+    if (categories.length > 0) {
+      // One count query for all categories instead of one per category
+      const counts = new Map<string, number>();
+      (db.prepare("SELECT pc.categoryId, COUNT(*) as cnt FROM PostCategory pc JOIN Post p ON p.id = pc.postId WHERE pc.categoryId IN (" + categories.map(() => '?').join(',') + ") AND p.type = 'post' AND p.status = 'published' GROUP BY pc.categoryId").all(...categories.map((c: any) => c.id)) as any[])
+        .forEach((r: any) => counts.set(r.categoryId, r.cnt));
+      categories.forEach((c: any) => { c._count = { posts: counts.get(c.id) || 0 }; });
+    }
     res.json(categories);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

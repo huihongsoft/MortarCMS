@@ -120,12 +120,21 @@ router.get('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, r
       SELECT p.*, (SELECT COUNT(*) FROM Comment c WHERE c.postId = p.id AND c.status = 'approved') AS commentCount
       FROM Post p WHERE p.type = ? ORDER BY p.menuOrder ASC
     `).all('page') as any[];
-    pages.forEach((p: any) => {
-      p.author = db.prepare('SELECT id, username FROM User WHERE id = ?').get(p.authorId);
-      const metaRows = db.prepare('SELECT key, value FROM PostMeta WHERE postId = ?').all(p.id) as any[];
-      p.meta = {};
-      metaRows.forEach((r: any) => { p.meta[r.key] = r.value; });
-    });
+    // Batch author + meta lookup (one query each, not one per page)
+    const ids = pages.map((p: any) => p.id);
+    const qmarks = ids.map(() => '?').join(',');
+    const authors = new Map<string, any>();
+    const authorIds = [...new Set(pages.map((p: any) => p.authorId).filter(Boolean))] as string[];
+    if (authorIds.length) {
+      (db.prepare('SELECT id, username FROM User WHERE id IN (' + authorIds.map(() => '?').join(',') + ')').all(...authorIds) as any[])
+        .forEach((u: any) => authors.set(u.id, u));
+    }
+    const meta = new Map<string, Record<string, string>>();
+    if (ids.length) {
+      (db.prepare('SELECT postId, key, value FROM PostMeta WHERE postId IN (' + qmarks + ')').all(...ids) as any[])
+        .forEach((r: any) => { if (!meta.has(r.postId)) meta.set(r.postId, {}); meta.get(r.postId)![r.key] = r.value; });
+    }
+    pages.forEach((p: any) => { p.author = authors.get(p.authorId); p.meta = meta.get(p.id) || {}; });
     res.json(pages);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

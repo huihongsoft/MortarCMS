@@ -33,9 +33,13 @@ router.get('/recent', (req: AuthRequest, res: Response) => {
 router.get('/post/:postId', (req: AuthRequest, res: Response) => {
   try {
     const comments = db.prepare('SELECT id, content, author, website, status, postId, parentId, userId, createdAt FROM Comment WHERE postId = ? AND status = ? AND parentId IS NULL ORDER BY createdAt DESC').all(req.params.postId, 'approved') as any[];
-    for (const c of comments) {
-      c.children = db.prepare('SELECT id, content, author, website, status, postId, parentId, userId, createdAt FROM Comment WHERE parentId = ? AND status = ? ORDER BY createdAt ASC').all(c.id, 'approved');
+    // Batch-load children for all top-level comments (one query total)
+    const children = new Map<string, any[]>();
+    if (comments.length > 0) {
+      (db.prepare('SELECT id, content, author, website, status, postId, parentId, userId, createdAt FROM Comment WHERE parentId IN (' + comments.map(() => '?').join(',') + ') AND status = ? ORDER BY createdAt ASC').all(...comments.map((c: any) => c.id), 'approved') as any[])
+        .forEach((r: any) => { if (!children.has(r.parentId)) children.set(r.parentId, []); children.get(r.parentId)!.push(r); });
     }
+    comments.forEach((c: any) => { c.children = children.get(c.id) || []; });
     res.json(comments);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

@@ -4,6 +4,7 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import db, { initDB } from './utils/db';
+import { flushViews } from './utils/views';
 import { verifyToken } from './utils/jwt';
 import { appPasswordAuth } from './middleware/auth';
 import { doAction } from './utils/hooks';
@@ -234,7 +235,9 @@ app.use('/api', appPasswordAuth);
 // Public page cache: caches anonymous GET responses for the frontend content
 // endpoints, so repeated visitors skip DB work. Admin/API clients (Bearer/App
 // auth) are never cached. Content mutations purge the affected prefixes.
-const CACHE_PREFIXES = ['/api/posts', '/api/pages', '/api/menus', '/api/categories', '/api/tags', '/api/links', '/api/comments/post', '/api/settings', '/api/feed', '/api/themes'];
+// '/api/comments' (not just '/api/comments/post') so new submissions and
+// moderation changes (PUT/DELETE /api/comments/:id) also purge the cache
+const CACHE_PREFIXES = ['/api/posts', '/api/pages', '/api/menus', '/api/categories', '/api/tags', '/api/links', '/api/comments', '/api/settings', '/api/feed', '/api/themes'];
 app.use('/api', (req: any, res: any, next: any) => {
   if (req.method !== 'GET' || req.headers.authorization) { next(); return; }
   if (!CACHE_PREFIXES.some((p: string) => req.originalUrl.startsWith(p))) { next(); return; }
@@ -457,7 +460,10 @@ try {
 app.use((err: any, _req: any, res: any, _next: any) => {
   console.error('[Error]', err.message);
   const isProd = process.env.NODE_ENV === 'production';
-  res.status(err.status || 500).json({ error: isProd ? 'Internal server error' : (err.message || 'Internal server error') });
+  // Client errors keep their status (multer rejects oversized files with
+  // LIMIT_FILE_SIZE — that is a 413, not a 500)
+  const status = err.status || (err.code === 'LIMIT_FILE_SIZE' ? 413 : 500);
+  res.status(status).json({ error: isProd && status >= 500 ? 'Internal server error' : (err.message || 'Internal server error') });
 });
 
 app.listen(PORT, () => {
@@ -466,3 +472,11 @@ app.listen(PORT, () => {
   console.log('  Frontend: http://localhost:' + PORT);
   doAction('init'); // Fired once everything is up; plugins listen to bootstrap
 });
+
+// Best-effort flush of in-memory view counts on shutdown
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => {
+    try { flushViews(); } catch {}
+    process.exit(0);
+  });
+}
