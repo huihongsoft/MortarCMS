@@ -19,7 +19,7 @@ export default function Login() {
     try {
       const r = await api.post('/auth/login', { email, password });
       if (r.data.twoFactorRequired) {
-        setError('2FA required on this account — please use the admin panel.');
+        setError(t('2FA required on this account — please use the admin panel.'));
         return;
       }
       localStorage.setItem('mortar_token', r.data.token);

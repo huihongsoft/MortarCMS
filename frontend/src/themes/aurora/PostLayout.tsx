@@ -8,19 +8,10 @@ import Toc from '../../components/Toc';
 import { cdnUrl, cdnHtml } from '../../lib/cdn';
 import { embedContent } from '../../lib/embed';
 import { sanitizeCss } from '../../lib/safeCss';
-import { timeAgo, readingTime } from '../../lib/time';
+import { timeAgo, readingTime, useTimeTick } from '../../lib/time';
+import { gravatarUrl } from '../../lib/gravatar';
 import { t } from '../../lib/i18n';
 import DOMPurify from 'dompurify';
-
-// Re-render every minute so relative times stay current without reloading
-function useTimeTick(): number {
-  const [tick, setTick] = React.useState(Date.now());
-  React.useEffect(() => {
-    const iv = setInterval(() => setTick(Date.now()), 60000);
-    return () => clearInterval(iv);
-  }, []);
-  return tick;
-}
 
 
 
@@ -60,14 +51,6 @@ export default function PostLayout(props: any) {
     React.createElement('textarea', { value: commentForm.content, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentForm({ ...commentForm, content: e.target.value }), placeholder: t('your comment', settings) + '...', 'aria-label': t('your comment', settings), className: inputCls, rows: 4, required: true }),
     React.createElement('button', { type: 'submit', className: 'w-full py-3 rounded-xl text-white text-sm font-medium transition-all hover:opacity-90 shadow-lg shadow-indigo-500/20', style: { background: 'var(--primary-color, #6366f1)' } }, t('submit comment', settings))
   );
-
-  // Browser-safe deterministic hash for the gravatar URL (no node crypto)
-  const gravatarUrl = (email: string) => {
-    let h = 0;
-    const s = (email || '').trim().toLowerCase();
-    for (let i = 0; i < s.length; i++) h = ((h << 5) - h + s.charCodeAt(i)) | 0;
-    return 'https://www.gravatar.com/avatar/' + Math.abs(h).toString(16) + '?d=identicon&s=96';
-  };
 
   return React.createElement('div', { className: 'max-w-5xl mx-auto px-6 py-14' },
     React.createElement(Breadcrumbs, { items: [{ label: t('blog', settings), to: '/' }, { label: post.title || t('post', settings) }] }),

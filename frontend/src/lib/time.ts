@@ -1,4 +1,15 @@
+import { useEffect, useState } from 'react';
 import { getSiteLang } from './i18n';
+
+// Re-render every minute so relative times stay current without reloading
+export function useTimeTick(): number {
+  const [tick, setTick] = useState(Date.now());
+  useEffect(() => {
+    const iv = setInterval(() => setTick(Date.now()), 60000);
+    return () => clearInterval(iv);
+  }, []);
+  return tick;
+}
 
 // SQLite CURRENT_TIMESTAMP stores UTC without a timezone marker
 // ('2026-08-12 04:19:49'); JS would parse it as local time and skew by the

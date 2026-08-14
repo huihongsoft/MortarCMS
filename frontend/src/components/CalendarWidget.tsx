@@ -1,7 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar as CalendarIcon } from 'lucide-react';
-import { t } from '../lib/i18n';
+import { t, getSiteLang } from '../lib/i18n';
 
 // Monthly calendar (WordPress-style): days link to the monthly archive
 export default function CalendarWidget() {
@@ -11,7 +11,7 @@ export default function CalendarWidget() {
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const today = now.getDate();
-  const weekdayNames = ['日', '一', '二', '三', '四', '五', '六'];
+  const weekdayNames = getSiteLang() === 'zh' ? ['日', '一', '二', '三', '四', '五', '六'] : ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
   const cells: React.ReactNode[] = [];
   for (let i = 0; i < firstDay; i++) cells.push(React.createElement('div', { key: 'b' + i }));
   for (let d = 1; d <= daysInMonth; d++) {

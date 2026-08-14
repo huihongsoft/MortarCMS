@@ -12,22 +12,9 @@ import CalendarWidget from '../../components/CalendarWidget';
 import PagesWidget from '../../components/PagesWidget';
 import RssWidget from '../../components/RssWidget';
 import { cdnUrl } from '../../lib/cdn';
-import { timeAgo, readingTime } from '../../lib/time';
+import { timeAgo, readingTime, useTimeTick } from '../../lib/time';
 import { t } from '../../lib/i18n';
 import Carousel from '../../components/Carousel';
-
-// Re-render every minute so relative times ("7h ago") stay current
-// without a page reload.
-function useTimeTick(): number {
-  const [tick, setTick] = React.useState(Date.now());
-  React.useEffect(() => {
-    const iv = setInterval(() => setTick(Date.now()), 60000);
-    return () => clearInterval(iv);
-  }, []);
-  return tick;
-}
-
-
 
 function formatIcon(f: string) {
   const icons: Record<string, string> = { gallery: '\u{1F5BC}', video: '\u{1F3AC}', audio: '\u{1F3B5}', quote: '\u{1F4AC}', link: '\u{1F517}' };

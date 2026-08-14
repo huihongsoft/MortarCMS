@@ -30,24 +30,26 @@ interface Session {
   ts: number;
 }
 
+// Texts are English keys resolved through t() at render time, so the UI and
+// the prompts actually sent to the model follow the admin's language.
 const SUGGESTIONS = [
-  { icon: BarChart3, text: '查看一下站点的统计数据' },
-  { icon: FileText, text: '帮我列出最近发布的 5 篇文章' },
-  { icon: Wand2, text: '撰写一篇关于内存涨价历史的文章并保存为草稿' },
-  { icon: MessageSquare, text: '查看待审核的评论' },
+  { icon: BarChart3, text: 'check the site statistics' },
+  { icon: FileText, text: 'list the recent 5 published posts' },
+  { icon: Wand2, text: 'write an article about the memory price surge and save as draft' },
+  { icon: MessageSquare, text: 'check the pending comments' },
 ];
 
 const PROMPT_LIBRARY = [
-  { label: '✍️ 写文章', text: '撰写一篇关于【主题】的深度文章并保存为草稿' },
-  { label: '📊 站点统计', text: '查看一下站点的统计数据' },
-  { label: '📰 最近文章', text: '列出最近发布的 5 篇文章' },
-  { label: '🔍 站内检索', text: '在站内搜索关于【关键词】的内容并总结' },
-  { label: '🌐 联网调研', text: '搜索互联网上关于【主题】的最新信息并总结要点' },
-  { label: '🏷️ 标签建议', text: '为文章《【标题】》推荐合适的标签' },
-  { label: '💡 选题建议', text: '根据我站点的内容推荐 5 个新选题' },
-  { label: '🧠 记住偏好', text: '记住：我更喜欢【简洁的写作风格】' },
-  { label: '🖼️ 生成配图', text: '为文章《【标题】》生成一张封面配图' },
-  { label: '📝 评论审核', text: '帮我审核待处理的评论' },
+  { label: '✍️ write article', text: 'write a deep article about {topic} and save as draft' },
+  { label: '📊 site statistics', text: 'check the site statistics' },
+  { label: '📰 recent posts', text: 'list the recent 5 published posts' },
+  { label: '🔍 site search', text: 'search the site for {keyword} content and summarize' },
+  { label: '🌐 web research', text: 'search the web for the latest information about {topic} and summarize key points' },
+  { label: '🏷️ tag suggestions', text: 'recommend suitable tags for the article {title}' },
+  { label: '💡 topic ideas', text: 'recommend 5 new topics based on my site content' },
+  { label: '🧠 remember preference', text: 'remember: I prefer {writing style}' },
+  { label: '🖼️ generate cover image', text: 'generate a cover image for the article {title}' },
+  { label: '📝 comment review', text: 'review the pending comments' },
 ];
 
 // One-click task templates: clicking one fills the task input so the model
@@ -56,42 +58,51 @@ const PROMPT_LIBRARY = [
 // input opens a two-level menu (category -> template).
 const TASK_TEMPLATE_GROUPS: { category: string; icon: string; templates: { label: string; prompt: string }[] }[] = [
   {
-    category: '写作', icon: '✍️', templates: [
-      { label: '撰写并发布文章', prompt: '请撰写一篇关于【主题】的文章并发布。要求：结构清晰，使用小标题分节，字数不少于 800 字，内容有深度，并分配合理的分类和标签。' },
-      { label: '生成文章草稿', prompt: '请撰写一篇关于【主题】的文章草稿（保存为草稿，不要发布）。要求：结构清晰，使用小标题分节，字数不少于 600 字。' },
-      { label: '写文章并生成封面', prompt: '请撰写一篇关于【主题】的文章并发布，同时用 generate_image 生成一张与主题匹配的封面图，把返回的 url 传给 write_post 的 featured 参数设为文章封面。' },
+    category: 'writing', icon: '✍️', templates: [
+      { label: 'write and publish article', prompt: 'write an article about {topic} and publish it. Requirements: clear structure with subheadings, at least 800 characters, in-depth content, and assign reasonable categories and tags.' },
+      { label: 'generate article draft', prompt: 'write an article draft about {topic} (save as draft, do not publish). Requirements: clear structure with subheadings, at least 600 characters.' },
+      { label: 'write article with cover image', prompt: 'write an article about {topic} and publish it, use generate_image to create a matching cover image, and pass the returned url to write_post as the featured parameter.' },
     ],
   },
   {
-    category: '调研', icon: '🔍', templates: [
-      { label: '调研后写文章', prompt: '请先用 web_search 搜索【主题】的最新信息（多搜索几个关键词），再基于调研结果撰写一篇有深度、有数据支撑的文章并保存为草稿。' },
+    category: 'research', icon: '🔍', templates: [
+      { label: 'research then write', prompt: 'first use web_search to find the latest information about {topic} (search several keywords), then write an in-depth, data-backed article based on the research and save it as draft.' },
     ],
   },
   {
-    category: '内容运营', icon: '📊', templates: [
-      { label: '翻译文章', prompt: '请把文章【文章标题或链接】翻译成【目标语言】，翻译后创建为新文章（保留封面图），标题带语言标记。' },
-      { label: '完善文章 SEO', prompt: '请为文章【文章标题或链接】调用 complete_post：自动生成摘要、SEO 标题、SEO 描述，并推荐合适的标签。' },
-      { label: '站点数据报告', prompt: '请查询站点的文章、页面、评论、分类、标签等统计信息，整理成一份简洁清晰的报告。' },
-      { label: '整理分类标签', prompt: '请查看站内所有文章的分类和标签使用情况，检查是否有遗漏或不当之处，并给出具体的整理建议（不要直接修改）。' },
+    category: 'content operations', icon: '📊', templates: [
+      { label: 'translate article', prompt: 'translate the article {title or link} into {target language}, save it as a new article (keep the cover image), with the language marker in the title.' },
+      { label: 'improve article SEO', prompt: 'for the article {title or link} call complete_post: auto-generate excerpt, SEO title, SEO description, and recommend suitable tags.' },
+      { label: 'site data report', prompt: 'query the site statistics for posts, pages, comments, categories, tags, and compile a clear concise report.' },
+      { label: 'organize categories and tags', prompt: 'review the category and tag usage across all posts, check for missing or inappropriate assignments, and give specific cleanup suggestions (do not modify directly).' },
     ],
   },
   {
-    category: '主题设计', icon: '🎨', templates: [
-      { label: '仿制网站主题', prompt: '请用 analyze_web_theme 分析【参考网站链接】的配色和字体，然后用 apply_theme_style 把类似的风格应用到当前站点主题（主色、背景、文字、链接、字体），如需圆角/间距等细节可附带 custom_css。' },
-      { label: '自定义主题风格', prompt: '请把站点主题调整为【风格描述，如：深色简洁 / 温暖杂志风】。用 apply_theme_style 设置主色、背景、文字、链接颜色和字体，并用 custom_css 补充细节。' },
+    category: 'theme design', icon: '🎨', templates: [
+      { label: 'clone website theme', prompt: 'use analyze_web_theme to analyze the colors and fonts of {reference site link}, then use apply_theme_style to apply a similar style to the current site theme (primary color, background, text, links, fonts), adding custom_css for details like rounded corners/spacing if needed.' },
+      { label: 'customize theme style', prompt: 'adjust the site theme to {style description, e.g. dark minimal / warm magazine}. Use apply_theme_style to set primary color, background, text, link colors and fonts, and use custom_css to add details.' },
     ],
   },
 ];
 
+// Translated copy of the static template groups (user templates are left as-is)
+function taskTemplateGroups(): { category: string; icon: string; templates: { label: string; prompt: string }[] }[] {
+  return TASK_TEMPLATE_GROUPS.map(g => ({
+    ...g,
+    category: t(g.category, getLang()),
+    templates: g.templates.map(tt => ({ label: t(tt.label, getLang()), prompt: t(tt.prompt, getLang()) })),
+  }));
+}
+
 const HISTORY_KEY = 'mortar_ai_sessions';
-const HELP_TEXT = '**可用命令**\n' +
-  '- `/stats` 查看站点统计\n' +
-  '- `/posts [数量]` 列出最近文章\n' +
-  '- `/draft 主题` 撰写文章并保存草稿\n' +
-  '- `/comments` 查看待审核评论\n' +
-  '- `/context` 查看站点概况\n' +
-  '- `/help` 显示本帮助\n\n' +
-  '也可以直接对话，例如：\n"写一篇关于内存涨价历史的文章并保存为草稿"';
+const HELP_TEXT = () => '**' + t('available commands', getLang()) + '**\n' +
+  '- `/stats` ' + t('view site stats', getLang()) + '\n' +
+  '- `/posts [' + t('count', getLang()) + ']` ' + t('list recent posts', getLang()) + '\n' +
+  '- `/draft ' + t('topic', getLang()) + '` ' + t('write article and save draft', getLang()) + '\n' +
+  '- `/comments` ' + t('pending comments', getLang()) + '\n' +
+  '- `/context` ' + t('site overview', getLang()) + '\n' +
+  '- `/help` ' + t('show this help', getLang()) + '\n\n' +
+  t('or just chat, for example', getLang()) + ':\n"' + t('write an article about the memory price surge and save as draft', getLang()) + '"';
 const LAST_KEY = 'mortar_ai_last_session';
 
 // Lightweight Markdown renderer for assistant replies
@@ -486,7 +497,7 @@ export default function AIChat() {
       // Switch to the task just created so the running task is in view
       if (newId) openTask(newId);
       setTimeout(fetchTasks, 500);
-    } catch (e: any) { setError(e.response?.data?.error || '任务创建失败'); }
+    } catch (e: any) { setError(e.response?.data?.error || t('task creation failed', getLang())); }
   }
 
   async function openTask(id: string) {
@@ -628,7 +639,7 @@ export default function AIChat() {
       setCopied('share');
       setTimeout(() => setCopied(null), 1500);
       alert(t('share link copied', getLang()) + ': ' + url);
-    } catch (e: any) { setError(e.response?.data?.error || '分享失败'); }
+    } catch (e: any) { setError(e.response?.data?.error || t('share failed', getLang())); }
   }
 
   function exportSession() {
@@ -672,17 +683,17 @@ export default function AIChat() {
     const [, cmd, rest] = m;
     const r = rest.trim();
     switch (cmd) {
-      case 'stats': return '查看一下站点的统计数据';
-      case 'posts': return '列出最近发布的 ' + (r || '5') + ' 篇文章，只列标题和发布日期';
-      case 'draft': return '撰写一篇关于「' + (r || '这个主题') + '」的文章并保存为草稿';
-      case 'comments': return '查看待审核的评论';
-      case 'context': return '请根据站点上下文简要总结当前站点的概况';
-      case 'seo': return '为站点最近发布的文章生成 SEO 标题和描述建议（列出文章标题与对应的 SEO 建议即可，不要修改文章）';
-      case 'memory': return '告诉我你记住了关于我的哪些信息（调用回忆工具）';
-      case 'tasks': return '查看最近的 AI 任务状态并总结';
-      case 'translate': return '将文章《' + (r || '最近的草稿文章') + '》翻译成英文并保存为草稿';
+      case 'stats': return t('check the site statistics', getLang());
+      case 'posts': return t('list the recent {n} posts with titles and dates', getLang()).replace('{n}', r || '5');
+      case 'draft': return t('write an article about 「{topic}」 and save as draft', getLang()).replace('{topic}', r || t('this topic', getLang()));
+      case 'comments': return t('check the pending comments', getLang());
+      case 'context': return t('summarize the current site overview from the site context', getLang());
+      case 'seo': return t('generate SEO title and description suggestions for recent posts (list titles with suggestions, do not modify posts)', getLang());
+      case 'memory': return t('tell me what you remember about me (use the recall tool)', getLang());
+      case 'tasks': return t('check the recent AI task status and summarize', getLang());
+      case 'translate': return t('translate the article 「{title}」 into English and save as draft', getLang()).replace('{title}', r || t('latest draft article', getLang()));
       case 'help':
-        if (active) updateSession(active.id, x => ({ ...x, messages: [...x.messages, { role: 'assistant', content: HELP_TEXT, ts: Date.now() }] }));
+        if (active) updateSession(active.id, x => ({ ...x, messages: [...x.messages, { role: 'assistant', content: HELP_TEXT(), ts: Date.now() }] }));
         return null;
       default: return null; // unknown -> send as-is
     }
@@ -778,7 +789,7 @@ export default function AIChat() {
         updateSession(sid, x => ({ ...x, messages: history }));
         setError(t('generation stopped', getLang()));
       } else {
-        setError(e.message || '请求失败');
+        setError(e.message || t('request failed', getLang()));
         updateSession(sid, x => ({ ...x, messages: history }));
       }
     } finally {
@@ -833,7 +844,7 @@ export default function AIChat() {
       }
       updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults }] }));
     } catch (e: any) {
-      if (e.name !== 'AbortError') setError(e.message || '请求失败');
+      if (e.name !== 'AbortError') setError(e.message || t('request failed', getLang()));
       updateSession(sid, x => ({ ...x, messages: history }));
     } finally { setBusy(false); abortRef.current = null; }
   }
@@ -1159,7 +1170,7 @@ export default function AIChat() {
           React.createElement('button', { onClick: startTask, disabled: !input.trim() || busy, className: 'btn-primary w-28 justify-center flex-shrink-0' }, React.createElement(Rocket, { size: 14 }), t('run task', getLang())),
           tplOpen && React.createElement('div', { className: 'absolute bottom-full left-0 mb-2 w-96 max-w-[calc(100vw-2rem)] bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden flex' },
             React.createElement('div', { className: 'w-32 shrink-0 border-r border-gray-100 dark:border-gray-700 py-1 max-h-72 overflow-y-auto' },
-              [...TASK_TEMPLATE_GROUPS, ...(myTemplates.length ? [{ category: t('my templates', getLang()), icon: '📌', templates: myTemplates.map(m => ({ label: m.name, prompt: m.prompt })) }] : [])].map((g, gi) =>
+              [...taskTemplateGroups(), ...(myTemplates.length ? [{ category: t('my templates', getLang()), icon: '📌', templates: myTemplates.map(m => ({ label: m.name, prompt: m.prompt })) }] : [])].map((g, gi) =>
                 React.createElement('button', {
                   key: g.category,
                   onClick: () => setTplGroup(gi),
@@ -1169,7 +1180,7 @@ export default function AIChat() {
             ),
             React.createElement('div', { className: 'flex-1 py-1 max-h-72 overflow-y-auto' },
               (() => {
-                const all = [...TASK_TEMPLATE_GROUPS, ...(myTemplates.length ? [{ category: t('my templates', getLang()), icon: '📌', templates: myTemplates.map(m => ({ label: m.name, prompt: m.prompt })) }] : [])];
+                const all = [...taskTemplateGroups(), ...(myTemplates.length ? [{ category: t('my templates', getLang()), icon: '📌', templates: myTemplates.map(m => ({ label: m.name, prompt: m.prompt })) }] : [])];
                 const g = all[Math.min(tplGroup, all.length - 1)];
                 return g.templates.map((tt: any) =>
                   React.createElement('button', {
@@ -1221,10 +1232,10 @@ export default function AIChat() {
         React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3 max-w-lg w-full' },
           SUGGESTIONS.map((s, i) => React.createElement('button', {
             key: i,
-            onClick: () => send(s.text),
+            onClick: () => send(t(s.text, getLang())),
             disabled: busy,
             className: 'flex items-center gap-2 p-3 rounded-xl border border-gray-200 text-left text-sm text-gray-600 hover:border-primary-400 hover:text-primary-600 hover:bg-primary-50/50 transition-colors',
-          }, React.createElement(s.icon, { size: 16 }), s.text))
+          }, React.createElement(s.icon, { size: 16 }), t(s.text, getLang())))
         )
       ),
       messages.map((m, i) => {
@@ -1294,9 +1305,9 @@ export default function AIChat() {
         promptsOpen && React.createElement('div', { className: 'absolute bottom-full left-0 mb-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 max-h-72 overflow-y-auto' },
           PROMPT_LIBRARY.map((p, i) => React.createElement('button', {
             key: i,
-            onClick: () => { setInput(p.text); setPromptsOpen(false); },
+            onClick: () => { setInput(t(p.text, getLang())); setPromptsOpen(false); },
             className: 'w-full text-left px-3 py-2 text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700',
-          }, p.label))
+          }, t(p.label, getLang())))
         ),
         React.createElement('textarea', {
           value: input,

@@ -11,6 +11,8 @@ const MONTHS = ['January','February','March','April','May','June','July','August
 export default function ArchivePage({ settings }: { settings: Record<string, string> }) {
   const { year, month } = useParams();
   const [data, setData] = useState<any>(null);
+  // Must run unconditionally: hooks cannot be called after an early return
+  const theme = useTheme();
 
   useEffect(() => {
     api.get('/posts/archive/' + year + '/' + month).then(r => setData(r.data)).catch(() => setData({ error: true }));
@@ -41,6 +43,6 @@ export default function ArchivePage({ settings }: { settings: Record<string, str
   if (!data) return React.createElement(ListSkeleton, null);
   if (data.error) return React.createElement('p', { className: 'text-gray-500 p-8' }, t('failed to load archive'));
 
-  const Layout = useTheme().ArchiveLayout;
+  const Layout = theme.ArchiveLayout;
   return React.createElement(Layout, { data, year, month });
 }

@@ -2,17 +2,8 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, User, Folder } from 'lucide-react';
 import { cdnUrl } from '../../lib/cdn';
-import { timeAgo, readingTime } from '../../lib/time';
+import { timeAgo, readingTime, useTimeTick } from '../../lib/time';
 import { t } from '../../lib/i18n';
-
-function useTimeTick(): number {
-  const [tick, setTick] = React.useState(Date.now());
-  React.useEffect(() => {
-    const iv = setInterval(() => setTick(Date.now()), 60000);
-    return () => clearInterval(iv);
-  }, []);
-  return tick;
-}
 
 // Aurora archive list (shared by category/tag/archive pages): centered,
 // hairline separators, editorial spacing

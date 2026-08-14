@@ -2,9 +2,10 @@ import React, { useEffect, useState } from 'react';
 import { Database, HardDrive, Server, Globe, User, ArrowRight, ArrowLeft, CheckCircle2, Loader2 } from 'lucide-react';
 import api from '../lib/api';
 import useSEO from '../hooks/useSEO';
+import { t } from '../lib/i18n';
 
 export default function Install() {
-  useSEO({ title: 'Install', url: '/install', noindex: true });
+  useSEO({ title: t('install mortar'), url: '/install', noindex: true });
   const [step, setStep] = useState(1);
   const [dbType, setDbType] = useState('sqlite');
   const [dbConfig, setDbConfig] = useState({ host: 'localhost', port: '3306', user: 'root', password: '', database: 'mortar' });
@@ -29,30 +30,30 @@ export default function Install() {
       setDone(true);
       setTimeout(() => { window.location.href = '/admin'; }, 1500);
     } catch (e: any) {
-      setError(e.response?.data?.error || 'Installation failed');
+      setError(e.response?.data?.error || t('installation failed'));
       setLoading(false);
     }
   }
 
   const dbOptions = [
-    { key: 'sqlite', name: 'SQLite', desc: 'Zero configuration, single file. Best for small to medium sites.', icon: HardDrive },
-    { key: 'mysql', name: 'MySQL / MariaDB', desc: 'Classic choice, widely hosted.', icon: Database },
-    { key: 'postgres', name: 'PostgreSQL', desc: 'Modern, feature-rich relational database.', icon: Server },
+    { key: 'sqlite', name: 'SQLite', desc: t('zero configuration, single file. best for small to medium sites.'), icon: HardDrive },
+    { key: 'mysql', name: 'MySQL / MariaDB', desc: t('classic choice, widely hosted.'), icon: Database },
+    { key: 'postgres', name: 'PostgreSQL', desc: t('modern, feature-rich relational database.'), icon: Server },
   ];
 
   if (done) return React.createElement('div', { className: 'min-h-screen flex items-center justify-center bg-gray-50' },
     React.createElement('div', { className: 'text-center' },
       React.createElement(CheckCircle2, { size: 56, className: 'mx-auto mb-4 text-green-500' }),
-      React.createElement('h1', { className: 'text-2xl font-bold text-gray-900 mb-2' }, 'Mortar installed!'),
-      React.createElement('p', { className: 'text-gray-500' }, 'Redirecting to the admin panel...'),
+      React.createElement('h1', { className: 'text-2xl font-bold text-gray-900 mb-2' }, t('mortar installed')),
+      React.createElement('p', { className: 'text-gray-500' }, t('redirecting to the admin panel')),
     ));
 
   return React.createElement('div', { className: 'min-h-screen bg-gray-50 flex items-center justify-center p-4' },
     React.createElement('div', { className: 'w-full max-w-xl' },
       React.createElement('div', { className: 'text-center mb-8' },
         React.createElement('div', { className: 'w-14 h-14 mx-auto mb-3 rounded-2xl bg-primary-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg' }, 'M'),
-        React.createElement('h1', { className: 'text-3xl font-bold text-gray-900' }, 'Install Mortar'),
-        React.createElement('p', { className: 'text-gray-500 mt-1' }, 'Welcome! Let us set up your new site — it only takes a minute.')
+        React.createElement('h1', { className: 'text-3xl font-bold text-gray-900' }, t('install mortar')),
+        React.createElement('p', { className: 'text-gray-500 mt-1' }, t('welcome! let us set up your new site — it only takes a minute.'))
       ),
       // Step indicator
       React.createElement('div', { className: 'flex items-center justify-center gap-2 mb-6' },
@@ -64,7 +65,7 @@ export default function Install() {
       React.createElement('div', { className: 'card p-8' },
         error && React.createElement('div', { className: 'p-3 mb-4 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg' }, error),
         step === 1 && React.createElement(React.Fragment, null,
-          React.createElement('h2', { className: 'text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2' }, React.createElement(Database, { size: 18 }), 'Choose your database'),
+          React.createElement('h2', { className: 'text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2' }, React.createElement(Database, { size: 18 }), t('choose your database')),
           React.createElement('div', { className: 'space-y-3' },
             dbOptions.map(o =>
               React.createElement('button', {
@@ -83,36 +84,36 @@ export default function Install() {
             )
           ),
           dbType !== 'sqlite' && React.createElement('div', { className: 'grid grid-cols-2 gap-3 mt-4' },
-            React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, 'Host'), React.createElement('input', { value: dbConfig.host, onChange: e => setDbConfig({ ...dbConfig, host: e.target.value }), className: 'input-field' })),
-            React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, 'Port'), React.createElement('input', { value: dbConfig.port, onChange: e => setDbConfig({ ...dbConfig, port: e.target.value }), className: 'input-field' })),
-            React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, 'User'), React.createElement('input', { value: dbConfig.user, onChange: e => setDbConfig({ ...dbConfig, user: e.target.value }), className: 'input-field' })),
-            React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, 'Password'), React.createElement('input', { type: 'password', value: dbConfig.password, onChange: e => setDbConfig({ ...dbConfig, password: e.target.value }), className: 'input-field' })),
-            React.createElement('div', { className: 'col-span-2' }, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, 'Database name'), React.createElement('input', { value: dbConfig.database, onChange: e => setDbConfig({ ...dbConfig, database: e.target.value }), className: 'input-field' })),
+            React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('host')), React.createElement('input', { value: dbConfig.host, onChange: e => setDbConfig({ ...dbConfig, host: e.target.value }), className: 'input-field' })),
+            React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('port')), React.createElement('input', { value: dbConfig.port, onChange: e => setDbConfig({ ...dbConfig, port: e.target.value }), className: 'input-field' })),
+            React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('user')), React.createElement('input', { value: dbConfig.user, onChange: e => setDbConfig({ ...dbConfig, user: e.target.value }), className: 'input-field' })),
+            React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('password')), React.createElement('input', { type: 'password', value: dbConfig.password, onChange: e => setDbConfig({ ...dbConfig, password: e.target.value }), className: 'input-field' })),
+            React.createElement('div', { className: 'col-span-2' }, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('database name')), React.createElement('input', { value: dbConfig.database, onChange: e => setDbConfig({ ...dbConfig, database: e.target.value }), className: 'input-field' })),
           ),
-          React.createElement('button', { onClick: () => setStep(2), className: 'btn-primary w-full justify-center mt-6' }, 'Continue', React.createElement(ArrowRight, { size: 16 })),
+          React.createElement('button', { onClick: () => setStep(2), className: 'btn-primary w-full justify-center mt-6' }, t('continue'), React.createElement(ArrowRight, { size: 16 })),
         ),
         step === 2 && React.createElement(React.Fragment, null,
-          React.createElement('h2', { className: 'text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2' }, React.createElement(Globe, { size: 18 }), 'Site information'),
+          React.createElement('h2', { className: 'text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2' }, React.createElement(Globe, { size: 18 }), t('site information')),
           React.createElement('div', { className: 'space-y-3' },
-            React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, 'Site title *'), React.createElement('input', { value: site.siteTitle, onChange: e => setSite({ ...site, siteTitle: e.target.value }), className: 'input-field', placeholder: 'My Mortar Site' })),
-            React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, 'Site description'), React.createElement('input', { value: site.siteDescription, onChange: e => setSite({ ...site, siteDescription: e.target.value }), className: 'input-field', placeholder: 'A short tagline' })),
+            React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('site title') + ' *'), React.createElement('input', { value: site.siteTitle, onChange: e => setSite({ ...site, siteTitle: e.target.value }), className: 'input-field', placeholder: t('my mortar site') })),
+            React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('site description')), React.createElement('input', { value: site.siteDescription, onChange: e => setSite({ ...site, siteDescription: e.target.value }), className: 'input-field', placeholder: t('a short tagline') })),
             React.createElement('div', { className: 'border-t border-gray-100 pt-3' },
-              React.createElement('p', { className: 'text-xs font-semibold text-gray-500 mb-3 flex items-center gap-1' }, React.createElement(User, { size: 12 }), 'Admin account'),
+              React.createElement('p', { className: 'text-xs font-semibold text-gray-500 mb-3 flex items-center gap-1' }, React.createElement(User, { size: 12 }), t('admin account')),
               React.createElement('div', { className: 'grid grid-cols-2 gap-3' },
-                React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, 'Username'), React.createElement('input', { value: site.adminUsername, onChange: e => setSite({ ...site, adminUsername: e.target.value }), className: 'input-field' })),
-                React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, 'Email *'), React.createElement('input', { type: 'email', value: site.adminEmail, onChange: e => setSite({ ...site, adminEmail: e.target.value }), className: 'input-field' })),
-                React.createElement('div', { className: 'col-span-2' }, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, 'Password (min 8 chars) *'), React.createElement('input', { type: 'password', value: site.adminPassword, onChange: e => setSite({ ...site, adminPassword: e.target.value }), className: 'input-field' })),
+                React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('username')), React.createElement('input', { value: site.adminUsername, onChange: e => setSite({ ...site, adminUsername: e.target.value }), className: 'input-field' })),
+                React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('email') + ' *'), React.createElement('input', { type: 'email', value: site.adminEmail, onChange: e => setSite({ ...site, adminEmail: e.target.value }), className: 'input-field' })),
+                React.createElement('div', { className: 'col-span-2' }, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('password (min 8 chars)') + ' *'), React.createElement('input', { type: 'password', value: site.adminPassword, onChange: e => setSite({ ...site, adminPassword: e.target.value }), className: 'input-field' })),
               )
             )
           ),
           React.createElement('div', { className: 'flex gap-3 mt-6' },
-            React.createElement('button', { onClick: () => setStep(1), className: 'btn-secondary flex-1 justify-center' }, React.createElement(ArrowLeft, { size: 16 }), 'Back'),
+            React.createElement('button', { onClick: () => setStep(1), className: 'btn-secondary flex-1 justify-center' }, React.createElement(ArrowLeft, { size: 16 }), t('back')),
             React.createElement('button', { onClick: submit, disabled: loading || !site.siteTitle || !site.adminEmail || site.adminPassword.length < 8, className: 'btn-primary flex-1 justify-center' },
-              loading ? React.createElement(Loader2, { size: 16, className: 'animate-spin' }) : React.createElement(CheckCircle2, { size: 16 }), loading ? 'Installing...' : 'Install Mortar'),
+              loading ? React.createElement(Loader2, { size: 16, className: 'animate-spin' }) : React.createElement(CheckCircle2, { size: 16 }), loading ? t('installing') + '...' : t('install mortar')),
           ),
         )
       ),
-      React.createElement('p', { className: 'text-center text-xs text-gray-400 mt-6' }, 'The database choice is saved and used on every restart. You can switch databases at any time by re-running the installer.')
+      React.createElement('p', { className: 'text-center text-xs text-gray-400 mt-6' }, t('the database choice is saved and used on every restart. you can switch databases at any time by re-running the installer.'))
     )
   );
 }

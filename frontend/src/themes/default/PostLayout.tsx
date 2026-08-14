@@ -9,20 +9,10 @@ import { cdnUrl, cdnHtml } from '../../lib/cdn';
 import { sanitizeCss } from '../../lib/safeCss';
 import { embedContent } from '../../lib/embed';
 import { gravatarUrl } from '../../lib/gravatar';
-import { timeAgo, readingTime } from '../../lib/time';
+import { timeAgo, readingTime, useTimeTick } from '../../lib/time';
 import { t } from '../../lib/i18n';
 import { useContentImageEnhancer } from '../../lib/imageEnhance';
 import DOMPurify from 'dompurify';
-
-// Re-render every minute so relative times stay current without reloading
-function useTimeTick(): number {
-  const [tick, setTick] = React.useState(Date.now());
-  React.useEffect(() => {
-    const iv = setInterval(() => setTick(Date.now()), 60000);
-    return () => clearInterval(iv);
-  }, []);
-  return tick;
-}
 
 
 

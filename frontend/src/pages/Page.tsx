@@ -11,6 +11,8 @@ export default function PageView({ settings }: { settings: Record<string, string
   const [page, setPage] = useState<any>(null);
   const [pwdError, setPwdError] = useState(false);
   const [pwdSubmitting, setPwdSubmitting] = useState(false);
+  // Must run unconditionally: hooks cannot be called after an early return
+  const theme = useTheme();
 
   useEffect(() => {
     setPwdError(false);
@@ -74,6 +76,6 @@ export default function PageView({ settings }: { settings: Record<string, string
       pwdError && React.createElement('p', { className: 'text-sm text-red-600' }, t('wrong password, please try again', settings)),
       React.createElement('button', { type: 'submit', disabled: pwdSubmitting, className: 'btn-primary w-full justify-center' }, pwdSubmitting ? t('checking', settings) + '…' : t('submit', settings))));
 
-  const Layout = useTheme().PageLayout;
+  const Layout = theme.PageLayout;
   return React.createElement(Layout, { settings, page });
 }

@@ -20,6 +20,8 @@ export default function Home({ settings }: { settings: Record<string, string> })
   // WordPress "static front page" — show a page instead of the post list
   const [frontPage, setFrontPage] = useState<any>(null);
   const showStatic = !catSlug && settings.show_on_front === 'page' && !!settings.page_on_front;
+  // Must run unconditionally: hooks cannot be called inside a conditional branch
+  const theme = useTheme();
 
   useEffect(() => {
     if (showStatic) {
@@ -68,11 +70,10 @@ export default function Home({ settings }: { settings: Record<string, string> })
       return React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-20 text-center' },
         React.createElement('h1', { className: 'text-2xl font-bold text-gray-900' }, t('page not found', settings)));
     }
-    const PageLayout = useTheme().PageLayout;
+    const PageLayout = theme.PageLayout;
     return React.createElement(PageLayout, { settings, page: frontPage });
   }
 
-  const theme = useTheme();
   const Layout = catSlug ? (isTagPage ? theme.TagLayout : theme.CategoryLayout) : theme.HomeLayout;
   // First paint: show a skeleton instead of flashing "no posts yet"
   if (loading && posts.length === 0 && !loadError && !catSlug) {

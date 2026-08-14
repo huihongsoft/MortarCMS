@@ -37,6 +37,8 @@ export default function PostPage({ settings }: { settings: Record<string, string
   const [commentForm, setCommentForm] = useState({ author: '', email: '', content: '', notifyMe: false });
   const [commentError, setCommentError] = useState('');
   const [submitted, setSubmitted] = useState(false);
+  // Must run unconditionally: hooks cannot be called after an early return
+  const theme = useTheme();
 
   // Remember commenter name/email locally so returning visitors are pre-filled
   useEffect(() => {
@@ -124,6 +126,6 @@ export default function PostPage({ settings }: { settings: Record<string, string
 
   if (post.protected) return React.createElement(PasswordForm, { title: post.title, slug, settings });
 
-  const Layout = useTheme().PostLayout;
+  const Layout = theme.PostLayout;
   return React.createElement(Layout, { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug });
 }
