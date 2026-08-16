@@ -1146,6 +1146,24 @@ const zh: Record<string, string> = {
 'site reset successful': '站点已初始化',
 'site reset failed': '初始化失败，请重试',
 'rows deleted': '行数据已删除',
+
+// Scheduled tasks (names + descriptions from the built-in scheduler)
+'Publish scheduled posts': '发布定时文章',
+'Publishes posts whose scheduled time has arrived': '到达发布时间后自动发布定时文章',
+'Purge trashed content': '清理回收站内容',
+'Permanently deletes posts/pages trashed more than 30 days ago': '永久删除回收站中超过 30 天的文章与页面',
+'Prune activity log': '清理活动日志',
+'Removes activity log entries older than 90 days': '删除 90 天前的活动日志记录',
+'Database maintenance': '数据库维护',
+'Runs a WAL checkpoint weekly to keep the database compact': '每周执行 WAL 检查点，保持数据库紧凑',
+'AI usage weekly report': 'AI 用量周报',
+'Emails admins a summary of the past 7 days of AI usage (requires SMTP)': '向管理员发送过去 7 天的 AI 用量摘要（需配置 SMTP）',
+'Backup database': '备份数据库',
+'Copies the database to the backups folder; keeps only the newest backups (retention setting)': '将数据库复制到备份目录，仅保留最新的备份（按保留设置）',
+'Prune AI task history': '清理 AI 任务历史',
+'Deletes finished AI tasks older than 90 days and keeps at most 500 records': '删除 90 天前完成的 AI 任务，最多保留 500 条记录',
+'Prune visit logs': '清理访问日志',
+'Deletes visit records (which store raw visitor IPs) older than 180 days — GDPR retention': '删除超过 180 天的访问记录（含原始访客 IP）— GDPR 保留策略',
 };
 const en: Record<string, string> = {};
 

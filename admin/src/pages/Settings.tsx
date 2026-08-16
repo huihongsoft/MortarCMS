@@ -354,8 +354,9 @@ export default function Settings() {
               t('cache enabled', getLang()))),
           React.createElement('div', { className: 'flex items-center gap-2 whitespace-nowrap' },
             React.createElement('label', { className: 'text-sm text-gray-700 dark:text-gray-300 whitespace-nowrap' }, t('cache ttl (seconds)', getLang())),
-            // inline width: .input-field carries w-full which overrides utility classes
-            React.createElement('input', { type: 'number', min: 5, max: 3600, value: cacheTtl, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCacheTtl(parseInt(e.target.value) || 60), className: 'input-field text-sm', style: { width: 96 } })),
+            // compact inline width/height: .input-field carries w-full + big padding that
+            // overrides utility classes, so plain Tailwind classes are used here
+            React.createElement('input', { type: 'number', min: 5, max: 3600, value: cacheTtl, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCacheTtl(parseInt(e.target.value) || 60), className: 'w-24 px-3 py-1.5 border border-gray-200 rounded-lg text-sm outline-none focus:border-primary-500 bg-white dark:bg-gray-800 dark:border-gray-600' })),
           React.createElement('span', { className: 'text-xs text-gray-400 sm:text-right sm:justify-self-end whitespace-nowrap' },
             t('cache entries', getLang()) + ': ' + cacheInfo.entries + ' · ' + t('cache hits', getLang()) + ': ' + cacheInfo.hits + ' · ' + t('cache misses', getLang()) + ': ' + cacheInfo.misses),
         ),
@@ -374,11 +375,11 @@ export default function Settings() {
                 React.createElement('div', { key: tk.id, className: 'flex items-center gap-3 py-2 border-b border-gray-50 dark:border-gray-800 last:border-0 flex-wrap' },
                   React.createElement('div', { className: 'flex-1 min-w-0' },
                     React.createElement('div', { className: 'flex items-center gap-2' },
-                      React.createElement('span', { className: 'text-sm font-medium text-gray-900 dark:text-gray-100' }, tk.name),
+                      React.createElement('span', { className: 'text-sm font-medium text-gray-900 dark:text-gray-100' }, t(tk.name, getLang())),
                       tk.enabled ? React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700' }, t('enabled', getLang())) : React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500' }, t('disabled', getLang())),
                       tk.lastStatus === 'error' && React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700', title: tk.lastError || '' }, t('error', getLang()))
                     ),
-                    React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' }, tk.desc),
+                    React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' }, t(tk.desc, getLang())),
                     React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' },
                       t('interval', getLang()) + ': ' + fmtInterval(tk.intervalMs) + ' · ' + t('last run', getLang()) + ': ' + (tk.lastRun ? new Date(tk.lastRun).toLocaleString() : t('never', getLang())) + ' · ' + t('run count', getLang()) + ': ' + tk.runCount + (tk.lastDurationMs != null ? ' · ' + tk.lastDurationMs + 'ms' : ''))
                   ),
