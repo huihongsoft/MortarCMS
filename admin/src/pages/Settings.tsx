@@ -203,7 +203,7 @@ export default function Settings() {
           }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('export my data', getLang())),
           React.createElement('button', { onClick: async () => {
             if (!confirm(t('erase my data', getLang()) + '?')) return;
-            try { await api.post('/gdpr/erase'); alert(t('data erased', getLang())); localStorage.removeItem('mortar_token'); window.location.href = '/admin#/login'; }
+            try { await api.post('/gdpr/erase'); alert(t('data erased', getLang())); localStorage.removeItem('mortar_token'); window.location.href = '/admin/login'; }
             catch (e: any) { alert(e.response?.data?.error || t('erase failed', getLang())); }
           }, className: 'btn-danger text-sm' }, t('erase my data', getLang()))
         )
@@ -504,7 +504,7 @@ export default function Settings() {
       React.createElement('div', { className: 'card p-6' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3' }, t('site health', getLang())),
         React.createElement('p', { className: 'text-sm text-gray-500 dark:text-gray-400 mb-4' }, t('check server and database health, plugin/theme status', getLang())),
-        React.createElement('a', { href: '/sysinfo', className: 'btn-secondary text-sm' }, t('run site health check', getLang()))
+        React.createElement('a', { href: '/admin/sysinfo', className: 'btn-secondary text-sm' }, t('run site health check', getLang()))
       ),
     )
   );
