@@ -136,8 +136,8 @@ export default function PostEditor() {
     // clicking without the required input shows a clear hint instead
     const needsTitle = ['generate', 'seo', 'tags', 'topics'].includes(action);
     const needsContent = ['polish', 'continue', 'translate', 'summarize'].includes(action);
-    if (needsTitle && !title.trim()) { setAiError(t('please enter a title first', getLang())); return; }
-    if (needsContent && !content.trim()) { setAiError(t('please enter content first', getLang())); return; }
+    if (needsTitle && !title.trim()) { setAiResult(''); setAiError(t('please enter a title first', getLang())); return; }
+    if (needsContent && !content.trim()) { setAiResult(''); setAiError(t('please enter content first', getLang())); return; }
     setAiLoading(true); setAiError(''); setAiResult('');
     try {
       const r = await api.post('/ai/generate', { action, title, content, excerpt, style: aiStyle, language: aiLang });
@@ -165,7 +165,8 @@ export default function PostEditor() {
   }
 
   function applySummary() {
-    const clean = aiResult.replace(/^摘要[:：]\s*/i, '').trim();
+    // Strip a leading label in either language ("摘要：" / "Summary:")
+    const clean = aiResult.replace(/^(摘要|Summary)\s*[:：]\s*/i, '').trim();
     if (clean) { setExcerpt(clean); setSaveState('dirty'); }
   }
 
@@ -181,7 +182,8 @@ export default function PostEditor() {
   ];
 
   function applyTags() {
-    const tags = aiResult.split(/[,，、\n]/).map((x: string) => x.trim().replace(/^\d+[.、)]\s*/, '')).filter(Boolean);
+    // Strip a leading label ("推荐标签：" / "Tags:") and list markers
+    const tags = aiResult.replace(/^(推荐标签|Tags?)\s*[:：]\s*/i, '').split(/[,，、\n]/).map((x: string) => x.trim().replace(/^\d+[.、)]\s*/, '')).filter(Boolean);
     if (tags.length) {
       const merged = [...new Set([...tagNames, ...tags.slice(0, 8)])];
       setTagNames(merged);
@@ -218,8 +220,8 @@ export default function PostEditor() {
             // influenced by prompt injection embedded in user content
             React.createElement('div', { dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(aiResult, { USE_PROFILES: { html: true } }) } })),
           React.createElement('div', { className: 'flex flex-wrap gap-1.5 mt-2' },
-            aiResult.startsWith('SEO') ? React.createElement('button', { onClick: applySeoResult, className: 'btn-primary text-xs' }, t('apply seo', getLang()))
-            : /摘要/.test(aiResult) && aiResult.length < 400 ? React.createElement('button', { onClick: applySummary, className: 'btn-primary text-xs' }, t('apply as excerpt', getLang()))
+            /^SEO/.test(aiResult) ? React.createElement('button', { onClick: applySeoResult, className: 'btn-primary text-xs' }, t('apply seo', getLang()))
+            : /^(摘要|Summary)\s*[:：]/i.test(aiResult) && aiResult.length < 400 ? React.createElement('button', { onClick: applySummary, className: 'btn-primary text-xs' }, t('apply as excerpt', getLang()))
             : aiResult.split(/[,，、\n]/).length > 2 && aiResult.length < 200 ? React.createElement('button', { onClick: applyTags, className: 'btn-primary text-xs' }, t('apply tags', getLang()))
             : React.createElement(React.Fragment, null,
                 React.createElement('button', { onClick: () => applyAiResult('append'), className: 'btn-secondary text-xs' }, t('insert to end', getLang())),
