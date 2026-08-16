@@ -1,0 +1,7 @@
+{
+  "name": "content-archive",
+  "version": "1.0.0",
+  "description": "Periodically moves published posts that have not been updated for N days back to draft (archiving stale content).",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}

@@ -1,0 +1,7 @@
+{
+  "name": "login-alert",
+  "version": "1.0.0",
+  "description": "Alerts the admin by email when brute-force login attempts are detected (3+ failures for the same account within 5 minutes). Requires SMTP.",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}

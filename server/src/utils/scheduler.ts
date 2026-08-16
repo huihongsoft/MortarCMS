@@ -197,7 +197,8 @@ export function registerBuiltinTasks(): void {
       const src = path.join(dataDir, 'mortar.db');
       if (!fs.existsSync(src)) return;
       const stamp = new Date().toISOString().slice(0, 10) + '-' + Date.now().toString(36).slice(-4);
-      fs.copyFileSync(src, path.join(backupDir, 'mortar-' + stamp + '.db'));
+      const backupFile = path.join(backupDir, 'mortar-' + stamp + '.db');
+      fs.copyFileSync(src, backupFile);
       // Retention: keep the newest N backups, drop the rest
       let retention = 10;
       try {
@@ -211,6 +212,7 @@ export function registerBuiltinTasks(): void {
         db.prepare("INSERT INTO Setting (id, key, value) VALUES ('db_last_backup', 'db_last_backup', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date().toISOString());
       } catch {}
       console.log('[Task] Database backup created (retention ' + retention + ')');
+      try { doAction('backup_completed', backupFile); } catch {}
     },
   });
 

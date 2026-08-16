@@ -58,6 +58,7 @@ export const KNOWN_ACTIONS = [
   'init', 'post_created', 'post_updated', 'post_published', 'delete_post',
   'comment_added', 'comment_approved', 'comment_spam', 'delete_comment',
   'user_register', 'site_reset',
+  'user_login', 'login_failed', 'backup_completed',
 ];
 export const KNOWN_FILTERS = ['post_content'];
 

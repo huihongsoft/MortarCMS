@@ -1,0 +1,7 @@
+{
+  "name": "backup-notify",
+  "version": "1.0.0",
+  "description": "Emails the admin after each automatic database backup with the backup file path. Requires SMTP.",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}

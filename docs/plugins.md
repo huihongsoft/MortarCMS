@@ -130,6 +130,10 @@ The admin Plugins page shows the live registry (Installed / Market tabs).
 | `event-webhook` | Pushes post/comment/user events to an external webhook (DingTalk group robot, your service) with HMAC signature | `event_webhook_url`, `event_webhook_secret`, `event_webhook_events` |
 | `daily-digest` | Daily content summary email (posts/comments/users) at a set time | `daily_digest_enabled`, `daily_digest_time`, `daily_digest_email` |
 | `content-stats` | `[stats]` shortcode: site content counts (`[stats posts comments]` filters) | — |
+| `login-alert` | Brute-force email alert (3+ failed logins / 5 min, 1h cooldown) | `login_alert_enabled`, `login_alert_email` |
+| `backup-notify` | Email after each automatic DB backup | `backup_notify_enabled`, `backup_notify_email` |
+| `ai-auto-tags` | AI tool `suggest_tags`: tag suggestions from existing vocabulary + title keywords | — |
+| `content-archive` | Moves stale published posts (no update for N days) back to draft | `content_archive_enabled`, `archive_after_days` |
 
 Plugin settings are plain `Setting` rows, so they can be written with
 `PUT /api/settings` (admin) or from a plugin's own admin UI.

@@ -106,9 +106,9 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
     const ip = req.ip || '';
     if (checkLock(data.email, ip)) { res.status(429).json({ error: 'Too many failed attempts, try again in 15 minutes' }); return; }
     const user = db.prepare('SELECT * FROM User WHERE email = ?').get(data.email) as any;
-    if (!user) { recordFailure(data.email, ip); res.status(401).json({ error: 'Invalid credentials' }); return; }
+    if (!user) { recordFailure(data.email, ip); doAction('login_failed', data.email, ip, 'no_such_user'); res.status(401).json({ error: 'Invalid credentials' }); return; }
     const valid = await bcrypt.compare(data.password, user.password);
-    if (!valid) { recordFailure(data.email, ip); res.status(401).json({ error: 'Invalid credentials' }); return; }
+    if (!valid) { recordFailure(data.email, ip); doAction('login_failed', data.email, ip, 'wrong_password'); res.status(401).json({ error: 'Invalid credentials' }); return; }
     loginFailures.delete(lockKey(data.email, ip));
     // 2FA challenge: issue a short-lived temp token, final token comes after code verification
     if (user.two_factor_enabled) {
@@ -118,6 +118,7 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
     }
     const token = signToken({ userId: user.id, role: user.role, v: (user as any).tokenVersion || 0 });
     logActivity(user.id, 'login', 'User logged in');
+    doAction('user_login', user.id, ip, 'password');
     // Whitelist: never expose two_factor_secret / reset_token / password hash
     res.json({ user: toPublicUser(user), token });
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
@@ -136,6 +137,7 @@ router.post('/2fa/verify', async (req: AuthRequest, res: Response) => {
     if (!verifyTOTP(user.two_factor_secret, String(code))) { res.status(401).json({ error: 'Invalid verification code' }); return; }
     const token = signToken({ userId: user.id, role: user.role, v: (user as any).tokenVersion || 0 });
     logActivity(user.id, 'login', 'User logged in with 2FA');
+    doAction('user_login', user.id, req.ip || '', '2fa');
     res.json({ user: toPublicUser(user), token });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

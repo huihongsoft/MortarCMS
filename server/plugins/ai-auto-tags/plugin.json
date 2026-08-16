@@ -1,0 +1,7 @@
+{
+  "name": "ai-auto-tags",
+  "version": "1.0.0",
+  "description": "Registers an AI tool that suggests tags for a post by matching existing tags and extracting keywords from the title.",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}
