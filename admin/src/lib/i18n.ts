@@ -1200,6 +1200,12 @@ const zh: Record<string, string> = {
 'Application passwords': '应用密码',
 '{0} application password(s) in use.': '有 {0} 个应用密码在使用。',
 'Revoke unused application passwords.': '请撤销不再使用的应用密码。',
+'good': '良好',
+'needs improvement': '需改进',
+'at risk': '存在风险',
+'security good hint': '安全状况良好，请继续保持',
+'security improve hint': '存在可改进项，建议查看下方明细',
+'security risk hint': '存在较高风险，请尽快处理下方问题',
 
 // Scheduled tasks (names + descriptions from the built-in scheduler)
 'Publish scheduled posts': '发布定时文章',
