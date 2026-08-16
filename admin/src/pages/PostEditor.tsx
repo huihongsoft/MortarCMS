@@ -145,6 +145,9 @@ export default function PostEditor() {
       if (!out.trim()) setAiError(t('ai returned no result', getLang()));
       else setAiResult(out);
     } catch (e: any) {
+      // Clear any stale result so the error can never be paired with an
+      // outdated output the user might accidentally apply
+      setAiResult('');
       setAiError(e.response?.data?.error || t('save failed', getLang()));
     } finally { setAiLoading(false); }
   }
