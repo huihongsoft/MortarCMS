@@ -14,7 +14,8 @@ export default function Install() {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [sampleData, setSampleData] = useState(true);
-  const [demoImported, setDemoImported] = useState(false);
+  // null = not requested, 'ok' / 'failed' = import result
+  const [demoResult, setDemoResult] = useState<null | 'ok' | 'failed'>(null);
 
   useEffect(() => {
     // If already installed, bounce to the home page
@@ -30,7 +31,7 @@ export default function Install() {
         adminEmail: site.adminEmail, adminPassword: site.adminPassword, adminUsername: site.adminUsername,
         sampleData,
       });
-      setDemoImported(!!r.data?.demo?.ok);
+      setDemoResult(r.data?.demo?.ok ? 'ok' : 'failed');
       setDone(true);
       setTimeout(() => { window.location.href = '/admin'; }, 1500);
     } catch (e: any) {
@@ -50,7 +51,8 @@ export default function Install() {
       React.createElement(CheckCircle2, { size: 56, className: 'mx-auto mb-4 text-green-500' }),
       React.createElement('h1', { className: 'text-2xl font-bold text-gray-900 mb-2' }, t('mortar installed')),
       React.createElement('p', { className: 'text-gray-500' }, t('redirecting to the admin panel')),
-      demoImported && React.createElement('p', { className: 'text-sm text-gray-400 mt-3' }, t('sample data imported')),
+      demoResult === 'ok' && React.createElement('p', { className: 'text-sm text-green-600 mt-3' }, t('sample data imported')),
+      demoResult === 'failed' && React.createElement('p', { className: 'text-sm text-amber-600 mt-3' }, t('sample data import failed')),
     ));
 
   return React.createElement('div', { className: 'min-h-screen bg-gray-50 flex items-center justify-center p-4' },

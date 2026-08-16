@@ -135,10 +135,12 @@ export function SideTabs({ settings }: { settings: Record<string, string> }) {
   const [tab, setTab] = useState<'hot' | 'latest'>('hot');
   const [hot, setHot] = useState<any[]>([]);
   const [latest, setLatest] = useState<any[]>([]);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    api.get('/posts/popular?limit=10').then(r => setHot(r.data || [])).catch(() => {});
-    api.get('/posts?limit=10').then(r => setLatest(r.data?.posts || [])).catch(() => {});
+    let done = 0;
+    api.get('/posts/popular?limit=10').then(r => setHot(r.data || [])).catch(() => {}).finally(() => { if (++done === 2) setLoaded(true); });
+    api.get('/posts?limit=10').then(r => setLatest(r.data?.posts || [])).catch(() => {}).finally(() => { if (++done === 2) setLoaded(true); });
   }, []);
 
   const rows = tab === 'hot' ? hot : latest;
@@ -155,7 +157,7 @@ export function SideTabs({ settings }: { settings: Record<string, string> }) {
     ),
     React.createElement('ul', { className: 'px-4 pt-2 pb-2' },
       rows.length === 0
-        ? React.createElement('p', { className: 'py-4 text-sm text-[#999] text-center' }, t('loading', settings))
+        ? React.createElement('p', { className: 'py-4 text-sm text-[#999] text-center' }, loaded ? t('no data', settings) : t('loading', settings))
         : rows.map((p: any) => React.createElement(RankRow, { key: p.id, p, settings }))
     )
   );

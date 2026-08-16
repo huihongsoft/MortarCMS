@@ -224,7 +224,6 @@ export function importDemoData(): { posts: number; categories: number; tags: num
     return { image: img, title: p.title, link: '/post/' + p.slug };
   });
   upsert.run(cuid(), 'carousel_items', JSON.stringify(carousel));
-  // Default layout widgets are empty → softstore sidebar works out of the box
 
   purgeAllCaches();
   return { posts: DEMO_POSTS.length, categories: DEMO_CATEGORIES.length, tags: DEMO_TAGS.length, comments, menus: 1, links: 3 };

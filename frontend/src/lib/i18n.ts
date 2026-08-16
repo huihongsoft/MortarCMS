@@ -167,6 +167,8 @@ const zh: Record<string, string> = {
   'import sample data': '导入示例数据（推荐）',
   'sample posts, categories and a theme demo to explore the site': '导入示例文章、分类、评论与菜单，并启用软件库主题演示，方便快速了解站点',
   'sample data imported': '示例数据已导入',
+  'sample data import failed': '示例数据导入失败，站点已安装',
+  'no data': '暂无数据',
 };
 
 export function t(key: string, settings?: Record<string, string>): string {
