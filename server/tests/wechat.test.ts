@@ -1,5 +1,37 @@
 import { describe, it, expect } from 'vitest';
-import { verifyWechatSignature, parseWechatXml, buildWechatReplyXml } from '../src/routes/ai';
+import { verifyWechatSignature, parseWechatXml, buildWechatReplyXml, dingtalkDecrypt, dingtalkVerifyMsgSignature, dingtalkCallbackSign } from '../src/routes/ai';
+
+describe('DingTalk', () => {
+  const AES_KEY = 'abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG'; // 43 chars
+  const crypto = require('crypto');
+
+  it('round-trips AES-CBC encrypt/decrypt (DingTalk scheme: IV = key[0..16))', () => {
+    const key = Buffer.from(AES_KEY + '=', 'base64');
+    const cipher = crypto.createCipheriv('aes-256-cbc', key, key.subarray(0, 16));
+    cipher.setAutoPadding(false);
+    const plain = JSON.stringify({ msgSignature: 'x', timeStamp: '1', nonce: 'n', eventType: 'e', event: '{}' });
+    // PKCS7 pad
+    const block = 16;
+    const pad = block - (Buffer.byteLength(plain) % block);
+    const padded = Buffer.concat([Buffer.from(plain), Buffer.alloc(pad, pad)]);
+    const enc = Buffer.concat([cipher.update(padded), cipher.final()]).toString('base64');
+    expect(dingtalkDecrypt(AES_KEY, enc)).toBe(plain);
+  });
+
+  it('validates the inner msgSignature (sha1 of sorted [token, timeStamp, nonce, encrypt])', () => {
+    const token = 'tok', timeStamp = '1700000000', nonce = 'n', encrypt = 'ciphertext';
+    const sig = crypto.createHash('sha1').update([token, timeStamp, nonce, encrypt].sort().join('')).digest('hex');
+    expect(dingtalkVerifyMsgSignature(token, timeStamp, nonce, encrypt, sig)).toBe(true);
+    expect(dingtalkVerifyMsgSignature(token, timeStamp, nonce, encrypt, 'bad')).toBe(false);
+  });
+
+  it('computes the callback header sign as HMAC-SHA256(appSecret, timestamp) hex', () => {
+    const appSecret = 'secret';
+    const ts = '1700000000';
+    const expected = crypto.createHmac('sha256', appSecret).update(ts).digest('hex');
+    expect(dingtalkCallbackSign(appSecret, ts)).toBe(expected);
+  });
+});
 
 describe('verifyWechatSignature', () => {
   it('accepts a correct signature (WeChat algorithm: sha1 of sorted concat)', () => {

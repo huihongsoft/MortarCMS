@@ -10,6 +10,12 @@ interface Binding {
   label: string;
   token: string;
   wechatToken?: string;
+  ddWebhook?: string;
+  ddSecret?: string;
+  ddToken?: string;
+  ddAesKey?: string;
+  ddAppKey?: string;
+  ddAppSecret?: string;
   userId: string;
   username: string;
   createdAt: string;
@@ -26,6 +32,8 @@ export default function AIBindings() {
   const [testMsg, setTestMsg] = useState('');
   const [testReply, setTestReply] = useState('');
   const [testing, setTesting] = useState<string | null>(null);
+  // DingTalk config fields (enterprise bot callback + group robot outbound)
+  const [dd, setDd] = useState({ ddWebhook: '', ddSecret: '', ddToken: '', ddAesKey: '', ddAppKey: '', ddAppSecret: '' });
   // Schedules
   const [schedules, setSchedules] = useState<any[]>([]);
   const [schName, setSchName] = useState('');
@@ -43,11 +51,25 @@ export default function AIBindings() {
 
   async function create() {
     try {
-      const r = await api.post('/ai/bindings', { platform, userId, label });
+      const r = await api.post('/ai/bindings', { platform, userId, label, ...(platform === 'dingtalk' ? dd : {}) });
       setBindings([...bindings, r.data.binding]);
-      setPlatform('wechat'); setUserId(''); setLabel('');
+      setPlatform('wechat'); setUserId(''); setLabel(''); setDd({ ddWebhook: '', ddSecret: '', ddToken: '', ddAesKey: '', ddAppKey: '', ddAppSecret: '' });
       toast.toast(t('binding created', getLang()));
     } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+  }
+
+  // Test-push to the DingTalk group custom robot
+  const [groupTesting, setGroupTesting] = useState<string | null>(null);
+  const [groupMsg, setGroupMsg] = useState('');
+  async function testGroup(b: Binding) {
+    if (!groupMsg.trim()) { toast.toast(t('enter test message', getLang()), 'error'); return; }
+    setGroupTesting(b.id);
+    try {
+      const r = await api.post('/ai/bindings/' + b.id + '/test-group', { message: groupMsg });
+      if (r.data?.success) toast.toast(t('group message sent', getLang()));
+      else toast.toast(r.data?.error || t('send failed', getLang()), 'error');
+    } catch (e: any) { toast.toast(e.response?.data?.error || t('send failed', getLang()), 'error'); }
+    finally { setGroupTesting(null); }
   }
 
   async function del(id: string) {
@@ -102,7 +124,23 @@ export default function AIBindings() {
           users.map(u => React.createElement('option', { key: u.id, value: u.id }, u.username + ' (' + u.role + ')'))),
         React.createElement('input', { value: label, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setLabel(e.target.value), placeholder: t('binding label', getLang()), className: 'input-field' }),
         React.createElement('button', { onClick: create, disabled: !userId, className: 'btn-primary' }, React.createElement(Plus, { size: 16 }), t('create', getLang()))
-      )
+      ),
+      platform === 'dingtalk' && React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3 mt-3' },
+        ['ddWebhook', 'ddSecret', 'ddToken', 'ddAesKey', 'ddAppKey', 'ddAppSecret'].map(k => {
+          const labels: Record<string, string> = {
+            ddWebhook: t('dingtalk group webhook', getLang()),
+            ddSecret: t('dingtalk group secret', getLang()),
+            ddToken: t('dingtalk callback token', getLang()),
+            ddAesKey: t('dingtalk callback aes key', getLang()),
+            ddAppKey: t('dingtalk app key', getLang()),
+            ddAppSecret: t('dingtalk app secret', getLang()),
+          };
+          return React.createElement('div', { key: k },
+            React.createElement('label', { className: 'block text-[11px] text-gray-400 mb-1' }, labels[k]),
+            React.createElement('input', { value: (dd as any)[k], onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDd({ ...dd, [k]: e.target.value }), placeholder: labels[k], className: 'input-field text-sm', type: k === 'ddAppSecret' || k === 'ddSecret' ? 'password' : 'text' }));
+        })
+      ),
+      platform === 'dingtalk' && React.createElement('p', { className: 'text-[11px] text-gray-400 mt-2 leading-relaxed' }, t('dingtalk config hint', getLang()))
     ),
 
     // Binding list
@@ -146,7 +184,11 @@ export default function AIBindings() {
             ),
             testReply && React.createElement('div', { className: 'mt-3 bg-gray-50 rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap' },
               React.createElement('p', { className: 'text-[10px] text-gray-400 mb-1 uppercase' }, t('ai reply', getLang())),
-              testReply)
+              testReply),
+            b.platform === 'dingtalk' && React.createElement('div', { className: 'mt-3 pt-3 border-t border-gray-100 flex items-center gap-2' },
+              React.createElement('input', { value: groupMsg, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setGroupMsg(e.target.value), placeholder: t('group push message placeholder', getLang()), className: 'input-field flex-1 text-sm' }),
+              React.createElement('button', { onClick: () => testGroup(b), disabled: groupTesting === b.id || !b.ddWebhook, className: 'btn-secondary text-xs flex-shrink-0 disabled:opacity-40', title: b.ddWebhook ? '' : t('dingtalk group webhook missing', getLang()) },
+                React.createElement(Bell, { size: 13 }), groupTesting === b.id ? t('sending', getLang()) + '...' : t('push to group', getLang())))
           )
         )),
 

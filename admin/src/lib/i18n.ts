@@ -1166,6 +1166,20 @@ const zh: Record<string, string> = {
 // AI Bindings — WeChat MP integration
 'wechat setup hint': '微信公众平台 → 设置与开发 → 基本配置 → 服务器配置：URL 填上方链接（需公网 HTTPS 域名），Token 填上方 Token，消息加解密方式选择"明文模式"，提交后微信会验证 URL。之后用户在公众号发消息，AI 会自动回复。',
 
+// AI Bindings — DingTalk integration
+'dingtalk group webhook': '钉钉群机器人 Webhook',
+'dingtalk group secret': '加签密钥（可选）',
+'dingtalk callback token': '回调 Token',
+'dingtalk callback aes key': '回调 AES 密钥',
+'dingtalk app key': 'AppKey',
+'dingtalk app secret': 'AppSecret',
+'dingtalk config hint': '钉钉对接：① 群机器人推送：钉钉群 → 添加自定义机器人 → 复制 Webhook（可选加签 Secret）填到上方，之后可用"推送到群"测试；② 企业机器人回调（@机器人 聊天）：钉钉开放平台创建应用 → 机器人消息接收方式选 HTTP → 回调 URL 填 ' + window.location.origin + '/api/ai/webhook/dingtalk/{token}，Token/AES 密钥/AppKey/AppSecret 填上方对应字段，配置事件订阅（机器人收到消息）。',
+'dingtalk group webhook missing': '请先配置钉钉群机器人 Webhook',
+'group push message placeholder': '输入要推送到钉钉群的消息...',
+'push to group': '推送到群',
+'group message sent': '已推送到钉钉群',
+'sending': '发送中',
+
 // Settings > General
 'site language hint': '站点前台默认语言；访客可在前台自行切换语言',
 'date format hint': '前台日期显示格式，如 Y-m-d、Y/m/d（PHP 日期格式）',

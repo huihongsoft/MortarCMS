@@ -896,6 +896,14 @@ interface Binding {
   label: string;
   token: string;      // secret webhook token
   wechatToken?: string; // Token configured on WeChat MP — used for URL verification
+  // DingTalk enterprise bot (callback protocol)
+  ddToken?: string;      // callback verification token
+  ddAesKey?: string;     // callback AES key (43 chars)
+  ddAppKey?: string;     // app key for access_token + active reply
+  ddAppSecret?: string;  // app secret
+  // DingTalk group custom robot (outbound push)
+  ddWebhook?: string;    // group robot webhook URL
+  ddSecret?: string;     // group robot signing secret (optional)
   userId: string;
   username: string;
   createdAt: string;
@@ -926,7 +934,7 @@ router.get('/bindings', authenticate, (req: AuthRequest, res: Response) => {
 // Create a binding (admin picks the target user; users can bind themselves)
 router.post('/bindings', authenticate, (req: AuthRequest, res: Response) => {
   try {
-    const { platform, userId, label } = req.body || {};
+    const { platform, userId, label, ddToken, ddAesKey, ddAppKey, ddAppSecret, ddWebhook, ddSecret } = req.body || {};
     if (!['wechat', 'dingtalk'].includes(platform)) { res.status(400).json({ error: 'platform must be wechat or dingtalk' }); return; }
     let targetUserId = userId;
     if (req.user!.role !== 'admin') targetUserId = req.user!.userId;
@@ -940,6 +948,8 @@ router.post('/bindings', authenticate, (req: AuthRequest, res: Response) => {
       // WeChat MP asks for a developer Token — pre-generate one the user
       // pastes into the MP console (also used for URL-verification signing)
       wechatToken: platform === 'wechat' ? require('crypto').randomBytes(12).toString('hex') : undefined,
+      // DingTalk enterprise-bot callback config + group robot (outbound)
+      ...(platform === 'dingtalk' ? { ddToken: String(ddToken || ''), ddAesKey: String(ddAesKey || ''), ddAppKey: String(ddAppKey || ''), ddAppSecret: String(ddAppSecret || ''), ddWebhook: String(ddWebhook || ''), ddSecret: String(ddSecret || '') } : {}),
       userId: user.id,
       username: user.username,
       createdAt: new Date().toISOString(),
@@ -949,6 +959,24 @@ router.post('/bindings', authenticate, (req: AuthRequest, res: Response) => {
     all.push(b);
     saveBindings(all);
     res.status(201).json({ binding: b });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Update a binding's config (labels / DingTalk credentials)
+router.put('/bindings/:id', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const all = getBindings();
+    const idx = all.findIndex(b => b.id === req.params.id && (req.user!.role === 'admin' || b.userId === req.user!.userId));
+    if (idx === -1) { res.status(404).json({ error: '绑定不存在' }); return; }
+    const body = req.body || {};
+    const upd: Partial<Binding> = {};
+    if (typeof body.label === 'string') upd.label = body.label;
+    for (const k of ['ddToken', 'ddAesKey', 'ddAppKey', 'ddAppSecret', 'ddWebhook', 'ddSecret'] as const) {
+      if (typeof body[k] === 'string') upd[k] = body[k];
+    }
+    all[idx] = { ...all[idx], ...upd };
+    saveBindings(all);
+    res.json({ binding: all[idx] });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -1054,6 +1082,120 @@ async function runWebhookReply(binding: Binding, message: string): Promise<strin
   recordUsage(user.id, 'webhook', reply, provider.model);
   return reply;
 }
+
+// ---- DingTalk protocol ----
+// Enterprise bot callback (HTTP mode): DingTalk POSTs { encrypt } with
+// timestamp/sign headers; we verify, AES-CBC decrypt, check the inner
+// msgSignature, then reply ACTIVELY via the robot API (the HTTP response is
+// only an ack). Group custom robots are outbound: we POST to their webhook.
+
+const crypto = require('crypto');
+
+// 43-char AES key + '=' base64-decodes to the 32-byte AES key
+function ddAesKeyBuf(aesKey: string): Buffer { return Buffer.from(String(aesKey) + '=', 'base64'); }
+
+// AES-CBC decrypt with PKCS7 unpadding (DingTalk's fixed scheme: IV = key[0..16))
+export function dingtalkDecrypt(aesKey: string, encrypt: string): string {
+  const key = ddAesKeyBuf(aesKey);
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, key.subarray(0, 16));
+  decipher.setAutoPadding(false);
+  let plain = Buffer.concat([decipher.update(Buffer.from(String(encrypt), 'base64')), decipher.final()]);
+  const pad = plain.length ? plain[plain.length - 1] : 0;
+  if (pad > 0 && pad <= 16) plain = plain.subarray(0, plain.length - pad);
+  return plain.toString('utf8');
+}
+
+// Inner msgSignature: sha1 of lexicographically sorted [token, timeStamp, nonce, encrypt]
+export function dingtalkVerifyMsgSignature(token: string, timeStamp: string, nonce: string, encrypt: string, msgSignature: string): boolean {
+  const str = [token, timeStamp, nonce, encrypt].sort().join('');
+  return crypto.createHash('sha1').update(str).digest('hex') === msgSignature;
+}
+
+// Callback request header sign (new API): HMAC-SHA256(appSecret, timestamp) hex
+export function dingtalkCallbackSign(appSecret: string, timestamp: string): string {
+  return crypto.createHmac('sha256', String(appSecret)).update(String(timestamp)).digest('hex');
+}
+
+// Group custom robot outbound push (optional signing secret)
+export async function sendDingtalkGroup(webhook: string, secret: string, content: string): Promise<{ ok: boolean; error?: string }> {
+  try {
+    let url = webhook;
+    if (secret) {
+      const ts = Date.now().toString();
+      const sign = crypto.createHmac('sha256', secret).update(ts + '\n' + secret).digest('base64');
+      url += (url.includes('?') ? '&' : '?') + 'timestamp=' + ts + '&sign=' + encodeURIComponent(sign);
+    }
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msgtype: 'text', text: { content } }) });
+    const d: any = await r.json();
+    return d?.errcode === 0 ? { ok: true } : { ok: false, error: d?.errmsg || 'HTTP ' + r.status };
+  } catch (e: any) { return { ok: false, error: e.message }; }
+}
+
+// Active reply to a user (enterprise internal robot, oToMessages API)
+async function ddAccessToken(appKey: string, appSecret: string): Promise<string> {
+  try {
+    const r = await fetch('https://oapi.dingtalk.com/gettoken?appkey=' + encodeURIComponent(appKey) + '&appsecret=' + encodeURIComponent(appSecret));
+    const d: any = await r.json();
+    return d?.access_token || '';
+  } catch { return ''; }
+}
+
+async function sendDingtalkBotReply(binding: Binding, userIds: string[], content: string): Promise<{ ok: boolean; error?: string }> {
+  if (!binding.ddAppKey || !binding.ddAppSecret) return { ok: false, error: 'AppKey/AppSecret 未配置' };
+  const token = await ddAccessToken(binding.ddAppKey, binding.ddAppSecret);
+  if (!token) return { ok: false, error: '获取钉钉 access_token 失败' };
+  try {
+    const r = await fetch('https://oapi.dingtalk.com/robot/oToMessages/batchSend?access_token=' + token, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ robotCode: binding.ddAppKey, userIds, msg: { msgtype: 'text', text: { content } } }),
+    });
+    const d: any = await r.json();
+    return d?.errcode === 0 ? { ok: true } : { ok: false, error: d?.errmsg || 'HTTP ' + r.status };
+  } catch (e: any) { return { ok: false, error: e.message }; }
+}
+
+// DingTalk enterprise-bot callback: /ai/webhook/dingtalk/:token
+router.post('/webhook/dingtalk/:token', webhookLimiter, async (req: AuthRequest, res: Response) => {
+  try {
+    const binding = getBindings().find(b => b.platform === 'dingtalk' && b.token === req.params.token);
+    if (!binding?.ddAesKey || !binding.ddToken) { res.status(404).json({ error: 'invalid binding' }); return; }
+    // 1) request header signature (timestamp + HMAC-SHA256(appSecret, timestamp))
+    const ts = String(req.headers.timestamp || '');
+    const sign = String(req.headers.sign || '');
+    if (binding.ddAppSecret && (!ts || !sign || dingtalkCallbackSign(binding.ddAppSecret, ts) !== sign)) {
+      res.status(403).json({ error: 'signature check failed' }); return;
+    }
+    // 2) decrypt + inner msgSignature check
+    const encrypt = String((req.body || {}).encrypt || '');
+    if (!encrypt) { res.status(400).json({ error: 'empty payload' }); return; }
+    let event: any;
+    try { event = JSON.parse(dingtalkDecrypt(binding.ddAesKey, encrypt)); } catch { res.status(400).json({ error: 'decrypt failed' }); return; }
+    if (!dingtalkVerifyMsgSignature(binding.ddToken, String(event.timeStamp || ''), String(event.nonce || ''), encrypt, String(event.msgSignature || ''))) {
+      res.status(403).json({ error: 'msgSignature check failed' }); return;
+    }
+    // 3) handle text messages from users
+    const ev = typeof event.event === 'string' ? (() => { try { return JSON.parse(event.event); } catch { return {}; } })() : (event.event || {});
+    const content = String(ev?.text?.content || ev?.content || '').trim();
+    const senderId = String(ev?.senderStaffId || ev?.senderId || '');
+    if (content && senderId) {
+      const reply = await runWebhookReply(binding, content);
+      await sendDingtalkBotReply(binding, [senderId], reply);
+    }
+    res.json({ msg: 'ok' });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: test-push to the group custom robot
+router.post('/bindings/:id/test-group', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const binding = getBindings().find(b => b.id === req.params.id && (req.user!.role === 'admin' || b.userId === req.user!.userId));
+    if (!binding?.ddWebhook) { res.status(400).json({ error: '钉钉群机器人 Webhook 未配置' }); return; }
+    const content = String((req.body || {}).message || '').trim();
+    if (!content) { res.status(400).json({ error: '消息为空' }); return; }
+    const r = await sendDingtalkGroup(binding.ddWebhook, binding.ddSecret || '', content);
+    res.json(r.ok ? { success: true } : { success: false, error: r.error });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
 
 // WeChat endpoint: /ai/webhook/wechat/:token
 router.get('/webhook/wechat/:token', (_req: AuthRequest, res: Response) => {
