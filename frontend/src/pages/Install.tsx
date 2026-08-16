@@ -14,6 +14,7 @@ export default function Install() {
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
   const [sampleData, setSampleData] = useState(true);
+  const [demoImported, setDemoImported] = useState(false);
 
   useEffect(() => {
     // If already installed, bounce to the home page
@@ -23,12 +24,13 @@ export default function Install() {
   async function submit() {
     setError(''); setLoading(true);
     try {
-      await api.post('/install', {
+      const r = await api.post('/install', {
         dbType, dbConfig: dbType === 'sqlite' ? undefined : dbConfig,
         siteTitle: site.siteTitle, siteDescription: site.siteDescription,
         adminEmail: site.adminEmail, adminPassword: site.adminPassword, adminUsername: site.adminUsername,
         sampleData,
       });
+      setDemoImported(!!r.data?.demo?.ok);
       setDone(true);
       setTimeout(() => { window.location.href = '/admin'; }, 1500);
     } catch (e: any) {
@@ -48,6 +50,7 @@ export default function Install() {
       React.createElement(CheckCircle2, { size: 56, className: 'mx-auto mb-4 text-green-500' }),
       React.createElement('h1', { className: 'text-2xl font-bold text-gray-900 mb-2' }, t('mortar installed')),
       React.createElement('p', { className: 'text-gray-500' }, t('redirecting to the admin panel')),
+      demoImported && React.createElement('p', { className: 'text-sm text-gray-400 mt-3' }, t('sample data imported')),
     ));
 
   return React.createElement('div', { className: 'min-h-screen bg-gray-50 flex items-center justify-center p-4' },

@@ -3,6 +3,7 @@ import path from 'path';
 import db, { cuid } from './db';
 import { slugify } from './slug';
 import { purgeAllCaches } from './cache';
+import { doAction } from './hooks';
 
 // Demo / sample data for a fresh install, and the "reset site" routine that
 // removes it. Content tables are cleared in dependency order (children first),
@@ -147,7 +148,9 @@ const DEMO_COMMENTS: { postSlug: string; author: string; content: string; childr
   { postSlug: 'obs-studio', author: '主播阿伟', content: '开源免费还支持硬件编码，比收费软件都稳。' },
 ];
 
-// Insert the demo dataset (idempotent: clears content tables first)
+// Insert the demo dataset. WARNING: clears all content tables first — only
+// call this on a fresh install (the sole caller is the install wizard), never
+// from an admin panel action on a site that has user content.
 export function importDemoData(): { posts: number; categories: number; tags: number; comments: number; menus: number; links: number } {
   clearContentTables();
   const now = new Date().toISOString();
@@ -236,20 +239,23 @@ export function resetSite(): Record<string, number> {
   for (const key of DEMO_SETTING_KEYS) db.prepare('DELETE FROM Setting WHERE key = ?').run(key);
   // Clear uploaded media files (keep the directory + .gitkeep). The thumbs/
   // dir holds generated thumbnail caches keyed by media id — orphaned once
-  // the Media table is emptied, so remove it too.
+  // the Media table is emptied, so remove it too. lstatSync (not statSync) so
+  // a symlink in uploads is unlinked instead of following it into a delete.
   try {
     if (fs.existsSync(uploadsDir)) {
       for (const f of fs.readdirSync(uploadsDir)) {
         if (f === '.gitkeep' || f === 'import-tmp') continue;
         const p = path.join(uploadsDir, f);
         try {
-          if (fs.statSync(p).isFile()) fs.unlinkSync(p);
-          else if (fs.statSync(p).isDirectory()) fs.rmSync(p, { recursive: true, force: true });
+          if (fs.lstatSync(p).isDirectory()) fs.rmSync(p, { recursive: true, force: true });
+          else fs.unlinkSync(p);
         } catch {}
       }
     }
   } catch {}
   purgeAllCaches();
+  // Let plugins react to the wipe (e.g. clear their own caches)
+  try { doAction('site_reset'); } catch {}
   return stats;
 }
 

@@ -78,13 +78,15 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     }
     // 5. Optional demo data (sample posts/categories/tags/comments/menu/links
     //    + softstore theme demo). Best-effort: never fail the install.
-    if (sampleData) {
+    let demo: { ok: boolean; stats?: Record<string, number> } = { ok: false };
+    if (sampleData === true) { // strict boolean — 'false' as a string must not import
       try {
         const { importDemoData } = require('../utils/demo');
-        importDemoData();
+        const stats = importDemoData();
+        demo = { ok: true, stats: { posts: stats.posts, categories: stats.categories, tags: stats.tags, comments: stats.comments, menus: stats.menus, links: stats.links } };
       } catch (err: any) { console.error('[install] demo data import failed:', err.message); }
     }
-    res.json({ success: true, message: 'Mortar installed. Redirecting...' });
+    res.json({ success: true, message: 'Mortar installed. Redirecting...', demo });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

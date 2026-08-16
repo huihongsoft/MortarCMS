@@ -424,7 +424,8 @@ export default function Settings() {
             if (!confirm(t('reset site confirm', getLang()))) return;
             try {
               const r = await api.post('/db/reset-content');
-              alert(t('site reset successful', getLang()) + (r.data?.stats ? ' (' + Object.entries(r.data.stats).filter(([, n]) => (n as number) > 0).map(([k]) => k).join(', ') + ')' : ''));
+              const total = r.data?.stats ? Object.values(r.data.stats).reduce((a: number, b: any) => a + (Number(b) || 0), 0) : 0;
+              alert(t('site reset successful', getLang()) + (total > 0 ? ' (' + total + ' ' + t('rows deleted', getLang()) + ')' : ''));
               window.location.reload();
             } catch { alert(t('site reset failed', getLang())); }
           },

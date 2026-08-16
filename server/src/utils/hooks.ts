@@ -57,7 +57,7 @@ export function applyFilters(hook: string, value: any, ...args: any[]): any {
 export const KNOWN_ACTIONS = [
   'init', 'post_created', 'post_updated', 'post_published', 'delete_post',
   'comment_added', 'comment_approved', 'comment_spam', 'delete_comment',
-  'user_register',
+  'user_register', 'site_reset',
 ];
 export const KNOWN_FILTERS = ['post_content'];
 

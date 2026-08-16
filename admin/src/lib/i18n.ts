@@ -1145,6 +1145,7 @@ const zh: Record<string, string> = {
 'reset site confirm': '确定要初始化站点吗？所有内容数据将被永久删除，此操作不可撤销！',
 'site reset successful': '站点已初始化',
 'site reset failed': '初始化失败，请重试',
+'rows deleted': '行数据已删除',
 };
 const en: Record<string, string> = {};
 
