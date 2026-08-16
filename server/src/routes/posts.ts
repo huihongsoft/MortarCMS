@@ -4,6 +4,7 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import db, { cuid } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { verifyToken } from '../utils/jwt';
 import { SiteRequest } from '../middleware/site';
 import { slugify, uniqueSlug } from '../utils/slug';
 import { applyFilters, doAction } from '../utils/hooks';
@@ -13,6 +14,24 @@ import { trackView } from '../utils/views';
 const router = Router();
 // Protected-post password guessing is brute-forced per IP
 const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, message: { error: 'Too many attempts, slow down' } });
+
+// Lightweight "is this visitor logged in?" check for public routes that don't
+// mount the full authenticate middleware (members-only filtering). App
+// passwords populate req.user globally; Bearer tokens are parsed here.
+function isLoggedIn(req: AuthRequest): boolean {
+  if (req.user) return true;
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) return false;
+  const payload = verifyToken(header.slice(7));
+  return !!payload;
+}
+
+// Members-only posts (PostMeta _members_only='1') are hidden from anonymous
+// visitors — used by the post-expiry plugin and settable manually.
+function isMembersOnly(postId: string): boolean {
+  return !!db.prepare("SELECT 1 FROM PostMeta WHERE postId = ? AND key = '_members_only' AND value = '1'").get(postId);
+}
+const MEMBERS_ONLY_EXCLUDE = " AND NOT EXISTS (SELECT 1 FROM PostMeta pm WHERE pm.postId = p.id AND pm.key = '_members_only' AND pm.value = '1')";
 
 // Visual-editor CSS is rendered into a <style> tag on the public site, so
 // dangerous primitives are stripped at write time (defense in depth with the
@@ -108,6 +127,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     sql += ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)';
     params.push(type, 'published', now);
     if (req.siteId) { sql += ' AND (p.siteId IS NULL OR p.siteId = ?)'; params.push(req.siteId); }
+    if (!isLoggedIn(req)) sql += MEMBERS_ONLY_EXCLUDE;
     if (search) { sql += ' AND (p.title LIKE ? OR p.content LIKE ? OR p.excerpt LIKE ?)'; params.push('%' + search + '%', '%' + search + '%', '%' + search + '%'); }
     if (category) { sql += ' AND c.slug = ?'; params.push(category); }
     if (tag) { sql += ' AND t.slug = ?'; params.push(tag); }
@@ -121,7 +141,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
       params.push(limit, (page - 1) * limit);
     }
     const postsData = db.prepare(sql).all(...params) as any[];
-    const countSql = 'SELECT COUNT(DISTINCT p.id) as cnt FROM Post p' + (category ? ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId' : '') + (tag ? ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId' : '') + ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + (req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '') + (search ? ' AND (p.title LIKE ? OR p.content LIKE ? OR p.excerpt LIKE ?)' : '') + (category ? ' AND c.slug = ?' : '') + (tag ? ' AND t.slug = ?' : '');
+    const countSql = 'SELECT COUNT(DISTINCT p.id) as cnt FROM Post p' + (category ? ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId' : '') + (tag ? ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId' : '') + ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + (req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '') + (!isLoggedIn(req) ? MEMBERS_ONLY_EXCLUDE : '') + (search ? ' AND (p.title LIKE ? OR p.content LIKE ? OR p.excerpt LIKE ?)' : '') + (category ? ' AND c.slug = ?' : '') + (tag ? ' AND t.slug = ?' : '');
     const countParams: any[] = [type, 'published', now];
     if (req.siteId) countParams.push(req.siteId);
     if (search) countParams.push('%' + search + '%', '%' + search + '%', '%' + search + '%');
@@ -170,6 +190,12 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
       // users or anonymous visitors.
       const canView = req.user && (['admin', 'editor'].includes(req.user.role) || (req.user.userId && req.user.userId === post.authorId));
       if (!canView) { res.status(404).json({ error: 'Post not found' }); return; }
+    }
+    // Members-only posts: anonymous visitors get a 403 so the frontend can
+    // show a "log in to view" screen (title/slug only, no content leak)
+    if (post.status === 'published' && isMembersOnly(post.id) && !isLoggedIn(req)) {
+      res.status(403).json({ private: true, membersOnly: true, title: post.title, slug: post.slug });
+      return;
     }
     trackView(post.id); // batched in memory, flushed to the DB periodically
     const enriched = enrichPost(post);

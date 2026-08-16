@@ -163,6 +163,10 @@ const zh: Record<string, string> = {
   'latest posts': '最新发布',
   'latest software': '最新软件',
 
+  // Members-only posts
+  'members only': '仅会员可见',
+  'log in to view this post': '请登录后查看此文章',
+
   // Install wizard sample data
   'import sample data': '导入示例数据（推荐）',
   'sample posts, categories and a theme demo to explore the site': '导入示例文章、分类、评论与菜单，并启用软件库主题演示，方便快速了解站点',

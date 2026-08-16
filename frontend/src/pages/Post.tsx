@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { Lock } from 'lucide-react';
 import useSEO from '../hooks/useSEO';
 import { cdnUrl } from '../lib/cdn';
 import api from '../lib/api';
@@ -57,7 +58,12 @@ export default function PostPage({ settings }: { settings: Record<string, string
       if (cancelled) return;
       setPost(r.data);
       api.get('/comments/post/' + r.data.id).then(cr => { if (!cancelled) setComments(cr.data); }).catch(() => {});
-    }).catch(() => { if (!cancelled) setPost({ error: true }); });
+    }).catch(err => {
+      if (cancelled) return;
+      // 403 with membersOnly → show the "log in to view" screen
+      if (err.response?.status === 403 && err.response.data?.membersOnly) setPost({ membersOnly: true, title: err.response.data.title, slug: err.response.data.slug });
+      else setPost({ error: true });
+    });
     return () => { cancelled = true; };
   }, [slug]);
 
@@ -123,6 +129,14 @@ export default function PostPage({ settings }: { settings: Record<string, string
   if (post.error) return React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-20 text-center' },
     React.createElement('h1', { className: 'text-2xl font-bold text-gray-900' }, t('page not found', settings)),
     React.createElement(Link, { to: '/', className: 'text-primary-600 text-sm mt-4 inline-block' }, t('back to home', settings)));
+
+  // Members-only post: anonymous visitors are asked to log in
+  if (post.membersOnly) return React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-20 text-center' },
+    post.title && React.createElement('h1', { className: 'text-2xl font-bold text-gray-900 mb-3' }, post.title),
+    React.createElement('div', { className: 'w-14 h-14 mx-auto mb-4 rounded-2xl bg-amber-50 dark:bg-amber-900/30 flex items-center justify-center' }, React.createElement(Lock, { size: 24, className: 'text-amber-500' })),
+    React.createElement('h2', { className: 'text-lg font-semibold text-gray-800 dark:text-gray-100 mb-2' }, t('members only', settings)),
+    React.createElement('p', { className: 'text-gray-500 dark:text-gray-400 mb-6' }, t('log in to view this post', settings)),
+    React.createElement(Link, { to: '/login', className: 'btn-primary justify-center inline-flex' }, t('log in', settings)));
 
   if (post.protected) return React.createElement(PasswordForm, { title: post.title, slug, settings });
 
