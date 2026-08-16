@@ -227,9 +227,9 @@ export default function Users() {
                   ),
                   React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500 dark:text-gray-400' }, u.email),
                   React.createElement('td', { className: 'px-4 py-3' },
-                    React.createElement('div', { className: 'flex items-center gap-2' },
-                      React.createElement('span', { className: 'px-2 py-0.5 text-[11px] rounded-full font-medium capitalize ' + (roleColors[u.role] || 'bg-gray-100 text-gray-600') }, t(u.role, getLang())),
-                      React.createElement('select', { value: u.role, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => updateRole(u.id, e.target.value), className: 'input-field w-28 text-xs py-1' },
+                    React.createElement('div', { className: 'flex items-center gap-2 whitespace-nowrap' },
+                      React.createElement('span', { className: 'px-2 py-0.5 text-[11px] rounded-full font-medium capitalize shrink-0 ' + (roleColors[u.role] || 'bg-gray-100 text-gray-600') }, t(u.role, getLang())),
+                      React.createElement('select', { value: u.role, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => updateRole(u.id, e.target.value), className: 'input-field w-28 text-xs py-1 shrink-0' },
                         roles.map(r => React.createElement('option', { key: r, value: r }, r))
                       )
                     )
