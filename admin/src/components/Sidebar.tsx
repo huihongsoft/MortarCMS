@@ -96,7 +96,11 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
               React.createElement(NavLink, {
                 key: link.to,
                 to: link.to,
-                end: link.to === '/',
+                // Exact match for '/' and '/ai' (which has sibling routes
+                // /ai/bindings + /ai/settings — prefix matching would keep
+                // 'AI chat' highlighted there); other links keep prefix
+                // matching so e.g. the post editor still highlights Posts
+                end: link.to === '/' || link.to === '/ai',
                 className: ({ isActive }: { isActive: boolean }) => `sidebar-link ${isActive ? 'active' : ''}`,
               }, React.createElement(link.icon, { size: 18 }), link.label)
             )
