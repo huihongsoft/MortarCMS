@@ -137,7 +137,7 @@ export default function AIBindings() {
           };
           return React.createElement('div', { key: k },
             React.createElement('label', { className: 'block text-[11px] text-gray-400 mb-1' }, labels[k]),
-            React.createElement('input', { value: (dd as any)[k], onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDd({ ...dd, [k]: e.target.value }), placeholder: labels[k], className: 'input-field text-sm', type: k === 'ddAppSecret' || k === 'ddSecret' ? 'password' : 'text' }));
+            React.createElement('input', { value: (dd as any)[k], onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDd({ ...dd, [k]: e.target.value }), placeholder: labels[k], className: 'input-field text-sm', type: k === 'ddAppSecret' || k === 'ddSecret' || k === 'ddAesKey' ? 'password' : 'text' }));
         })
       ),
       platform === 'dingtalk' && React.createElement('p', { className: 'text-[11px] text-gray-400 mt-2 leading-relaxed' }, t('dingtalk config hint', getLang()))
@@ -161,12 +161,12 @@ export default function AIBindings() {
               ),
               React.createElement('button', { onClick: () => del(b.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 15 }))
             ),
-            // Webhook URL (generic JSON endpoint; WeChat bindings get the
-            // WeChat protocol endpoint + the developer Token for the MP console)
+            // Webhook URL — each platform shows its own protocol endpoint:
+            // generic JSON, WeChat MP or DingTalk enterprise-bot callback
             React.createElement('div', { className: 'mt-3 flex items-center gap-2' },
               React.createElement(KeyRound, { size: 13, className: 'text-gray-400 flex-shrink-0' }),
-              React.createElement('code', { className: 'text-xs bg-gray-50 border border-gray-100 rounded px-2 py-1 truncate flex-1' }, window.location.origin + (b.platform === 'wechat' ? '/api/ai/webhook/wechat/' : '/api/ai/webhook/') + b.token),
-              React.createElement('button', { onClick: () => copy(window.location.origin + (b.platform === 'wechat' ? '/api/ai/webhook/wechat/' : '/api/ai/webhook/') + b.token), className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Copy, { size: 14 }))
+              React.createElement('code', { className: 'text-xs bg-gray-50 border border-gray-100 rounded px-2 py-1 truncate flex-1' }, window.location.origin + (b.platform === 'wechat' ? '/api/ai/webhook/wechat/' : b.platform === 'dingtalk' ? '/api/ai/webhook/dingtalk/' : '/api/ai/webhook/') + b.token),
+              React.createElement('button', { onClick: () => copy(window.location.origin + (b.platform === 'wechat' ? '/api/ai/webhook/wechat/' : b.platform === 'dingtalk' ? '/api/ai/webhook/dingtalk/' : '/api/ai/webhook/') + b.token), className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Copy, { size: 14 }))
             ),
             b.platform === 'wechat' && b.wechatToken && React.createElement(React.Fragment, null,
               React.createElement('div', { className: 'mt-2 flex items-center gap-2' },

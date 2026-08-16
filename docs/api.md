@@ -144,8 +144,12 @@ GET    /api/ai/memories | DELETE /:key     long-term memory management
 GET    /api/ai/notifications | POST /read-all   task completion notifications
 GET    /api/ai/usage                usage statistics (admin)
 GET    /api/ai/audit                sandbox audit trail (admin)
-GET    /api/ai/bindings | POST | DELETE     WeChat/DingTalk bindings
-POST   /api/ai/webhook/:token       bot entry — acts as the bound user
+GET    /api/ai/bindings | POST | PUT | DELETE   WeChat/DingTalk bindings
+POST   /api/ai/webhook/:token            generic bot entry — acts as the bound user
+GET    /api/ai/webhook/wechat/:token     WeChat MP URL verification (echostr)
+POST   /api/ai/webhook/wechat/:token     WeChat MP text message (XML) → AI reply
+POST   /api/ai/webhook/dingtalk/:token   DingTalk enterprise-bot callback (encrypted)
+POST   /api/ai/bindings/:id/test-group   push a test message to a DingTalk group robot
 POST   /api/ai/review-comments      AI spam/approve classification
 POST   /api/ai/batch-translate      translate up to 10 posts (creates drafts)
 POST   /api/ai/compare              side-by-side model comparison
