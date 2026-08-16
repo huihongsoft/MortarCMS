@@ -38,21 +38,29 @@ export default function Security() {
       : !data
         ? React.createElement('p', { className: 'text-gray-500' }, t('audit failed', getLang()))
         : React.createElement('div', null,
-            // Summary banner: score with a segmented level (color + label +
-            // suggestion) and a color-dot legend in the top-right corner
+            // Summary banner: score with a segmented level, a three-color
+            // legend (good / needs improvement / at risk) in the top-right
+            // corner, the segmented hint bottom-right, score bar centered
             (() => {
               const score = data.summary.score;
-              const level = score >= 80
-                ? { bg: 'bg-green-50 dark:bg-green-900/30', text: 'text-green-600 dark:text-green-400', dot: 'bg-green-500', label: t('good', getLang()), hint: t('security good hint', getLang()) }
-                : score >= 60
-                  ? { bg: 'bg-amber-50 dark:bg-amber-900/30', text: 'text-amber-600 dark:text-amber-400', dot: 'bg-amber-500', label: t('needs improvement', getLang()), hint: t('security improve hint', getLang()) }
-                  : { bg: 'bg-red-50 dark:bg-red-900/30', text: 'text-red-600 dark:text-red-400', dot: 'bg-red-500', label: t('at risk', getLang()), hint: t('security risk hint', getLang()) };
+              const levels = {
+                good: { bg: 'bg-green-50 dark:bg-green-900/30', text: 'text-green-600 dark:text-green-400', dot: 'bg-green-500', label: t('good', getLang()), hint: t('security good hint', getLang()) },
+                improve: { bg: 'bg-amber-50 dark:bg-amber-900/30', text: 'text-amber-600 dark:text-amber-400', dot: 'bg-amber-500', label: t('needs improvement', getLang()), hint: t('security improve hint', getLang()) },
+                risk: { bg: 'bg-red-50 dark:bg-red-900/30', text: 'text-red-600 dark:text-red-400', dot: 'bg-red-500', label: t('at risk', getLang()), hint: t('security risk hint', getLang()) },
+              };
+              const level = score >= 80 ? levels.good : score >= 60 ? levels.improve : levels.risk;
               return React.createElement('div', { className: 'card p-6 mb-6 relative' },
-                // Legend dot + label, top-right corner
-                React.createElement('div', { className: 'absolute top-4 right-4 flex items-center gap-1.5' },
-                  React.createElement('span', { className: 'w-2.5 h-2.5 rounded-full ' + level.dot }),
-                  React.createElement('span', { className: 'text-xs font-medium ' + level.text }, level.label)),
-                React.createElement('div', { className: 'flex items-center gap-6 flex-wrap' },
+                // Three-color legend, top-right corner
+                React.createElement('div', { className: 'absolute top-4 right-4 flex items-center gap-3' },
+                  [levels.good, levels.improve, levels.risk].map(lv =>
+                    React.createElement('span', { key: lv.label, className: 'flex items-center gap-1' },
+                      React.createElement('span', { className: 'w-2 h-2 rounded-full ' + lv.dot }),
+                      React.createElement('span', { className: 'text-[11px] ' + lv.text }, lv.label)
+                    )
+                  )
+                ),
+                // Score number + level + stats, and the score bar (vertically centered)
+                React.createElement('div', { className: 'flex items-center gap-6 flex-wrap min-h-[72px] pr-36' },
                   React.createElement('div', { className: 'flex items-center gap-3' },
                     React.createElement('div', { className: 'w-16 h-16 rounded-2xl flex items-center justify-center ' + level.bg + ' ' + level.text },
                       React.createElement('span', { className: 'text-2xl font-bold' }, score)),
@@ -65,10 +73,11 @@ export default function Security() {
                   React.createElement('div', { className: 'flex-1 min-w-[200px]' },
                     React.createElement('div', { className: 'h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden' },
                       React.createElement('div', { className: 'h-full rounded-full transition-all ' + level.dot, style: { width: score + '%' } })
-                    ),
-                    React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, t('security summary hint', getLang())),
+                    )
                   ),
-                )
+                ),
+                // Segmented hint, bottom-right
+                React.createElement('p', { className: 'text-[11px] text-gray-400 text-right mt-3' }, t('security summary hint', getLang())),
               );
             })(),
             // Checks list
