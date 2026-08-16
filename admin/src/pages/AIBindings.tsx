@@ -9,6 +9,7 @@ interface Binding {
   platform: string;
   label: string;
   token: string;
+  wechatToken?: string;
   userId: string;
   username: string;
   createdAt: string;
@@ -122,11 +123,20 @@ export default function AIBindings() {
               ),
               React.createElement('button', { onClick: () => del(b.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 15 }))
             ),
-            // Webhook URL
+            // Webhook URL (generic JSON endpoint; WeChat bindings get the
+            // WeChat protocol endpoint + the developer Token for the MP console)
             React.createElement('div', { className: 'mt-3 flex items-center gap-2' },
-              React.createElement('KeyRound', { size: 13, className: 'text-gray-400 flex-shrink-0' }),
-              React.createElement('code', { className: 'text-xs bg-gray-50 border border-gray-100 rounded px-2 py-1 truncate flex-1' }, window.location.origin + '/api/ai/webhook/' + b.token),
-              React.createElement('button', { onClick: () => copy(window.location.origin + '/api/ai/webhook/' + b.token), className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Copy, { size: 14 }))
+              React.createElement(KeyRound, { size: 13, className: 'text-gray-400 flex-shrink-0' }),
+              React.createElement('code', { className: 'text-xs bg-gray-50 border border-gray-100 rounded px-2 py-1 truncate flex-1' }, window.location.origin + (b.platform === 'wechat' ? '/api/ai/webhook/wechat/' : '/api/ai/webhook/') + b.token),
+              React.createElement('button', { onClick: () => copy(window.location.origin + (b.platform === 'wechat' ? '/api/ai/webhook/wechat/' : '/api/ai/webhook/') + b.token), className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Copy, { size: 14 }))
+            ),
+            b.platform === 'wechat' && b.wechatToken && React.createElement(React.Fragment, null,
+              React.createElement('div', { className: 'mt-2 flex items-center gap-2' },
+                React.createElement(KeyRound, { size: 13, className: 'text-gray-400 flex-shrink-0' }),
+                React.createElement('code', { className: 'text-xs bg-gray-50 border border-gray-100 rounded px-2 py-1 truncate flex-1' }, b.wechatToken),
+                React.createElement('button', { onClick: () => copy(b.wechatToken || ''), className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Copy, { size: 14 }))
+              ),
+              React.createElement('p', { className: 'text-[11px] text-gray-400 mt-2 leading-relaxed' }, t('wechat setup hint', getLang()))
             ),
             // Test panel
             React.createElement('div', { className: 'mt-3 pt-3 border-t border-gray-100 flex items-center gap-2' },

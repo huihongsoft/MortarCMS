@@ -1163,6 +1163,9 @@ const zh: Record<string, string> = {
 'invalid 2fa code': '验证码无效，请重试',
 '2fa': '2FA',
 
+// AI Bindings — WeChat MP integration
+'wechat setup hint': '微信公众平台 → 设置与开发 → 基本配置 → 服务器配置：URL 填上方链接（需公网 HTTPS 域名），Token 填上方 Token，消息加解密方式选择"明文模式"，提交后微信会验证 URL。之后用户在公众号发消息，AI 会自动回复。',
+
 // Settings > General
 'site language hint': '站点前台默认语言；访客可在前台自行切换语言',
 'date format hint': '前台日期显示格式，如 Y-m-d、Y/m/d（PHP 日期格式）',

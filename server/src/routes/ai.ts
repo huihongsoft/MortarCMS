@@ -895,6 +895,7 @@ interface Binding {
   platform: string;   // wechat | dingtalk
   label: string;
   token: string;      // secret webhook token
+  wechatToken?: string; // Token configured on WeChat MP — used for URL verification
   userId: string;
   username: string;
   createdAt: string;
@@ -912,12 +913,13 @@ function saveBindings(bindings: Binding[]): void {
     .run('ai_bindings', JSON.stringify(bindings));
 }
 
-// List bindings (admin) or own (regular users)
+// List bindings (admin) or own (regular users). Tokens are returned in full:
+// the webhook URL and WeChat token must be copyable for external configuration.
 router.get('/bindings', authenticate, (req: AuthRequest, res: Response) => {
   try {
     const all = getBindings();
     const list = req.user!.role === 'admin' ? all : all.filter(b => b.userId === req.user!.userId);
-    res.json({ bindings: list.map((b: Binding) => ({ ...b, token: '••••' + b.token.slice(-4) })) });
+    res.json({ bindings: list });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -935,6 +937,9 @@ router.post('/bindings', authenticate, (req: AuthRequest, res: Response) => {
       platform,
       label: label || (platform === 'wechat' ? '微信' : '钉钉'),
       token: require('crypto').randomBytes(12).toString('hex'),
+      // WeChat MP asks for a developer Token — pre-generate one the user
+      // pastes into the MP console (also used for URL-verification signing)
+      wechatToken: platform === 'wechat' ? require('crypto').randomBytes(12).toString('hex') : undefined,
       userId: user.id,
       username: user.username,
       createdAt: new Date().toISOString(),
@@ -974,40 +979,108 @@ router.post('/webhook/:token', webhookLimiter, async (req: AuthRequest, res: Res
     const body = req.body || {};
     const message = String(body.message || body.Content || body.text?.content || body.content || '').trim();
     if (!message) { res.status(400).json({ error: '消息为空' }); return; }
-
-    const user = db.prepare('SELECT id, role FROM User WHERE id = ?').get(binding.userId) as any;
-    if (!user) { res.status(404).json({ error: '绑定的用户不存在' }); return; }
-
-    // Update last used
-    const all = getBindings().map((b: Binding) => b.id === binding.id ? { ...b, lastUsedAt: new Date().toISOString() } : b);
-    saveBindings(all);
-
-    const provider = getDefaultProvider();
-    if (!provider) { res.json({ reply: 'AI 服务商尚未配置，请联系管理员。' }); return; }
-    if (!isRoleAllowed(user.role)) { res.json({ reply: '你的角色无权使用 AI 功能。' }); return; }
-
-    const tools = listToolSchemas(user.role);
-    const msgs: any[] = [
-      { role: 'system', content: SYSTEM_PROMPT + ' 当前用户: ' + binding.username + '。\n' + buildSiteContext() + memoryPrompt(user.id) + (tools.length ? '\n可用的工具: ' + tools.map(t => t.function.name).join(', ') : '') },
-      { role: 'user', content: guardUserMessage(message) },
-    ];
-    const ctx = { userId: user.id, role: user.role };
-
-    let reply = '';
-    const MAX_ITER = 6;
-    for (let i = 0; i < MAX_ITER; i++) {
-      const result = await chatComplete(provider, msgs, { tools });
-      reply = result.content;
-      if (!result.toolCalls.length) break;
-      pushAssistantWithTools(msgs, result.content, result.toolCalls, provider.type);
-      const results = await Promise.all(result.toolCalls.map(tc => toolCallToResult(tc, ctx)));
-      pushToolResults(msgs, results, provider.type);
-      if (i === MAX_ITER - 1) reply = '已达到工具调用次数上限，请简化问题重试。';
-    }
-
-    recordUsage(user.id, 'webhook', reply, provider.model);
+    const reply = await runWebhookReply(binding, message);
     res.json({ reply });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// ---- WeChat Official Account (公众号) protocol ----
+// 1) URL verification (GET): WeChat MP console sends
+//    signature/timestamp/nonce/echostr; we sign (token+timestamp+nonce) and
+//    echo echostr back. The "token" here is the developer Token the user
+//    pastes from the MP console (binding.wechatToken).
+// 2) Messages (POST): plain-text XML from WeChat; reply with text XML so the
+//    reply is pushed to the user in the chat.
+
+// sha1 of the lexicographically sorted concatenation — WeChat's algorithm
+export function verifyWechatSignature(token: string, timestamp: string, nonce: string, signature: string): boolean {
+  if (!token || !timestamp || !nonce || !signature) return false;
+  const str = [token, timestamp, nonce].sort().join('');
+  return require('crypto').createHash('sha1').update(str).digest('hex') === signature;
+}
+
+// Parse a WeChat plain-text message XML (fixed structure, CDATA or raw text)
+export function parseWechatXml(xml: string): { toUser: string; fromUser: string; content: string } {
+  const grab = (tag: string) => {
+    const m = new RegExp('<' + tag + '>(?:<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>|([\\s\\S]*?))</' + tag + '>').exec(xml);
+    return (m ? (m[1] !== undefined ? m[1] : m[2]) : '').trim();
+  };
+  return { toUser: grab('ToUserName'), fromUser: grab('FromUserName'), content: grab('Content') };
+}
+
+export function buildWechatReplyXml(toUser: string, fromUser: string, content: string): string {
+  const cdata = (s: string) => '<![CDATA[' + String(s).replace(/\]\]>/g, ']]]]><![CDATA[>') + ']]>';
+  return '<xml>' +
+    '<ToUserName>' + cdata(toUser) + '</ToUserName>' +
+    '<FromUserName>' + cdata(fromUser) + '</FromUserName>' +
+    '<CreateTime>' + Math.floor(Date.now() / 1000) + '</CreateTime>' +
+    '<MsgType>' + cdata('text') + '</MsgType>' +
+    '<Content>' + cdata(content) + '</Content>' +
+    '</xml>';
+}
+
+// Shared AI pipeline for webhook entries (JSON generic + WeChat XML)
+async function runWebhookReply(binding: Binding, message: string): Promise<string> {
+  const user = db.prepare('SELECT id, role FROM User WHERE id = ?').get(binding.userId) as any;
+  if (!user) return '绑定的用户不存在';
+
+  // Update last used
+  const all = getBindings().map((b: Binding) => b.id === binding.id ? { ...b, lastUsedAt: new Date().toISOString() } : b);
+  saveBindings(all);
+
+  const provider = getDefaultProvider();
+  if (!provider) return 'AI 服务商尚未配置，请联系管理员。';
+  if (!isRoleAllowed(user.role)) return '你的角色无权使用 AI 功能。';
+
+  const tools = listToolSchemas(user.role);
+  const msgs: any[] = [
+    { role: 'system', content: SYSTEM_PROMPT + ' 当前用户: ' + binding.username + '。\n' + buildSiteContext() + memoryPrompt(user.id) + (tools.length ? '\n可用的工具: ' + tools.map(t => t.function.name).join(', ') : '') },
+    { role: 'user', content: guardUserMessage(message) },
+  ];
+  const ctx = { userId: user.id, role: user.role };
+
+  let reply = '';
+  const MAX_ITER = 6;
+  for (let i = 0; i < MAX_ITER; i++) {
+    const result = await chatComplete(provider, msgs, { tools });
+    reply = result.content;
+    if (!result.toolCalls.length) break;
+    pushAssistantWithTools(msgs, result.content, result.toolCalls, provider.type);
+    const results = await Promise.all(result.toolCalls.map(tc => toolCallToResult(tc, ctx)));
+    pushToolResults(msgs, results, provider.type);
+    if (i === MAX_ITER - 1) reply = '已达到工具调用次数上限，请简化问题重试。';
+  }
+
+  recordUsage(user.id, 'webhook', reply, provider.model);
+  return reply;
+}
+
+// WeChat endpoint: /ai/webhook/wechat/:token
+router.get('/webhook/wechat/:token', (_req: AuthRequest, res: Response) => {
+  try {
+    const binding = getBindings().find(b => b.platform === 'wechat' && b.token === _req.params.token);
+    if (!binding?.wechatToken) { res.status(404).send('invalid binding'); return; }
+    const { signature, timestamp, nonce, echostr } = _req.query as Record<string, string>;
+    if (!verifyWechatSignature(binding.wechatToken, timestamp || '', nonce || '', signature || '')) {
+      res.status(403).send('signature check failed');
+      return;
+    }
+    res.type('text/plain').send(echostr || '');
+  } catch { res.status(500).send('error'); }
+});
+
+router.post('/webhook/wechat/:token', webhookLimiter, require('express').text({ type: ['text/xml', 'application/xml', 'text/plain'] }), async (req: AuthRequest, res: Response) => {
+  try {
+    const binding = getBindings().find(b => b.platform === 'wechat' && b.token === req.params.token);
+    if (!binding?.wechatToken) { res.status(404).send('invalid binding'); return; }
+    const xml = String(req.body || '');
+    const msg = parseWechatXml(xml);
+    if (!msg.content) { res.type('application/xml').send(buildWechatReplyXml(msg.toUser, msg.fromUser, '消息为空')); return; }
+    const reply = await runWebhookReply(binding, msg.content);
+    res.type('application/xml').send(buildWechatReplyXml(msg.toUser, msg.fromUser, reply));
+  } catch (err: any) {
+    res.status(500).type('application/xml').send(buildWechatReplyXml('', '', '服务暂时不可用'));
+  }
 });
 
 export default router;
