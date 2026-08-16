@@ -309,31 +309,37 @@ export default function Settings() {
           const startVal = sch?.start ? new Date(sch.start).toISOString().slice(0, 16) : '';
           const endVal = sch?.end ? new Date(sch.end).toISOString().slice(0, 16) : '';
           const toLocal = (v: string) => v ? new Date(v).toISOString() : '';
-          return React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-3 items-end' },
-            React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300' },
-              React.createElement('input', { type: 'checkbox', checked: !!sch?.start, onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
-                if (e.target.checked) {
-                  const start = new Date(Date.now() + 60000).toISOString();
-                  const end = new Date(Date.now() + 3600000).toISOString();
-                  setSettings({ ...settings, maintenance_schedule: JSON.stringify({ start, end }) });
-                } else { setSettings({ ...settings, maintenance_schedule: '' }); }
-              }, className: 'rounded border-gray-300 text-primary-600' }),
-              t('enable schedule', getLang())
+          return React.createElement('div', null,
+            // Row 1: schedule toggle, right-aligned on its own line
+            React.createElement('div', { className: 'flex justify-end mb-3' },
+              React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300' },
+                React.createElement('input', { type: 'checkbox', checked: !!sch?.start, onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+                  if (e.target.checked) {
+                    const start = new Date(Date.now() + 60000).toISOString();
+                    const end = new Date(Date.now() + 3600000).toISOString();
+                    setSettings({ ...settings, maintenance_schedule: JSON.stringify({ start, end }) });
+                  } else { setSettings({ ...settings, maintenance_schedule: '' }); }
+                }, className: 'rounded border-gray-300 text-primary-600' }),
+                t('enable schedule', getLang())
+              )
             ),
-            React.createElement('div', null,
-              React.createElement('label', { className: 'block text-[10px] text-gray-400 mb-1' }, t('start', getLang())),
-              React.createElement('input', { type: 'datetime-local', value: startVal, onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
-                const s = e.target.value ? toLocal(e.target.value) : '';
-                const cur: any = (() => { try { return settings.maintenance_schedule ? JSON.parse(settings.maintenance_schedule) : {}; } catch { return {}; } })();
-                if (s) setSettings({ ...settings, maintenance_schedule: JSON.stringify({ ...cur, start: s }) });
-              }, className: 'input-field text-sm' })),
-            React.createElement('div', null,
-              React.createElement('label', { className: 'block text-[10px] text-gray-400 mb-1' }, t('end', getLang())),
-              React.createElement('input', { type: 'datetime-local', value: endVal, onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
-                const en = e.target.value ? toLocal(e.target.value) : '';
-                const cur: any = (() => { try { return settings.maintenance_schedule ? JSON.parse(settings.maintenance_schedule) : {}; } catch { return {}; } })();
-                if (en) setSettings({ ...settings, maintenance_schedule: JSON.stringify({ ...cur, end: en }) });
-              }, className: 'input-field text-sm' }))
+            // Row 2: start/end times, left-aligned
+            React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3' },
+              React.createElement('div', null,
+                React.createElement('label', { className: 'block text-[10px] text-gray-400 mb-1' }, t('start', getLang())),
+                React.createElement('input', { type: 'datetime-local', value: startVal, onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+                  const s = e.target.value ? toLocal(e.target.value) : '';
+                  const cur: any = (() => { try { return settings.maintenance_schedule ? JSON.parse(settings.maintenance_schedule) : {}; } catch { return {}; } })();
+                  if (s) setSettings({ ...settings, maintenance_schedule: JSON.stringify({ ...cur, start: s }) });
+                }, className: 'input-field text-sm' })),
+              React.createElement('div', null,
+                React.createElement('label', { className: 'block text-[10px] text-gray-400 mb-1' }, t('end', getLang())),
+                React.createElement('input', { type: 'datetime-local', value: endVal, onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+                  const en = e.target.value ? toLocal(e.target.value) : '';
+                  const cur: any = (() => { try { return settings.maintenance_schedule ? JSON.parse(settings.maintenance_schedule) : {}; } catch { return {}; } })();
+                  if (en) setSettings({ ...settings, maintenance_schedule: JSON.stringify({ ...cur, end: en }) });
+                }, className: 'input-field text-sm' }))
+            )
           );
         })()
       ),
