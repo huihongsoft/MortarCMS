@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Trash2, UserPlus, UserCircle2, Shield, ShieldCheck, Copy, Check } from 'lucide-react';
+import QRCode from 'qrcode';
 import { useAuth } from '../lib/auth';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
@@ -26,6 +27,18 @@ export default function Users() {
   const [twoFaCode, setTwoFaCode] = useState('');
   const [twoFaBusy, setTwoFaBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [qrUrl, setQrUrl] = useState('');
+
+  // Render the otpauth URI as a scannable QR code (client-side, no network)
+  useEffect(() => {
+    let cancelled = false;
+    if (twoFa?.otpauth && !twoFa.enabled) {
+      QRCode.toDataURL(twoFa.otpauth, { width: 176, margin: 1, color: { dark: '#111827', light: '#ffffff' } })
+        .then(u => { if (!cancelled) setQrUrl(u); })
+        .catch(() => { if (!cancelled) setQrUrl(''); });
+    } else { setQrUrl(''); }
+    return () => { cancelled = true; };
+  }, [twoFa]);
 
   async function open2fa() {
     try {
@@ -164,7 +177,9 @@ export default function Users() {
                 React.createElement('div', { className: 'p-3 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-sm mb-4 flex items-center gap-2' }, React.createElement(ShieldCheck, { size: 16 }), t('2fa enabled hint', getLang())),
                 React.createElement('button', { onClick: disable2fa, className: 'btn-danger w-full justify-center text-sm' }, t('disable 2fa', getLang())))
             : React.createElement(React.Fragment, null,
-                React.createElement('p', { className: 'text-xs text-gray-500 dark:text-gray-400 mb-2' }, t('scan or enter the secret', getLang())),
+                React.createElement('p', { className: 'text-xs text-gray-500 dark:text-gray-400 mb-3' }, t('scan the qr or enter the secret', getLang())),
+                qrUrl && React.createElement('div', { className: 'flex justify-center mb-3' },
+                  React.createElement('img', { src: qrUrl, alt: '2FA QR code', className: 'w-44 h-44 rounded-lg border border-gray-200 dark:border-gray-600' })),
                 React.createElement('div', { className: 'flex items-center gap-2 mb-3' },
                   React.createElement('code', { className: 'flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 rounded-lg text-sm font-mono break-all' }, twoFa.secret),
                   React.createElement('button', { onClick: () => copyText(twoFa.otpauth || twoFa.secret || ''), className: 'btn-secondary text-xs shrink-0' }, copied ? React.createElement(Check, { size: 14 }) : React.createElement(Copy, { size: 14 }), copied ? t('copied', getLang()) : t('copy', getLang()))

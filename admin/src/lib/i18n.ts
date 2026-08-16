@@ -1156,7 +1156,7 @@ const zh: Record<string, string> = {
 '2fa enabled hint': '两步验证已启用。禁用后登录将不再需要验证码。',
 'disable 2fa': '禁用两步验证',
 'disable 2fa?': '确定要禁用两步验证吗？',
-'scan or enter the secret': '使用验证器应用（如 Google Authenticator / 微软 Authenticator）扫描 otpauth 链接，或手动输入以下密钥：',
+'scan the qr or enter the secret': '使用验证器应用（如 Google Authenticator / 微软 Authenticator）扫描下方二维码，或手动输入密钥：',
 'enter 2fa code': '输入 6 位验证码',
 'verify and enable': '验证并启用',
 '2fa setup failed': '两步验证操作失败，请重试',
