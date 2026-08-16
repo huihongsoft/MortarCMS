@@ -1,0 +1,7 @@
+{
+  "name": "content-shortcodes",
+  "version": "1.0.0",
+  "description": "Adds [views] (post view count) and [word-count] (reading length) shortcodes.",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}

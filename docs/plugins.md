@@ -137,6 +137,9 @@ The admin Plugins page shows the live registry (Installed / Market tabs).
 | `comment-guard-ip` | Rejects comments from blacklisted IPs / emails before storing | `comment_guard_enabled`, `comment_ip_blacklist`, `comment_email_blacklist` |
 | `media-cleanup` | Reports (or deletes) orphaned media files not referenced by any post | `media_cleanup_enabled`, `media_cleanup_days`, `media_cleanup_delete` |
 | `link-health-check` | Probes friend links daily and emails about broken ones | `link_health_enabled`, `link_health_notify`, `link_health_email` |
+| `ai-comment-review` | AI reviews new comments; obvious spam is auto-marked (needs an AI provider) | `ai_review_comments_enabled` |
+| `auto-excerpt` | Fills missing post excerpts from the first content paragraph | `auto_excerpt_enabled`, `auto_excerpt_length` |
+| `content-shortcodes` | `[views]`, `[word-count]`, `[post-title]` shortcodes | — |
 
 Plugin settings are plain `Setting` rows, so they can be written with
 `PUT /api/settings` (admin) or from a plugin's own admin UI.

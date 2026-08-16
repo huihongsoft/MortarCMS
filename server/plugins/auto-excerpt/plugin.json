@@ -1,0 +1,7 @@
+{
+  "name": "auto-excerpt",
+  "version": "1.0.0",
+  "description": "Fills in a post excerpt automatically from the first paragraph of content when none was provided.",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}

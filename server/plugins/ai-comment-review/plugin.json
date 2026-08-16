@@ -1,0 +1,7 @@
+{
+  "name": "ai-comment-review",
+  "version": "1.0.0",
+  "description": "Automatically reviews new comments with AI: obvious spam is marked as spam, everything else stays pending. Requires an AI provider.",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}
