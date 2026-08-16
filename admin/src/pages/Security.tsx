@@ -49,9 +49,10 @@ export default function Security() {
                 risk: { bg: 'bg-red-50 dark:bg-red-900/30', text: 'text-red-600 dark:text-red-400', dot: 'bg-red-500', label: t('at risk', getLang()), hint: t('security risk hint', getLang()) },
               };
               const level = score >= 80 ? levels.good : score >= 60 ? levels.improve : levels.risk;
-              return React.createElement('div', { className: 'card p-6 mb-6 relative' },
-                // Three-color legend, top-right corner
-                React.createElement('div', { className: 'absolute top-4 right-4 flex items-center gap-3' },
+              return React.createElement('div', { className: 'card p-6 mb-6' },
+                // Top-right: segmented hint in front of the three-color legend
+                React.createElement('div', { className: 'flex items-center justify-end gap-3 mb-4' },
+                  React.createElement('span', { className: 'text-[11px] text-gray-400' }, t('security summary hint', getLang())),
                   [levels.good, levels.improve, levels.risk].map(lv =>
                     React.createElement('span', { key: lv.label, className: 'flex items-center gap-1' },
                       React.createElement('span', { className: 'w-2 h-2 rounded-full ' + lv.dot }),
@@ -60,7 +61,7 @@ export default function Security() {
                   )
                 ),
                 // Score number + level + stats, and the score bar (vertically centered)
-                React.createElement('div', { className: 'flex items-center gap-6 flex-wrap min-h-[72px] pr-36' },
+                React.createElement('div', { className: 'flex items-center gap-6 flex-wrap min-h-[72px]' },
                   React.createElement('div', { className: 'flex items-center gap-3' },
                     React.createElement('div', { className: 'w-16 h-16 rounded-2xl flex items-center justify-center ' + level.bg + ' ' + level.text },
                       React.createElement('span', { className: 'text-2xl font-bold' }, score)),
@@ -76,8 +77,6 @@ export default function Security() {
                     )
                   ),
                 ),
-                // Segmented hint, bottom-right
-                React.createElement('p', { className: 'text-[11px] text-gray-400 text-right mt-3' }, t('security summary hint', getLang())),
               );
             })(),
             // Checks list
