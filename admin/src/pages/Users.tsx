@@ -116,7 +116,7 @@ export default function Users() {
           React.createElement('div', { className: 'space-y-3' },
             React.createElement('input', { id: 'new-username', placeholder: t('username', getLang()), className: 'input-field' }),
             React.createElement('input', { id: 'new-email', placeholder: t('email', getLang()), type: 'email', className: 'input-field' }),
-            React.createElement('input', { id: 'new-password', placeholder: t('password', getLang()), type: 'password', className: 'input-field' }),
+            React.createElement('input', { id: 'new-password', placeholder: t('password', getLang()), type: 'password', autoComplete: 'new-password', className: 'input-field' }),
             React.createElement('select', { id: 'new-role', className: 'input-field', defaultValue: 'author' },
               roles.map(r => React.createElement('option', { key: r, value: r }, t(r, getLang())))
             ),
@@ -131,7 +131,7 @@ export default function Users() {
               React.createElement('input', { type: 'text', value: avatarUrl, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setAvatarUrl(e.target.value), placeholder: t('avatar url', getLang()), className: 'input-field text-sm flex-1' })
             ),
             React.createElement('textarea', { id: 'profile-bio', className: 'input-field', rows: 3, placeholder: t('tell us about yourself...', getLang()), defaultValue: currentUser?.bio || '' }),
-            React.createElement('input', { id: 'profile-pw', type: 'password', className: 'input-field', placeholder: t('new password', getLang()), onChange: (e: React.ChangeEvent<HTMLInputElement>) => checkPwdStrength(e.target.value) }),
+            React.createElement('input', { id: 'profile-pw', type: 'password', autoComplete: 'new-password', className: 'input-field', placeholder: t('new password', getLang()), onChange: (e: React.ChangeEvent<HTMLInputElement>) => checkPwdStrength(e.target.value) }),
             pwdScore > 0 && React.createElement('div', { className: 'flex items-center gap-2' },
               React.createElement('div', { className: 'flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden' },
                 React.createElement('div', { className: 'h-full rounded-full transition-all ' + (pwdScore >= 4 ? 'bg-green-500' : pwdScore >= 3 ? 'bg-yellow-500' : 'bg-red-500'), style: { width: (pwdScore / 5) * 100 + '%' } })),
