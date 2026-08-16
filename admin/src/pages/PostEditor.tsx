@@ -132,10 +132,18 @@ export default function PostEditor() {
   // ---- AI assistant for the editor ----
   async function runAi(action: string) {
     if (aiLoading) return;
+    // Preconditions per action — a silent disabled button looks broken, so
+    // clicking without the required input shows a clear hint instead
+    const needsTitle = ['generate', 'seo', 'tags', 'topics'].includes(action);
+    const needsContent = ['polish', 'continue', 'translate', 'summarize'].includes(action);
+    if (needsTitle && !title.trim()) { setAiError(t('please enter a title first', getLang())); return; }
+    if (needsContent && !content.trim()) { setAiError(t('please enter content first', getLang())); return; }
     setAiLoading(true); setAiError(''); setAiResult('');
     try {
       const r = await api.post('/ai/generate', { action, title, content, excerpt, style: aiStyle, language: aiLang });
-      setAiResult(r.data.content || '');
+      const out = r.data.content || '';
+      if (!out.trim()) setAiError(t('ai returned no result', getLang()));
+      else setAiResult(out);
     } catch (e: any) {
       setAiError(e.response?.data?.error || t('save failed', getLang()));
     } finally { setAiLoading(false); }
@@ -198,7 +206,7 @@ export default function PostEditor() {
           AI_ACTIONS.map(a => React.createElement('button', {
             key: a.key,
             onClick: () => runAi(a.key),
-            disabled: aiLoading || (a.key === 'generate' && !title),
+            disabled: aiLoading,
             className: 'flex items-center gap-1 px-2.5 py-1.5 text-xs rounded-lg border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 disabled:opacity-40 transition-colors',
           }, React.createElement('span', null, a.icon), a.label))
         ),

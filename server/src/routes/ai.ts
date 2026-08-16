@@ -242,6 +242,11 @@ router.post('/generate', authenticate, enforceUsageLimit, async (req: AuthReques
     if (!['generate', 'polish', 'continue', 'translate', 'summarize', 'seo', 'tags', 'topics'].includes(action)) {
       res.status(400).json({ error: '未知操作' }); return;
     }
+    // Preconditions — same hints the editor shows before calling
+    const needsTitle = ['generate', 'seo', 'tags', 'topics'].includes(action);
+    const needsContent = ['polish', 'continue', 'translate', 'summarize'].includes(action);
+    if (needsTitle && !String(title || '').trim()) { res.status(400).json({ error: '请先填写文章标题' }); return; }
+    if (needsContent && !String(content || '').trim()) { res.status(400).json({ error: '请先填写文章正文' }); return; }
 
     const WRITER = '你是专业的文章写作助手。只输出要求的内容本身，不要任何解释、前言或 Markdown 代码块标记。';
     let prompt = '';

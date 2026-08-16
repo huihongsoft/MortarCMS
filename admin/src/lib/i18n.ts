@@ -1205,6 +1205,11 @@ const zh: Record<string, string> = {
 // Comment errors (frontend)
 'comment rejected': '评论已被拒绝',
 
+// Post editor AI assistant
+'please enter a title first': '请先填写文章标题',
+'please enter content first': '请先填写文章正文',
+'ai returned no result': 'AI 未返回结果，请重试',
+
 // Plugin settings (labels + hints from plugin.json settingsSchema)
 'Enable search-engine pings': '启用搜索引擎推送',
 'Baidu site': '百度站点',
