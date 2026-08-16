@@ -1147,6 +1147,11 @@ const zh: Record<string, string> = {
 'site reset failed': '初始化失败，请重试',
 'rows deleted': '行数据已删除',
 
+// Settings > General
+'site language hint': '站点前台默认语言；访客可在前台自行切换语言',
+'date format hint': '前台日期显示格式，如 Y-m-d、Y/m/d（PHP 日期格式）',
+'allow public registration hint': '允许访客在前台注册账号（可在"阅读设置"中指定默认角色）',
+
 // Scheduled tasks (names + descriptions from the built-in scheduler)
 'Publish scheduled posts': '发布定时文章',
 'Publishes posts whose scheduled time has arrived': '到达发布时间后自动发布定时文章',
