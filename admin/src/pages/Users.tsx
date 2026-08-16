@@ -229,8 +229,8 @@ export default function Users() {
                   React.createElement('td', { className: 'px-4 py-3' },
                     React.createElement('div', { className: 'flex items-center gap-2 whitespace-nowrap' },
                       React.createElement('span', { className: 'px-2 py-0.5 text-[11px] rounded-full font-medium capitalize shrink-0 ' + (roleColors[u.role] || 'bg-gray-100 text-gray-600') }, t(u.role, getLang())),
-                      // inline width: .input-field's w-full overrides utility classes
-                      React.createElement('select', { value: u.role, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => updateRole(u.id, e.target.value), className: 'input-field text-xs py-1 shrink-0', style: { width: 96 } },
+                      // inline width/padding: .input-field's w-full/py-2.5 override utility classes
+                      React.createElement('select', { value: u.role, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => updateRole(u.id, e.target.value), className: 'input-field text-xs shrink-0', style: { width: 96, paddingTop: 5, paddingBottom: 5 } },
                         roles.map(r => React.createElement('option', { key: r, value: r }, r))
                       )
                     )
