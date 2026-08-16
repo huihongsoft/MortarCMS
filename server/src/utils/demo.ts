@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import db, { cuid } from './db';
+import { slugify } from './slug';
 import { purgeAllCaches } from './cache';
 
 // Demo / sample data for a fresh install, and the "reset site" routine that
@@ -13,7 +14,7 @@ const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
 const CONTENT_TABLES = [
   'PostCategory', 'PostTag', 'PostMeta', 'Revision', 'Comment',
   'Post', 'Category', 'Tag', 'Media', 'Menu', 'Link',
-  'AiSession', 'AiTask', 'AiMemory', 'AiAudit', 'AiUsage', 'Activity', 'Visit',
+  'AiSession', 'AiTask', 'AiMemory', 'AiAudit', 'AiUsage', 'AiNotification', 'Activity', 'Visit',
 ];
 
 // Settings written by the demo data — removed by resetSite() so the site
@@ -21,6 +22,12 @@ const CONTENT_TABLES = [
 const DEMO_SETTING_KEYS = ['theme_active', 'carousel_items', 'widgets_active', 'demo_imported'];
 
 function run(sql: string, ...args: any[]): void { db.prepare(sql).run(...args); }
+
+// Table names come from the hardcoded CONTENT_TABLES whitelist, so no quoting
+// is needed — and MySQL would reject the double-quoted identifier form
+function clearTable(t: string): number {
+  try { return (db.prepare('DELETE FROM ' + t).run() as any).changes || 0; } catch { return 0; }
+}
 
 // Generate a small gradient SVG placeholder (no external dependencies) so
 // demo posts have real cover images on disk
@@ -162,7 +169,7 @@ export function importDemoData(): { posts: number; categories: number; tags: num
   for (const name of DEMO_TAGS) {
     const id = cuid();
     tagIds[name] = id;
-    run('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)', id, name, name.toLowerCase().replace(/\s+/g, '-'));
+    run('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)', id, name, slugify(name));
   }
 
   // Posts (+ images, categories, tags)
@@ -224,18 +231,21 @@ export function importDemoData(): { posts: number; categories: number; tags: num
 // user accounts, roles, system settings and site structure are preserved.
 export function resetSite(): Record<string, number> {
   const stats: Record<string, number> = {};
-  for (const t of CONTENT_TABLES) {
-    try { stats[t] = (db.prepare('DELETE FROM "' + t + '"').run() as any).changes || 0; } catch { stats[t] = 0; }
-  }
+  for (const t of CONTENT_TABLES) stats[t] = clearTable(t);
   // Drop settings written by the demo data
   for (const key of DEMO_SETTING_KEYS) db.prepare('DELETE FROM Setting WHERE key = ?').run(key);
-  // Clear uploaded media files (keep the directory + .gitkeep)
+  // Clear uploaded media files (keep the directory + .gitkeep). The thumbs/
+  // dir holds generated thumbnail caches keyed by media id — orphaned once
+  // the Media table is emptied, so remove it too.
   try {
     if (fs.existsSync(uploadsDir)) {
       for (const f of fs.readdirSync(uploadsDir)) {
-        if (f === '.gitkeep' || f === 'thumbs' || f === 'import-tmp') continue;
+        if (f === '.gitkeep' || f === 'import-tmp') continue;
         const p = path.join(uploadsDir, f);
-        try { if (fs.statSync(p).isFile()) fs.unlinkSync(p); } catch {}
+        try {
+          if (fs.statSync(p).isFile()) fs.unlinkSync(p);
+          else if (fs.statSync(p).isDirectory()) fs.rmSync(p, { recursive: true, force: true });
+        } catch {}
       }
     }
   } catch {}
@@ -244,7 +254,5 @@ export function resetSite(): Record<string, number> {
 }
 
 function clearContentTables(): void {
-  for (const t of CONTENT_TABLES) {
-    try { db.prepare('DELETE FROM "' + t + '"').run(); } catch {}
-  }
+  for (const t of CONTENT_TABLES) clearTable(t);
 }

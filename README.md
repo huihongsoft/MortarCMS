@@ -183,9 +183,13 @@ Visit `http://localhost:3001/install` on first launch:
 
 1. Choose a database — **SQLite** (default, zero-config) / **MySQL/MariaDB** / **PostgreSQL**
 2. Enter site title & admin account
-3. Done — log in at `/admin`
+3. Optionally check **"Import sample data"** — 8 software posts, categories,
+   tags, comments, a menu, friend links and the softstore theme demo
+4. Done — log in at `/admin`
 
 You can switch databases later from the admin panel (System Info → Switch database).
+To wipe all content and start from an empty site (accounts, roles and system
+settings are kept), use **Settings → Tools → Reset site**.
 
 ## 🗄️ Database
 

@@ -118,8 +118,9 @@ GET    /api/db/backup               database download
 GET    /api/db/backup-full          database + uploads zip
 POST   /api/db/restore-full         restore from backup zip
 GET    /api/db/optimize             vacuum/analyze
+POST   /api/db/reset-content        admin: wipe all content (fresh empty site)
 GET    /api/install/status          installed?
-POST   /api/install                 install wizard (db choice + admin account)
+POST   /api/install                 install wizard (db choice + admin account, optional sampleData)
 GET    /api/install                 admin: current db configuration
 POST   /api/install/switch          admin: runtime database switch
 POST   /api/install/reset           admin only: re-run the wizard
