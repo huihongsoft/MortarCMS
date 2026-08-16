@@ -1,0 +1,7 @@
+{
+  "name": "content-stats",
+  "version": "1.0.0",
+  "description": "Adds a [stats] shortcode that renders site content counts (posts, pages, comments, categories, tags) into any post or page.",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}

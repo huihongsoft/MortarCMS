@@ -1,0 +1,7 @@
+{
+  "name": "event-webhook",
+  "version": "1.0.0",
+  "description": "Pushes site events (post published, comment added, user registered) to an external webhook — e.g. a DingTalk group robot or your own service.",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}

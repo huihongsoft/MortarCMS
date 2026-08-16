@@ -127,6 +127,9 @@ The admin Plugins page shows the live registry (Installed / Market tabs).
 | `search-engine-ping` | Pings Google/Bing sitemap on publish; optional Baidu push | `seo_ping_enabled`, `seo_baidu_token`, `seo_baidu_site` |
 | `comment-email-notify` | Emails the admin on new comments (needs SMTP) | `comment_notify_enabled`, `comment_notify_email` |
 | `post-expiry` | Time windows: `meta.available_from` auto-publishes, `meta.expiry_at` auto-unpublishes (to draft or to members-only) | `post_expiry_enabled`, `post_expiry_action` (`draft`\|`members`) |
+| `event-webhook` | Pushes post/comment/user events to an external webhook (DingTalk group robot, your service) with HMAC signature | `event_webhook_url`, `event_webhook_secret`, `event_webhook_events` |
+| `daily-digest` | Daily content summary email (posts/comments/users) at a set time | `daily_digest_enabled`, `daily_digest_time`, `daily_digest_email` |
+| `content-stats` | `[stats]` shortcode: site content counts (`[stats posts comments]` filters) | — |
 
 Plugin settings are plain `Setting` rows, so they can be written with
 `PUT /api/settings` (admin) or from a plugin's own admin UI.

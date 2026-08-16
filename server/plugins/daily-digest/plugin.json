@@ -1,0 +1,7 @@
+{
+  "name": "daily-digest",
+  "version": "1.0.0",
+  "description": "Sends a daily content summary email (posts, comments, users) at a configured time. Requires SMTP.",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}
