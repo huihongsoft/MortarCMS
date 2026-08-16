@@ -3,5 +3,26 @@
   "version": "1.0.0",
   "description": "Periodically checks friend links (Link table) with HTTP HEAD requests and emails the admin about broken ones.",
   "author": "Mortar Team",
-  "requires": "0.1.0"
+  "requires": "0.1.0",
+  "settingsSchema": [
+    {
+      "key": "link_health_enabled",
+      "label": "Enable link checks",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "link_health_notify",
+      "label": "Email about broken links",
+      "type": "checkbox",
+      "default": "0"
+    },
+    {
+      "key": "link_health_email",
+      "label": "Notification email",
+      "type": "text",
+      "default": "",
+      "hint": "Defaults to the admin email"
+    }
+  ]
 }

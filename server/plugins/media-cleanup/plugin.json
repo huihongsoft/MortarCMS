@@ -3,5 +3,27 @@
   "version": "1.0.0",
   "description": "Finds media library files not referenced by any post (featured image or in content) and reports or deletes them.",
   "author": "Mortar Team",
-  "requires": "0.1.0"
+  "requires": "0.1.0",
+  "settingsSchema": [
+    {
+      "key": "media_cleanup_enabled",
+      "label": "Enable media cleanup",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "media_cleanup_days",
+      "label": "Minimum age (days)",
+      "type": "number",
+      "default": "7",
+      "hint": "Files younger than this are never touched"
+    },
+    {
+      "key": "media_cleanup_delete",
+      "label": "Delete orphaned files",
+      "type": "checkbox",
+      "default": "0",
+      "hint": "Off: report only. On: delete files and rows"
+    }
+  ]
 }

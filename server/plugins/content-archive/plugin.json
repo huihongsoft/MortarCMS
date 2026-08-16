@@ -3,5 +3,20 @@
   "version": "1.0.0",
   "description": "Periodically moves published posts that have not been updated for N days back to draft (archiving stale content).",
   "author": "Mortar Team",
-  "requires": "0.1.0"
+  "requires": "0.1.0",
+  "settingsSchema": [
+    {
+      "key": "content_archive_enabled",
+      "label": "Enable content archiving",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "archive_after_days",
+      "label": "Archive after days",
+      "type": "number",
+      "default": "365",
+      "hint": "Days without updates before a post is moved to draft"
+    }
+  ]
 }

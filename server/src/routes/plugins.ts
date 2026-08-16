@@ -3,7 +3,7 @@ import https from 'https';
 import http from 'http';
 import db from '../utils/db';
 import { listHooks } from '../utils/hooks';
-import { listPlugins, listMarket, installPlugin, installFromUrl, uninstallPlugin, setPluginActive } from '../plugins/manager';
+import { listPlugins, listMarket, installPlugin, installFromUrl, uninstallPlugin, setPluginActive, validatePluginSettings, PluginMeta } from '../plugins/manager';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -32,6 +32,46 @@ router.put('/:name/toggle', authenticate, requireCap('manage_options'), async (r
     const r = await setPluginActive(req.params.name, req.body?.active === true);
     if (!r.ok) { res.status(400).json({ error: r.error || 'Failed' }); return; }
     res.json({ success: true, name: req.params.name, active: req.body?.active === true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: read a plugin's settings (schema + current values + read-only reports)
+router.get('/:name/settings', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    const plugin = (listPlugins().find((p: PluginMeta) => p.name === req.params.name));
+    if (!plugin) { res.status(404).json({ error: 'Plugin not found' }); return; }
+    const values: Record<string, string> = {};
+    const reports: Record<string, string> = {};
+    for (const f of plugin.settingsSchema || []) {
+      const row = db.prepare('SELECT value FROM Setting WHERE key = ?').get(f.key) as any;
+      values[f.key] = row?.value ?? f.default ?? '';
+    }
+    // Read-only reports the plugin may have stored (e.g. link_health_report)
+    if (plugin.name === 'link-health-check') { const r = db.prepare("SELECT value FROM Setting WHERE key = 'link_health_report'").get() as any; if (r?.value) reports.link_health_report = r.value; }
+    if (plugin.name === 'media-cleanup') { const r = db.prepare("SELECT value FROM Setting WHERE key = 'media_cleanup_report'").get() as any; if (r?.value) reports.media_cleanup_report = r.value; }
+    res.json({ plugin, values, reports });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: update a plugin's settings (validated against the schema)
+router.put('/:name/settings', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    const plugin = (listPlugins().find((p: PluginMeta) => p.name === req.params.name));
+    if (!plugin) { res.status(404).json({ error: 'Plugin not found' }); return; }
+    const schema = plugin.settingsSchema || [];
+    const entries = (req.body || {}).values as Record<string, unknown> || {};
+    const error = validatePluginSettings(schema, entries);
+    if (error) { res.status(400).json({ error }); return; }
+    const upsert = db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+    for (const f of schema) {
+      const v = entries[f.key];
+      if (v === undefined) continue;
+      const str = String(v);
+      // Empty password fields keep the existing value (masked inputs)
+      if (f.type === 'password' && str === '') continue;
+      upsert.run('plugin-' + plugin.name + '-' + f.key, f.key, str);
+    }
+    res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

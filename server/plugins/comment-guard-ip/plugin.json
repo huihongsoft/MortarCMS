@@ -3,5 +3,27 @@
   "version": "1.0.0",
   "description": "Rejects comments from blacklisted IPs or emails before they are stored (comment_validate filter).",
   "author": "Mortar Team",
-  "requires": "0.1.0"
+  "requires": "0.1.0",
+  "settingsSchema": [
+    {
+      "key": "comment_guard_enabled",
+      "label": "Enable comment guard",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "comment_ip_blacklist",
+      "label": "IP blacklist",
+      "type": "textarea",
+      "default": "",
+      "hint": "Comma or newline separated IPs"
+    },
+    {
+      "key": "comment_email_blacklist",
+      "label": "Email blacklist",
+      "type": "textarea",
+      "default": "",
+      "hint": "Comma or newline separated emails"
+    }
+  ]
 }

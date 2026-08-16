@@ -3,5 +3,26 @@
   "version": "1.0.0",
   "description": "Notifies search engines when a post is published: Google/Bing sitemap ping plus optional Baidu push (requires seo_baidu_token).",
   "author": "Mortar Team",
-  "requires": "0.1.0"
+  "requires": "0.1.0",
+  "settingsSchema": [
+    {
+      "key": "seo_ping_enabled",
+      "label": "Enable search-engine pings",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "seo_baidu_site",
+      "label": "Baidu site",
+      "type": "text",
+      "default": "",
+      "hint": "Your domain as registered with Baidu (required for Baidu push)"
+    },
+    {
+      "key": "seo_baidu_token",
+      "label": "Baidu push token",
+      "type": "password",
+      "default": ""
+    }
+  ]
 }

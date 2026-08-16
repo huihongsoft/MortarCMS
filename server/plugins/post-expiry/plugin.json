@@ -3,5 +3,24 @@
   "version": "1.0.0",
   "description": "Auto-unpublishes posts whose meta expiry_at date has passed (set meta.expiry_at to an ISO date via the post API).",
   "author": "Mortar Team",
-  "requires": "0.1.0"
+  "requires": "0.1.0",
+  "settingsSchema": [
+    {
+      "key": "post_expiry_enabled",
+      "label": "Enable expiry windows",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "post_expiry_action",
+      "label": "Expiry action",
+      "type": "select",
+      "options": [
+        "draft",
+        "members"
+      ],
+      "default": "draft",
+      "hint": "draft: move back to draft; members: keep published but members-only"
+    }
+  ]
 }

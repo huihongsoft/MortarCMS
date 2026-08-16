@@ -3,5 +3,20 @@
   "version": "1.0.0",
   "description": "Emails the admin when a new comment is submitted (requires SMTP configured in Settings → Email).",
   "author": "Mortar Team",
-  "requires": "0.1.0"
+  "requires": "0.1.0",
+  "settingsSchema": [
+    {
+      "key": "comment_notify_enabled",
+      "label": "Enable comment notifications",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "comment_notify_email",
+      "label": "Notification email",
+      "type": "text",
+      "default": "",
+      "hint": "Defaults to the admin email"
+    }
+  ]
 }

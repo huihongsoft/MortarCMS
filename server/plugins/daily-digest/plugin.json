@@ -3,5 +3,27 @@
   "version": "1.0.0",
   "description": "Sends a daily content summary email (posts, comments, users) at a configured time. Requires SMTP.",
   "author": "Mortar Team",
-  "requires": "0.1.0"
+  "requires": "0.1.0",
+  "settingsSchema": [
+    {
+      "key": "daily_digest_enabled",
+      "label": "Enable daily digest",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "daily_digest_time",
+      "label": "Send time",
+      "type": "text",
+      "default": "09:00",
+      "hint": "HH:MM in server time"
+    },
+    {
+      "key": "daily_digest_email",
+      "label": "Recipient email",
+      "type": "text",
+      "default": "",
+      "hint": "Defaults to the admin email"
+    }
+  ]
 }

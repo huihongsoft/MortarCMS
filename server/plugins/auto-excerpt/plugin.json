@@ -3,5 +3,19 @@
   "version": "1.0.0",
   "description": "Fills in a post excerpt automatically from the first paragraph of content when none was provided.",
   "author": "Mortar Team",
-  "requires": "0.1.0"
+  "requires": "0.1.0",
+  "settingsSchema": [
+    {
+      "key": "auto_excerpt_enabled",
+      "label": "Enable auto excerpts",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "auto_excerpt_length",
+      "label": "Excerpt length",
+      "type": "number",
+      "default": "200"
+    }
+  ]
 }

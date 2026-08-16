@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Puzzle, Zap, Filter, Link2, PlusCircle, RefreshCw, ToggleLeft, ToggleRight, Package, Store, Download, Trash2, Info, X } from 'lucide-react';
+import { Puzzle, Zap, Filter, Link2, PlusCircle, RefreshCw, ToggleLeft, ToggleRight, Package, Store, Download, Trash2, Info, X, Settings, Eye } from 'lucide-react';
 import { useToast } from '../lib/toast';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
@@ -40,6 +40,31 @@ export default function Plugins() {
   const [pluginSearch, setPluginSearch] = useState('');
   const filteredPlugins = pluginSearch ? plugins.filter((p: any) => (p.name + ' ' + (p.description || '')).toLowerCase().includes(pluginSearch.toLowerCase())) : plugins;
   const toast = useToast();
+
+  // Plugin settings modal
+  const [settingsFor, setSettingsFor] = useState<any>(null);
+  const [settingsValues, setSettingsValues] = useState<Record<string, string>>({});
+  const [settingsReports, setSettingsReports] = useState<Record<string, string>>({});
+  const [settingsSaving, setSettingsSaving] = useState(false);
+
+  async function openSettings(p: any) {
+    try {
+      const r = await api.get('/plugins/' + p.name + '/settings');
+      setSettingsFor(r.data.plugin);
+      setSettingsValues(r.data.values || {});
+      setSettingsReports(r.data.reports || {});
+    } catch (e: any) { toast.toast(e.response?.data?.error || t('load failed', getLang()), 'error'); }
+  }
+
+  async function saveSettings() {
+    setSettingsSaving(true);
+    try {
+      await api.put('/plugins/' + settingsFor.name + '/settings', { values: settingsValues });
+      toast.toast(t('plugin settings saved', getLang()));
+      setSettingsFor(null);
+    } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+    finally { setSettingsSaving(false); }
+  }
 
   useEffect(() => {
     api.get('/plugins/hooks').then(r => setHooks(r.data || { actions: [], filters: [] })).catch(() => {});
@@ -147,6 +172,7 @@ export default function Plugins() {
                   p.author && React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, t('by', getLang()) + ' ' + p.author),
                 ),
                 React.createElement('button', { onClick: () => openDetail(p), className: 'flex items-center gap-1 shrink-0 text-xs px-2 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50' }, React.createElement(Info, { size: 13 }), t('details', getLang())),
+                p.settingsSchema?.length > 0 && React.createElement('button', { onClick: () => openSettings(p), className: 'flex items-center gap-1 shrink-0 text-xs px-2 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50' }, React.createElement(Settings, { size: 13 }), t('settings', getLang())),
                 React.createElement('button', {
                   onClick: () => toggle(p.name, !p.active),
                   className: 'flex items-center gap-1.5 shrink-0 text-xs px-2.5 py-1.5 rounded-lg border ' + (p.active ? 'bg-green-50 border-green-200 text-green-700' : 'bg-white border-gray-300 text-gray-500 hover:bg-gray-50'),
@@ -180,6 +206,55 @@ export default function Plugins() {
                   )
                 )
               )
+        )
+      )
+    ),
+    // Plugin settings modal (rendered from the plugin's settingsSchema)
+    settingsFor && React.createElement('div', { className: 'fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4', onClick: (e: React.MouseEvent) => { if (e.target === e.currentTarget) setSettingsFor(null); } },
+      React.createElement('div', { className: 'card w-full max-w-md p-6 max-h-[85vh] overflow-y-auto' },
+        React.createElement('div', { className: 'flex items-center justify-between mb-1' },
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 flex items-center gap-2' }, React.createElement(Settings, { size: 15, className: 'text-primary-500' }), settingsFor.name + ' ' + t('settings', getLang())),
+          React.createElement('button', { onClick: () => setSettingsFor(null), className: 'p-1 text-gray-400 hover:text-gray-700', title: t('close', getLang()) }, React.createElement(X, { size: 16 }))
+        ),
+        React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t(settingsFor.description, getLang())),
+        React.createElement('div', { className: 'space-y-4' },
+          (settingsFor.settingsSchema || []).map((f: any) =>
+            React.createElement('div', { key: f.key },
+              React.createElement('label', { className: 'block text-xs font-medium text-gray-700 mb-1' }, t(f.label, getLang())),
+              f.type === 'checkbox'
+                ? React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer' },
+                    React.createElement('input', { type: 'checkbox', checked: settingsValues[f.key] === '1', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettingsValues({ ...settingsValues, [f.key]: e.target.checked ? '1' : '0' }), className: 'rounded border-gray-300 text-primary-600' }),
+                    React.createElement('span', { className: 'text-sm text-gray-600' }, settingsValues[f.key] === '1' ? t('enabled', getLang()) : t('disabled', getLang())))
+                : f.type === 'select'
+                  ? React.createElement('select', { value: settingsValues[f.key] || '', onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSettingsValues({ ...settingsValues, [f.key]: e.target.value }), className: 'input-field text-sm' },
+                      (f.options || []).map((o: string) => React.createElement('option', { key: o, value: o }, o)))
+                  : f.type === 'textarea'
+                    ? React.createElement('textarea', { value: settingsValues[f.key] || '', onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setSettingsValues({ ...settingsValues, [f.key]: e.target.value }), rows: 3, className: 'input-field font-mono text-xs' })
+                    : React.createElement('input', { type: f.type === 'password' ? 'password' : f.type === 'number' ? 'number' : 'text', value: settingsValues[f.key] || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettingsValues({ ...settingsValues, [f.key]: e.target.value }), className: 'input-field text-sm' }),
+              f.hint && React.createElement('p', { className: 'text-[10px] text-gray-400 mt-1' }, t(f.hint, getLang())),
+            )
+          )
+        ),
+        // Read-only reports (link-health-check / media-cleanup)
+        Object.keys(settingsReports).length > 0 && React.createElement('div', { className: 'mt-4 pt-4 border-t border-gray-100' },
+          React.createElement('p', { className: 'text-xs font-semibold text-gray-700 mb-2 flex items-center gap-1.5' }, React.createElement(Eye, { size: 13, className: 'text-gray-400' }), t('latest report', getLang())),
+          Object.entries(settingsReports).map(([key, raw]) => {
+            let parsed: any = null;
+            try { parsed = JSON.parse(raw); } catch {}
+            return React.createElement('div', { key: key, className: 'bg-gray-50 rounded-lg p-3 text-[11px] text-gray-500' },
+              parsed
+                ? React.createElement(React.Fragment, null,
+                    React.createElement('p', { className: 'mb-1' }, new Date(parsed.at || Date.now()).toLocaleString() + (parsed.checked !== undefined ? ' · ' + t('checked', getLang()) + ': ' + parsed.checked + ' · ' + t('broken', getLang()) + ': ' + parsed.broken : '') + (parsed.orphaned !== undefined ? ' · ' + t('orphaned', getLang()) + ': ' + parsed.orphaned + ' · ' + t('deleted', getLang()) + ': ' + parsed.deleted : '')),
+                    Array.isArray(parsed.items) && parsed.items.length > 0
+                      ? React.createElement('ul', { className: 'space-y-0.5 max-h-32 overflow-y-auto' }, parsed.items.slice(0, 20).map((it: any, i: number) =>
+                          React.createElement('li', { key: i, className: 'truncate ' + (it.ok === false ? 'text-red-500' : '') }, it.name || it.url || it.original)))
+                      : null)
+                : React.createElement('p', { className: 'break-all' }, String(raw).slice(0, 300)));
+          })
+        ),
+        React.createElement('div', { className: 'flex gap-3 mt-5' },
+          React.createElement('button', { onClick: () => setSettingsFor(null), className: 'btn-secondary flex-1 justify-center text-sm' }, t('cancel', getLang())),
+          React.createElement('button', { onClick: saveSettings, disabled: settingsSaving, className: 'btn-primary flex-1 justify-center text-sm disabled:opacity-50' }, t('save settings', getLang()))
         )
       )
     ),

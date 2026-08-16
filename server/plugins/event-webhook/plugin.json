@@ -3,5 +3,27 @@
   "version": "1.0.0",
   "description": "Pushes site events (post published, comment added, user registered) to an external webhook — e.g. a DingTalk group robot or your own service.",
   "author": "Mortar Team",
-  "requires": "0.1.0"
+  "requires": "0.1.0",
+  "settingsSchema": [
+    {
+      "key": "event_webhook_url",
+      "label": "Webhook URL",
+      "type": "url",
+      "default": ""
+    },
+    {
+      "key": "event_webhook_secret",
+      "label": "Shared secret",
+      "type": "password",
+      "default": "",
+      "hint": "Signs requests with an X-Signature HMAC header"
+    },
+    {
+      "key": "event_webhook_events",
+      "label": "Events",
+      "type": "text",
+      "default": "post_published,comment_added,user_register",
+      "hint": "Comma-separated: post_published,comment_added,user_register"
+    }
+  ]
 }

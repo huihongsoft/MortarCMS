@@ -13,6 +13,15 @@ import { assertSafeArchive } from '../utils/archive';
 // no-op (tsx already handles it).
 try { require('tsx/cjs'); } catch { /* tsx not installed — plugin loading falls back to tsx dev runtime */ }
 
+export interface PluginSettingField {
+  key: string;
+  label: string; // i18n key (English text; admin UI translates it)
+  type: 'text' | 'textarea' | 'password' | 'number' | 'checkbox' | 'select' | 'url';
+  options?: string[]; // for select
+  default?: string;
+  hint?: string; // i18n key
+}
+
 export interface PluginMeta {
   name: string;
   version: string;
@@ -22,6 +31,28 @@ export interface PluginMeta {
   builtin: boolean;
   requires?: string; // minimum core version, e.g. "0.1.0"
   error?: string;
+  settingsSchema?: PluginSettingField[];
+}
+
+// Validate a plugin's declared settings against its schema
+export function validatePluginSettings(schema: PluginSettingField[] | undefined, values: Record<string, unknown>): string | null {
+  if (!schema) return null;
+  for (const field of schema) {
+    const v = values[field.key];
+    if (v === undefined || v === null || v === '') continue;
+    const s = String(v);
+    if (field.type === 'number') {
+      if (isNaN(Number(s))) return field.key + ' must be a number';
+      const n = Number(s);
+      if (field.key.includes('days') || field.key.includes('length') || field.key.includes('retention')) {
+        if (n < 1) return field.key + ' must be >= 1';
+      }
+    }
+    if (field.type === 'url' && !/^https?:\/\/\S+$/i.test(s)) return field.key + ' must be a valid http(s) URL';
+    if (field.type === 'checkbox' && s !== '0' && s !== '1') return field.key + ' must be 0 or 1';
+    if (field.type === 'select' && field.options && !field.options.includes(s)) return field.key + ' must be one of: ' + field.options.join(', ');
+  }
+  return null;
 }
 
 const pluginsDir = path.join(__dirname, '..', '..', 'plugins');
@@ -59,6 +90,7 @@ export function listPlugins(): PluginMeta[] {
           requires: meta.requires || undefined,
           active: active.includes(meta.name || dir),
           builtin: true,
+          settingsSchema: Array.isArray(meta.settingsSchema) ? meta.settingsSchema : undefined,
         });
       } catch (err: any) {
         result.push({ name: dir, version: '?', description: '', active: false, builtin: true, error: err.message });

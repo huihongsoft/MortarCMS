@@ -3,5 +3,20 @@
   "version": "1.0.0",
   "description": "Alerts the admin by email when brute-force login attempts are detected (3+ failures for the same account within 5 minutes). Requires SMTP.",
   "author": "Mortar Team",
-  "requires": "0.1.0"
+  "requires": "0.1.0",
+  "settingsSchema": [
+    {
+      "key": "login_alert_enabled",
+      "label": "Enable brute-force alerts",
+      "type": "checkbox",
+      "default": "1"
+    },
+    {
+      "key": "login_alert_email",
+      "label": "Alert email",
+      "type": "text",
+      "default": "",
+      "hint": "Defaults to the admin email"
+    }
+  ]
 }
