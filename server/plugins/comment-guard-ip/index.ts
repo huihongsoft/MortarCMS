@@ -21,8 +21,8 @@ export function register() {
       if (setting('comment_guard_enabled') === '0') return error;
       const ip = String(ctx?.ip || '').trim();
       const email = String(ctx?.email || '').trim().toLowerCase();
-      if (ip && list('comment_ip_blacklist').includes(ip)) return '评论已被拒绝';
-      if (email && list('comment_email_blacklist').includes(email)) return '评论已被拒绝';
+      if (ip && list('comment_ip_blacklist').includes(ip)) return 'comment rejected';
+      if (email && list('comment_email_blacklist').includes(email)) return 'comment rejected';
     } catch {}
     return error;
   }, 10, 'comment-guard-ip');

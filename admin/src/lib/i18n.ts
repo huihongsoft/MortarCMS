@@ -1180,6 +1180,31 @@ const zh: Record<string, string> = {
 'group message sent': '已推送到钉钉群',
 'sending': '发送中',
 
+// Plugins — descriptions (English in plugin.json acts as the i18n key)
+'Adds a small greeting banner to the top of every post via the post_content filter.': '在每篇文章顶部添加问候横幅（post_content 过滤器）。',
+'Appends a signature footer with published date to every post.': '在每篇文章末尾添加带发布日期的签名页脚。',
+'Automatically marks comments containing spammy keywords (viagra, casino, buy now) as spam.': '自动将含垃圾关键词（如 viagra、casino、buy now）的评论标记为垃圾。',
+'Adds a \'Read in X min\' hint and SEO-friendly meta tweaks to published posts.': '为已发布文章添加阅读时长提示与 SEO 元信息优化。',
+'Notifies search engines when a post is published: Google/Bing sitemap ping plus optional Baidu push (requires seo_baidu_token).': '发布文章时通知搜索引擎：Google/Bing sitemap 推送，可选百度主动推送（需 seo_baidu_token）。',
+'Emails the admin when a new comment is submitted (requires SMTP configured in Settings → Email).': '新评论提交时邮件通知管理员（需在 设置 → 邮件 中配置 SMTP）。',
+'Time windows: meta.available_from auto-publishes, meta.expiry_at auto-unpublishes (to draft or to members-only).': '定时窗口：available_from 到点自动发布，expiry_at 到点自动下架（转草稿或仅会员可见）。',
+'Pushes site events (post published, comment added, user registered) to an external webhook — e.g. a DingTalk group robot or your own service.': '将站点事件（文章发布/新评论/新用户）推送到外部 webhook（如钉钉群机器人或自建服务）。',
+'Sends a daily content summary email (posts, comments, users) at a configured time. Requires SMTP.': '按设定时间发送每日内容摘要邮件（文章/评论/用户）。需要 SMTP。',
+'Adds a [stats] shortcode that renders site content counts (posts, pages, comments, categories, tags) into any post or page.': '提供 [stats] 短代码，在文章/页面中显示站点内容统计（文章/页面/评论/分类/标签）。',
+'Alerts the admin by email when brute-force login attempts are detected (3+ failures for the same account within 5 minutes). Requires SMTP.': '检测到暴力破解登录尝试时邮件告警管理员（5 分钟内同一账号失败 3 次以上）。需要 SMTP。',
+'Emails the admin after each automatic database backup with the backup file path. Requires SMTP.': '每次自动数据库备份完成后邮件通知管理员（含文件路径）。需要 SMTP。',
+'Registers an AI tool that suggests tags for a post by matching existing tags and extracting keywords from the title.': '注册 AI 工具：通过匹配站内已有标签与标题关键词为文章推荐标签。',
+'Moves stale published posts (no update for N days) back to draft.': '将超过 N 天未更新的已发布文章自动转回草稿（内容归档）。',
+'Rejects comments from blacklisted IPs or emails before they are stored (comment_validate filter).': '存储前拒绝来自黑名单 IP 或邮箱的评论（comment_validate 过滤器）。',
+'Finds media library files not referenced by any post (featured image or in content) and reports or deletes them.': '查找未被任何文章引用的媒体文件（封面或正文），报告或删除。',
+'Periodically checks friend links (Link table) with HTTP HEAD requests and emails the admin about broken ones.': '定期用 HTTP 请求检查友情链接可用性，发现失效时邮件通知管理员。',
+'Automatically reviews new comments with AI: obvious spam is marked as spam, everything else stays pending. Requires an AI provider.': 'AI 自动审核新评论：明显垃圾标记为 spam，其余保持待审核。需要配置 AI 服务商。',
+'Fills in a post excerpt automatically from the first paragraph of content when none was provided.': '未填写摘要时，自动从正文第一段提取生成摘要。',
+'Adds [views] (post view count) and [word-count] (reading length) shortcodes.': '提供 [views]（浏览量）与 [word-count]（字数）短代码。',
+
+// Comment errors (frontend)
+'comment rejected': '评论已被拒绝',
+
 // Settings > General
 'site language hint': '站点前台默认语言；访客可在前台自行切换语言',
 'date format hint': '前台日期显示格式，如 Y-m-d、Y/m/d（PHP 日期格式）',

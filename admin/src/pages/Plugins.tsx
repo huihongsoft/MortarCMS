@@ -111,7 +111,7 @@ export default function Plugins() {
                     React.createElement('p', { className: 'font-mono text-sm font-medium text-gray-800' }, p.name),
                     React.createElement('span', { className: 'text-[10px] text-gray-400' }, 'v' + p.version),
                   ),
-                  React.createElement('p', { className: 'text-xs text-gray-500 mt-0.5' }, p.description),
+                  React.createElement('p', { className: 'text-xs text-gray-500 mt-0.5' }, t(p.description, getLang())),
                   p.author && React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, t('by', getLang()) + ' ' + p.author),
                 ),
                 p.installed
@@ -143,7 +143,7 @@ export default function Plugins() {
                     p.requires && React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500', title: t('requires core version', getLang()) + ' ' + p.requires }, '≥ ' + p.requires),
                     p.error && React.createElement('span', { className: 'text-[10px] text-red-500' }, p.error),
                   ),
-                  React.createElement('p', { className: 'text-xs text-gray-500 mt-0.5' }, p.description),
+                  React.createElement('p', { className: 'text-xs text-gray-500 mt-0.5' }, t(p.description, getLang())),
                   p.author && React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, t('by', getLang()) + ' ' + p.author),
                 ),
                 React.createElement('button', { onClick: () => openDetail(p), className: 'flex items-center gap-1 shrink-0 text-xs px-2 py-1.5 rounded-lg border border-gray-300 text-gray-500 hover:bg-gray-50' }, React.createElement(Info, { size: 13 }), t('details', getLang())),
@@ -165,7 +165,7 @@ export default function Plugins() {
           React.createElement('span', { className: 'text-xs text-gray-400' }, 'v' + detail.version),
           React.createElement('button', { onClick: () => setDetail(null), className: 'p-1 text-gray-400 hover:text-gray-700 ml-auto', title: t('close', getLang()) }, React.createElement(X, { size: 16 }))
         ),
-        React.createElement('p', { className: 'text-sm text-gray-500 mb-2' }, detail.description),
+        React.createElement('p', { className: 'text-sm text-gray-500 mb-2' }, t(detail.description, getLang())),
         detail.author && React.createElement('p', { className: 'text-[10px] text-gray-400 mb-2' }, t('by', getLang()) + ' ' + detail.author),
         detail.requires && React.createElement('p', { className: 'text-[10px] text-gray-400 mb-3' }, t('requires core version', getLang()) + ': ' + detail.requires),
         devMode && React.createElement(React.Fragment, null,

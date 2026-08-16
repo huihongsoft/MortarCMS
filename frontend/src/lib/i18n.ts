@@ -166,6 +166,7 @@ const zh: Record<string, string> = {
   // Members-only posts
   'members only': '仅会员可见',
   'log in to view this post': '请登录后查看此文章',
+  'comment rejected': '评论已被拒绝',
 
   // Install wizard sample data
   'import sample data': '导入示例数据（推荐）',

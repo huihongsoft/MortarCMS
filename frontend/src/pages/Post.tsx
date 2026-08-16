@@ -85,7 +85,7 @@ export default function PostPage({ settings }: { settings: Record<string, string
       api.get('/comments/post/' + post.id).then(cr => setComments(cr.data)).catch(() => {});
     } catch (err: any) {
       // Show the error inline and keep the form content so the user can retry
-      setCommentError(err.response?.data?.error || t('comment failed', settings));
+      setCommentError(t(err.response?.data?.error || 'comment failed', settings));
     }
   }
 
