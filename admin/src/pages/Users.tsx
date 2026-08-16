@@ -204,7 +204,7 @@ export default function Users() {
         : !loaded ? React.createElement('p', { className: 'text-sm text-gray-400 p-6' }, t('loading...', getLang()))
         : filteredUsers.length === 0
           ? React.createElement('p', { className: 'text-sm text-gray-400 p-6' }, t('no users', getLang()))
-          : React.createElement('table', { className: 'w-full' },
+          : React.createElement('table', { className: 'w-full min-w-[880px]' },
               React.createElement('thead', null, React.createElement('tr', { className: 'border-b border-gray-200 bg-gray-50 dark:bg-gray-800' },
                 React.createElement('th', { className: 'text-left px-4 py-3' }, t('user', getLang())),
                 React.createElement('th', { className: 'text-left px-4 py-3' }, t('email', getLang())),
