@@ -92,8 +92,8 @@ export default function Settings() {
   ];
 
   return React.createElement('div', null,
-    // Header with sticky save
-    React.createElement('div', { className: 'sticky top-12 z-30 bg-gray-50/90 dark:bg-gray-900/90 backdrop-blur-md py-4 mb-6 flex items-center justify-between' },
+    // Header (in flow — not sticky, so it never covers the content)
+    React.createElement('div', { className: 'flex items-center justify-between py-4 mb-6' },
       React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 dark:text-gray-100' }, t('settings', getLang())),
       React.createElement('button', { onClick: saveSettings, className: 'btn-primary' }, React.createElement(Save, { size: 16 }), saved ? t('saved!', getLang()) : t('save changes', getLang()))
     ),
