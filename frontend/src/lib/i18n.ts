@@ -162,6 +162,10 @@ const zh: Record<string, string> = {
   'hot ranking': '热门排行',
   'latest posts': '最新发布',
   'latest software': '最新软件',
+
+  // Install wizard sample data
+  'import sample data': '导入示例数据（推荐）',
+  'sample posts, categories and a theme demo to explore the site': '导入示例文章、分类、评论与菜单，并启用软件库主题演示，方便快速了解站点',
 };
 
 export function t(key: string, settings?: Record<string, string>): string {

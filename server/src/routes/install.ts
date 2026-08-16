@@ -42,7 +42,7 @@ router.get('/', authenticate, requireCap('manage_options'), (_req: AuthRequest, 
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     if (installed()) { res.status(400).json({ error: 'Already installed' }); return; }
-    const { dbType, dbConfig, siteTitle, siteDescription, adminEmail, adminPassword, adminUsername } = req.body || {};
+    const { dbType, dbConfig, siteTitle, siteDescription, adminEmail, adminPassword, adminUsername, sampleData } = req.body || {};
     if (!siteTitle || !adminEmail || !adminPassword) {
       res.status(400).json({ error: 'Site title, admin email and a password are required' }); return;
     }
@@ -75,6 +75,14 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     if (!hasSite || hasSite.c === 0) {
       const siteExists = db.prepare('SELECT id FROM Site WHERE slug = ?').get('default') as any;
       if (!siteExists) db.prepare('INSERT INTO Site (id, name, slug, domain, isPrimary, active) VALUES (?, ?, ?, ?, 1, 1)').run(cuid(), siteTitle, 'default', 'localhost:3001');
+    }
+    // 5. Optional demo data (sample posts/categories/tags/comments/menu/links
+    //    + softstore theme demo). Best-effort: never fail the install.
+    if (sampleData) {
+      try {
+        const { importDemoData } = require('../utils/demo');
+        importDemoData();
+      } catch (err: any) { console.error('[install] demo data import failed:', err.message); }
     }
     res.json({ success: true, message: 'Mortar installed. Redirecting...' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }

@@ -1138,6 +1138,13 @@ const zh: Record<string, string> = {
 'desktop': '桌面端',
 'tablet': '平板',
 'mobile': '手机端',
+
+// Site reset (Settings → Tools)
+'reset site': '初始化站点',
+'reset site hint': '清空所有内容数据（文章、分类、标签、媒体、评论、菜单、链接、AI 数据、活动与访问统计），恢复到全新空站点。用户账号、角色权限与系统设置保留。此操作不可撤销。',
+'reset site confirm': '确定要初始化站点吗？所有内容数据将被永久删除，此操作不可撤销！',
+'site reset successful': '站点已初始化',
+'site reset failed': '初始化失败，请重试',
 };
 const en: Record<string, string> = {};
 

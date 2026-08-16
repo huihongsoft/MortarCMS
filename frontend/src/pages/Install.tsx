@@ -13,6 +13,7 @@ export default function Install() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
+  const [sampleData, setSampleData] = useState(true);
 
   useEffect(() => {
     // If already installed, bounce to the home page
@@ -26,6 +27,7 @@ export default function Install() {
         dbType, dbConfig: dbType === 'sqlite' ? undefined : dbConfig,
         siteTitle: site.siteTitle, siteDescription: site.siteDescription,
         adminEmail: site.adminEmail, adminPassword: site.adminPassword, adminUsername: site.adminUsername,
+        sampleData,
       });
       setDone(true);
       setTimeout(() => { window.location.href = '/admin'; }, 1500);
@@ -104,6 +106,13 @@ export default function Install() {
                 React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('email') + ' *'), React.createElement('input', { type: 'email', value: site.adminEmail, onChange: e => setSite({ ...site, adminEmail: e.target.value }), className: 'input-field' })),
                 React.createElement('div', { className: 'col-span-2' }, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('password (min 8 chars)') + ' *'), React.createElement('input', { type: 'password', value: site.adminPassword, onChange: e => setSite({ ...site, adminPassword: e.target.value }), className: 'input-field' })),
               )
+            )
+          ),
+          React.createElement('label', { className: 'flex items-center gap-2.5 mt-5 p-3.5 rounded-xl border border-gray-200 hover:border-primary-300 cursor-pointer transition-colors' },
+            React.createElement('input', { type: 'checkbox', checked: sampleData, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSampleData(e.target.checked), className: 'w-4 h-4 rounded border-gray-300 text-primary-600' }),
+            React.createElement('div', null,
+              React.createElement('p', { className: 'text-sm font-medium text-gray-800' }, t('import sample data')),
+              React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' }, t('sample posts, categories and a theme demo to explore the site'))
             )
           ),
           React.createElement('div', { className: 'flex gap-3 mt-6' },

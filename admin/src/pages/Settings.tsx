@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson } from 'lucide-react';
+import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson, Trash2 } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -415,6 +415,21 @@ export default function Settings() {
           input.click();
         }, className: 'btn-secondary text-sm' }, React.createElement(Upload, { size: 14 }), t('import json', getLang()))
         )
+      ),
+      React.createElement('div', { className: 'card p-6 border-red-200 dark:border-red-900/50' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-red-600 dark:text-red-400 mb-3' }, t('reset site', getLang())),
+        React.createElement('p', { className: 'text-sm text-gray-500 dark:text-gray-400 mb-4' }, t('reset site hint', getLang())),
+        React.createElement('button', {
+          onClick: async () => {
+            if (!confirm(t('reset site confirm', getLang()))) return;
+            try {
+              const r = await api.post('/db/reset-content');
+              alert(t('site reset successful', getLang()) + (r.data?.stats ? ' (' + Object.entries(r.data.stats).filter(([, n]) => (n as number) > 0).map(([k]) => k).join(', ') + ')' : ''));
+              window.location.reload();
+            } catch { alert(t('site reset failed', getLang())); }
+          },
+          className: 'btn-danger text-sm',
+        }, React.createElement(Trash2, { size: 14 }), t('reset site', getLang()))
       ),
       React.createElement('div', { className: 'card p-6' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3' }, t('database', getLang())),

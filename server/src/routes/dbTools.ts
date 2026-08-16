@@ -198,4 +198,15 @@ router.post('/restore-full', authenticate, authorize('admin'), upload.single('fi
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Admin: reset the site to a fresh empty state — wipes all content
+// (posts/categories/tags/media/comments/menus/links/AI data/activity/stats)
+// but keeps user accounts, roles, system settings and site structure.
+router.post('/reset-content', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+  try {
+    const { resetSite } = require('../utils/demo');
+    const stats = resetSite();
+    res.json({ success: true, message: 'Site content reset', stats });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 export default router;

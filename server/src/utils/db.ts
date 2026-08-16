@@ -6,7 +6,9 @@ import { Worker } from 'worker_threads';
 // Driver selection: DATABASE_URL=mysql://... or postgres://... switches backends.
 // SQLite stays the default (sync, direct); MySQL/PostgreSQL run on a worker
 // thread bridged with Atomics so the existing sync call sites keep working.
-const DB_PATH = path.join(__dirname, '../../data/mortar.db');
+// MORTAR_DB_PATH overrides the SQLite file location (isolated tests, custom
+// Docker volume layouts, portable installs).
+const DB_PATH = process.env.MORTAR_DB_PATH || path.join(__dirname, '../../data/mortar.db');
 const dataDir = path.dirname(DB_PATH);
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
