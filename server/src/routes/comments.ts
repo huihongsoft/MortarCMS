@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import db, { cuid } from '../utils/db';
 import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
-import { doAction } from '../utils/hooks';
+import { applyFilters, doAction } from '../utils/hooks';
 import { renderTemplate, sendEmail } from '../utils/mailer';
 
 const router = Router();
@@ -49,6 +49,10 @@ router.post('/', (req: AuthRequest, res: Response) => {
     const data = commentSchema.parse(req.body);
     const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(data.postId) as any;
     if (!post || post.status !== 'published') { res.status(404).json({ error: 'Post not found' }); return; }
+    // Plugins may reject a comment before it is stored (e.g. IP/email
+    // blacklists) by returning a non-empty error string from the filter
+    const validationError = applyFilters('comment_validate', '', { ...data, ip: req.ip || '' });
+    if (validationError) { res.status(400).json({ error: validationError }); return; }
     const id = cuid();
     db.prepare('INSERT INTO Comment (id, content, author, email, website, postId, parentId, status, subscribe) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.content, data.author || 'Anonymous', data.email || '', data.website || '', data.postId, data.parentId || null, 'pending', data.subscribe ? 1 : 0);
     

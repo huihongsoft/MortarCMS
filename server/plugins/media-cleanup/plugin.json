@@ -1,0 +1,7 @@
+{
+  "name": "media-cleanup",
+  "version": "1.0.0",
+  "description": "Finds media library files not referenced by any post (featured image or in content) and reports or deletes them.",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}

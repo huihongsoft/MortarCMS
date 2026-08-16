@@ -134,6 +134,9 @@ The admin Plugins page shows the live registry (Installed / Market tabs).
 | `backup-notify` | Email after each automatic DB backup | `backup_notify_enabled`, `backup_notify_email` |
 | `ai-auto-tags` | AI tool `suggest_tags`: tag suggestions from existing vocabulary + title keywords | — |
 | `content-archive` | Moves stale published posts (no update for N days) back to draft | `content_archive_enabled`, `archive_after_days` |
+| `comment-guard-ip` | Rejects comments from blacklisted IPs / emails before storing | `comment_guard_enabled`, `comment_ip_blacklist`, `comment_email_blacklist` |
+| `media-cleanup` | Reports (or deletes) orphaned media files not referenced by any post | `media_cleanup_enabled`, `media_cleanup_days`, `media_cleanup_delete` |
+| `link-health-check` | Probes friend links daily and emails about broken ones | `link_health_enabled`, `link_health_notify`, `link_health_email` |
 
 Plugin settings are plain `Setting` rows, so they can be written with
 `PUT /api/settings` (admin) or from a plugin's own admin UI.

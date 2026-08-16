@@ -60,7 +60,7 @@ export const KNOWN_ACTIONS = [
   'user_register', 'site_reset',
   'user_login', 'login_failed', 'backup_completed',
 ];
-export const KNOWN_FILTERS = ['post_content'];
+export const KNOWN_FILTERS = ['post_content', 'comment_validate'];
 
 export interface HookInfo {
   name: string;

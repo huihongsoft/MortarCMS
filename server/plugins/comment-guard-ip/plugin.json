@@ -1,0 +1,7 @@
+{
+  "name": "comment-guard-ip",
+  "version": "1.0.0",
+  "description": "Rejects comments from blacklisted IPs or emails before they are stored (comment_validate filter).",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}
