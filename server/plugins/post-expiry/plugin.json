@@ -1,0 +1,7 @@
+{
+  "name": "post-expiry",
+  "version": "1.0.0",
+  "description": "Auto-unpublishes posts whose meta expiry_at date has passed (set meta.expiry_at to an ISO date via the post API).",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}

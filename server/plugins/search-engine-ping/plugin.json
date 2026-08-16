@@ -1,0 +1,7 @@
+{
+  "name": "search-engine-ping",
+  "version": "1.0.0",
+  "description": "Notifies search engines when a post is published: Google/Bing sitemap ping plus optional Baidu push (requires seo_baidu_token).",
+  "author": "Mortar Team",
+  "requires": "0.1.0"
+}

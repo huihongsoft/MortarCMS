@@ -115,3 +115,18 @@ The admin Plugins page shows the live registry (Installed / Market tabs).
 - Plugins execute server-side with full DB access — install only trusted code
 - All database access must use parameterized queries (`db.prepare(...)` with `?`)
 - Never log secrets; validate any external input
+
+## Bundled plugins
+
+| Plugin | What it does | Config (Settings API) |
+|--------|--------------|------------------------|
+| `hello-world` | Demo banner injected into post content | — |
+| `post-footer` | Signature footer with date appended to posts | — |
+| `comments-spam-guard` | Auto-marks spammy comments as spam | `spam_words` (extra keywords) |
+| `seo-tools` | Reserved (reading time is built into themes) | — |
+| `search-engine-ping` | Pings Google/Bing sitemap on publish; optional Baidu push | `seo_ping_enabled`, `seo_baidu_token`, `seo_baidu_site` |
+| `comment-email-notify` | Emails the admin on new comments (needs SMTP) | `comment_notify_enabled`, `comment_notify_email` |
+| `post-expiry` | Auto-unpublishes posts whose `meta.expiry_at` has passed | `post_expiry_enabled` |
+
+Plugin settings are plain `Setting` rows, so they can be written with
+`PUT /api/settings` (admin) or from a plugin's own admin UI.
