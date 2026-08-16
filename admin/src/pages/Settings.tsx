@@ -302,7 +302,6 @@ export default function Settings() {
       ),
       React.createElement('div', { className: 'card p-6' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100 mb-1' }, t('scheduled maintenance window', getLang())),
-        React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t('the site enters maintenance automatically between these times, even when the toggle above is off.', getLang())),
         (() => {
           let sch: any = null;
           try { sch = settings.maintenance_schedule ? JSON.parse(settings.maintenance_schedule) : null; } catch {}
@@ -310,9 +309,10 @@ export default function Settings() {
           const endVal = sch?.end ? new Date(sch.end).toISOString().slice(0, 16) : '';
           const toLocal = (v: string) => v ? new Date(v).toISOString() : '';
           return React.createElement('div', null,
-            // Row 1: schedule toggle, right-aligned on its own line
-            React.createElement('div', { className: 'flex justify-end mb-3' },
-              React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300' },
+            // Row 1: description on the left, schedule toggle right-aligned on the same line
+            React.createElement('div', { className: 'flex items-center justify-between gap-4 mb-4' },
+              React.createElement('p', { className: 'text-xs text-gray-400' }, t('the site enters maintenance automatically between these times, even when the toggle above is off.', getLang())),
+              React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300 shrink-0' },
                 React.createElement('input', { type: 'checkbox', checked: !!sch?.start, onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
                   if (e.target.checked) {
                     const start = new Date(Date.now() + 60000).toISOString();
