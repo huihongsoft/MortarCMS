@@ -20,6 +20,14 @@ export default function Security() {
   }
   useEffect(load, []);
 
+  // Translate a check field (label/detail/advice are i18n keys) and fill any
+  // {0} placeholders with the args the server attached
+  const tr = (key: string, args?: Record<string, string | number>) => {
+    let s = t(key, getLang());
+    if (args) for (const [k, v] of Object.entries(args)) s = s.replace('{' + k + '}', String(v));
+    return s;
+  };
+
   return React.createElement('div', null,
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
       React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2' }, React.createElement(ShieldCheck, { size: 24, className: 'text-primary-500' }), t('security audit', getLang())),
@@ -55,11 +63,11 @@ export default function Security() {
                   React.createElement('div', { className: 'w-8 h-8 rounded-full flex items-center justify-center shrink-0 ' + s.cls }, React.createElement(s.icon, { size: 16 })),
                   React.createElement('div', { className: 'flex-1 min-w-0' },
                     React.createElement('div', { className: 'flex items-center gap-2 flex-wrap' },
-                      React.createElement('p', { className: 'font-medium text-gray-900 dark:text-gray-100 text-sm' }, c.label),
+                      React.createElement('p', { className: 'font-medium text-gray-900 dark:text-gray-100 text-sm' }, tr(c.label)),
                       React.createElement('span', { className: 'px-1.5 py-0.5 text-[10px] rounded-full ' + s.cls }, s.label),
                     ),
-                    React.createElement('p', { className: 'text-sm text-gray-600 dark:text-gray-300 mt-1' }, c.detail),
-                    c.advice && React.createElement('p', { className: 'text-xs text-gray-400 mt-1 flex items-start gap-1' }, React.createElement(Lock, { size: 11, className: 'mt-0.5 shrink-0' }), c.advice),
+                    React.createElement('p', { className: 'text-sm text-gray-600 dark:text-gray-300 mt-1' }, tr(c.detail, c.args)),
+                    c.advice && React.createElement('p', { className: 'text-xs text-gray-400 mt-1 flex items-start gap-1' }, React.createElement(Lock, { size: 11, className: 'mt-0.5 shrink-0' }), tr(c.advice, c.args)),
                   )
                 );
               })

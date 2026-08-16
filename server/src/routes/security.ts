@@ -8,10 +8,11 @@ const router = Router();
 
 export interface SecurityCheck {
   id: string;
-  label: string;
+  label: string; // i18n key (English text; admin UI translates it)
   status: 'ok' | 'warn' | 'fail' | 'info';
-  detail: string;
-  advice: string;
+  detail: string; // i18n key, may contain {0} placeholders replaced via args
+  advice: string; // i18n key
+  args?: Record<string, string | number>; // values for {n} placeholders
 }
 
 // Admin: run a security audit (WordPress Site Health style)
@@ -77,15 +78,15 @@ router.get('/audit', authenticate, requireCap('manage_options'), (req: AuthReque
     const bakFiles = fs.existsSync(path.join(__dirname, '../..', 'data'))
       ? fs.readdirSync(path.join(__dirname, '../..', 'data')).filter(f => f.startsWith('mortar.db.bak-'))
       : [];
-    checks.push({ id: 'backup', label: 'Database backups', status: bakFiles.length > 0 ? 'ok' : 'info', detail: bakFiles.length > 0 ? bakFiles.length + ' automatic backup(s) found.' : 'No .bak backups found yet.', advice: 'Download a full backup (System Info → Backup) regularly.' });
+    checks.push({ id: 'backup', label: 'Database backups', status: bakFiles.length > 0 ? 'ok' : 'info', detail: bakFiles.length > 0 ? '{0} automatic backup(s) found.' : 'No .bak backups found yet.', args: { '0': bakFiles.length }, advice: 'Download a full backup (System Info → Backup) regularly.' });
 
     // 11. HTTPS
     const proto = (req.headers['x-forwarded-proto'] as string) || (req.secure ? 'https' : 'http');
-    checks.push({ id: 'https', label: 'HTTPS', status: proto === 'https' ? 'ok' : 'warn', detail: 'Connection is ' + proto + '.', advice: proto === 'https' ? '' : 'Terminate TLS at your reverse proxy for production.' });
+    checks.push({ id: 'https', label: 'HTTPS', status: proto === 'https' ? 'ok' : 'warn', detail: 'Connection is {0}.', args: { '0': proto }, advice: proto === 'https' ? '' : 'Terminate TLS at your reverse proxy for production.' });
 
     // 12. App passwords
     const appPw = db.prepare('SELECT COUNT(*) as c FROM AppPassword').get() as any;
-    checks.push({ id: 'app_passwords', label: 'Application passwords', status: 'info', detail: (appPw?.c || 0) + ' application password(s) in use.', advice: 'Revoke unused application passwords.' });
+    checks.push({ id: 'app_passwords', label: 'Application passwords', status: 'info', detail: '{0} application password(s) in use.', args: { '0': appPw?.c || 0 }, advice: 'Revoke unused application passwords.' });
 
     const summary = {
       ok: checks.filter(c => c.status === 'ok').length,
