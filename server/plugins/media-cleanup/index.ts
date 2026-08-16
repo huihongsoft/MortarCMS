@@ -54,8 +54,8 @@ export function runCleanup(): { orphaned: number; deleted: number } {
 
 export function register() {
   addAction('init', () => {
-    try { if (setting('media_cleanup_enabled') !== '0') runCleanup(); } catch {}
-    if (!timer) timer = setInterval(() => { try { if (setting('media_cleanup_enabled') !== '0') runCleanup(); } catch {} }, CHECK_INTERVAL_MS);
+    try { runCleanup(); } catch {}
+    if (!timer) timer = setInterval(() => { try { runCleanup(); } catch {} }, CHECK_INTERVAL_MS);
     timer.unref?.();
   }, 10, 'media-cleanup');
 }

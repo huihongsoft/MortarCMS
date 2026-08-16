@@ -6,12 +6,6 @@
   "requires": "0.1.0",
   "settingsSchema": [
     {
-      "key": "post_expiry_enabled",
-      "label": "Enable expiry windows",
-      "type": "checkbox",
-      "default": "1"
-    },
-    {
       "key": "post_expiry_action",
       "label": "Expiry action",
       "type": "select",

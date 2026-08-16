@@ -6,12 +6,6 @@
   "requires": "0.1.0",
   "settingsSchema": [
     {
-      "key": "content_archive_enabled",
-      "label": "Enable content archiving",
-      "type": "checkbox",
-      "default": "1"
-    },
-    {
       "key": "archive_after_days",
       "label": "Archive after days",
       "type": "number",

@@ -18,7 +18,6 @@ export function register() {
   addAction('comment_added', (commentId: string) => {
     void (async () => {
       try {
-        if (setting('ai_review_comments_enabled') === '0') return;
         const provider = getDefaultProvider();
         if (!provider) return; // no AI configured — leave comments pending
         const c = db.prepare('SELECT * FROM Comment WHERE id = ?').get(commentId) as any;

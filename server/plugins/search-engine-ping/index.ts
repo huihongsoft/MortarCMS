@@ -44,7 +44,6 @@ async function pingBaidu(postUrl: string): Promise<void> {
 export function register() {
   addAction('post_published', async (postId: string) => {
     try {
-      if (setting('seo_ping_enabled') === '0') return;
       const base = siteUrl();
       if (!base) return;
       const post = db.prepare('SELECT slug, status FROM Post WHERE id = ?').get(postId) as any;

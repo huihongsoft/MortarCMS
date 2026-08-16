@@ -6,12 +6,6 @@
   "requires": "0.1.0",
   "settingsSchema": [
     {
-      "key": "daily_digest_enabled",
-      "label": "Enable daily digest",
-      "type": "checkbox",
-      "default": "1"
-    },
-    {
       "key": "daily_digest_time",
       "label": "Send time",
       "type": "text",

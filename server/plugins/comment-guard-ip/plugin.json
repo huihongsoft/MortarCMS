@@ -6,12 +6,6 @@
   "requires": "0.1.0",
   "settingsSchema": [
     {
-      "key": "comment_guard_enabled",
-      "label": "Enable comment guard",
-      "type": "checkbox",
-      "default": "1"
-    },
-    {
       "key": "comment_ip_blacklist",
       "label": "IP blacklist",
       "type": "textarea",

@@ -6,12 +6,6 @@
   "requires": "0.1.0",
   "settingsSchema": [
     {
-      "key": "link_health_enabled",
-      "label": "Enable link checks",
-      "type": "checkbox",
-      "default": "1"
-    },
-    {
       "key": "link_health_notify",
       "label": "Email about broken links",
       "type": "checkbox",

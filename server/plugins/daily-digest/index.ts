@@ -28,7 +28,6 @@ function count(sql: string, ...args: any[]): number {
 
 function sendDigest(): void {
   try {
-    if (setting('daily_digest_enabled') === '0') return;
     const recipient = setting('daily_digest_email') || setting('admin_email');
     if (!recipient) return;
     const today = new Date().toISOString().slice(0, 10);

@@ -6,12 +6,6 @@
   "requires": "0.1.0",
   "settingsSchema": [
     {
-      "key": "backup_notify_enabled",
-      "label": "Enable backup notifications",
-      "type": "checkbox",
-      "default": "1"
-    },
-    {
       "key": "backup_notify_email",
       "label": "Notification email",
       "type": "text",

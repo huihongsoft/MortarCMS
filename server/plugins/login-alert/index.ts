@@ -21,7 +21,6 @@ function setting(key: string): string {
 export function register() {
   addAction('login_failed', (email: string, ip: string) => {
     try {
-      if (setting('login_alert_enabled') === '0') return;
       const key = String(email).toLowerCase();
       const now = Date.now();
       const rec = failures.get(key) || { count: 0, first: now, lastAlerted: 0 };

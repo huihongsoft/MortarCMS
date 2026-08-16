@@ -18,7 +18,6 @@ function setting(key: string): string {
 
 function archiveOnce(): void {
   try {
-    if (setting('content_archive_enabled') === '0') return;
     const days = Math.max(7, parseInt(setting('archive_after_days') || '365') || 365);
     const cutoff = new Date(Date.now() - days * 86400000).toISOString();
     const rows = db.prepare(

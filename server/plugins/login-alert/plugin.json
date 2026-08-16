@@ -6,12 +6,6 @@
   "requires": "0.1.0",
   "settingsSchema": [
     {
-      "key": "login_alert_enabled",
-      "label": "Enable brute-force alerts",
-      "type": "checkbox",
-      "default": "1"
-    },
-    {
       "key": "login_alert_email",
       "label": "Alert email",
       "type": "text",

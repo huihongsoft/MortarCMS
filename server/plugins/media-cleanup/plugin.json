@@ -6,12 +6,6 @@
   "requires": "0.1.0",
   "settingsSchema": [
     {
-      "key": "media_cleanup_enabled",
-      "label": "Enable media cleanup",
-      "type": "checkbox",
-      "default": "1"
-    },
-    {
       "key": "media_cleanup_days",
       "label": "Minimum age (days)",
       "type": "number",

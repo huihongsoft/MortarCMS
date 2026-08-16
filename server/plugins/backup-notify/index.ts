@@ -17,7 +17,6 @@ function setting(key: string): string {
 export function register() {
   addAction('backup_completed', (backupFile: string) => {
     try {
-      if (setting('backup_notify_enabled') === '0') return;
       const recipient = setting('backup_notify_email') || setting('admin_email');
       if (!recipient) return;
       let sizeKb = 0;

@@ -18,7 +18,6 @@ function list(key: string): string[] {
 export function register() {
   addFilter('comment_validate', (error: string, ctx: any) => {
     try {
-      if (setting('comment_guard_enabled') === '0') return error;
       const ip = String(ctx?.ip || '').trim();
       const email = String(ctx?.email || '').trim().toLowerCase();
       if (ip && list('comment_ip_blacklist').includes(ip)) return 'comment rejected';

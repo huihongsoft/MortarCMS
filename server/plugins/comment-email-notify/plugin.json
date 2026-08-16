@@ -6,12 +6,6 @@
   "requires": "0.1.0",
   "settingsSchema": [
     {
-      "key": "comment_notify_enabled",
-      "label": "Enable comment notifications",
-      "type": "checkbox",
-      "default": "1"
-    },
-    {
       "key": "comment_notify_email",
       "label": "Notification email",
       "type": "text",

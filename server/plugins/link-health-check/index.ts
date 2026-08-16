@@ -67,8 +67,8 @@ function escapeHtml(s: string): string {
 
 export function register() {
   addAction('init', () => {
-    try { if (setting('link_health_enabled') !== '0') void runCheck(); } catch {}
-    if (!timer) timer = setInterval(() => { try { if (setting('link_health_enabled') !== '0') void runCheck(); } catch {} }, CHECK_INTERVAL_MS);
+    try { void runCheck(); } catch {}
+    if (!timer) timer = setInterval(() => { try { void runCheck(); } catch {} }, CHECK_INTERVAL_MS);
     timer.unref?.();
   }, 10, 'link-health-check');
 }

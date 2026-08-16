@@ -14,7 +14,6 @@ function setting(key: string): string {
 export function register() {
   addAction('comment_added', (commentId: string) => {
     try {
-      if (setting('comment_notify_enabled') === '0') return;
       const recipient = setting('comment_notify_email') || setting('admin_email');
       if (!recipient) return;
       const c = db.prepare('SELECT * FROM Comment WHERE id = ?').get(commentId) as any;

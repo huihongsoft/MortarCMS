@@ -25,7 +25,6 @@ function setting(key: string): string {
 
 function checkWindows(): void {
   try {
-    if (setting('post_expiry_enabled') === '0') return;
     const now = new Date().toISOString();
 
     // 1) Expired → draft or members-only (once; expiry marker cleared)

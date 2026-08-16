@@ -6,12 +6,6 @@
   "requires": "0.1.0",
   "settingsSchema": [
     {
-      "key": "seo_ping_enabled",
-      "label": "Enable search-engine pings",
-      "type": "checkbox",
-      "default": "1"
-    },
-    {
       "key": "seo_baidu_site",
       "label": "Baidu site",
       "type": "text",
