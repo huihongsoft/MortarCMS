@@ -50,31 +50,39 @@ export default function Security() {
               };
               const level = score >= 80 ? levels.good : score >= 60 ? levels.improve : levels.risk;
               return React.createElement('div', { className: 'card p-6 mb-6' },
-                // Top-right: segmented hint in front of the three-color legend
-                React.createElement('div', { className: 'flex items-center justify-end gap-3 mb-4' },
-                  React.createElement('span', { className: 'text-[11px] text-gray-400' }, t('security summary hint', getLang())),
-                  [levels.good, levels.improve, levels.risk].map(lv =>
-                    React.createElement('span', { key: lv.label, className: 'flex items-center gap-1' },
-                      React.createElement('span', { className: 'w-2 h-2 rounded-full ' + lv.dot }),
-                      React.createElement('span', { className: 'text-[11px] ' + lv.text }, lv.label)
-                    )
-                  )
-                ),
-                // Score number + level + stats, and the score bar (vertically centered)
-                React.createElement('div', { className: 'flex items-center gap-6 flex-wrap min-h-[72px]' },
-                  React.createElement('div', { className: 'flex items-center gap-3' },
-                    React.createElement('div', { className: 'w-16 h-16 rounded-2xl flex items-center justify-center ' + level.bg + ' ' + level.text },
-                      React.createElement('span', { className: 'text-2xl font-bold' }, score)),
-                    React.createElement('div', null,
-                      React.createElement('p', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100' }, t('security score', getLang())),
-                      React.createElement('p', { className: 'text-xs font-medium ' + level.text }, level.label + ' — ' + level.hint),
-                      React.createElement('p', { className: 'text-xs text-gray-500 mt-0.5' }, data.summary.ok + ' ' + t('passed', getLang()) + ' · ' + data.summary.warn + ' ' + t('warning', getLang()) + ' · ' + data.summary.fail + ' ' + t('failed', getLang()) + ' · ' + data.summary.info + ' ' + t('info', getLang())),
-                    )
+                React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-[1fr_auto] items-start gap-4' },
+                  // Left column: score number + level + stats + score bar.
+                  // Its height defines the whole banner height.
+                  React.createElement('div', { className: 'min-w-0' },
+                    React.createElement('div', { className: 'flex items-center gap-6 flex-wrap' },
+                      React.createElement('div', { className: 'flex items-center gap-3' },
+                        React.createElement('div', { className: 'w-16 h-16 rounded-2xl flex items-center justify-center ' + level.bg + ' ' + level.text },
+                          React.createElement('span', { className: 'text-2xl font-bold' }, score)),
+                        React.createElement('div', null,
+                          React.createElement('p', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100' }, t('security score', getLang())),
+                          React.createElement('p', { className: 'text-xs font-medium ' + level.text }, level.label + ' — ' + level.hint),
+                          React.createElement('p', { className: 'text-xs text-gray-500 mt-0.5' }, data.summary.ok + ' ' + t('passed', getLang()) + ' · ' + data.summary.warn + ' ' + t('warning', getLang()) + ' · ' + data.summary.fail + ' ' + t('failed', getLang()) + ' · ' + data.summary.info + ' ' + t('info', getLang())),
+                        )
+                      ),
+                      React.createElement('div', { className: 'flex-1 min-w-[200px]' },
+                        React.createElement('div', { className: 'h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden' },
+                          React.createElement('div', { className: 'h-full rounded-full transition-all ' + level.dot, style: { width: score + '%' } })
+                        )
+                      ),
+                    ),
                   ),
-                  React.createElement('div', { className: 'flex-1 min-w-[200px]' },
-                    React.createElement('div', { className: 'h-2 rounded-full bg-gray-100 dark:bg-gray-700 overflow-hidden' },
-                      React.createElement('div', { className: 'h-full rounded-full transition-all ' + level.dot, style: { width: score + '%' } })
-                    )
+                  // Right column: legend (top-right), never taller than the
+                  // left column so it adds no extra height to the banner
+                  React.createElement('div', { className: 'md:text-right min-w-0' },
+                    React.createElement('p', { className: 'text-[11px] text-gray-400 leading-relaxed' }, t('security summary hint', getLang())),
+                    React.createElement('div', { className: 'flex flex-wrap items-center gap-2.5 mt-1.5 md:justify-end' },
+                      [levels.good, levels.improve, levels.risk].map(lv =>
+                        React.createElement('span', { key: lv.label, className: 'flex items-center gap-1' },
+                          React.createElement('span', { className: 'w-2 h-2 rounded-full ' + lv.dot }),
+                          React.createElement('span', { className: 'text-[11px] ' + lv.text }, lv.label)
+                        )
+                      )
+                    ),
                   ),
                 ),
               );
