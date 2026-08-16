@@ -1147,6 +1147,22 @@ const zh: Record<string, string> = {
 'site reset failed': '初始化失败，请重试',
 'rows deleted': '行数据已删除',
 
+// Users page — 2FA management
+'two-factor authentication': '两步验证（2FA）',
+'2fa hint': '启用两步验证后，登录时需要输入验证器应用生成的动态验证码，账号安全性更高。',
+'manage 2fa': '管理两步验证',
+'2fa enabled': '已启用',
+'2fa disabled': '未启用',
+'2fa enabled hint': '两步验证已启用。禁用后登录将不再需要验证码。',
+'disable 2fa': '禁用两步验证',
+'disable 2fa?': '确定要禁用两步验证吗？',
+'scan or enter the secret': '使用验证器应用（如 Google Authenticator / 微软 Authenticator）扫描 otpauth 链接，或手动输入以下密钥：',
+'enter 2fa code': '输入 6 位验证码',
+'verify and enable': '验证并启用',
+'2fa setup failed': '两步验证操作失败，请重试',
+'invalid 2fa code': '验证码无效，请重试',
+'2fa': '2FA',
+
 // Settings > General
 'site language hint': '站点前台默认语言；访客可在前台自行切换语言',
 'date format hint': '前台日期显示格式，如 Y-m-d、Y/m/d（PHP 日期格式）',
@@ -1164,7 +1180,7 @@ const zh: Record<string, string> = {
 'Keep enabled; consider lower limits for high-risk deployments.': '保持开启；高风险部署可考虑更严格的限制。',
 'Two-factor authentication': '两步验证（2FA）',
 'No admin account has 2FA enabled.': '暂无管理员账号启用 2FA。',
-'Enable 2FA for at least one admin account (admin → Users → 2FA).': '请为至少一个管理员账号启用 2FA（后台 → 用户）。',
+'Enable 2FA for at least one admin account (admin → Users → 2FA).': '请为至少一个管理员账号启用 2FA（后台 → 用户 → 左侧"管理两步验证"）。',
 'At least one admin has 2FA enabled.': '至少一个管理员账号已启用 2FA。',
 'Enable 2FA for all privileged accounts.': '建议为所有高权限账号启用 2FA。',
 'Password strength policy': '密码强度策略',

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Trash2, UserPlus, UserCircle2, Shield } from 'lucide-react';
+import { Trash2, UserPlus, UserCircle2, Shield, ShieldCheck, Copy, Check } from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
@@ -20,6 +20,45 @@ export default function Users() {
     catch (e: any) { alert(e.response?.data?.error || t('update failed', getLang())); }
   }
   async function del(id: string) { if (!confirm(t('delete this user?', getLang()))) return; try { await api.delete(`/users/${id}`); setUsers(users.filter((u: any) => u.id !== id)); } catch (e: any) { alert(e.response?.data?.error || t('delete failed', getLang())); } }
+
+  // ---- 2FA management (self-service: the API acts on the logged-in user) ----
+  const [twoFa, setTwoFa] = useState<null | { enabled: boolean; secret?: string; otpauth?: string }>(null);
+  const [twoFaCode, setTwoFaCode] = useState('');
+  const [twoFaBusy, setTwoFaBusy] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function open2fa() {
+    try {
+      const status = await api.get('/auth/2fa/status');
+      if (status.data?.enabled) { setTwoFa({ enabled: true }); return; }
+      const s = await api.post('/auth/2fa/setup');
+      setTwoFa({ enabled: false, secret: s.data.secret, otpauth: s.data.otpauth });
+    } catch (e: any) { alert(e.response?.data?.error || t('2fa setup failed', getLang())); }
+  }
+
+  async function enable2fa() {
+    if (!twoFaCode.trim()) return;
+    setTwoFaBusy(true);
+    try {
+      await api.post('/auth/2fa/enable', { code: twoFaCode.trim() });
+      setTwoFa({ enabled: true });
+      api.get('/users').then(r => setUsers(r.data)).catch(() => {});
+    } catch (e: any) { alert(e.response?.data?.error || t('invalid 2fa code', getLang())); }
+    finally { setTwoFaBusy(false); }
+  }
+
+  async function disable2fa() {
+    if (!confirm(t('disable 2fa?', getLang()))) return;
+    try {
+      await api.post('/auth/2fa/disable');
+      setTwoFa(null);
+      api.get('/users').then(r => setUsers(r.data)).catch(() => {});
+    } catch (e: any) { alert(e.response?.data?.error || t('2fa setup failed', getLang())); }
+  }
+
+  function copyText(v: string) {
+    navigator.clipboard?.writeText(v).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); }).catch(() => {});
+  }
 
   async function createUser() {
     const u = (document.getElementById('new-username') as HTMLInputElement).value;
@@ -109,6 +148,31 @@ export default function Users() {
               className: 'btn-danger w-full justify-center text-sm',
             }, t('log out everywhere', getLang()))
           )
+        ),
+        React.createElement('div', { className: 'card p-5' },
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2' }, React.createElement(Shield, { size: 16, className: 'text-primary-500' }), t('two-factor authentication', getLang())),
+          React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t('2fa hint', getLang())),
+          React.createElement('button', { onClick: open2fa, className: 'btn-secondary w-full justify-center text-sm' }, React.createElement(ShieldCheck, { size: 14 }), t('manage 2fa', getLang()))
+        ),
+      ),
+      // 2FA setup modal
+      twoFa && React.createElement('div', { className: 'fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4', onClick: () => setTwoFa(null) },
+        React.createElement('div', { className: 'bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-5', onClick: (e: React.MouseEvent) => e.stopPropagation() },
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2' }, React.createElement(Shield, { size: 16, className: 'text-primary-500' }), t('two-factor authentication', getLang())),
+          twoFa.enabled
+            ? React.createElement(React.Fragment, null,
+                React.createElement('div', { className: 'p-3 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-sm mb-4 flex items-center gap-2' }, React.createElement(ShieldCheck, { size: 16 }), t('2fa enabled hint', getLang())),
+                React.createElement('button', { onClick: disable2fa, className: 'btn-danger w-full justify-center text-sm' }, t('disable 2fa', getLang())))
+            : React.createElement(React.Fragment, null,
+                React.createElement('p', { className: 'text-xs text-gray-500 dark:text-gray-400 mb-2' }, t('scan or enter the secret', getLang())),
+                React.createElement('div', { className: 'flex items-center gap-2 mb-3' },
+                  React.createElement('code', { className: 'flex-1 px-3 py-2 bg-gray-50 dark:bg-gray-900 rounded-lg text-sm font-mono break-all' }, twoFa.secret),
+                  React.createElement('button', { onClick: () => copyText(twoFa.otpauth || twoFa.secret || ''), className: 'btn-secondary text-xs shrink-0' }, copied ? React.createElement(Check, { size: 14 }) : React.createElement(Copy, { size: 14 }), copied ? t('copied', getLang()) : t('copy', getLang()))
+                ),
+                twoFa.otpauth && React.createElement('a', { href: twoFa.otpauth, className: 'text-xs text-primary-600 dark:text-primary-400 break-all hover:underline' }, twoFa.otpauth),
+                React.createElement('input', { type: 'text', value: twoFaCode, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setTwoFaCode(e.target.value), placeholder: t('enter 2fa code', getLang()), maxLength: 6, className: 'input-field text-center text-lg tracking-widest mt-3' }),
+                React.createElement('button', { onClick: enable2fa, disabled: twoFaBusy || twoFaCode.length < 6, className: 'btn-primary w-full justify-center text-sm mt-3 disabled:opacity-50' }, t('verify and enable', getLang()))
+              )
         )
       ),
       // Right column: user table
@@ -131,6 +195,7 @@ export default function Users() {
                 React.createElement('th', { className: 'text-left px-4 py-3' }, t('email', getLang())),
                 React.createElement('th', { className: 'text-left px-4 py-3' }, t('role', getLang())),
                 React.createElement('th', { className: 'text-left px-4 py-3' }, t('posts', getLang())),
+                React.createElement('th', { className: 'text-left px-4 py-3' }, t('2fa', getLang())),
                 React.createElement('th', { className: 'text-left px-4 py-3' }, t('registered', getLang())),
                 React.createElement('th', { className: 'text-right px-4 py-3' }, t('actions', getLang())),
               )),
@@ -155,6 +220,9 @@ export default function Users() {
                     )
                   ),
                   React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500 dark:text-gray-400' }, u._count?.posts || 0),
+                  React.createElement('td', { className: 'px-4 py-3' },
+                    React.createElement('span', { className: 'px-2 py-0.5 text-[11px] rounded-full font-medium ' + (u.two_factor_enabled ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400') },
+                      u.two_factor_enabled ? t('2fa enabled', getLang()) : t('2fa disabled', getLang()))),
                   React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-400 dark:text-gray-500' }, u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'),
                   React.createElement('td', { className: 'px-4 py-3' },
                     React.createElement('div', { className: 'flex justify-end' },
