@@ -44,7 +44,7 @@ function sanitizeVisualCss(css: string): string {
     .replace(/behavior\s*:[^;}]+;?/gi, '')
     .replace(/url\(\s*(javascript|data):/gi, 'url(');
 }
-const postSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), meta: z.record(z.string(), z.string()).optional() });
+const postSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), authorId: z.string().optional(), publishedAt: z.string().optional(), meta: z.record(z.string(), z.string()).optional() });
 
 // Batch enrichment: one query per relation for the whole list instead of one
 // per post (a 10-post page used to run ~70 queries). Chunked so a huge
@@ -315,7 +315,11 @@ router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contribut
     const slug = uniqueSlug(data.title, allSlugs);
     const id = cuid();
     const now = new Date().toISOString();
-    db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', status, data.featured || null, data.password || '', req.user!.userId, data.parentId || null, data.menuOrder || 0, status === 'published' ? now : null, data.siteId || null);
+    // Admins/editors may assign an author; everyone else writes as themselves.
+    // A supplied publish date drives scheduled publishing; otherwise publish now.
+    const authorId = data.authorId && ['admin', 'editor'].includes(req.user!.role) ? data.authorId : req.user!.userId;
+    const publishedAt = data.publishedAt || (status === 'published' ? now : null);
+    db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', status, data.featured || null, data.password || '', authorId, data.parentId || null, data.menuOrder || 0, publishedAt, data.siteId || null);
     if (data.categoryIds) for (const cid of data.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, cid);
     if (data.tagIds) for (const tid of data.tagIds) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tid);
     if (data.tagNames) for (const name of data.tagNames) {
@@ -353,6 +357,8 @@ router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contrib
     if (data.menuOrder !== undefined) { sets.push('menuOrder = ?'); vals.push(data.menuOrder); }
     if (data.password !== undefined) { sets.push('password = ?'); vals.push(data.password); }
     if (data.siteId !== undefined) { sets.push('siteId = ?'); vals.push(data.siteId || null); }
+    if (data.authorId !== undefined && ['admin', 'editor'].includes(req.user!.role)) { sets.push('authorId = ?'); vals.push(data.authorId); }
+    if (data.publishedAt !== undefined) { sets.push('publishedAt = ?'); vals.push(data.publishedAt); }
     if (data.categoryIds) { db.prepare('DELETE FROM PostCategory WHERE postId = ?').run(req.params.id); for (const cid of data.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(req.params.id, cid); }
     if (data.tagIds) { db.prepare('DELETE FROM PostTag WHERE postId = ?').run(req.params.id); for (const tid of data.tagIds) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(req.params.id, tid); }
     if (data.meta) {

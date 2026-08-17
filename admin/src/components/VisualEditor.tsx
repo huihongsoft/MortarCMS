@@ -34,6 +34,8 @@ const WPI = {
   separator:  S+'<path d="M4.5 12.5v4H3V7h1.5v3.987h15V7H21v9.5h-1.5v-4h-15Z"/>'+E,
   searchBlock:S+'<path d="M13 5c-3.3 0-6 2.7-6 6 0 1.4.5 2.7 1.3 3.7l-3.8 3.8 1.1 1.1 3.8-3.8c1 .8 2.3 1.3 3.7 1.3 3.3 0 6-2.7 6-6S16.3 5 13 5zm0 10.5c-2.5 0-4.5-2-4.5-4.5s2-4.5 4.5-4.5 4.5 2 4.5 4.5-2 4.5-4.5 4.5z"/>'+E,
   video:      S+'<path d="M18.7 3H5.3C4 3 3 4 3 5.3v13.4C3 20 4 21 5.3 21h13.4c1.3 0 2.3-1 2.3-2.3V5.3C21 4 20 3 18.7 3zm.8 15.7c0 .4-.4.8-.8.8H5.3c-.4 0-.8-.4-.8-.8V5.3c0-.4.4-.8.8-.8h13.4c.4 0 .8.4.8.8v13.4zM10 15l5-3-5-3v6z"/>'+E,
+  // WordPress block-editor "W" logo (three stacked squares)
+  wpLogo:     S+'<path d="M32 8H18a2 2 0 0 0-2 2v4h-4a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-4h4a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2z" fill="currentColor" opacity=".35"/>'+'<path d="M27 14v-4a2 2 0 0 0-2-2H9a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h4v-6a4 4 0 0 1 4-4h6a2 2 0 0 0 2-2z" fill="currentColor" opacity=".7"/>'+'<path d="M27 20a2 2 0 0 0-2 2v4a2 2 0 0 1-2 2h-4a2 2 0 0 0-2 2v4h14a2 2 0 0 0 2-2v-10a2 2 0 0 0-2-2h-4z" fill="currentColor"/>'+E,
 };
 
 // Escape values before splicing into HTML strings that become DOM content.
@@ -61,6 +63,8 @@ interface VisualEditorProps {
   onPublish?: () => void;         // Publish button
   onBack?: () => void;            // Back to rich-text mode (shown as icon button at far left of the header)
   saveState?: 'saved' | 'saving' | 'dirty';  // drives the save snackbar
+  /** 'page' (default) = page builder; 'post' = WordPress-style post editor */
+  mode?: 'page' | 'post';
   /** Post/Page settings shown in the "Post" tab of the sidebar */
   pageSettings?: {
     status?: string;
@@ -81,6 +85,19 @@ interface VisualEditorProps {
     onAllowCommentsChange?: (v: boolean) => void;
     password?: string;
     onPasswordChange?: (v: string) => void;
+    // ---- Post mode only (WordPress-style post settings) ----
+    postTitle?: string;                       // shown in the header breadcrumb
+    categories?: { id: string; name: string }[];
+    categoryIds?: string[];
+    onCategoryIdsChange?: (ids: string[]) => void;
+    onAddCategory?: (name: string) => Promise<any>;  // resolves to the created category
+    tags?: string[];
+    onTagsChange?: (tags: string[]) => void;
+    users?: { id: string; username: string }[];
+    authorId?: string;
+    onAuthorIdChange?: (id: string) => void;
+    publishDate?: string;                     // datetime-local value or '' (= immediately)
+    onPublishDateChange?: (v: string) => void;
   };
 }
 
@@ -147,11 +164,13 @@ const ALL_BLOCKS = [...LAYOUT_BLOCKS, ...CONTENT_BLOCKS, ...SECTIONS_BLOCKS, ...
 //  VisualEditor Component — Gutenberg-style skeleton layout
 // ============================================================
 
-export default function VisualEditor({ content, css, onChange, height, onSaveShortcut, onPublish, onBack, saveState, pageSettings }: VisualEditorProps) {
+export default function VisualEditor({ content, css, onChange, height, onSaveShortcut, onPublish, onBack, saveState, pageSettings, mode }: VisualEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | null>(null);
   const pageSettingsRef = useRef(pageSettings);
   pageSettingsRef.current = pageSettings;
+  const modeRef = useRef(mode || 'page');
+  modeRef.current = mode || 'page';
 
   // i18n helper
   const lang = getLang();
@@ -257,6 +276,28 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
   // Bridge for the snackbar function defined inside the main useEffect
   const snackbarFnRef = useRef<(msg: string) => void>(() => {});
 
+  // Re-render the dynamic sidebar lists (categories checkboxes, tag chips).
+  // Called from the main effect after panel injection and from the settings
+  // sync effect whenever the underlying data changes.
+  const renderPostPanelLists = () => {
+    const ctEl = containerRef.current; if (!ctEl) return;
+    const panel = ctEl.querySelector('#ve-post-panel') as HTMLElement;
+    if (!panel) return;
+    const ps = pageSettingsRef.current;
+    const catList = panel.querySelector('#ve-cat-list') as HTMLElement;
+    if (catList) {
+      const cats = ps?.categories || [];
+      catList.innerHTML = cats.length
+        ? cats.map((c: any) => `<label class="ve-guten-cat-row"><input type="checkbox" data-cat="${escAttr(c.id)}" ${ps?.categoryIds?.includes(c.id) ? 'checked' : ''} />${escAttr(c.name)}</label>`).join('')
+        : '<span class="ve-guten-field-hint">' + __('no categories') + '</span>';
+    }
+    const chipWrap = panel.querySelector('#ve-tag-chips') as HTMLElement;
+    if (chipWrap) {
+      chipWrap.innerHTML = (ps?.tags || []).map((tg: string) =>
+        `<span class="ve-guten-tag-chip">${escAttr(tg)}<button data-tag="${escAttr(tg)}" aria-label="${__('remove')}" title="${__('remove')}">×</button></span>`).join('');
+    }
+  };
+
   // ============================================================
   //  MAIN INIT — Build Gutenberg skeleton + init GrapesJS
   // ============================================================
@@ -265,9 +306,59 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     const ct = containerRef.current;
 
     // --- Build Gutenberg skeleton ---
+    const isPost = modeRef.current === 'post';
     ct.innerHTML = `
       <div class="ve-guten-skeleton">
-        <div class="ve-guten-header">
+        <div class="ve-guten-header${isPost ? ' is-post-mode' : ''}">
+          ${isPost ? `
+          <div class="ve-guten-header-left">
+            ${onBack ? `<button id="ve-back-btn" class="ve-guten-icon-btn" title="${__('back to rich text')}" aria-label="${__('back to rich text')}">${WPI.arrowLeft}</button>` : ''}
+            <span class="ve-guten-wp-logo" title="Mortar">${WPI.wpLogo}</span>
+            <div class="ve-guten-wp-breadcrumb">
+              <span class="ve-guten-wp-crumb">${__('posts')}</span>
+              <span class="ve-guten-wp-sep">/</span>
+              <span class="ve-guten-wp-title" id="ve-wp-title">${escAttr(pageSettingsRef.current?.postTitle || __('untitled'))}</span>
+            </div>
+          </div>
+          <div class="ve-guten-header-center">
+            <button id="ve-inserter-btn" class="ve-guten-icon-btn" title="${__('toggle block inserter')}" aria-label="${__('add block')}">${WPI.plus}</button>
+            <button id="ve-undo-btn" class="ve-guten-icon-btn" title="${__('undo')}" aria-label="${__('undo')}">${WPI.undo}</button>
+            <button id="ve-redo-btn" class="ve-guten-icon-btn" title="${__('redo')}" aria-label="${__('redo')}">${WPI.redo}</button>
+            <button id="ve-list-btn" class="ve-guten-icon-btn" title="${__('document overview')}" aria-label="${__('document overview')}">${WPI.listView}</button>
+            <span class="ve-guten-save-state" id="ve-save-state"></span>
+            <button id="ve-save-btn" class="ve-guten-text-btn">${__('save draft')}</button>
+          </div>
+          <div class="ve-guten-header-right">
+            <span class="ve-guten-dropdown-wrap">
+              <button id="ve-preview-btn" class="ve-guten-text-btn${pageSettingsRef.current?.slug ? '' : ' is-disabled'}" title="${pageSettingsRef.current?.slug ? '' : __('save first to preview')}">${__('preview')} ${WPI.chevronDown}</button>
+              <div class="ve-guten-dropdown" id="ve-preview-dropdown" style="display:none">
+                <div class="ve-guten-dropdown-title">${__('preview in')}</div>
+                <button class="ve-guten-dropdown-item is-active" data-pdev="desktop">${WPI.desktop}<span>${__('desktop')}</span></button>
+                <button class="ve-guten-dropdown-item" data-pdev="tablet">${WPI.tablet}<span>${__('tablet')}</span></button>
+                <button class="ve-guten-dropdown-item" data-pdev="mobile">${WPI.mobile}<span>${__('mobile')}</span></button>
+                <div class="ve-guten-dropdown-sep"></div>
+                <button class="ve-guten-dropdown-item" id="ve-preview-open">${WPI.external}<span>${__('open in new tab')}</span></button>
+              </div>
+            </span>
+            <span class="ve-guten-dropdown-wrap">
+              <button id="ve-publish-btn" class="ve-guten-primary-btn">${__('publish')} ${WPI.chevronDown}</button>
+              <div class="ve-guten-dropdown ve-prepublish" id="ve-prepublish" style="display:none">
+                <div class="ve-prepublish-title">${__('are you ready to publish')}</div>
+                <div class="ve-prepublish-list">
+                  <div class="ve-prepublish-row"><strong>${__('visibility')}</strong><span id="ve-pp-visibility"></span></div>
+                  <div class="ve-prepublish-row"><strong>${__('categories')}</strong><span id="ve-pp-categories"></span></div>
+                  <div class="ve-prepublish-row"><strong>${__('tags')}</strong><span id="ve-pp-tags"></span></div>
+                </div>
+                <div class="ve-prepublish-actions">
+                  <button class="ve-prepublish-cancel" id="ve-pp-cancel">${__('cancel')}</button>
+                  <button class="ve-guten-primary-btn" id="ve-pp-publish">${__('publish')}</button>
+                </div>
+              </div>
+            </span>
+            <button id="ve-settings-btn" class="ve-guten-icon-btn" title="${__('settings')}" aria-label="${__('settings')}">${WPI.cog}</button>
+            <button id="ve-more-btn" class="ve-guten-icon-btn" title="More options" aria-label="More options">${WPI.moreVert}</button>
+          </div>
+          ` : `
           <div class="ve-guten-header-left">
             ${onBack ? `<button id="ve-back-btn" class="ve-guten-icon-btn" title="${__('back to rich text')}" aria-label="${__('back to rich text')}">${WPI.arrowLeft}</button>` : ''}
             <button id="ve-inserter-btn" class="ve-guten-icon-btn" title="${__('toggle block inserter')}" aria-label="${__('add block')}">${WPI.plus}</button>
@@ -290,6 +381,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
             <button id="ve-settings-btn" class="ve-guten-icon-btn" title="${__('settings')}" aria-label="${__('settings')}">${WPI.cog}</button>
             <button id="ve-more-btn" class="ve-guten-icon-btn" title="More options" aria-label="More options">${WPI.moreVert}</button>
           </div>
+          `}
         </div>
         <div class="ve-guten-body">
           <div class="ve-guten-inserter-sidebar" id="ve-guten-inserter" style="display:none">
@@ -1038,14 +1130,15 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       }, 300);
     });
 
-    // --- Inject page settings into the Post tab panel ---
+    // --- Inject page/post settings into the Post tab panel ---
     const injectPagePanel = () => {
       const panel = ct.querySelector('#ve-post-panel') as HTMLElement;
       if (!panel || panel.dataset.injected === '1') return;
       panel.dataset.injected = '1';
       const ps = pageSettingsRef.current;
-      panel.innerHTML = `
-        ${ps?.showMediaPicker ? `
+      const isPost = modeRef.current === 'post';
+      const visValue = ps?.status === 'private' ? 'private' : ps?.password ? 'password' : 'public';
+      const secFeatured = ps?.showMediaPicker ? `
         <div class="components-panel__body is-opened">
           <h2 class="components-panel__body-title"><button>${__('featured image')}</button></h2>
           <div class="ve-guten-field">
@@ -1055,48 +1148,97 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
                 : `<button class="ve-guten-featured-btn" data-action="featured-pick">${__('set featured image')}</button>`}
             </div>
           </div>
-        </div>` : ''}
-        ${ps?.excerpt !== undefined || ps?.onExcerptChange ? `
+        </div>` : '';
+      const secExcerpt = ps?.excerpt !== undefined || ps?.onExcerptChange ? `
         <div class="components-panel__body is-opened">
           <h2 class="components-panel__body-title"><button>${__('excerpt')}</button></h2>
           <div class="ve-guten-field">
-            <textarea data-field="excerpt" class="ve-guten-input" rows="3" placeholder="${__('write a short excerpt')}">${ps?.excerpt || ''}</textarea>
+            <textarea data-field="excerpt" class="ve-guten-input" rows="3" placeholder="${__('write a short excerpt')}">${escAttr(ps?.excerpt || '')}</textarea>
           </div>
-        </div>` : ''}
+        </div>` : '';
+      const secStatusVis = `
         <div class="components-panel__body is-opened">
           <h2 class="components-panel__body-title"><button>${__('status & visibility')}</button></h2>
           <div class="ve-guten-field">
+            ${isPost ? `
+            <label class="ve-guten-radio-row">
+              <input type="radio" name="ve-visibility" value="public" data-vis="public" ${visValue === 'public' ? 'checked' : ''} />
+              <span>${__('public')}</span>
+            </label>
+            <label class="ve-guten-radio-row">
+              <input type="radio" name="ve-visibility" value="private" data-vis="private" ${visValue === 'private' ? 'checked' : ''} />
+              <span>${__('private')}</span>
+            </label>
+            <label class="ve-guten-radio-row">
+              <input type="radio" name="ve-visibility" value="password" data-vis="password" ${visValue === 'password' ? 'checked' : ''} />
+              <span>${__('password protected')}</span>
+            </label>
+            ${ps?.onPasswordChange ? `
+            <div class="ve-guten-field" id="ve-pw-field" style="${visValue === 'password' ? '' : 'display:none'}">
+              <input type="password" data-field="password" value="${escAttr(ps?.password || '')}" autocomplete="new-password" class="ve-guten-input" placeholder="${__('password protect this page')}" />
+              <span class="ve-guten-field-hint">${__('visitors need this password to view the page; clear it to remove protection')}</span>
+            </div>` : ''}
+            ${ps?.onPublishDateChange ? `
+            <div class="ve-guten-field" style="margin-top:4px;">
+              <div class="ve-guten-date-row">
+                <label class="ve-guten-date-label">${__('publish date')}</label>
+                <input type="datetime-local" data-field="publishDate" value="${escAttr(ps?.publishDate || '')}" class="ve-guten-input" />
+                <span class="ve-guten-date-now">${ps?.publishDate ? '' : __('immediately')}</span>
+              </div>
+            </div>` : ''}
+            ` : `
             <select data-field="status" class="ve-guten-select">
               <option value="draft" ${ps?.status === 'draft' ? 'selected' : ''}>${__('draft')}</option>
               <option value="published" ${ps?.status === 'published' && !ps?.password ? 'selected' : ''}>${__('published')}</option>
               <option value="password" ${ps?.status === 'password' || (ps?.status === 'published' && ps?.password) ? 'selected' : ''}>${__('password protected')}</option>
               <option value="private" ${ps?.status === 'private' ? 'selected' : ''}>${__('private')}</option>
             </select>
+            ${ps?.onPasswordChange ? `
+            <div class="ve-guten-field" style="margin-top:8px;">
+              <input type="password" data-field="password" value="${escAttr(ps?.password || '')}" autocomplete="new-password" class="ve-guten-input" placeholder="${__('password protect this page')}" />
+              <span class="ve-guten-field-hint">${__('visitors need this password to view the page; clear it to remove protection')}</span>
+            </div>` : ''}
+            `}
           </div>
-          ${ps?.onPasswordChange ? `
-          <div class="ve-guten-field" style="margin-top:8px;">
-            <input type="password" data-field="password" value="${ps?.password || ''}" autocomplete="new-password" class="ve-guten-input" placeholder="${__('password protect this page')}" />
-            <span class="ve-guten-field-hint">${__('visitors need this password to view the page; clear it to remove protection')}</span>
-          </div>` : ''}
-        </div>
+        </div>`;
+      const secPermalink = `
         <div class="components-panel__body is-opened">
           <h2 class="components-panel__body-title"><button>${__('permalink')}</button></h2>
           <div class="ve-guten-field">
-            <span class="ve-guten-slug">/page/<strong id="ve-slug-val">${ps?.slug || '—'}</strong></span>
-            ${ps?.slug ? '<a class="ve-guten-link" id="ve-preview-link" href="#">' + __('view page') + '</a>' : ''}
+            <span class="ve-guten-slug">/${isPost ? 'post' : 'page'}/<strong id="ve-slug-val">${escAttr(ps?.slug || '—')}</strong></span>
+            ${ps?.slug ? '<a class="ve-guten-link" id="ve-preview-link" href="#">' + (isPost ? __('view post') : __('view page')) + '</a>' : ''}
           </div>
-        </div>
-        ${ps?.parentPages?.length ? `
+        </div>`;
+      const secCategories = isPost && ps?.onCategoryIdsChange ? `
+        <div class="components-panel__body is-opened">
+          <h2 class="components-panel__body-title"><button>${__('categories')}</button></h2>
+          <div class="ve-guten-field">
+            <div class="ve-guten-cat-list" id="ve-cat-list"></div>
+            <div class="ve-guten-cat-add">
+              <input class="ve-guten-input" id="ve-cat-new" placeholder="${__('add new category')}" />
+              <button class="ve-guten-cat-add-btn" id="ve-cat-add">+</button>
+            </div>
+          </div>
+        </div>` : '';
+      const secTags = isPost && ps?.onTagsChange ? `
+        <div class="components-panel__body is-opened">
+          <h2 class="components-panel__body-title"><button>${__('tags')}</button></h2>
+          <div class="ve-guten-field">
+            <input class="ve-guten-input" id="ve-tag-input" placeholder="${__('add tag or hit enter')}" />
+            <div class="ve-guten-tag-wrap" id="ve-tag-chips"></div>
+          </div>
+        </div>` : '';
+      const secParent = !isPost && ps?.parentPages?.length ? `
         <div class="components-panel__body is-opened">
           <h2 class="components-panel__body-title"><button>${__('parent page')}</button></h2>
           <div class="ve-guten-field">
             <select data-field="parentId" class="ve-guten-select">
               <option value="">${__('no parent')}</option>
-              ${ps.parentPages.map((p: any) => `<option value="${p.id}" ${ps.parentId === p.id ? 'selected' : ''}>${p.title}</option>`).join('')}
+              ${ps.parentPages.map((p: any) => `<option value="${escAttr(p.id)}" ${ps.parentId === p.id ? 'selected' : ''}>${escAttr(p.title)}</option>`).join('')}
             </select>
           </div>
-        </div>` : ''}
-        ${ps?.onAllowCommentsChange ? `
+        </div>` : '';
+      const secDiscussion = ps?.onAllowCommentsChange ? `
         <div class="components-panel__body is-opened">
           <h2 class="components-panel__body-title"><button>${__('discussion')}</button></h2>
           <div class="ve-guten-field">
@@ -1105,14 +1247,30 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
               <span>${__('allow comments')}</span>
             </label>
           </div>
-        </div>` : ''}
+        </div>` : '';
+      const secAuthor = isPost && ps?.users?.length ? `
+        <div class="components-panel__body is-opened">
+          <h2 class="components-panel__body-title"><button>${__('author')}</button></h2>
+          <div class="ve-guten-field">
+            <select data-field="authorId" class="ve-guten-select">
+              <option value="">${__('select author')}</option>
+              ${ps.users.map((u: any) => `<option value="${escAttr(u.id)}" ${ps.authorId === u.id ? 'selected' : ''}>${escAttr(u.username)}</option>`).join('')}
+            </select>
+          </div>
+        </div>` : '';
+      const secMenuOrder = !isPost ? `
         <div class="components-panel__body is-opened">
           <h2 class="components-panel__body-title"><button>${__('menu order')}</button></h2>
           <div class="ve-guten-field">
             <input type="number" data-field="menuOrder" value="${ps?.menuOrder ?? 0}" class="ve-guten-input" min="0" />
           </div>
-        </div>
-      `;
+        </div>` : '';
+      // Post mode follows the WordPress sidebar order: status & visibility →
+      // permalink → categories → tags → featured image → excerpt → discussion → author.
+      // Page mode keeps its original order (featured image → excerpt → … → menu order).
+      panel.innerHTML = isPost
+        ? [secStatusVis, secPermalink, secCategories, secTags, secFeatured, secExcerpt, secDiscussion, secAuthor].join('')
+        : [secFeatured, secExcerpt, secStatusVis, secPermalink, secParent, secDiscussion, secMenuOrder].join('');
       panel.addEventListener('change', (e) => {
         const el = e.target as HTMLElement;
         const ps = pageSettingsRef.current;
@@ -1122,11 +1280,72 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         else if (el.dataset.field === 'excerpt') ps?.onExcerptChange?.((el as HTMLTextAreaElement).value);
         else if (el.dataset.field === 'allowComments') ps?.onAllowCommentsChange?.((el as HTMLInputElement).checked);
         else if (el.dataset.field === 'password') ps?.onPasswordChange?.((el as HTMLInputElement).value);
+        else if (el.dataset.field === 'authorId') ps?.onAuthorIdChange?.((el as HTMLSelectElement).value);
+        else if (el.dataset.field === 'publishDate') ps?.onPublishDateChange?.((el as HTMLInputElement).value);
+        const vis = el.dataset.vis;
+        if (vis) {
+          // Visibility radios: password shows the password field; leaving
+          // password-protected clears the password (WordPress behavior)
+          const pwField = panel.querySelector('#ve-pw-field') as HTMLElement;
+          if (pwField) pwField.style.display = vis === 'password' ? '' : 'none';
+          if (vis === 'private') ps?.onStatusChange?.('private');
+          else if (vis === 'public' || vis === 'password') {
+            if (ps?.status === 'private') ps?.onStatusChange?.('published');
+            if (vis === 'public' && ps?.password) ps?.onPasswordChange?.('');
+          }
+        }
       });
       panel.addEventListener('input', (e) => {
         const el = e.target as HTMLElement;
         if (el.dataset.field === 'excerpt') pageSettingsRef.current?.onExcerptChange?.((el as HTMLTextAreaElement).value);
       });
+      // Categories: checkbox toggle + quick-add (auto-selects the new one)
+      const catList = panel.querySelector('#ve-cat-list') as HTMLElement;
+      if (catList) {
+        catList.addEventListener('change', (e) => {
+          const cb = e.target as HTMLInputElement;
+          if (!cb.dataset.cat) return;
+          const ps = pageSettingsRef.current;
+          const ids = [...(ps?.categoryIds || [])];
+          if (cb.checked) { if (!ids.includes(cb.dataset.cat)) ids.push(cb.dataset.cat); }
+          else { const i = ids.indexOf(cb.dataset.cat); if (i > -1) ids.splice(i, 1); }
+          ps?.onCategoryIdsChange?.(ids);
+        });
+        panel.querySelector('#ve-cat-add')?.addEventListener('click', async () => {
+          const input = panel.querySelector('#ve-cat-new') as HTMLInputElement;
+          const name = input?.value.trim();
+          if (!name) return;
+          const ps = pageSettingsRef.current;
+          try {
+            const cat = await ps?.onAddCategory?.(name);
+            if (cat?.id) {
+              input.value = '';
+              ps?.onCategoryIdsChange?.([...(ps.categoryIds || []), cat.id]);
+            }
+          } catch {}
+        });
+      }
+      // Tags: Enter adds, chip × removes
+      const tagInput = panel.querySelector('#ve-tag-input') as HTMLInputElement;
+      if (tagInput) {
+        tagInput.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter') return;
+          e.preventDefault();
+          const v = tagInput.value.trim();
+          if (!v) return;
+          const ps = pageSettingsRef.current;
+          const tags = [...(ps?.tags || [])];
+          if (!tags.includes(v)) tags.push(v);
+          ps?.onTagsChange?.(tags);
+          tagInput.value = '';
+        });
+        panel.querySelector('#ve-tag-chips')?.addEventListener('click', (e) => {
+          const btn = (e.target as HTMLElement).closest('button');
+          if (!btn?.dataset.tag) return;
+          const ps = pageSettingsRef.current;
+          ps?.onTagsChange?.((ps.tags || []).filter((x: string) => x !== btn.dataset.tag));
+        });
+      }
       panel.querySelector('#ve-preview-link')?.addEventListener('click', (e) => { e.preventDefault(); pageSettingsRef.current?.showPreview?.(); });
       // Featured image actions
       const featuredWrap = panel.querySelector('#ve-featured-wrap') as HTMLElement;
@@ -1139,6 +1358,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           pageSettingsRef.current?.onFeaturedImageChange?.('');
         }
       });
+      renderPostPanelLists();
     };
 
     // --- Floating block toolbar ---
@@ -1368,6 +1588,33 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
 
     // --- Header action buttons (event delegation on header) ---
     const headerEl = ct.querySelector('.ve-guten-header') as HTMLElement;
+    const previewDd = ct.querySelector('#ve-preview-dropdown') as HTMLElement;
+    const prePublishEl = ct.querySelector('#ve-prepublish') as HTMLElement;
+    const switchDevice = (device: string, btnEl?: HTMLElement) => {
+      ct.querySelectorAll('.ve-guten-device-btn').forEach(b => b.classList.remove('is-active'));
+      if (btnEl) btnEl.classList.add('is-active');
+      try {
+        const d = device === 'desktop' ? 'desktop' : device === 'tablet' ? 'tablet' : 'mobilePortrait';
+        editor.setDevice(d);
+      } catch {}
+      // GrapesJS updates the device width asynchronously — re-apply our
+      // zoom layout several times so the iframe width (device width × zoom)
+      // takes effect and the content reflows for the new device.
+      setTimeout(applyZoom, 60);
+      setTimeout(applyZoom, 250);
+      setTimeout(applyZoom, 600);
+    };
+    // Fill the pre-publish summary from the current settings (WordPress flow)
+    const updatePrepublish = () => {
+      const ps = pageSettingsRef.current;
+      const vis = ct.querySelector('#ve-pp-visibility') as HTMLElement;
+      const cats = ct.querySelector('#ve-pp-categories') as HTMLElement;
+      const tags = ct.querySelector('#ve-pp-tags') as HTMLElement;
+      if (vis) vis.textContent = ps?.status === 'private' ? __('private') : ps?.password ? __('password protected') : __('public');
+      const catNames = (ps?.categories || []).filter((c: any) => ps?.categoryIds?.includes(c.id)).map((c: any) => c.name).join(', ');
+      if (cats) cats.textContent = catNames || '—';
+      if (tags) tags.textContent = (ps?.tags || []).join(', ') || '—';
+    };
     headerEl?.addEventListener('click', (e) => {
       const btn = (e.target as HTMLElement).closest('button') as HTMLElement;
       if (!btn) return;
@@ -1381,17 +1628,44 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         else { listEl.style.display = 'none'; ct.classList.remove('ve-list-open'); }
       }
       else if (id === 've-preview-btn') {
-        const ps = pageSettingsRef.current;
-        if (!ps?.slug) { showSnackbar(__('save first to preview')); }
-        else ps.showPreview?.();
+        if (previewDd && prePublishEl) {
+          // Post mode: dropdown with device previews + open in new tab
+          const open = previewDd.style.display === 'none';
+          previewDd.style.display = open ? '' : 'none';
+          prePublishEl.style.display = 'none';
+          if (open) {
+            const cur = editor.getDevice?.();
+            previewDd.querySelectorAll('[data-pdev]').forEach((b) => b.classList.toggle('is-active', (b as HTMLElement).dataset.pdev === (cur === 'mobilePortrait' ? 'mobile' : cur)));
+          }
+        } else {
+          const ps = pageSettingsRef.current;
+          if (!ps?.slug) { showSnackbar(__('save first to preview')); }
+          else ps.showPreview?.();
+        }
       }
       else if (id === 've-save-btn') {
         showSnackbar(__('saving'));
         onSaveRef.current?.();
       }
       else if (id === 've-publish-btn') {
-        showSnackbar(__('publishing'));
-        onPublishRef.current?.();
+        if (prePublishEl && previewDd) {
+          // Post mode: pre-publish check before the real publish
+          const open = prePublishEl.style.display === 'none';
+          prePublishEl.style.display = open ? '' : 'none';
+          previewDd.style.display = 'none';
+          if (open) updatePrepublish();
+        } else {
+          showSnackbar(__('publishing'));
+          onPublishRef.current?.();
+        }
+      }
+      else if (id === 've-pp-cancel') { if (prePublishEl) prePublishEl.style.display = 'none'; }
+      else if (id === 've-pp-publish') { showSnackbar(__('publishing')); onPublishRef.current?.(); }
+      else if (id === 've-preview-open') {
+        const ps = pageSettingsRef.current;
+        if (!ps?.slug) { showSnackbar(__('save first to preview')); }
+        else ps.showPreview?.();
+        if (previewDd) previewDd.style.display = 'none';
       }
       else if (id === 've-settings-btn') {
         const viewsEl = ct.querySelector('.gjs-pn-views-container') as HTMLElement;
@@ -1403,23 +1677,30 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         const menu = ct.querySelector('#ve-more-menu') as HTMLElement;
         if (menu) menu.style.display = menu.style.display === 'none' ? '' : 'none';
       }
-      // Device switch
-      const device = btn.dataset.device;
+      // Device switch (page mode header buttons + post mode preview dropdown)
+      const device = btn.dataset.device || btn.dataset.pdev;
       if (device) {
-        ct.querySelectorAll('.ve-guten-device-btn').forEach(b => b.classList.remove('is-active'));
-        btn.classList.add('is-active');
-        try {
-          const d = device === 'desktop' ? 'desktop' : device === 'tablet' ? 'tablet' : 'mobilePortrait';
-          editor.setDevice(d);
-        } catch {}
-        // GrapesJS updates the device width asynchronously — re-apply our
-        // zoom layout several times so the iframe width (device width × zoom)
-        // takes effect and the content reflows for the new device.
-        setTimeout(applyZoom, 60);
-        setTimeout(applyZoom, 250);
-        setTimeout(applyZoom, 600);
+        if (btn.dataset.pdev && previewDd) {
+          previewDd.style.display = 'none';
+          previewDd.querySelectorAll('[data-pdev]').forEach(b => b.classList.remove('is-active'));
+          btn.classList.add('is-active');
+        }
+        switchDevice(device, btn.dataset.device ? btn : undefined);
       }
     });
+    // Close the preview / pre-publish dropdowns when clicking outside
+    const closeDds = (e: MouseEvent) => {
+      if (!previewDd && !prePublishEl) return;
+      const t = e.target as Node;
+      const inside = (previewDd?.contains(t) || prePublishEl?.contains(t)) || !!(t as HTMLElement).closest?.('#ve-preview-btn, #ve-publish-btn');
+      if (!inside) {
+        if (previewDd) previewDd.style.display = 'none';
+        if (prePublishEl) prePublishEl.style.display = 'none';
+      }
+    };
+    document.addEventListener('click', closeDds);
+    // Breadcrumb "Posts" link navigates back to the post list (WordPress behavior)
+    ct.querySelector('.ve-guten-wp-crumb')?.addEventListener('click', () => { window.location.href = '/admin/posts'; });
 
     // --- More menu actions ---
     const moreMenu = ct.querySelector('#ve-more-menu') as HTMLElement;
@@ -1484,6 +1765,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       zoomBar.remove();
       blockBar.remove();
       document.removeEventListener('keydown', escHandler);
+      document.removeEventListener('click', closeDds);
       canvasWrapper?.removeEventListener('scroll', positionBlockBar);
       window.removeEventListener('scroll', positionBlockBar, true);
       ct.removeEventListener('wheel', wheelHandler);
@@ -1498,7 +1780,13 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
   useEffect(() => {
     if (saveState === 'saving') snackbarFnRef.current?.(t('saving', getLang()));
     else if (saveState === 'saved') snackbarFnRef.current?.(t('saved', getLang()));
-     
+    // Post mode: header save-state text ("Saving…" / "Saved" / unsaved hint)
+    const stateEl = containerRef.current?.querySelector('#ve-save-state') as HTMLElement;
+    if (stateEl) {
+      if (saveState === 'saving') stateEl.textContent = t('saving', getLang());
+      else if (saveState === 'saved') stateEl.textContent = t('saved', getLang());
+      else if (saveState === 'dirty') stateEl.textContent = t('unsaved changes', getLang());
+    }
   }, [saveState]);
 
   // --- Sync external content changes ---
@@ -1544,6 +1832,28 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       }
       void btn;
     }
+    // ---- Post mode syncs ----
+    // Header breadcrumb title (WordPress "Posts / Title")
+    const titleEl = panel.closest('.visual-editor-container')?.querySelector('#ve-wp-title') as HTMLElement;
+    if (titleEl) titleEl.textContent = pageSettings.postTitle || t('untitled', getLang());
+    // Visibility radios + password field visibility
+    if (panel.querySelector('input[data-vis]')) {
+      const visVal = pageSettings.status === 'private' ? 'private' : pageSettings.password ? 'password' : 'public';
+      const visRadio = panel.querySelector(`input[data-vis="${visVal}"]`) as HTMLInputElement;
+      if (visRadio) visRadio.checked = true;
+      const pwField = panel.querySelector('#ve-pw-field') as HTMLElement;
+      if (pwField) pwField.style.display = visVal === 'password' ? '' : 'none';
+    }
+    // Publish date input + "Immediately" hint
+    const dateInput = panel.querySelector('[data-field="publishDate"]') as HTMLInputElement;
+    if (dateInput && pageSettings.publishDate !== undefined && dateInput.value !== (pageSettings.publishDate || '')) dateInput.value = pageSettings.publishDate || '';
+    const dateNow = panel.querySelector('.ve-guten-date-now') as HTMLElement;
+    if (dateNow) dateNow.textContent = pageSettings.publishDate ? '' : t('immediately', getLang());
+    // Author select
+    const authorSel = panel.querySelector('[data-field="authorId"]') as HTMLSelectElement;
+    if (authorSel && pageSettings.authorId !== undefined && authorSel.value !== pageSettings.authorId) authorSel.value = pageSettings.authorId || '';
+    // Categories / tags lists (may change from text mode, AI suggestions, …)
+    renderPostPanelLists();
   }, [pageSettings]);
 
   return React.createElement('div', {

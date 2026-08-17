@@ -52,6 +52,8 @@ export default function PostEditor() {
   const [sites, setSites] = useState<any[]>([]);
   const [allowComments, setAllowComments] = useState(true);
   const [password, setPassword] = useState('');
+  // Publish date shown in the visual sidebar (datetime-local value, '' = immediately)
+  const [publishDate, setPublishDate] = useState('');
   // Tracks the id of a newly-created post so draft saves (which stay in the
   // editor) reuse the same post instead of creating duplicates
   const createdIdRef = useRef<string | null>(null);
@@ -88,12 +90,12 @@ export default function PostEditor() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [title, content, excerpt, status, categoryIds, tagNames, featured, slug, format, siteId]);
+  }, [title, content, excerpt, status, categoryIds, tagNames, featured, slug, format, siteId, publishDate, authorId]);
 
   useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); api.get('/users').then(r => setUsers(r.data)).catch(() => {});
     api.get('/categories').then(r => setCategories(r.data)); api.get('/media').then(r => setMediaItems(r.data.media || []));
     api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])).catch(() => {});
-    if (id) { api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.categoryId || c.category?.id) || []); setTagNames(p.tags?.map((t: any) => t.name || t.tag?.name) || []); if (p.featured) setFeatured(p.featured); if (p.allowComments !== undefined) setAllowComments(p.allowComments); if (p.password) setPassword(p.password); if (p.siteId) setSiteId(p.siteId); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); if (p.meta?._seo_title) setSeoTitle(p.meta._seo_title); if (p.meta?._seo_desc) setSeoDesc(p.meta._seo_desc); if (p.meta?._seo_noindex) setSeoNoindex(p.meta._seo_noindex === '1'); if (p.meta?._seo_canonical) setSeoCanonical(p.meta._seo_canonical); if (p.meta?._seo_og_image) setSeoOgImage(p.meta._seo_og_image);
+    if (id) { api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.categoryId || c.category?.id) || []); setTagNames(p.tags?.map((t: any) => t.name || t.tag?.name) || []); if (p.featured) setFeatured(p.featured); if (p.allowComments !== undefined) setAllowComments(p.allowComments); if (p.password) setPassword(p.password); if (p.siteId) setSiteId(p.siteId); if (p.authorId) setAuthorId(p.authorId); if (p.publishedAt) { const d = new Date(p.publishedAt); const pad = (n: number) => String(n).padStart(2, '0'); setPublishDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`); } if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); if (p.meta?._seo_title) setSeoTitle(p.meta._seo_title); if (p.meta?._seo_desc) setSeoDesc(p.meta._seo_desc); if (p.meta?._seo_noindex) setSeoNoindex(p.meta._seo_noindex === '1'); if (p.meta?._seo_canonical) setSeoCanonical(p.meta._seo_canonical); if (p.meta?._seo_og_image) setSeoOgImage(p.meta._seo_og_image);
       // Custom fields: load user-defined keys (system keys with _ prefixes are managed by their own panels)
       const systemKeys = ['_visual_css', '_seo_title', '_seo_desc', '_seo_noindex', '_seo_canonical', '_seo_og_image'];
       if (p.meta) setMetaFields(Object.entries(p.meta).filter(([k]) => !systemKeys.includes(k) && k.trim()).map(([key, value]) => ({ key, value: String(value) })));
@@ -105,11 +107,13 @@ export default function PostEditor() {
     setSaving(true);
     setSaveState('saving');
     try {
-      const schedDate = (document.getElementById('scheduled-date') as HTMLInputElement)?.value || null;
+      const schedDate = publishDate || (document.getElementById('scheduled-date') as HTMLInputElement)?.value || null;
       // "Save draft" always drafts; "Publish" uses the user-selected status
       // (published / private / scheduled...), falling back to published.
+      // A publish date only applies when actually publishing (drafts never
+      // carry one); an empty date means "publish now" like WordPress.
       const finalStatus = s === 'draft' ? 'draft' : (status === 'draft' ? 'published' : status);
-      const payload: any = { title, slug: slug || undefined, content, excerpt, status: finalStatus, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: finalStatus === 'scheduled' && schedDate ? new Date(schedDate).toISOString() : undefined, siteId: siteId || null, allowComments, password };
+      const payload: any = { title, slug: slug || undefined, content, excerpt, status: finalStatus, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: finalStatus !== 'draft' && schedDate ? new Date(schedDate).toISOString() : undefined, authorId: authorId || undefined, siteId: siteId || null, allowComments, password };
       payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc, _seo_noindex: seoNoindex ? '1' : '', _seo_canonical: seoCanonical, _seo_og_image: seoOgImage };
       // Custom fields (user-defined key/value pairs) ride along in meta
       for (const mf of metaFields) { if (mf.key.trim()) payload.meta[mf.key.trim()] = mf.value; }
@@ -418,6 +422,7 @@ export default function PostEditor() {
           onPublish: () => handleSave('published'),
           onBack: () => setVisualMode(false),
           saveState,
+          mode: 'post',
           pageSettings: {
             status,
             onStatusChange: (v: string) => { setStatus(v); setSaveState('dirty'); },
@@ -432,6 +437,25 @@ export default function PostEditor() {
             onAllowCommentsChange: (v: boolean) => { setAllowComments(v); setSaveState('dirty'); },
             password,
             onPasswordChange: (v: string) => { setPassword(v); setSaveState('dirty'); },
+            // ---- Post mode: WordPress-style post settings ----
+            postTitle: title,
+            categories,
+            categoryIds,
+            onCategoryIdsChange: (ids: string[]) => { setCategoryIds(ids); setSaveState('dirty'); },
+            onAddCategory: async (name: string) => { const r = await api.post('/categories', { name }); setCategories([...categories, r.data]); return r.data; },
+            tags: tagNames,
+            onTagsChange: (tags: string[]) => { setTagNames(tags); setSaveState('dirty'); },
+            users,
+            authorId,
+            onAuthorIdChange: (uid: string) => { setAuthorId(uid); setSaveState('dirty'); },
+            publishDate,
+            // A future date schedules the post (WordPress behavior); clearing
+            // the date un-schedules so the post can't stay stuck as "scheduled"
+            onPublishDateChange: (v: string) => {
+              setPublishDate(v); setSaveState('dirty');
+              if (v && new Date(v).getTime() > Date.now()) setStatus('scheduled');
+              else if (!v && status === 'scheduled') setStatus('draft');
+            },
           },
         }),
         showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },

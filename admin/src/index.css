@@ -1544,3 +1544,209 @@ details.card summary::-webkit-details-marker { display: none; }
 details.card summary { list-style: none; }
 details.card > *:not(summary) { margin-top: 0.75rem; }
 details.card[open] summary .ve-arrow { transform: rotate(180deg); }
+
+/* =================================================================
+   POST MODE (WordPress-style post editor) — header logo/breadcrumb,
+   save state, Preview / Publish dropdowns, sidebar post panels
+   ================================================================= */
+
+.ve-guten-header.is-post-mode { grid-template: auto / auto minmax(min-content, 1fr) auto; }
+.ve-guten-header.is-post-mode .ve-guten-header-left {
+  grid-column: 1;
+  gap: 4px;
+  padding-left: 4px;
+  min-width: 0;
+}
+.ve-guten-header.is-post-mode .ve-guten-header-center {
+  grid-column: 2;
+  justify-content: flex-start;
+  gap: 4px;
+  overflow: visible;
+}
+.ve-guten-header.is-post-mode .ve-guten-header-right { grid-column: 3; }
+
+/* W logo (block editor mark) */
+.ve-guten-wp-logo {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px; flex-shrink: 0;
+  color: #1e1e1e;
+}
+.ve-guten-wp-logo svg { width: 26px; height: 26px; }
+.dark .ve-guten-wp-logo { color: #e0e0e0; }
+
+/* Breadcrumb: Posts / Post title (wp .editor-header__breadcrumb) */
+.ve-guten-wp-breadcrumb {
+  display: flex; align-items: center; gap: 4px;
+  min-width: 0; white-space: nowrap;
+  font-size: 13px; color: #1e1e1e;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  margin-right: 8px;
+}
+.ve-guten-wp-breadcrumb .ve-guten-wp-crumb {
+  color: #757575; text-decoration: none; font-weight: 400;
+}
+.ve-guten-wp-breadcrumb .ve-guten-wp-crumb:hover { color: #1e1e1e; }
+.ve-guten-wp-breadcrumb .ve-guten-wp-sep { color: #757575; flex-shrink: 0; }
+.ve-guten-wp-breadcrumb .ve-guten-wp-title {
+  font-weight: 600; overflow: hidden; text-overflow: ellipsis;
+}
+.dark .ve-guten-wp-breadcrumb { color: #e0e0e0; }
+.dark .ve-guten-wp-breadcrumb .ve-guten-wp-crumb { color: #999; }
+.dark .ve-guten-wp-breadcrumb .ve-guten-wp-crumb:hover { color: #fff; }
+.dark .ve-guten-wp-breadcrumb .ve-guten-wp-sep { color: #999; }
+
+/* Save state text ("Saving…" / "Saved") */
+.ve-guten-save-state {
+  font-size: 12px; color: #757575;
+  margin: 0 6px 0 8px; white-space: nowrap;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.dark .ve-guten-save-state { color: #999; }
+
+/* Dropdown wrappers (Preview / Publish) */
+.ve-guten-dropdown-wrap { position: relative; display: inline-flex; }
+.ve-guten-dropdown {
+  position: absolute; top: calc(100% + 4px); right: 0;
+  min-width: 240px;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 2px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  padding: 4px 0;
+  z-index: 50;
+  font-size: 13px;
+  color: #1e1e1e;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.dark .ve-guten-dropdown { background: #1e1e1e; border-color: #333; color: #e0e0e0; }
+.ve-guten-dropdown-title {
+  padding: 6px 12px 2px;
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  color: #757575;
+  letter-spacing: 0.02em;
+}
+.dark .ve-guten-dropdown-title { color: #999; }
+.ve-guten-dropdown-item {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: none; background: transparent;
+  text-align: left; font-size: 13px;
+  color: #1e1e1e; cursor: pointer;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-guten-dropdown-item svg { width: 20px; height: 20px; flex-shrink: 0; pointer-events: none; }
+.ve-guten-dropdown-item:hover { background: #f0f0f0; }
+.ve-guten-dropdown-item.is-active { color: var(--wp-admin-theme-color); }
+.dark .ve-guten-dropdown-item { color: #e0e0e0; }
+.dark .ve-guten-dropdown-item:hover { background: #2c2c2c; }
+.ve-guten-dropdown-sep {
+  height: 1px; background: #ddd; margin: 4px 0;
+}
+.dark .ve-guten-dropdown-sep { background: #333; }
+
+/* Pre-publish check (publish dropdown) */
+.ve-prepublish { padding: 0; }
+.ve-prepublish-title {
+  font-size: 13px; font-weight: 600; color: #1e1e1e;
+  padding: 12px 12px 4px;
+}
+.dark .ve-prepublish-title { color: #e0e0e0; }
+.ve-prepublish-list { padding: 4px 12px 8px; }
+.ve-prepublish-row {
+  display: flex; align-items: baseline; gap: 8px;
+  padding: 3px 0; font-size: 12px; color: #757575;
+}
+.ve-prepublish-row strong {
+  min-width: 88px; font-weight: 600; color: #1e1e1e;
+  font-size: 12px;
+}
+.dark .ve-prepublish-row strong { color: #e0e0e0; }
+.ve-prepublish-row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ve-prepublish-actions {
+  display: flex; justify-content: flex-end; gap: 8px;
+  padding: 8px 12px 12px;
+}
+.ve-prepublish-actions .ve-guten-primary-btn { padding: 8px 16px; }
+.ve-prepublish-cancel {
+  padding: 7px 12px;
+  border: 1px solid #ddd; background: #fff; border-radius: 2px;
+  font-size: 13px; color: #1e1e1e; cursor: pointer;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-prepublish-cancel:hover { background: #f0f0f0; }
+.dark .ve-prepublish-cancel { background: #1e1e1e; border-color: #333; color: #e0e0e0; }
+.dark .ve-prepublish-cancel:hover { background: #2c2c2c; }
+
+/* Sidebar post panels (categories / tags / visibility / author) */
+.ve-guten-radio-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0; font-size: 13px; color: #1e1e1e;
+  cursor: pointer;
+}
+.ve-guten-radio-row input[type="radio"] {
+  width: 16px; height: 16px;
+  accent-color: var(--wp-admin-theme-color);
+  cursor: pointer; margin: 0;
+}
+.dark .ve-guten-radio-row { color: #e0e0e0; }
+
+.ve-guten-date-row { display: flex; flex-direction: column; gap: 4px; }
+.ve-guten-date-now { font-size: 11px; color: #757575; }
+.dark .ve-guten-date-now { color: #999; }
+
+.ve-guten-cat-list { max-height: 168px; overflow-y: auto; }
+.ve-guten-cat-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 4px 0; font-size: 13px; color: #1e1e1e;
+  cursor: pointer;
+}
+.ve-guten-cat-row input[type="checkbox"] {
+  width: 16px; height: 16px;
+  accent-color: var(--wp-admin-theme-color);
+  cursor: pointer; margin: 0;
+}
+.dark .ve-guten-cat-row { color: #e0e0e0; }
+.ve-guten-cat-add {
+  display: flex; gap: 6px; margin-top: 6px;
+}
+.ve-guten-cat-add .ve-guten-input { flex: 1; padding: 6px 10px; }
+.ve-guten-cat-add-btn {
+  padding: 6px 10px; flex-shrink: 0;
+  border: 1px solid #ddd; background: #fff; border-radius: 2px;
+  font-size: 13px; color: #1e1e1e; cursor: pointer;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+}
+.ve-guten-cat-add-btn:hover { background: #f0f0f0; }
+.dark .ve-guten-cat-add-btn { background: #111; border-color: #333; color: #e0e0e0; }
+.dark .ve-guten-cat-add-btn:hover { background: #2c2c2c; }
+
+.ve-guten-tag-wrap { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
+.ve-guten-tag-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px;
+  background: #fff; border: 1px solid #ddd; border-radius: 12px;
+  font-size: 12px; color: #1e1e1e;
+}
+.ve-guten-tag-chip button {
+  border: none; background: transparent; padding: 0;
+  width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center;
+  color: #757575; cursor: pointer; font-size: 13px; line-height: 1;
+  border-radius: 50%;
+}
+.ve-guten-tag-chip button:hover { color: #1e1e1e; background: #e0e0e0; }
+.dark .ve-guten-tag-chip { background: #111; border-color: #333; color: #e0e0e0; }
+.dark .ve-guten-tag-chip button:hover { color: #fff; background: #333; }
+
+/* Chevron icons inside header text buttons (Preview ▾ / Publish ▾) */
+.ve-guten-header .ve-guten-text-btn svg {
+  width: 14px; height: 14px;
+  margin-left: 2px; vertical-align: middle;
+}
+
+/* Publish date label inside Status & visibility */
+.ve-guten-date-label {
+  font-size: 12px; color: #757575;
+  margin-bottom: 2px;
+}
+.dark .ve-guten-date-label { color: #999; }

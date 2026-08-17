@@ -391,6 +391,8 @@ export function initDB(): void {
   try { db.exec("ALTER TABLE User ADD COLUMN tokenVersion INTEGER NOT NULL DEFAULT 0"); } catch {}
   // Multi-site content isolation: NULL siteId = global content visible on every site
   try { db.exec("ALTER TABLE Post ADD COLUMN siteId TEXT"); } catch {}
+  // Post password protection column (missing from the base CREATE TABLE)
+  try { db.exec("ALTER TABLE Post ADD COLUMN password TEXT DEFAULT ''"); } catch {}
   try { db.exec("ALTER TABLE Post ADD COLUMN views INTEGER DEFAULT 0"); } catch {}
   try { db.exec("ALTER TABLE Post ADD COLUMN sticky INTEGER DEFAULT 0"); } catch {}
   try { db.exec("ALTER TABLE Post ADD COLUMN format TEXT DEFAULT 'standard'"); } catch {}

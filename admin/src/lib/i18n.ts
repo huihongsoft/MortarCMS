@@ -1138,6 +1138,24 @@ const zh: Record<string, string> = {
 'desktop': '桌面端',
 'tablet': '平板',
 'mobile': '手机端',
+'back to rich text': '返回富文本模式',
+'copy html': '复制 HTML',
+'view page': '查看页面',
+
+// VisualEditor post mode (WordPress-style post editor)
+'status & visibility': '状态与可见性',
+'visibility': '可见性',
+'public': '公开',
+'publish date': '发布日期',
+'immediately': '立即',
+'permalink': '固定链接',
+'untitled': '无标题',
+'are you ready to publish': '准备好发布了吗？',
+'open in new tab': '在新标签页打开',
+'preview in': '预览方式',
+'choose a future date to schedule': '选择未来日期可定时发布',
+'add new category': '添加新分类',
+'add tag or hit enter': '输入标签，回车添加',
 
 // Site reset (Settings → Tools)
 'reset site': '初始化站点',
