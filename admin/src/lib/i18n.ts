@@ -1156,6 +1156,7 @@ const zh: Record<string, string> = {
 'choose a future date to schedule': '选择未来日期可定时发布',
 'add new category': '添加新分类',
 'add tag or hit enter': '输入标签，回车添加',
+'add title': '添加标题',
 
 // Site reset (Settings → Tools)
 'reset site': '初始化站点',

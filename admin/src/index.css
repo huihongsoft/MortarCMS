@@ -1750,3 +1750,63 @@ details.card[open] summary .ve-arrow { transform: rotate(180deg); }
   margin-bottom: 2px;
 }
 .dark .ve-guten-date-label { color: #999; }
+
+/* =================================================================
+   POST MODE CANVAS — WordPress paper sheet (gray surround, centered
+   white column ~680px) with the title input above the blocks
+   ================================================================= */
+
+.visual-editor-container.is-post-mode .gjs-cv-canvas {
+  background: #ddd;
+}
+.dark .visual-editor-container.is-post-mode .gjs-cv-canvas {
+  background: #1a1a1a;
+}
+
+.ve-post-title-wrap {
+  width: 100%;
+  background: #fff;
+  padding: 32px 24px 0;
+  box-sizing: border-box;
+}
+.dark .ve-post-title-wrap { background: #fff; } /* sheet stays white in dark mode, like WP */
+
+.ve-post-title-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: -apple-system, system-ui, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #1e1e1e;
+  padding: 0 0 24px;
+  box-sizing: border-box;
+}
+.ve-post-title-input::placeholder { color: #949494; font-weight: 400; }
+
+/* Empty-state hint sits below the title in post mode */
+.ve-empty-state.is-post {
+  top: 260px;
+  align-items: flex-start;
+}
+.ve-empty-state.is-post .ve-empty-card { padding-top: 12px; }
+
+/* Collapsible sidebar panels (WordPress components-panel behavior) */
+.ve-guten-content .components-panel__body:not(.is-opened) .ve-guten-field { display: none; }
+.ve-guten-content .components-panel__body-title button::after {
+  content: '';
+  position: absolute;
+  right: 18px;
+  top: 50%;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid #757575;
+  border-bottom: 2px solid #757575;
+  transform: translateY(-50%) rotate(-45deg);   /* closed: chevron-right */
+  transition: transform 0.1s ease;
+}
+.ve-guten-content .components-panel__body.is-opened > .components-panel__body-title button::after {
+  transform: translateY(-50%) rotate(45deg);    /* open: chevron-down */
+}

@@ -86,7 +86,8 @@ interface VisualEditorProps {
     password?: string;
     onPasswordChange?: (v: string) => void;
     // ---- Post mode only (WordPress-style post settings) ----
-    postTitle?: string;                       // shown in the header breadcrumb
+    postTitle?: string;                       // shown in the header breadcrumb + canvas title input
+    onPostTitleChange?: (v: string) => void;  // typed in the canvas title input
     categories?: { id: string; name: string }[];
     categoryIds?: string[];
     onCategoryIdsChange?: (ids: string[]) => void;
@@ -250,7 +251,9 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       const root = containerRef.current?.querySelector('.ve-guten-content') as HTMLElement;
       if (!root) return;
       const emptyState = document.createElement('div');
-      emptyState.className = 've-empty-state';
+      // Post mode: the canvas has a title input at the top, so the empty
+      // hint must sit below it instead of covering the whole surface
+      emptyState.className = 've-empty-state' + (modeRef.current === 'post' ? ' is-post' : '');
       emptyState.innerHTML = '<div class="ve-empty-card"><div class="ve-empty-icon">✦</div><p class="ve-empty-title">' + __('click + to add your first block') + '</p><p class="ve-empty-sub">' + __('or start with a template') + ':</p><div class="ve-empty-actions"><button data-add="hero">' + __('hero banner') + '</button><button data-add="two-columns">' + __('2 columns') + '</button><button data-add="sec-pricing">' + __('pricing') + '</button><button data-add="post-list">' + __('post list') + '</button></div></div>';
       root.appendChild(emptyState);
       const updateEmptyState = () => { let hc = false; try { hc = editor.getComponents().length > 0; } catch {} emptyState.style.display = hc ? 'none' : 'flex'; };
@@ -313,22 +316,22 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           ${isPost ? `
           <div class="ve-guten-header-left">
             ${onBack ? `<button id="ve-back-btn" class="ve-guten-icon-btn" title="${__('back to rich text')}" aria-label="${__('back to rich text')}">${WPI.arrowLeft}</button>` : ''}
+            <button id="ve-inserter-btn" class="ve-guten-icon-btn" title="${__('toggle block inserter')}" aria-label="${__('add block')}">${WPI.plus}</button>
+            <button id="ve-undo-btn" class="ve-guten-icon-btn" title="${__('undo')}" aria-label="${__('undo')}">${WPI.undo}</button>
+            <button id="ve-redo-btn" class="ve-guten-icon-btn" title="${__('redo')}" aria-label="${__('redo')}">${WPI.redo}</button>
+            <button id="ve-list-btn" class="ve-guten-icon-btn" title="${__('document overview')}" aria-label="${__('document overview')}">${WPI.listView}</button>
+          </div>
+          <div class="ve-guten-header-center">
             <span class="ve-guten-wp-logo" title="Mortar">${WPI.wpLogo}</span>
             <div class="ve-guten-wp-breadcrumb">
               <span class="ve-guten-wp-crumb">${__('posts')}</span>
               <span class="ve-guten-wp-sep">/</span>
               <span class="ve-guten-wp-title" id="ve-wp-title">${escAttr(pageSettingsRef.current?.postTitle || __('untitled'))}</span>
             </div>
-          </div>
-          <div class="ve-guten-header-center">
-            <button id="ve-inserter-btn" class="ve-guten-icon-btn" title="${__('toggle block inserter')}" aria-label="${__('add block')}">${WPI.plus}</button>
-            <button id="ve-undo-btn" class="ve-guten-icon-btn" title="${__('undo')}" aria-label="${__('undo')}">${WPI.undo}</button>
-            <button id="ve-redo-btn" class="ve-guten-icon-btn" title="${__('redo')}" aria-label="${__('redo')}">${WPI.redo}</button>
-            <button id="ve-list-btn" class="ve-guten-icon-btn" title="${__('document overview')}" aria-label="${__('document overview')}">${WPI.listView}</button>
-            <span class="ve-guten-save-state" id="ve-save-state"></span>
             <button id="ve-save-btn" class="ve-guten-text-btn">${__('save draft')}</button>
           </div>
           <div class="ve-guten-header-right">
+            <span class="ve-guten-save-state" id="ve-save-state"></span>
             <span class="ve-guten-dropdown-wrap">
               <button id="ve-preview-btn" class="ve-guten-text-btn${pageSettingsRef.current?.slug ? '' : ' is-disabled'}" title="${pageSettingsRef.current?.slug ? '' : __('save first to preview')}">${__('preview')} ${WPI.chevronDown}</button>
               <div class="ve-guten-dropdown" id="ve-preview-dropdown" style="display:none">
@@ -657,6 +660,36 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     if (css) { try { editor.setStyle(css); } catch {} }
     lastContentRef.current = content;
 
+    // --- Post mode: WP-style title input above the paper sheet ---
+    // Injected as the first child of the frames container so it scrolls and
+    // zooms together with the iframe (GrapesJS auto-sizes the frame to the
+    // content height, so the whole column scrolls as one sheet).
+    if (isPost) {
+      editor.on('load', () => {
+        const frames = ct.querySelector('.gjs-cv-canvas__frames') as HTMLElement;
+        if (!frames || frames.querySelector('.ve-post-title-wrap')) return;
+        const wrap = document.createElement('div');
+        wrap.className = 've-post-title-wrap';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 've-post-title-input';
+        input.id = 've-post-title-input';
+        input.placeholder = __('add title');
+        input.value = pageSettingsRef.current?.postTitle || '';
+        input.setAttribute('aria-label', __('add title'));
+        wrap.appendChild(input);
+        frames.prepend(wrap);
+        input.addEventListener('input', () => { pageSettingsRef.current?.onPostTitleChange?.(input.value); });
+        // Enter moves focus into the canvas (first block), like WordPress
+        input.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            try { (editor.Canvas.getFrameEl() as HTMLIFrameElement)?.contentWindow?.focus(); } catch {}
+          }
+        });
+      });
+    }
+
     // --- Change notification ---
     let changeTimer: ReturnType<typeof setTimeout>;
     const notifyChange = () => {
@@ -702,7 +735,10 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       const wrapper = frames?.querySelector('.gjs-frame-wrapper') as HTMLElement;
       const canvas = ct.querySelector('.gjs-cv-canvas') as HTMLElement;
       if (frames && wrapper) {
-        const h = wrapper.offsetHeight;
+        // Post mode: the title input sits above the frame inside the same
+        // scroll flow — include it so the bottom of the sheet is reachable.
+        const titleH = isPost ? (frames.querySelector('.ve-post-title-wrap') as HTMLElement)?.offsetHeight || 0 : 0;
+        const h = wrapper.offsetHeight + titleH;
         const canvasH = canvas?.clientHeight || 0;
         if (h > 0) frames.style.height = Math.max(h, canvasH) + 'px';
         else if (canvasH > 0) frames.style.height = canvasH + 'px';
@@ -727,6 +763,9 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         const dw = dev?.get?.('width');
         if (dw && !String(dw).includes('%')) baseW = parseFloat(dw);
       } catch {}
+      // Post mode: WordPress renders the post in a centered paper column
+      // (~680px), never full-bleed like the page builder
+      if (modeRef.current === 'post') baseW = Math.min(baseW, 680);
       const cw = canvas.clientWidth;
       const w = Math.max(1, Math.round(baseW * z));
       frames.style.transform = 'none';
@@ -1299,6 +1338,13 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         const el = e.target as HTMLElement;
         if (el.dataset.field === 'excerpt') pageSettingsRef.current?.onExcerptChange?.((el as HTMLTextAreaElement).value);
       });
+      // Panel headers collapse/expand the body (WordPress components-panel)
+      panel.addEventListener('click', (e) => {
+        const btn = (e.target as HTMLElement).closest('.components-panel__body-title button') as HTMLElement;
+        if (!btn) return;
+        const body = btn.closest('.components-panel__body') as HTMLElement;
+        if (body) body.classList.toggle('is-opened');
+      });
       // Categories: checkbox toggle + quick-add (auto-selects the new one)
       const catList = panel.querySelector('#ve-cat-list') as HTMLElement;
       if (catList) {
@@ -1836,6 +1882,9 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     // Header breadcrumb title (WordPress "Posts / Title")
     const titleEl = panel.closest('.visual-editor-container')?.querySelector('#ve-wp-title') as HTMLElement;
     if (titleEl) titleEl.textContent = pageSettings.postTitle || t('untitled', getLang());
+    // Canvas title input (skip while the user is typing in it)
+    const titleInput = containerRef.current?.querySelector('#ve-post-title-input') as HTMLInputElement;
+    if (titleInput && pageSettings.postTitle !== undefined && titleInput.value !== pageSettings.postTitle && document.activeElement !== titleInput) titleInput.value = pageSettings.postTitle;
     // Visibility radios + password field visibility
     if (panel.querySelector('input[data-vis]')) {
       const visVal = pageSettings.status === 'private' ? 'private' : pageSettings.password ? 'password' : 'public';
@@ -1858,7 +1907,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
 
   return React.createElement('div', {
     ref: containerRef,
-    className: 'visual-editor-container',
+    className: 'visual-editor-container' + (mode === 'post' ? ' is-post-mode' : ''),
     style: { height: height || 'calc(100vh - 200px)', minHeight: '500px' },
   });
 }

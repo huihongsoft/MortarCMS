@@ -439,6 +439,7 @@ export default function PostEditor() {
             onPasswordChange: (v: string) => { setPassword(v); setSaveState('dirty'); },
             // ---- Post mode: WordPress-style post settings ----
             postTitle: title,
+            onPostTitleChange: (v: string) => { setTitle(v); setSaveState('dirty'); },
             categories,
             categoryIds,
             onCategoryIdsChange: (ids: string[]) => { setCategoryIds(ids); setSaveState('dirty'); },
