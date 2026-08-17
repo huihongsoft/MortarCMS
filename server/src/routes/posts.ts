@@ -285,7 +285,7 @@ router.get('/admin', authenticate, authorize('admin', 'editor', 'author'), (req:
     const status = req.query.status as string;
     const search = (req.query.search as string) || '';
     // Sort columns are whitelisted (never concatenate raw query input into SQL)
-    const sortCols: Record<string, string> = { title: 'title', createdAt: 'createdAt', views: 'views' };
+    const sortCols: Record<string, string> = { title: 'title', createdAt: 'createdAt', views: 'views', status: 'status' };
     const sortCol = sortCols[(req.query.sortBy as string) || 'createdAt'] || 'createdAt';
     const sortDir = req.query.sortDir === 'asc' ? 'ASC' : 'DESC';
     let sql = 'SELECT * FROM Post WHERE type = ?';
