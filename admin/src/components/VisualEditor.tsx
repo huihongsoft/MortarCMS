@@ -211,7 +211,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     // Register CMS data block component types with live preview
     CMS_BLOCKS.forEach(block => {
       editor.DomComponents.addType(`cms-${block.id}`, {
-        model: { defaults: { tagName: 'div', draggable: true, droppable: false, traits: [{ type: 'text', name: 'title', label: 'Title' }] } },
+        model: { defaults: { tagName: 'div', draggable: true, droppable: false, traits: [{ type: 'text', name: 'title', label: t('trait title', getLang()) }] } },
         view: {
           init() {
             this.previewHtml = '';
@@ -540,6 +540,21 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         `,
       },
       plugins: [cmsPlugin],
+      // Localize GrapesJS chrome (style manager empty hint, trait labels)
+      i18n: {
+        locale: lang === 'zh' ? 'zh' : 'en',
+        messages: {
+          zh: {
+            styleManager: { empty: __('select an element before using style manager') },
+            traitManager: { traits: { labels: {
+              title: __('trait title'), href: __('trait href'), target: __('trait target'),
+              alt: __('trait alt'), src: __('trait src'), name: __('trait name'), value: __('trait value'),
+              type: __('trait type'), placeholder: __('trait placeholder'), required: __('trait required'),
+              disabled: __('trait disabled'), min: __('trait min'), max: __('trait max'), step: __('trait step'),
+            } } },
+          },
+        },
+      },
       styleManager: {
         sectors: [
           { name: 'Typography', open: false, properties: [{ property: 'font-size', type: 'select', defaults: 'inherit', options: [{ id: 'inherit', value: 'inherit', label: 'Default' }, { id: '12px', value: '12px' }, { id: '14px', value: '14px' }, { id: '16px', value: '16px' }, { id: '18px', value: '18px' }, { id: '24px', value: '24px' }, { id: '32px', value: '32px' }, { id: '48px', value: '48px' }] }, { property: 'font-weight', type: 'select', defaults: 'inherit', options: [{ id: 'inherit', value: 'inherit', label: 'Default' }, { id: '300', value: '300', label: 'Light' }, { id: '400', value: '400', label: 'Regular' }, { id: '500', value: '500', label: 'Medium' }, { id: '600', value: '600', label: 'Semi Bold' }, { id: '700', value: '700', label: 'Bold' }] }, { property: 'text-align', type: 'radio', defaults: 'left', options: [{ id: 'left', value: 'left' }, { id: 'center', value: 'center' }, { id: 'right', value: 'right' }] }, { property: 'color', type: 'color' }, { property: 'line-height' }, { property: 'letter-spacing' }] },
@@ -1139,6 +1154,29 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     editor.on('component:add', () => { if (listEl.style.display !== 'none') renderListView(); });
     editor.on('component:remove', () => { if (listEl.style.display !== 'none') renderListView(); });
     editor.on('component:selected', () => { if (listEl.style.display !== 'none') renderListView(); });
+
+    // --- Localize the style manager sector titles (GrapesJS shows the raw
+    // sector name; the i18n mapping above only covers its built-in sectors) ---
+    if (lang === 'zh') {
+      const SECTOR_LABELS: Record<string, string> = {
+        Typography: __('style sector Typography'),
+        Spacing: __('style sector Spacing'),
+        Background: __('style sector Background'),
+        Border: __('style sector Border'),
+        Size: __('style sector Size'),
+        Layout: __('style sector Layout'),
+        Effects: __('style sector Effects'),
+      };
+      editor.on('load', () => {
+        setTimeout(() => {
+          ct.querySelectorAll('[data-sector-title]').forEach((el) => {
+            const label = el.querySelector('.gjs-sm-sector-label') as HTMLElement;
+            const name = label?.textContent?.trim() || '';
+            if (label && SECTOR_LABELS[name]) label.textContent = SECTOR_LABELS[name];
+          });
+        }, 400);
+      });
+    }
 
     // --- Settings Sidebar (uses GrapesJS's built-in views container) ---
     // Show/hide the settings sidebar and shift the canvas accordingly.
