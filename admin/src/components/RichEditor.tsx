@@ -179,7 +179,9 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
   };
 
   async function openMedia() {
-    try { const r = await api.get('/media'); setMediaList(r.data || []); } catch {}
+    // /api/media returns { media, total, ... } — use .media (the raw object
+    // would crash the list render with "E.map is not a function")
+    try { const r = await api.get('/media'); setMediaList(r.data?.media || []); } catch {}
     setShowMedia(true);
   }
 
