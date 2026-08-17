@@ -43,6 +43,35 @@ const WPI = {
 // break out of an attribute and inject markup (stored XSS).
 const escAttr = (v: any) => String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// The frontend renders post/page body copy inside Tailwind Typography's
+// `prose` container (themes/default PostLayout & PageLayout). The canvas
+// wraps content in the SAME classes so editing looks like the live page —
+// otherwise the bundled theme CSS (.prose h1, .prose blockquote, …) never
+// matches and the editor looks nothing like the preview.
+const PROSE_CLS = 'prose prose-gray prose-lg max-w-none';
+const wrapProse = (html: string) => '<div class="' + PROSE_CLS + '">' + html + '</div>';
+// Strip the wrapper before saving (content is stored without it)
+const unwrapProse = (html: string): string => {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  const first = tmp.firstElementChild;
+  if (first && tmp.children.length === 1 && first.classList.contains('prose')) return first.innerHTML;
+  return html;
+};
+// Find the canvas's prose container component (if any)
+const findProseComp = (editor: any): any => {
+  let found: any = null;
+  try { editor.getComponents().each((c: any) => { if (!found && (c.getClasses?.() || []).join(' ').includes('prose')) found = c; }); } catch {}
+  return found;
+};
+// Add blocks INSIDE the prose container when nothing is selected, so new
+// content keeps the frontend body styles
+const addToCanvas = (editor: any, html: string) => {
+  const prose = findProseComp(editor);
+  if (prose) { try { prose.components().add(html); return; } catch {} }
+  editor.addComponents(html);
+};
+
 // Content may arrive as a full document (some imports produce <body>…
 // </body>). GrapesJS parses fragments best — strip the document shell so the
 // canvas loads cleanly.
@@ -256,7 +285,18 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       emptyState.className = 've-empty-state' + (modeRef.current === 'post' ? ' is-post' : '');
       emptyState.innerHTML = '<div class="ve-empty-card"><div class="ve-empty-icon">✦</div><p class="ve-empty-title">' + __('click + to add your first block') + '</p><p class="ve-empty-sub">' + __('or start with a template') + ':</p><div class="ve-empty-actions"><button data-add="hero">' + __('hero banner') + '</button><button data-add="two-columns">' + __('2 columns') + '</button><button data-add="sec-pricing">' + __('pricing') + '</button><button data-add="post-list">' + __('post list') + '</button></div></div>';
       root.appendChild(emptyState);
-      const updateEmptyState = () => { let hc = false; try { hc = editor.getComponents().length > 0; } catch {} emptyState.style.display = hc ? 'none' : 'flex'; };
+      // The body always contains the prose container once content loads —
+      // empty means the prose container itself has no children (and no
+      // other root components exist)
+      const updateEmptyState = () => {
+        let hc = false;
+        try {
+          const root = editor.getComponents();
+          const prose = findProseComp(editor);
+          hc = root.length > 1 || (!!prose && prose.components().length > 0);
+        } catch {}
+        emptyState.style.display = hc ? 'none' : 'flex';
+      };
       updateEmptyState();
       editor.on('component:add', updateEmptyState);
       editor.on('component:remove', updateEmptyState);
@@ -265,7 +305,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         const btn = (e.target as HTMLElement).closest('button');
         if (!btn?.dataset.add) return;
         const block = ALL_BLOCKS.find(b => b.id === btn.dataset.add);
-        if (block) editor.addComponents(block.content);
+        if (block) addToCanvas(editor, block.content);
       });
     });
   }, []);
@@ -659,8 +699,12 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     });
 
     // Load initial content
-    if (content) { try { editor.setComponents(normalizeContent(content)); } catch { editor.setComponents('<p>Start building your page...</p>'); } }
+    if (content) { try { editor.setComponents(wrapProse(normalizeContent(content))); } catch { editor.setComponents(wrapProse('<p>Start building your page...</p>')); } }
     if (css) { try { editor.setStyle(css); } catch {} }
+    // The prose wrapper is just the frontend's body container — users edit
+    // its children, never the wrapper itself
+    const proseComp = findProseComp(editor);
+    if (proseComp) proseComp.set({ selectable: false, draggable: false, deletable: false });
     lastContentRef.current = content;
 
     // --- Post mode: WP-style title input above the paper sheet ---
@@ -699,7 +743,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       clearTimeout(changeTimer);
       changeTimer = setTimeout(() => {
         const ed = editorRef.current; if (!ed) return;
-        const html = ed.getHtml(); const styles = ed.getCss();
+        const html = unwrapProse(ed.getHtml()); const styles = ed.getCss();
         lastContentRef.current = html; onChangeRef.current(html, styles || '');
       }, 500);
     };
@@ -720,7 +764,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); try { editor.runCommand('core:redo'); } catch {} return; }
       const comp = editor.getSelected() as any;
       if ((e.ctrlKey || e.metaKey) && k === 'c') { e.preventDefault(); if (comp) { try { clipHtml = comp.toHTML?.() || ''; } catch {} } return; }
-      if ((e.ctrlKey || e.metaKey) && k === 'v') { e.preventDefault(); if (clipHtml) { try { editor.addComponents(clipHtml); notifyChange(); } catch {} } return; }
+      if ((e.ctrlKey || e.metaKey) && k === 'v') { e.preventDefault(); if (clipHtml) { try { addToCanvas(editor, clipHtml); notifyChange(); } catch {} } return; }
       if (!comp) return;
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'd') { e.preventDefault(); const p = comp.parent(); if (p) { const s = p.components(); const i = s.indexOf(comp); if (i > -1) { const c = comp.clone(); s.add(c, { at: i + 1 }); editor.select(c); } } return; }
       if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { e.preventDefault(); const p = comp.parent(); if (p) { const s = p.components(); const i = s.indexOf(comp); const t = e.key === 'ArrowUp' ? i - 1 : i + 1; if (i > -1 && t >= 0 && t < s.length) { s.remove(comp); s.add(comp, { at: t }); editor.select(comp); } } }
@@ -868,8 +912,8 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       const block = ALL_BLOCKS.find(b => b.id === btn.dataset.block);
       if (block) {
         const sel = editor.getSelected() as any;
-        if (sel) { const p = sel.parent?.(); if (p) { const s = p.components(); s.add(block.content, { at: s.indexOf(sel) + 1 }); } else editor.addComponents(block.content); }
-        else editor.addComponents(block.content);
+        if (sel) { const p = sel.parent?.(); if (p) { const s = p.components(); s.add(block.content, { at: s.indexOf(sel) + 1 }); } else addToCanvas(editor, block.content); }
+        else addToCanvas(editor, block.content);
         // Record recent block usage (WordPress "Recent" section)
         try {
           const recent = JSON.parse(sessionStorage.getItem('mortar_recent_blocks') || '[]');
@@ -949,8 +993,8 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
               items.map((m: any) => `<img src="${escAttr(m.thumbnail || m.url)}" alt="${escAttr(m.original || '')}" style="width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:6px;display:block;" />`).join('') +
               '</div>';
             const sel = editor.getSelected() as any;
-            if (sel) { const p = sel.parent?.(); if (p) { const s = p.components(); s.add(galleryHtml, { at: s.indexOf(sel) + 1 }); } else editor.addComponents(galleryHtml); }
-            else editor.addComponents(galleryHtml);
+            if (sel) { const p = sel.parent?.(); if (p) { const s = p.components(); s.add(galleryHtml, { at: s.indexOf(sel) + 1 }); } else addToCanvas(editor, galleryHtml); }
+            else addToCanvas(editor, galleryHtml);
             hideInserter();
           });
           imgs.forEach((m: any) => {
@@ -980,8 +1024,8 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
               }
               const html = `<img src="${escAttr(m.url)}" alt="${escAttr(m.original || '')}" style="width:100%;max-width:800px;height:auto;display:block;" />`;
               const sel = editor.getSelected() as any;
-              if (sel) { const p = sel.parent?.(); if (p) { const s = p.components(); s.add(html, { at: s.indexOf(sel) + 1 }); } else editor.addComponents(html); }
-              else editor.addComponents(html);
+              if (sel) { const p = sel.parent?.(); if (p) { const s = p.components(); s.add(html, { at: s.indexOf(sel) + 1 }); } else addToCanvas(editor, html); }
+              else addToCanvas(editor, html);
               hideInserter();
             });
             grid.appendChild(item);
@@ -1021,8 +1065,8 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     const insertShortcode = (name: string) => {
       const html = '<p style="background:#f0f0f0;border-radius:4px;padding:10px 14px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:13px;color:#757575;margin:0 0 1em;">[' + name + ']</p>';
       const sel = editor.getSelected() as any;
-      if (sel) { const p = sel.parent?.(); if (p) { const s = p.components(); s.add(html, { at: s.indexOf(sel) + 1 }); } else editor.addComponents(html); }
-      else editor.addComponents(html);
+      if (sel) { const p = sel.parent?.(); if (p) { const s = p.components(); s.add(html, { at: s.indexOf(sel) + 1 }); } else addToCanvas(editor, html); }
+      else addToCanvas(editor, html);
       hideInserter();
     };
 
@@ -1900,8 +1944,10 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     const ed = editorRef.current; if (!ed) return;
     if (content !== lastContentRef.current) {
       lastContentRef.current = content;
-      try { ed.setComponents(normalizeContent(content)); } catch {}
+      try { ed.setComponents(wrapProse(normalizeContent(content))); } catch {}
       try { ed.setStyle(css || ''); } catch {}
+      const prose = findProseComp(ed);
+      if (prose) prose.set({ selectable: false, draggable: false, deletable: false });
     }
      
   }, [content, css]);
