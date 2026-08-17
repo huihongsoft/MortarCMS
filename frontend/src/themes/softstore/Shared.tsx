@@ -32,7 +32,7 @@ export function IconCarousel({ settings }: { settings: Record<string, string> })
 
   if (posts.length === 0) return null;
 
-  return React.createElement('div', { className: 'bg-white rounded-[5px] border border-[#dedede] px-4 pt-4 pb-1' },
+  return React.createElement('div', { className: 'bg-white rounded-[5px] border border-[#dedede] px-4 pt-4 pb-4' },
     React.createElement('div', {
       ref: trackRef,
       className: 'flex gap-[10px] overflow-x-auto scrollbar-none',

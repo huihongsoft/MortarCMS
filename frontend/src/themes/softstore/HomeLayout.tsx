@@ -37,7 +37,8 @@ export default function SoftstoreHomeLayout(props: any) {
   return React.createElement('div', { className: 'bg-[#f5f5f5] min-h-screen' },
     React.createElement('div', { className: 'max-w-6xl mx-auto px-4' },
       // 1) software icon carousel
-      React.createElement('div', { className: 'pt-4' }, React.createElement(IconCarousel, { settings })),
+      // Breathing room above the carousel (it would otherwise hug the sticky header)
+      React.createElement('div', { className: 'pt-6' }, React.createElement(IconCarousel, { settings })),
       // 2) tag bar
       React.createElement('div', { className: 'mt-2' }, React.createElement(TagBar, { settings })),
       // 3) main area: tabbed list (col-9) + sidebar (col-3)
