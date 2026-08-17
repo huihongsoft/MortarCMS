@@ -711,6 +711,29 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       // Also run on load to correct GrapesJS's initial size calculation
       setTimeout(forceFullLayout, 100);
       setTimeout(forceFullLayout, 500);
+
+      // Keep the iframe height in sync with its body content. GrapesJS's own
+      // auto-size can stall when the frame style forces html{height:100%},
+      // leaving the frame shorter than the content — the overflow is clipped
+      // and the scroll area ends up with a second scrollbar.
+      const syncIframeHeight = () => {
+        const wr = ct.querySelector('.gjs-frame-wrapper') as HTMLElement;
+        const fr = wr?.querySelector('iframe') as HTMLIFrameElement;
+        const b = fr?.contentDocument?.body;
+        if (wr && fr && b) {
+          const h = b.scrollHeight;
+          if (h > 0 && Math.abs(h - fr.clientHeight) > 2) fr.style.height = h + 'px';
+        }
+        // The frames container follows the frame (title input sits above it)
+        syncFramesHeight();
+      };
+      editor.on('component:add', syncIframeHeight);
+      editor.on('component:update', syncIframeHeight);
+      editor.on('component:remove', syncIframeHeight);
+      editor.on('styleable:change', syncIframeHeight);
+      setTimeout(syncIframeHeight, 300);
+      setTimeout(syncIframeHeight, 800);
+      setTimeout(syncIframeHeight, 1500);
     });
 
     // Load initial content
