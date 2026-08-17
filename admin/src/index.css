@@ -1841,3 +1841,9 @@ details.card[open] summary .ve-arrow { transform: rotate(180deg); }
   display: block;
 }
 .ve-featured-picker-item:hover { outline: 2px solid var(--wp-admin-theme-color); }
+
+/* Narrow windows: drop the saved-state text so the settings gear and the
+   more menu never get pushed out of the visible header */
+@media (max-width: 1180px) {
+  .ve-guten-header .ve-guten-save-state { display: none; }
+}
