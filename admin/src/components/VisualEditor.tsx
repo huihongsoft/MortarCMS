@@ -549,11 +549,8 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     // Remove default blocks we don't need
     ['map', 'link'].forEach(id => editor.BlockManager.remove(id));
 
-    // Force-hide views container initially (GrapesJS may set inline styles)
-    setTimeout(() => {
-      const vc = ct.querySelector('.gjs-pn-views-container') as HTMLElement;
-      if (vc) vc.style.display = 'none';
-    }, 300);
+    // NOTE: the settings sidebar (views container) is now VISIBLE by default
+    // (WordPress behavior) and toggled only by the gear button / close icon.
 
     // Force canvas to fill the entire content area
     editor.on('load', () => {
@@ -1166,6 +1163,12 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           if (viewsEl.style.display === 'none') return;
           setTab('post');
         });
+
+        // Default: the settings sidebar is open when the editor loads,
+        // showing the Post (page/post info) tab — WordPress behavior.
+        // The user can still close it with the gear button or the close icon.
+        viewsEl.style.display = '';
+        injectPagePanel();
       }, 300);
     });
 
