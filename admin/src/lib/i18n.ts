@@ -1214,6 +1214,8 @@ const zh: Record<string, string> = {
 'post settings': '文章设置',
 'collapse sidebar': '收起侧栏',
 'expand sidebar': '展开侧栏',
+'rich text': '富文本',
+'visual design': '可视化设计',
 
 // Markdown toolbar
 'markdown heading': '标题',
