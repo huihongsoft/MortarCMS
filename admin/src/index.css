@@ -1747,10 +1747,14 @@ details.card[open] summary .ve-arrow { transform: rotate(180deg); }
 .dark .ve-guten-tag-chip { background: #111; border-color: #333; color: #e0e0e0; }
 .dark .ve-guten-tag-chip button:hover { color: #fff; background: #333; }
 
-/* Chevron icons inside header text buttons (Preview ▾ / Publish ▾) */
-.ve-guten-header .ve-guten-text-btn svg {
+/* Chevron icons inside header buttons (Preview ▾ / Publish ▾).
+   Without an explicit size the raw SVG defaults to ~300x150 and blows the
+   button apart (the label wraps onto two lines). */
+.ve-guten-header .ve-guten-text-btn svg,
+.ve-guten-header .ve-guten-primary-btn svg {
   width: 14px; height: 14px;
   margin-left: 2px; vertical-align: middle;
+  flex-shrink: 0;
 }
 
 /* Publish date label inside Status & visibility */
