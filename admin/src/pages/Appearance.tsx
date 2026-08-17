@@ -305,14 +305,14 @@ export default function Appearance() {
           )
         )
       ),
-      React.createElement('div', { className: 'card p-6' },
+      React.createElement('div', { className: 'card p-6 mb-6' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('layout', getLang())),
         React.createElement('div', { className: 'space-y-4' },
           selectField(t('sidebar position', getLang()), 'theme_sidebar_position', [t('right', getLang()), t('left', getLang()), t('none', getLang())], settings, setSettings),
           selectField(t('posts per row', getLang()), 'theme_posts_per_row', ['1', '2', '3'], settings, setSettings),
         )
       ),
-        React.createElement('div', { className: 'card p-6' },
+        React.createElement('div', { className: 'card p-6 mb-6' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('site identity', getLang())),
           React.createElement('div', { className: 'space-y-4' },
             React.createElement('div', null,
