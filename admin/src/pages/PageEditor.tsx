@@ -19,6 +19,8 @@ export default function PageEditor() {
   const [parentPages, setParentPages] = useState<any[]>([]);
   const [menuOrder, setMenuOrder] = useState(0);
   const [password, setPassword] = useState('');
+  const [featured, setFeatured] = useState('');
+  const [excerpt, setExcerpt] = useState('');
   const toast = useToast();
   const [visualMode, setVisualMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -27,7 +29,7 @@ export default function PageEditor() {
   const [saving, setSaving] = useState(false);
   const createdIdRef = useRef<string | null>(null);
 
-  useEffect(() => { api.get('/pages').then(r => { const all = r.data; setParentPages(all.filter((p: any) => p.id !== id)); if (id) { const p = all.find((x: any) => x.id === id); if (p) { setTitle(p.title); setSlug(p.slug || ''); setContent(p.content); setStatus(p.status === 'published' && p.password ? 'password' : p.status); setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); setPassword(p.password || ''); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } } }); }, [id]);
+  useEffect(() => { api.get('/pages').then(r => { const all = r.data; setParentPages(all.filter((p: any) => p.id !== id)); if (id) { const p = all.find((x: any) => x.id === id); if (p) { setTitle(p.title); setSlug(p.slug || ''); setContent(p.content); setStatus(p.status === 'published' && p.password ? 'password' : p.status); setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); setPassword(p.password || ''); if (p.featured) setFeatured(p.featured); if (p.excerpt) setExcerpt(p.excerpt); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } } }); }, [id]);
 
   // stay=false (publish): navigate to pages; stay=true (draft from the builder):
   // keep editing in place
@@ -39,7 +41,7 @@ export default function PageEditor() {
       // status (published / password-protected / private), falling back to
       // published when the select is still on draft.
       const finalStatus = s === 'draft' ? 'draft' : (status === 'draft' ? 'published' : status);
-      const payload: any = { title, content, status: finalStatus, menuOrder, parentId: parentId || null, password };
+      const payload: any = { title, content, status: finalStatus, menuOrder, parentId: parentId || null, password, featured: featured || undefined, excerpt };
       if (visualCss) payload.meta = { _visual_css: visualCss };
       const pageId = id || createdIdRef.current;
       if (pageId) await api.put(`/pages/${pageId}`, payload);
@@ -101,6 +103,11 @@ export default function PageEditor() {
             onPasswordChange: (v: string) => { setPassword(v); setSaveState('dirty'); },
             slug,
             showPreview: () => { if (slug) window.open(window.location.origin + '/page/' + slug, '_blank'); },
+            featuredImage: featured || undefined,
+            onFeaturedImageChange: (url: string) => { setFeatured(url); setSaveState('dirty'); },
+            showMediaPicker: () => {},   // the sidebar uses its own inline media grid
+            excerpt,
+            onExcerptChange: (v: string) => { setExcerpt(v); setSaveState('dirty'); },
           },
         }),
         showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },

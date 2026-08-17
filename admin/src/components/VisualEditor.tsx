@@ -1186,8 +1186,11 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           <div class="ve-guten-field">
             <div class="ve-guten-featured" id="ve-featured-wrap">
               ${ps?.featuredImage
-                ? `<img src="${ps.featuredImage}" alt="Featured" class="ve-guten-featured-img" data-action="featured-remove" />`
+                ? `<img src="${escAttr(ps.featuredImage)}" alt="Featured" class="ve-guten-featured-img" data-action="featured-remove" />`
                 : `<button class="ve-guten-featured-btn" data-action="featured-pick">${__('set featured image')}</button>`}
+            </div>
+            <div class="ve-featured-picker" id="ve-featured-picker" style="display:none">
+              <div class="ve-featured-picker-grid" id="ve-featured-picker-grid">${__('loading media')}…</div>
             </div>
           </div>
         </div>` : '';
@@ -1396,13 +1399,49 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         });
       }
       panel.querySelector('#ve-preview-link')?.addEventListener('click', (e) => { e.preventDefault(); pageSettingsRef.current?.showPreview?.(); });
-      // Featured image actions
+      // Featured image: pick from an inline media grid (works inside the
+      // full-screen editor, unlike the external media picker), or remove
       const featuredWrap = panel.querySelector('#ve-featured-wrap') as HTMLElement;
+      const featuredPicker = panel.querySelector('#ve-featured-picker') as HTMLElement;
+      const featuredGrid = panel.querySelector('#ve-featured-picker-grid') as HTMLElement;
+      const loadFeaturedMedia = () => {
+        if (featuredGrid?.dataset.loaded === '1') return;
+        featuredGrid!.dataset.loaded = '1';
+        const token = localStorage.getItem('mortar_token') || '';
+        fetch('/api/media?limit=48', { headers: { Authorization: 'Bearer ' + token } })
+          .then(r => r.json())
+          .then((d: any) => {
+            const imgs = (d?.media || []).filter((m: any) => m.mimeType?.startsWith('image/'));
+            if (imgs.length === 0) { featuredGrid!.innerHTML = '<span class="ve-guten-field-hint">' + __('no media found') + '</span>'; return; }
+            featuredGrid!.innerHTML = '';
+            imgs.forEach((m: any) => {
+              // Build with DOM APIs (never innerHTML): file names are user-controlled
+              const item = document.createElement('button');
+              item.type = 'button';
+              item.className = 've-featured-picker-item';
+              item.title = m.original || '';
+              const img = document.createElement('img');
+              img.src = m.thumbnail || m.url;
+              img.alt = m.original || '';
+              img.loading = 'lazy';
+              item.appendChild(img);
+              item.addEventListener('click', () => {
+                pageSettingsRef.current?.onFeaturedImageChange?.(m.url);
+                if (featuredPicker) featuredPicker.style.display = 'none';
+              });
+              featuredGrid!.appendChild(item);
+            });
+          })
+          .catch(() => { featuredGrid!.innerHTML = '<span class="ve-guten-field-hint">' + __('no media found') + '</span>'; });
+      };
       featuredWrap?.addEventListener('click', (e) => {
         const el = (e.target as HTMLElement).closest('[data-action]') as HTMLElement;
         if (!el) return;
         if (el.dataset.action === 'featured-pick') {
-          pageSettingsRef.current?.showMediaPicker?.();
+          // Toggle the inline media grid (replaces the old external picker)
+          const open = featuredPicker?.style.display === 'none';
+          if (featuredPicker) featuredPicker.style.display = open ? '' : 'none';
+          if (open) loadFeaturedMedia();
         } else if (el.dataset.action === 'featured-remove') {
           pageSettingsRef.current?.onFeaturedImageChange?.('');
         }

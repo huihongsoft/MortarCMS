@@ -20,7 +20,7 @@ function sanitizeVisualCss(css: string): string {
     .replace(/behavior\s*:[^;}]+;?/gi, '')
     .replace(/url\(\s*(javascript|data):/gi, 'url(');
 }
-const pageSchema = z.object({ title: z.string().min(1), content: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'password', 'trash']).optional(), password: z.string().optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), meta: z.record(z.string(), z.string()).optional() });
+const pageSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'password', 'trash']).optional(), password: z.string().optional(), featured: z.string().optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), meta: z.record(z.string(), z.string()).optional() });
 
 // 'password' status means "published but password protected" (WordPress style):
 // store it as status='published' + a non-empty password field.
@@ -146,7 +146,7 @@ router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, 
     const slug = uniqueSlug(data.title, allSlugs);
     const id = cuid();
     const { status: storeStatus, password: storePassword } = normalizePage(data);
-    db.prepare('INSERT INTO Post (id, title, slug, content, status, password, type, authorId, parentId, menuOrder, publishedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', storeStatus, storePassword, 'page', req.user!.userId, data.parentId || null, data.menuOrder || 0, storeStatus === 'published' ? new Date().toISOString() : null);
+    db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, featured, status, password, type, authorId, parentId, menuOrder, publishedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', data.featured || null, storeStatus, storePassword, 'page', req.user!.userId, data.parentId || null, data.menuOrder || 0, storeStatus === 'published' ? new Date().toISOString() : null);
     if (data.meta) {
       for (const [key, value] of Object.entries(data.meta)) {
         db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
@@ -165,6 +165,8 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest
     const sets: string[] = []; const vals: any[] = [];
     if (data.title !== undefined) { sets.push('title = ?'); vals.push(data.title); }
     if (data.content !== undefined) { sets.push('content = ?'); vals.push(data.content); }
+    if (data.excerpt !== undefined) { sets.push('excerpt = ?'); vals.push(data.excerpt); }
+    if (data.featured !== undefined) { sets.push('featured = ?'); vals.push(data.featured || null); }
     if (data.status !== undefined || data.password !== undefined) {
       const norm = normalizePage({ status: data.status, password: data.password }, existing.password || '');
       sets.push('status = ?'); vals.push(norm.status);

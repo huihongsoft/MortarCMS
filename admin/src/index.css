@@ -1809,3 +1809,35 @@ details.card[open] summary .ve-arrow { transform: rotate(180deg); }
 .ve-guten-content .components-panel__body.is-opened > .components-panel__body-title button::after {
   transform: translateY(-50%) rotate(45deg);    /* open: chevron-down */
 }
+
+/* Featured image inline media grid (settings sidebar) */
+.ve-featured-picker {
+  margin-top: 8px;
+  border: 1px solid #ddd;
+  border-radius: 2px;
+  padding: 8px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.dark .ve-featured-picker { border-color: #333; }
+.ve-featured-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+.ve-featured-picker-item {
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border-radius: 2px;
+}
+.ve-featured-picker-item img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.ve-featured-picker-item:hover { outline: 2px solid var(--wp-admin-theme-color); }
