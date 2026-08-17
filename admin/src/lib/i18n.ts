@@ -1210,6 +1210,11 @@ const zh: Record<string, string> = {
 'videos': '视频',
 'documents': '文档',
 
+// Post editor sidebar collapse
+'post settings': '文章设置',
+'collapse sidebar': '收起侧栏',
+'expand sidebar': '展开侧栏',
+
 // Markdown toolbar
 'markdown heading': '标题',
 'bold text': '加粗文字',

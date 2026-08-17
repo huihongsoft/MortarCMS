@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye, Sparkles } from 'lucide-react';
+import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye, Sparkles, PanelRightClose } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { useToast } from '../lib/toast';
 import RichEditor from '../components/RichEditor';
@@ -14,6 +14,7 @@ export default function PostEditor() {
   const navigate = useNavigate();
   const [slug, setSlug] = useState('');
   const [title, setTitle] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [content, setContent] = useState('');
   const [excerpt, setExcerpt] = useState('');
   const [status, setStatus] = useState('draft');
@@ -455,8 +456,8 @@ export default function PostEditor() {
       )
     ),
     // ---- TEXT MODE: original 3-col grid ----
-    !visualMode && React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
-      React.createElement('div', { className: 'lg:col-span-2 space-y-4' },
+    !visualMode && React.createElement('div', { className: 'grid grid-cols-1 ' + (sidebarOpen ? 'lg:grid-cols-3' : '') + ' gap-6' },
+      React.createElement('div', { className: (sidebarOpen ? 'lg:col-span-2 ' : '') + 'space-y-4' },
         React.createElement('div', { className: 'relative' },
           React.createElement('input', { value: title, onChange: e => setTitle(e.target.value), placeholder: t('post title', getLang()), className: 'input-field text-lg font-semibold pr-20' }),
           React.createElement('span', { id: 'post-word-count', className: 'absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400' }, (content || '').replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length + ' ' + t('words', getLang()))
@@ -472,12 +473,17 @@ export default function PostEditor() {
             className: 'flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 transition-colors ' +
               (visualMode ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'),
           }, React.createElement(Palette, { size: 14 }), t('visual design', getLang())),
+          React.createElement('button', {
+            onClick: () => setSidebarOpen(!sidebarOpen),
+            title: sidebarOpen ? t('collapse sidebar', getLang()) : t('expand sidebar', getLang()),
+            className: 'ml-auto flex items-center gap-1.5 px-3 py-2 text-sm border-b-2 border-transparent text-gray-500 hover:text-gray-700 transition-colors',
+          }, React.createElement(PanelRightClose, { size: 14 }), t('post settings', getLang())),
         ),
         renderAiPanel(),
         React.createElement(RichEditor, { value: content, onChange: setContent, placeholder: t('write your post content', getLang()) }),
         React.createElement('textarea', { value: excerpt, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setExcerpt(e.target.value), placeholder: t('excerpt (optional)', getLang()), className: 'input-field', rows: 3 })
       ),
-      renderSidebar()
+      sidebarOpen && renderSidebar()
     )
   );
 }
