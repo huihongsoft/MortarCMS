@@ -561,8 +561,11 @@ table tbody tr { transition: background-color 0.12s ease; }
 .dark .ve-guten-content { background-color: #111; }
 
 /* Hide ALL GrapesJS toolbar buttons (View code, Preview, Fullscreen, etc.)
-   — their functions are provided by our own header ⋯ menu */
-.ve-guten-content .gjs-pn-panels,
+   — their functions are provided by our own header ⋯ menu.
+   The panels container itself must stay visible: it holds the settings
+   sidebar (.gjs-pn-views-container), so only its other children are hidden. */
+.ve-guten-content .gjs-pn-panels { display: block !important; }
+.ve-guten-content .gjs-pn-panels .gjs-pn-panel:not(.gjs-pn-views-container) { display: none !important; }
 .ve-guten-content .gjs-blocks-c,
 .ve-guten-content .gjs-devices-c,
 .ve-guten-content .gjs-device-label,
@@ -584,6 +587,8 @@ table tbody tr { transition: background-color 0.12s ease; }
 
 .ve-guten-content .gjs-pn-views-container {
   flex-shrink: 0;
+  /* GrapesJS reserves 42px at the top for its (hidden) toolbar bar */
+  padding-top: 0;
   background: #fff;
   color: #1e1e1e;
   overflow-y: auto;
@@ -1384,8 +1389,10 @@ table tbody tr { transition: background-color 0.12s ease; }
   top: 0 !important;
   left: 0 !important;
   --gjs-canvas-top: 0px !important;
-  --gjs-left-width: 0px !important;
-  width: 100% !important;
+  /* Sidebar width is managed by JS (280px visible / 0px hidden) — the
+     !important here would defeat it, so this stays a plain default */
+  --gjs-left-width: 0px;
+  width: calc(100% - var(--gjs-left-width)) !important;
   height: 100% !important;
   overflow: auto !important;
 }
@@ -1460,10 +1467,13 @@ table tbody tr { transition: background-color 0.12s ease; }
   margin: 0 !important;
   border: none !important;
 }
-/* Only the fixed containers keep full width */
-.ve-guten-content .gjs-cv-canvas__wrapper,
-.ve-guten-content .gjs-cv-canvas {
+/* The wrapper fills the canvas; the canvas itself yields space to the
+   settings sidebar (its width is calc(100% - var(--gjs-left-width))) */
+.ve-guten-content .gjs-cv-canvas__wrapper {
   width: 100% !important;
+}
+.ve-guten-content .gjs-cv-canvas {
+  width: calc(100% - var(--gjs-left-width)) !important;
 }
 .ve-guten-content .gjs-frame-wrapper,
 .ve-guten-content .gjs-frame {

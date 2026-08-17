@@ -624,18 +624,24 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           cv.style.padding = '0';
           cv.style.top = '0';
           cv.style.left = '0';
-          cv.style.width = '100%';
           cv.style.height = '100%';
           cv.style.setProperty('--gjs-canvas-top', '0px');
-          cv.style.setProperty('--gjs-left-width', '0px');
+          // The settings sidebar lives inside GrapesJS's panels container
+          // (which stays visible now). Reserve its width so the canvas
+          // shifts left instead of being covered by the sidebar. The canvas
+          // keeps GrapesJS's width: calc(100% - var(--gjs-left-width)) rule
+          // (do NOT set style.width — it would override the calc).
+          cv.style.setProperty('--gjs-left-width', '280px');
         }
         // Force gjs-editor to have no gaps
         const ed = ct.querySelector('.gjs-editor') as HTMLElement;
         if (ed) { ed.style.padding = '0'; ed.style.margin = '0'; ed.style.gap = '0'; ed.style.display = 'flex'; ed.style.flexDirection = 'column'; }
-        // Kill any leftover top toolbar strip / panels that create a blank
-        // band between our header and the canvas
+        // Do NOT hide .gjs-pn-panels — it is the positioning parent of the
+        // settings sidebar (.gjs-pn-views-container). Only the other toolbars
+        // are hidden (via CSS). Clear any leftover inline hiding from older
+        // versions of this layout.
         const panelsEl = ct.querySelector('.gjs-pn-panels') as HTMLElement;
-        if (panelsEl) { panelsEl.style.display = 'none'; panelsEl.style.height = '0'; panelsEl.style.padding = '0'; panelsEl.style.margin = '0'; }
+        if (panelsEl) { panelsEl.style.display = ''; panelsEl.style.height = ''; panelsEl.style.padding = ''; panelsEl.style.margin = ''; }
         // Ensure canvas starts at the very top of the editor
         const framesEl = ct.querySelector('.gjs-cv-canvas__frames') as HTMLElement;
         if (framesEl) { framesEl.style.top = '0'; framesEl.style.marginTop = '0'; }
@@ -1091,6 +1097,18 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     editor.on('component:selected', () => { if (listEl.style.display !== 'none') renderListView(); });
 
     // --- Settings Sidebar (uses GrapesJS's built-in views container) ---
+    // Show/hide the settings sidebar and shift the canvas accordingly.
+    // The canvas width is calc(100% - var(--gjs-left-width)), so the
+    // sidebar must reserve its width while visible (or cover the canvas).
+    const setSidebarVisible = (visible: boolean) => {
+      const viewsEl = ct.querySelector('.gjs-pn-views-container') as HTMLElement;
+      if (!viewsEl) return;
+      viewsEl.style.display = visible ? '' : 'none';
+      const cv = ct.querySelector('.gjs-cv-canvas') as HTMLElement;
+      if (cv) cv.style.setProperty('--gjs-left-width', visible ? '280px' : '0px');
+      // Re-center the paper sheet in the new canvas width
+      try { setTimeout(applyZoom, 50); setTimeout(applyZoom, 200); } catch {}
+    };
     // Inject the Gutenberg tabs + Post panel into the GrapesJS views container
     editor.on('load', () => {
       setTimeout(() => {
@@ -1103,7 +1121,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         sidebarHdr.className = 've-guten-sidebar-hdr';
         sidebarHdr.innerHTML = `
           <div class="ve-guten-tabs">
-            <button class="ve-guten-tab is-active" data-gtab="post">${__('post')}</button>
+            <button class="ve-guten-tab is-active" data-gtab="post">${modeRef.current === 'post' ? __('post') : __('page')}</button>
             <button class="ve-guten-tab" data-gtab="block">${__('block')}</button>
           </div>
           <button class="ve-guten-close-sm ve-guten-sidebar-close" title="${__('close settings')}" aria-label="${__('close settings')}">${WPI.close}</button>
@@ -1146,7 +1164,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
 
         // Close button
         sidebarHdr.querySelector('.ve-guten-sidebar-close')?.addEventListener('click', () => {
-          viewsEl.style.display = 'none';
+          setSidebarVisible(false);
         });
 
         // Auto-switch to Block tab when a component is selected (WordPress behavior),
@@ -1167,7 +1185,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         // Default: the settings sidebar is open when the editor loads,
         // showing the Post (page/post info) tab — WordPress behavior.
         // The user can still close it with the gear button or the close icon.
-        viewsEl.style.display = '';
+        setSidebarVisible(true);
         injectPagePanel();
       }, 300);
     });
@@ -1758,8 +1776,8 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       else if (id === 've-settings-btn') {
         const viewsEl = ct.querySelector('.gjs-pn-views-container') as HTMLElement;
         if (!viewsEl) return;
-        if (viewsEl.style.display === 'none') { viewsEl.style.display = ''; injectPagePanel(); }
-        else viewsEl.style.display = 'none';
+        if (viewsEl.style.display === 'none') { setSidebarVisible(true); injectPagePanel(); }
+        else setSidebarVisible(false);
       }
       else if (id === 've-more-btn') {
         const menu = ct.querySelector('#ve-more-menu') as HTMLElement;
