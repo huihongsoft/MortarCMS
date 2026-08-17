@@ -97,6 +97,24 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
   const [showMedia, setShowMedia] = useState(false);
   const [mediaList, setMediaList] = useState<any[]>([]);
   const [mediaFilter, setMediaFilter] = useState('all');
+  const mdRef = useRef<HTMLTextAreaElement>(null);
+
+  // Insert markdown syntax at the cursor, wrapping any selection. Focus and
+  // selection are restored so consecutive toolbar clicks keep working.
+  function insertMdSyntax(before: string, after: string, placeholder: string) {
+    const el = mdRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? mdBuffer.length;
+    const end = el.selectionEnd ?? mdBuffer.length;
+    const sel = mdBuffer.slice(start, end) || placeholder;
+    const next = mdBuffer.slice(0, start) + before + sel + after + mdBuffer.slice(end);
+    setMdBuffer(next);
+    emit(markdownToHtml(next));
+    requestAnimationFrame(() => {
+      el.focus();
+      el.setSelectionRange(start + before.length, start + before.length + sel.length);
+    });
+  }
   const [showBlocks, setShowBlocks] = useState(false);
   const [blocks, setBlocks] = useState<any[]>([]);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -375,14 +393,36 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
       ),
       React.createElement(EditorContent, { editor, className: 'prose max-w-none px-3 py-2 min-h-[300px] focus:outline-none' }),
     ),
-    mode === 'markdown' && React.createElement('div', { className: 'grid grid-cols-2 gap-0' },
-      React.createElement('textarea', {
-        className: 'p-3 min-h-[300px] font-mono text-sm focus:outline-none border-r border-gray-200 resize-y',
-        value: mdBuffer,
-        placeholder: placeholder || t('write in markdown...', getLang()),
-        onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => { setMdBuffer(e.target.value); emit(markdownToHtml(e.target.value)); },
-      }),
-      React.createElement('div', { className: 'prose max-w-none p-3 min-h-[300px] overflow-auto', dangerouslySetInnerHTML: { __html: markdownToHtml(mdBuffer) } }),
+    mode === 'markdown' && React.createElement('div', { className: 'border-t border-gray-200' },
+      // Markdown quick toolbar — inserts syntax at the cursor / wraps the selection
+      React.createElement('div', { className: 'flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-200 flex-wrap' },
+        [['#', t('markdown heading', getLang()), '## ', '', '标题'],
+         ['B', t('bold', getLang()), '**', '**', t('bold text', getLang())],
+         ['I', t('italic', getLang()), '*', '*', t('italic text', getLang())],
+         ['•', t('list', getLang()), '- ', '', ''],
+         ['1.', t('ordered list', getLang()), '1. ', '', ''],
+         ['>', t('quote', getLang()), '> ', '', ''],
+         ['`', t('code', getLang()), '`', '`', t('code', getLang())],
+         ['🔗', t('link', getLang()), '[', '](https://)', t('link text', getLang())],
+         ['🖼', t('image', getLang()), '![', '](https://)', t('image alt', getLang())],
+         ['—', t('divider', getLang()), '\n\n---\n\n', '', '']].map(([icon, label, before, after, ph]) =>
+          React.createElement('button', {
+            key: label, type: 'button', title: label, 'aria-label': label,
+            onClick: () => insertMdSyntax(String(before), String(after), String(ph)),
+            className: 'w-7 h-7 flex items-center justify-center text-xs rounded hover:bg-gray-100 text-gray-500 hover:text-gray-900',
+          }, icon)
+        )
+      ),
+      React.createElement('div', { className: 'grid grid-cols-2 gap-0' },
+        React.createElement('textarea', {
+          ref: mdRef,
+          className: 'p-3 min-h-[300px] font-mono text-sm focus:outline-none border-r border-gray-200 resize-y',
+          value: mdBuffer,
+          placeholder: placeholder || t('write in markdown...', getLang()),
+          onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => { setMdBuffer(e.target.value); emit(markdownToHtml(e.target.value)); },
+        }),
+        React.createElement('div', { className: 'prose max-w-none p-3 min-h-[300px] overflow-auto', dangerouslySetInnerHTML: { __html: markdownToHtml(mdBuffer) } }),
+      ),
     ),
     mode === 'html' && React.createElement('textarea', {
       className: 'p-3 min-h-[300px] font-mono text-sm w-full focus:outline-none resize-y',

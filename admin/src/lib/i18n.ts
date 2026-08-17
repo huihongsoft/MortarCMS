@@ -1210,6 +1210,13 @@ const zh: Record<string, string> = {
 'videos': '视频',
 'documents': '文档',
 
+// Markdown toolbar
+'markdown heading': '标题',
+'bold text': '加粗文字',
+'italic text': '斜体文字',
+'ordered list': '有序列表',
+'link text': '链接文字',
+
 // Post editor AI assistant
 'please enter a title first': '请先填写文章标题',
 'please enter content first': '请先填写文章正文',
