@@ -96,6 +96,7 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
   const [htmlBuffer, setHtmlBuffer] = useState('');
   const [showMedia, setShowMedia] = useState(false);
   const [mediaList, setMediaList] = useState<any[]>([]);
+  const [mediaFilter, setMediaFilter] = useState('all');
   const [showBlocks, setShowBlocks] = useState(false);
   const [blocks, setBlocks] = useState<any[]>([]);
   const [dragIdx, setDragIdx] = useState<number | null>(null);
@@ -396,19 +397,38 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
           React.createElement('h3', { className: 'font-semibold text-gray-900' }, t('insert media', getLang())),
           React.createElement('button', { onClick: () => setShowMedia(false), className: 'p-1 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 18 })),
         ),
+        // Type filter tabs (all / images / videos / audio / documents)
+        React.createElement('div', { className: 'flex items-center gap-1.5 px-4 pt-3 flex-wrap' },
+          [['all', t('all', getLang())], ['image', t('images', getLang())], ['video', t('videos', getLang())], ['audio', t('audio', getLang())], ['doc', t('documents', getLang())]].map(([k, label]) =>
+            React.createElement('button', {
+              key: k, onClick: () => setMediaFilter(k),
+              className: 'px-3 py-1 text-xs rounded-full border ' + (mediaFilter === k ? 'bg-primary-600 text-white border-primary-600' : 'border-gray-200 text-gray-500 hover:border-primary-400 hover:text-primary-600'),
+            }, label)
+          )
+        ),
         React.createElement('div', { className: 'p-4 overflow-auto grid grid-cols-3 gap-3' },
-          mediaList.length === 0
-            ? React.createElement('p', { className: 'col-span-3 text-sm text-gray-400 text-center py-10' }, t('no media uploaded yet', getLang()))
-            : mediaList.map((m: any) =>
-                React.createElement('button', {
-                  key: m.id, onClick: () => insertMedia(m), className: 'group border border-gray-200 rounded-lg overflow-hidden hover:border-primary-500 transition-colors',
-                },
-                  m.mimeType && m.mimeType.startsWith('image/')
-                    ? React.createElement('img', { src: m.thumbnail || m.url, alt: m.alt || m.title || '', className: 'w-full h-24 object-cover' })
-                    : React.createElement('div', { className: 'w-full h-24 bg-gray-100 flex items-center justify-center text-2xl' }, '\u{1F4C4}'),
-                  React.createElement('p', { className: 'px-2 py-1 text-xs text-gray-600 truncate' }, m.title || m.filename),
-                )
-              ),
+          (() => {
+            const filtered = mediaList.filter((m: any) => {
+              const mt = String(m.mimeType || '');
+              if (mediaFilter === 'all') return true;
+              if (mediaFilter === 'image') return mt.startsWith('image/');
+              if (mediaFilter === 'video') return mt.startsWith('video/');
+              if (mediaFilter === 'audio') return mt.startsWith('audio/');
+              return !mt.startsWith('image/') && !mt.startsWith('video/') && !mt.startsWith('audio/');
+            });
+            return filtered.length === 0
+              ? React.createElement('p', { className: 'col-span-3 text-sm text-gray-400 text-center py-10' }, t('no media uploaded yet', getLang()))
+              : filtered.map((m: any) =>
+                  React.createElement('button', {
+                    key: m.id, onClick: () => insertMedia(m), className: 'group border border-gray-200 rounded-lg overflow-hidden hover:border-primary-500 transition-colors',
+                  },
+                    m.mimeType && m.mimeType.startsWith('image/')
+                      ? React.createElement('img', { src: m.thumbnail || m.url, alt: m.alt || m.title || '', className: 'w-full h-24 object-cover' })
+                      : React.createElement('div', { className: 'w-full h-24 bg-gray-100 flex items-center justify-center text-2xl' }, '\u{1F4C4}'),
+                    React.createElement('p', { className: 'px-2 py-1 text-xs text-gray-600 truncate' }, m.title || m.filename),
+                  )
+                );
+          })(),
         ),
       ),
     ),

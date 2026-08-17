@@ -1205,6 +1205,11 @@ const zh: Record<string, string> = {
 // Comment errors (frontend)
 'comment rejected': '评论已被拒绝',
 
+// Media picker type filter
+'images': '图片',
+'videos': '视频',
+'documents': '文档',
+
 // Post editor AI assistant
 'please enter a title first': '请先填写文章标题',
 'please enter content first': '请先填写文章正文',
