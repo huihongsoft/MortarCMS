@@ -41,6 +41,17 @@ const WPI = {
 // break out of an attribute and inject markup (stored XSS).
 const escAttr = (v: any) => String(v ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+// Content may arrive as a full document (some imports produce <body>…
+// </body>). GrapesJS parses fragments best — strip the document shell so the
+// canvas loads cleanly.
+function normalizeContent(raw: string): string {
+  return String(raw || '')
+    .replace(/^\s*<html[^>]*>/i, '')
+    .replace(/^\s*<body[^>]*>/i, '')
+    .replace(/<\/body>\s*$/i, '')
+    .replace(/<\/html>\s*$/i, '');
+}
+
 interface VisualEditorProps {
   content: string;
   css?: string;
@@ -550,7 +561,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     });
 
     // Load initial content
-    if (content) { try { editor.setComponents(content); } catch { editor.setComponents('<p>Start building your page...</p>'); } }
+    if (content) { try { editor.setComponents(normalizeContent(content)); } catch { editor.setComponents('<p>Start building your page...</p>'); } }
     if (css) { try { editor.setStyle(css); } catch {} }
     lastContentRef.current = content;
 
@@ -1495,7 +1506,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     const ed = editorRef.current; if (!ed) return;
     if (content !== lastContentRef.current) {
       lastContentRef.current = content;
-      try { ed.setComponents(content || ''); } catch {}
+      try { ed.setComponents(normalizeContent(content)); } catch {}
       try { ed.setStyle(css || ''); } catch {}
     }
      
