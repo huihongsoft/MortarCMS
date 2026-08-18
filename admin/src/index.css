@@ -1861,3 +1861,12 @@ details.card[open] summary .ve-arrow { transform: rotate(180deg); }
 @media (max-width: 1180px) {
   .ve-guten-header .ve-guten-save-state { display: none; }
 }
+
+/* The Post tab's first panel starts with a 1px divider under the tab bar;
+   give the Block tab's first module (selector manager) the same divider */
+.ve-guten-content .ve-guten-tab-panel[data-gpanel="block"] > :first-child {
+  border-top: 1px solid #e0e0e0;
+}
+.dark .ve-guten-content .ve-guten-tab-panel[data-gpanel="block"] > :first-child {
+  border-color: #333;
+}
