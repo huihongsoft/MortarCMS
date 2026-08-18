@@ -1870,3 +1870,36 @@ details.card[open] summary .ve-arrow { transform: rotate(180deg); }
 .dark .ve-guten-content .ve-guten-tab-panel[data-gpanel="block"] > :first-child {
   border-color: #333;
 }
+
+/* Custom fields rows + revisions list (sidebar panels) */
+.ve-meta-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.ve-meta-row .ve-guten-input { padding: 6px 10px; font-size: 12px; }
+.ve-meta-row button {
+  flex-shrink: 0;
+  width: 28px;
+  border: 1px solid #ddd;
+  background: #fff;
+  border-radius: 2px;
+  color: #d63638;
+  cursor: pointer;
+  font-size: 14px;
+}
+.ve-meta-row button:hover { background: #f0f0f0; }
+.dark .ve-meta-row button { background: #111; border-color: #333; color: #f56e6e; }
+.dark .ve-meta-row button:hover { background: #2c2c2c; }
+
+.ve-rev-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f0f0f0;
+}
+.ve-rev-row:last-child { border-bottom: none; }
+.ve-rev-time { font-size: 12px; color: #757575; }
+.dark .ve-rev-row { border-color: #2c2c2c; }

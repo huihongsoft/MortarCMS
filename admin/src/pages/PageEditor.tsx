@@ -110,6 +110,9 @@ export default function PageEditor() {
             showMediaPicker: () => {},   // the sidebar uses its own inline media grid
             excerpt,
             onExcerptChange: (v: string) => { setExcerpt(v); setSaveState('dirty'); },
+            // Revisions panel (same info as the rich-text sidebar)
+            postId: id || createdIdRef.current || undefined,
+            onRestoreRevision: (post: any) => { setTitle(post.title); setContent(post.content || ''); setSaveState('dirty'); },
           },
         }),
         showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },

@@ -275,6 +275,11 @@ export default function PostEditor() {
           )
         )
       ),
+      // Excerpt (matches the visual editor sidebar)
+      React.createElement('div', { className: 'card p-4' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('excerpt', getLang())),
+        React.createElement('textarea', { value: excerpt, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setExcerpt(e.target.value), placeholder: t('write a short excerpt', getLang()), className: 'input-field', rows: 3 })
+      ),
       // Permalink (matches the visual editor sidebar)
       React.createElement('div', { className: 'card p-4' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('permalink', getLang())),
@@ -471,6 +476,24 @@ export default function PostEditor() {
               if (v && new Date(v).getTime() > Date.now()) setStatus('scheduled');
               else if (!v && status === 'scheduled') setStatus('draft');
             },
+            // ---- Extended panels (same info as the rich-text sidebar) ----
+            seoTitle, seoDesc, seoNoindex, seoCanonical, seoOgImage,
+            onSeoChange: (patch: any) => {
+              if (patch.seoTitle !== undefined) setSeoTitle(patch.seoTitle);
+              if (patch.seoDesc !== undefined) setSeoDesc(patch.seoDesc);
+              if (patch.seoNoindex !== undefined) setSeoNoindex(patch.seoNoindex);
+              if (patch.seoCanonical !== undefined) setSeoCanonical(patch.seoCanonical);
+              if (patch.seoOgImage !== undefined) setSeoOgImage(patch.seoOgImage);
+              setSaveState('dirty');
+            },
+            sites, siteId,
+            onSiteIdChange: (v: string) => { setSiteId(v); setSaveState('dirty'); },
+            format,
+            onFormatChange: (v: string) => { setFormat(v); setSaveState('dirty'); },
+            metaFields,
+            onMetaFieldsChange: (fields: { key: string; value: string }[]) => { setMetaFields(fields); setSaveState('dirty'); },
+            postId: id || createdIdRef.current || undefined,
+            onRestoreRevision: (post: any) => { setTitle(post.title); setContent(post.content || ''); setExcerpt(post.excerpt || ''); setSaveState('dirty'); },
           },
         }),
         showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },
@@ -519,8 +542,7 @@ export default function PostEditor() {
           }, React.createElement(PanelRightClose, { size: 14 }), t('post settings', getLang())),
         ),
         renderAiPanel(),
-        React.createElement(RichEditor, { value: content, onChange: setContent, placeholder: t('write your post content', getLang()) }),
-        React.createElement('textarea', { value: excerpt, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setExcerpt(e.target.value), placeholder: t('excerpt (optional)', getLang()), className: 'input-field', rows: 3 })
+        React.createElement(RichEditor, { value: content, onChange: setContent, placeholder: t('write your post content', getLang()) })
       ),
       sidebarOpen && renderSidebar()
     )

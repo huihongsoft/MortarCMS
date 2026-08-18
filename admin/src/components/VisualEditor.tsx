@@ -128,6 +128,23 @@ interface VisualEditorProps {
     onAuthorIdChange?: (id: string) => void;
     publishDate?: string;                     // datetime-local value or '' (= immediately)
     onPublishDateChange?: (v: string) => void;
+    // ---- Extended panels (kept in sync with the rich-text sidebar) ----
+    seoTitle?: string;
+    seoDesc?: string;
+    seoNoindex?: boolean;
+    seoCanonical?: string;
+    seoOgImage?: string;
+    onSeoChange?: (patch: { seoTitle?: string; seoDesc?: string; seoNoindex?: boolean; seoCanonical?: string; seoOgImage?: string }) => void;
+    sites?: { id: string; name: string; isPrimary?: number }[];
+    siteId?: string;
+    onSiteIdChange?: (v: string) => void;
+    format?: string;
+    onFormatChange?: (v: string) => void;
+    metaFields?: { key: string; value: string }[];
+    onMetaFieldsChange?: (fields: { key: string; value: string }[]) => void;
+    /** id of the post/page being edited — enables the Revisions panel */
+    postId?: string;
+    onRestoreRevision?: (post: { title: string; content: string; excerpt: string }) => void;
   };
 }
 
@@ -338,6 +355,12 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     if (chipWrap) {
       chipWrap.innerHTML = (ps?.tags || []).map((tg: string) =>
         `<span class="ve-guten-tag-chip">${escAttr(tg)}<button data-tag="${escAttr(tg)}" aria-label="${__('remove')}" title="${__('remove')}">×</button></span>`).join('');
+    }
+    // Custom fields rows
+    const metaWrap = panel.querySelector('#ve-meta-fields') as HTMLElement;
+    if (metaWrap) {
+      metaWrap.innerHTML = (ps?.metaFields || []).map((m: any, i: number) =>
+        `<div class="ve-meta-row"><input data-mf="key" data-i="${i}" value="${escAttr(m.key)}" placeholder="${__('key')}" class="ve-guten-input" /><input data-mf="value" data-i="${i}" value="${escAttr(m.value)}" placeholder="${__('value')}" class="ve-guten-input" /><button data-mf="del" data-i="${i}" title="${__('remove')}" aria-label="${__('remove')}">×</button></div>`).join('');
     }
   };
 
@@ -1465,12 +1488,73 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
             <input type="number" data-field="menuOrder" value="${ps?.menuOrder ?? 0}" class="ve-guten-input" min="0" />
           </div>
         </div>` : '';
+      // Extended panels shared with the rich-text sidebar (post mode):
+      const secSeo = isPost && ps?.onSeoChange ? `
+        <div class="components-panel__body is-opened">
+          <h2 class="components-panel__body-title"><button>${__('seo')}</button></h2>
+          <div class="ve-guten-field">
+            <label class="ve-guten-field-hint" style="margin:0 0 4px;">${__('seo title')}</label>
+            <input data-field="seoTitle" value="${escAttr(ps?.seoTitle || '')}" maxlength="70" class="ve-guten-input" />
+            <label class="ve-guten-field-hint" style="margin:10px 0 4px;">${__('seo description')}</label>
+            <textarea data-field="seoDesc" rows="3" class="ve-guten-input">${escAttr(ps?.seoDesc || '')}</textarea>
+            <label class="ve-guten-toggle-row" style="margin-top:8px;">
+              <input type="checkbox" data-field="seoNoindex" ${ps?.seoNoindex ? 'checked' : ''} />
+              <span>${__('noindex (hide from search engines)')}</span>
+            </label>
+            <label class="ve-guten-field-hint" style="margin:10px 0 4px;">${__('canonical url (optional)')}</label>
+            <input data-field="seoCanonical" value="${escAttr(ps?.seoCanonical || '')}" class="ve-guten-input" />
+            <label class="ve-guten-field-hint" style="margin:10px 0 4px;">${__('og image url (optional)')}</label>
+            <input data-field="seoOgImage" value="${escAttr(ps?.seoOgImage || '')}" class="ve-guten-input" />
+          </div>
+        </div>` : '';
+      const secSite = isPost && ps?.sites?.length ? `
+        <div class="components-panel__body is-opened">
+          <h2 class="components-panel__body-title"><button>${__('site')}</button></h2>
+          <div class="ve-guten-field">
+            <select data-field="siteId" class="ve-guten-select">
+              <option value="">${__('global (all sites)')}</option>
+              ${ps.sites.map((st: any) => `<option value="${escAttr(st.id)}" ${ps.siteId === st.id ? 'selected' : ''}>${escAttr(st.name)}${st.isPrimary === 1 ? ' (primary)' : ''}</option>`).join('')}
+            </select>
+            <span class="ve-guten-field-hint">${__('posts assigned to a site are only visible on that site\u2019s domain')}</span>
+          </div>
+        </div>` : '';
+      const secFormat = isPost && ps?.onFormatChange ? `
+        <div class="components-panel__body is-opened">
+          <h2 class="components-panel__body-title"><button>${__('format')}</button></h2>
+          <div class="ve-guten-field">
+            <select data-field="format" class="ve-guten-select">
+              <option value="standard" ${ps?.format === 'standard' || !ps?.format ? 'selected' : ''}>${__('standard')}</option>
+              <option value="gallery" ${ps?.format === 'gallery' ? 'selected' : ''}>${__('gallery')}</option>
+              <option value="video" ${ps?.format === 'video' ? 'selected' : ''}>${__('video')}</option>
+              <option value="audio" ${ps?.format === 'audio' ? 'selected' : ''}>${__('audio')}</option>
+              <option value="quote" ${ps?.format === 'quote' ? 'selected' : ''}>${__('quote')}</option>
+              <option value="link" ${ps?.format === 'link' ? 'selected' : ''}>${__('link')}</option>
+            </select>
+          </div>
+        </div>` : '';
+      const secMetaFields = isPost && ps?.onMetaFieldsChange ? `
+        <div class="components-panel__body is-opened">
+          <h2 class="components-panel__body-title"><button>${__('custom fields')}</button></h2>
+          <div class="ve-guten-field">
+            <div id="ve-meta-fields"></div>
+            <button class="ve-guten-cat-add-btn" id="ve-meta-add" style="width:100%;margin-top:8px;">+ ${__('add custom field')}</button>
+          </div>
+        </div>` : '';
+      const secRevisions = ps?.postId ? `
+        <div class="components-panel__body is-opened">
+          <h2 class="components-panel__body-title"><button>${__('revisions')}</button></h2>
+          <div class="ve-guten-field">
+            <div id="ve-revisions-list">${__('loading')}…</div>
+          </div>
+        </div>` : '';
       // Post mode follows the WordPress sidebar order: status & visibility →
-      // permalink → categories → tags → featured image → excerpt → discussion → author.
+      // permalink → categories → tags → featured image → excerpt → discussion →
+      // author, then the extended panels (seo/site/format/custom fields/revisions)
+      // so both editor modes expose the same post info.
       // Page mode keeps its original order (featured image → excerpt → … → menu order).
       panel.innerHTML = isPost
-        ? [secStatusVis, secPermalink, secCategories, secTags, secFeatured, secExcerpt, secDiscussion, secAuthor].join('')
-        : [secFeatured, secExcerpt, secStatusVis, secPermalink, secParent, secDiscussion, secMenuOrder].join('');
+        ? [secStatusVis, secPermalink, secCategories, secTags, secFeatured, secExcerpt, secDiscussion, secAuthor, secSeo, secSite, secFormat, secMetaFields, secRevisions].join('')
+        : [secFeatured, secExcerpt, secStatusVis, secPermalink, secParent, secDiscussion, secMenuOrder, secRevisions].join('');
       panel.addEventListener('change', (e) => {
         const el = e.target as HTMLElement;
         const ps = pageSettingsRef.current;
@@ -1482,6 +1566,13 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         else if (el.dataset.field === 'password') ps?.onPasswordChange?.((el as HTMLInputElement).value);
         else if (el.dataset.field === 'authorId') ps?.onAuthorIdChange?.((el as HTMLSelectElement).value);
         else if (el.dataset.field === 'publishDate') ps?.onPublishDateChange?.((el as HTMLInputElement).value);
+        else if (el.dataset.field === 'siteId') ps?.onSiteIdChange?.((el as HTMLSelectElement).value);
+        else if (el.dataset.field === 'format') ps?.onFormatChange?.((el as HTMLSelectElement).value);
+        else if (el.dataset.field === 'seoTitle') ps?.onSeoChange?.({ seoTitle: (el as HTMLInputElement).value });
+        else if (el.dataset.field === 'seoDesc') ps?.onSeoChange?.({ seoDesc: (el as HTMLTextAreaElement).value });
+        else if (el.dataset.field === 'seoNoindex') ps?.onSeoChange?.({ seoNoindex: (el as HTMLInputElement).checked });
+        else if (el.dataset.field === 'seoCanonical') ps?.onSeoChange?.({ seoCanonical: (el as HTMLInputElement).value });
+        else if (el.dataset.field === 'seoOgImage') ps?.onSeoChange?.({ seoOgImage: (el as HTMLInputElement).value });
         const vis = el.dataset.vis;
         if (vis) {
           // Visibility radios: password shows the password field; leaving
@@ -1498,7 +1589,71 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       panel.addEventListener('input', (e) => {
         const el = e.target as HTMLElement;
         if (el.dataset.field === 'excerpt') pageSettingsRef.current?.onExcerptChange?.((el as HTMLTextAreaElement).value);
+        else if (el.dataset.field === 'seoTitle') pageSettingsRef.current?.onSeoChange?.({ seoTitle: (el as HTMLInputElement).value });
+        else if (el.dataset.field === 'seoDesc') pageSettingsRef.current?.onSeoChange?.({ seoDesc: (el as HTMLTextAreaElement).value });
+        else if (el.dataset.field === 'seoCanonical') pageSettingsRef.current?.onSeoChange?.({ seoCanonical: (el as HTMLInputElement).value });
+        else if (el.dataset.field === 'seoOgImage') pageSettingsRef.current?.onSeoChange?.({ seoOgImage: (el as HTMLInputElement).value });
       });
+      // Custom fields: edit key/value rows, remove, add
+      const metaWrap = panel.querySelector('#ve-meta-fields') as HTMLElement;
+      if (metaWrap) {
+        metaWrap.addEventListener('input', (e) => {
+          const el = e.target as HTMLElement;
+          const i = parseInt(el.dataset.i || '-1');
+          if (i < 0) return;
+          const ps = pageSettingsRef.current;
+          const fields = [...(ps?.metaFields || [])];
+          if (el.dataset.mf === 'key') fields[i] = { ...fields[i], key: (el as HTMLInputElement).value };
+          else if (el.dataset.mf === 'value') fields[i] = { ...fields[i], value: (el as HTMLInputElement).value };
+          ps?.onMetaFieldsChange?.(fields);
+        });
+        metaWrap.addEventListener('click', (e) => {
+          const btn = (e.target as HTMLElement).closest('button') as HTMLElement;
+          if (!btn?.dataset.mf || btn.dataset.mf !== 'del') return;
+          const i = parseInt(btn.dataset.i || '-1');
+          if (i < 0) return;
+          const ps = pageSettingsRef.current;
+          ps?.onMetaFieldsChange?.((ps.metaFields || []).filter((_, j) => j !== i));
+        });
+        panel.querySelector('#ve-meta-add')?.addEventListener('click', () => {
+          const ps = pageSettingsRef.current;
+          ps?.onMetaFieldsChange?.([...(ps.metaFields || []), { key: '', value: '' }]);
+        });
+      }
+      // Revisions: list + restore
+      const revisionsList = panel.querySelector('#ve-revisions-list') as HTMLElement;
+      if (revisionsList) {
+        const token = localStorage.getItem('mortar_token') || '';
+        fetch('/api/posts/' + ps?.postId + '/revisions', { headers: { Authorization: 'Bearer ' + token } })
+          .then(r => r.json())
+          .then((d: any) => {
+            const revs = Array.isArray(d) ? d : (d.revisions || []);
+            if (revs.length === 0) { revisionsList.innerHTML = '<span class="ve-guten-field-hint">' + __('no revisions yet') + '</span>'; return; }
+            revisionsList.innerHTML = '';
+            revs.forEach((rev: any) => {
+              const row = document.createElement('div');
+              row.className = 've-rev-row';
+              const time = document.createElement('span');
+              time.className = 've-rev-time';
+              time.textContent = new Date(rev.createdAt).toLocaleString();
+              const btn = document.createElement('button');
+              btn.textContent = __('restore');
+              btn.className = 've-guten-cat-add-btn';
+              btn.addEventListener('click', async () => {
+                if (!confirm(__('restore this revision? the current state will be kept as a revision.'))) return;
+                try {
+                  const rr = await fetch('/api/posts/' + ps?.postId + '/revisions/' + rev.id + '/restore', { method: 'PUT', headers: { Authorization: 'Bearer ' + token } });
+                  if (!rr.ok) { alert(__('restore failed')); return; }
+                  pageSettingsRef.current?.onRestoreRevision?.({ title: rev.title, content: rev.content || '', excerpt: rev.excerpt || '' });
+                } catch { alert(__('restore failed')); }
+              });
+              row.appendChild(time);
+              row.appendChild(btn);
+              revisionsList.appendChild(row);
+            });
+          })
+          .catch(() => { revisionsList.innerHTML = '<span class="ve-guten-field-hint">' + __('no revisions yet') + '</span>'; });
+      }
       // Panel headers collapse/expand the body (WordPress components-panel)
       panel.addEventListener('click', (e) => {
         const btn = (e.target as HTMLElement).closest('.components-panel__body-title button') as HTMLElement;
@@ -2100,6 +2255,23 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     // Author select
     const authorSel = panel.querySelector('[data-field="authorId"]') as HTMLSelectElement;
     if (authorSel && pageSettings.authorId !== undefined && authorSel.value !== pageSettings.authorId) authorSel.value = pageSettings.authorId || '';
+    // Site select
+    const siteSel = panel.querySelector('[data-field="siteId"]') as HTMLSelectElement;
+    if (siteSel && pageSettings.siteId !== undefined && siteSel.value !== (pageSettings.siteId || '')) siteSel.value = pageSettings.siteId || '';
+    // Format select
+    const formatSel = panel.querySelector('[data-field="format"]') as HTMLSelectElement;
+    if (formatSel && pageSettings.format !== undefined && formatSel.value !== (pageSettings.format || 'standard')) formatSel.value = pageSettings.format || 'standard';
+    // SEO fields
+    const seoT = panel.querySelector('[data-field="seoTitle"]') as HTMLInputElement;
+    if (seoT && pageSettings.seoTitle !== undefined && seoT.value !== (pageSettings.seoTitle || '') && document.activeElement !== seoT) seoT.value = pageSettings.seoTitle || '';
+    const seoD = panel.querySelector('[data-field="seoDesc"]') as HTMLTextAreaElement;
+    if (seoD && pageSettings.seoDesc !== undefined && seoD.value !== (pageSettings.seoDesc || '') && document.activeElement !== seoD) seoD.value = pageSettings.seoDesc || '';
+    const seoN = panel.querySelector('[data-field="seoNoindex"]') as HTMLInputElement;
+    if (seoN && pageSettings.seoNoindex !== undefined && seoN.checked !== !!pageSettings.seoNoindex) seoN.checked = !!pageSettings.seoNoindex;
+    const seoC = panel.querySelector('[data-field="seoCanonical"]') as HTMLInputElement;
+    if (seoC && pageSettings.seoCanonical !== undefined && seoC.value !== (pageSettings.seoCanonical || '') && document.activeElement !== seoC) seoC.value = pageSettings.seoCanonical || '';
+    const seoO = panel.querySelector('[data-field="seoOgImage"]') as HTMLInputElement;
+    if (seoO && pageSettings.seoOgImage !== undefined && seoO.value !== (pageSettings.seoOgImage || '') && document.activeElement !== seoO) seoO.value = pageSettings.seoOgImage || '';
     // Categories / tags lists (may change from text mode, AI suggestions, …)
     renderPostPanelLists();
   }, [pageSettings]);
