@@ -23,7 +23,10 @@ const extMimeMap: Record<string, string[]> = {
   '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
   '.mp3': ['audio/mpeg', 'audio/mp3'],
   '.mp4': ['video/mp4'],
-  '.zip': ['application/zip', 'application/x-zip-compressed'],
+  // octet-stream included: browsers disagree on the MIME they send for .zip
+  // (macOS Chrome sends application/zip, some send application/octet-stream).
+  // The zip content itself is validated by assertSafeArchive on restore.
+  '.zip': ['application/zip', 'application/x-zip-compressed', 'application/octet-stream'],
 };
 
 export const upload = multer({
