@@ -210,8 +210,10 @@ export default function Users() {
                 React.createElement('th', { className: 'text-left px-4 py-3' }, t('email', getLang())),
                 React.createElement('th', { className: 'text-left px-4 py-3' }, t('role', getLang())),
                 React.createElement('th', { className: 'text-left px-4 py-3' }, t('posts', getLang())),
-                React.createElement('th', { className: 'text-left px-4 py-3' }, t('2fa', getLang())),
-                React.createElement('th', { className: 'text-left px-4 py-3' }, t('registered', getLang())),
+                // Hide less critical columns on narrow windows so the table
+                // fits without clipping the actions column
+                React.createElement('th', { className: 'text-left px-4 py-3 hidden md:table-cell' }, t('2fa', getLang())),
+                React.createElement('th', { className: 'text-left px-4 py-3 hidden lg:table-cell' }, t('registered', getLang())),
                 React.createElement('th', { className: 'text-right px-4 py-3' }, t('actions', getLang())),
               )),
               React.createElement('tbody', null, filteredUsers.map((u: any) =>
@@ -236,10 +238,10 @@ export default function Users() {
                     )
                   ),
                   React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500 dark:text-gray-400' }, u._count?.posts || 0),
-                  React.createElement('td', { className: 'px-4 py-3' },
+                  React.createElement('td', { className: 'px-4 py-3 hidden md:table-cell' },
                     React.createElement('span', { className: 'px-2 py-0.5 text-[11px] rounded-full font-medium ' + (u.two_factor_enabled ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400') },
                       u.two_factor_enabled ? t('2fa enabled', getLang()) : t('2fa disabled', getLang()))),
-                  React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-400 dark:text-gray-500' }, u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'),
+                  React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-400 dark:text-gray-500 hidden lg:table-cell' }, u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'),
                   React.createElement('td', { className: 'px-4 py-3' },
                     React.createElement('div', { className: 'flex justify-end' },
                       React.createElement('button', { onClick: () => del(u.id), disabled: u.id === currentUser?.id, className: 'p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 })))
