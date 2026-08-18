@@ -61,7 +61,7 @@ export default function Activity() {
                   React.createElement('td', { className: 'px-4 py-2.5' },
                     React.createElement('div', { className: 'flex items-center gap-2 flex-wrap' },
                       React.createElement('span', { className: 'px-1.5 py-0.5 text-[10px] rounded font-bold ' + methodColor(l.action) }, l.action.split(' ')[0]),
-                      React.createElement('code', { className: 'text-xs text-gray-600 dark:text-gray-300' }, describeActivity(l.action, getLang()))
+                      React.createElement('code', { className: 'text-xs text-gray-600 dark:text-gray-300' }, describeActivity(l.action, getLang()) + (l.detail ? '「' + l.detail + '」' : ''))
                     )
                   )
                 )

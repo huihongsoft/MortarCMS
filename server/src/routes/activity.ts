@@ -12,6 +12,52 @@ export function logActivity(userId: string, action: string, detail = '') {
   } catch {}
 }
 
+// Backfill the affected entity's title for old entries whose detail is
+// empty (the action string still carries the id, e.g. "PUT /api/posts/abc").
+// Runs once per entry; later reads hit the stored detail directly.
+function backfillDetails(rows: any[]): void {
+  for (const row of rows) {
+    if (row.detail) continue;
+    const m = String(row.action || '').match(/^\/api\/(posts|pages|categories|tags|comments|media|users|menus|links|sites)\/([^/]+)/);
+    if (!m) continue;
+    const [, type, id] = m;
+    let title = '';
+    try {
+      if (type === 'posts' || type === 'pages') {
+        const p = db.prepare('SELECT title FROM Post WHERE id = ?').get(id) as any;
+        title = p?.title ? String(p.title).slice(0, 60) : '';
+      } else if (type === 'categories') {
+        const r = db.prepare('SELECT name FROM Category WHERE id = ?').get(id) as any;
+        title = r?.name ? String(r.name).slice(0, 60) : '';
+      } else if (type === 'tags') {
+        const r = db.prepare('SELECT name FROM Tag WHERE id = ?').get(id) as any;
+        title = r?.name ? String(r.name).slice(0, 60) : '';
+      } else if (type === 'comments') {
+        const r = db.prepare('SELECT content FROM Comment WHERE id = ?').get(id) as any;
+        title = r ? String(r.content).slice(0, 40) : '';
+      } else if (type === 'media') {
+        const r = db.prepare('SELECT original FROM Media WHERE id = ?').get(id) as any;
+        title = r?.original ? String(r.original).slice(0, 60) : '';
+      } else if (type === 'users') {
+        const r = db.prepare('SELECT username FROM User WHERE id = ?').get(id) as any;
+        title = r?.username ? String(r.username).slice(0, 60) : '';
+      } else if (type === 'menus') {
+        const r = db.prepare('SELECT name FROM Menu WHERE id = ?').get(id) as any;
+        title = r?.name ? String(r.name).slice(0, 60) : '';
+      } else if (type === 'links') {
+        const r = db.prepare('SELECT name FROM Link WHERE id = ?').get(id) as any;
+        title = r?.name ? String(r.name).slice(0, 60) : '';
+      } else if (type === 'sites') {
+        const r = db.prepare('SELECT name FROM Site WHERE id = ?').get(id) as any;
+        title = r?.name ? String(r.name).slice(0, 60) : '';
+      }
+    } catch {}
+    if (title) {
+      try { db.prepare('UPDATE Activity SET detail = ? WHERE id = ?').run(title, row.id); } catch {}
+    }
+  }
+}
+
 // Admin: get activity log (filterable by action substring, paginated)
 router.get('/', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
@@ -23,6 +69,7 @@ router.get('/', authenticate, authorize('admin'), (req: AuthRequest, res: Respon
     if (q) { where = ' WHERE a.action LIKE ?'; params.push('%' + q + '%'); }
     const total = (db.prepare('SELECT COUNT(*) as c FROM Activity a' + where).get(...params) as any)?.c || 0;
     const logs = db.prepare('SELECT a.*, u.username FROM Activity a LEFT JOIN User u ON u.id = a.userId' + where + ' ORDER BY a.createdAt DESC LIMIT ? OFFSET ?').all(...params, limit, (page - 1) * limit) as any[];
+    backfillDetails(logs);
     res.json({ logs, total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

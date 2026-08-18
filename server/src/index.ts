@@ -232,6 +232,29 @@ app.use('/uploads', cacheControl('86400'), (_req: any, res: any, next: any) => {
 // App-password auth (alternative to Bearer tokens) for all API routes
 app.use('/api', appPasswordAuth);
 
+// Look up the affected entity's title for the activity log (e.g. the post
+// title behind PUT /api/posts/:id), so entries read "更新文章「Foo」".
+function resourceTitle(path: string): string {
+  const m = path.match(/^\/api\/(posts|pages|categories|tags|comments|media|users|menus|links|sites)\/([^/]+)/);
+  if (!m) return '';
+  const [, type, id] = m;
+  try {
+    if (type === 'posts' || type === 'pages') {
+      const p = db.prepare('SELECT title FROM Post WHERE id = ?').get(id) as any;
+      return p?.title ? String(p.title).slice(0, 60) : '';
+    }
+    if (type === 'categories') { const r = db.prepare('SELECT name FROM Category WHERE id = ?').get(id) as any; return r?.name ? String(r.name).slice(0, 60) : ''; }
+    if (type === 'tags') { const r = db.prepare('SELECT name FROM Tag WHERE id = ?').get(id) as any; return r?.name ? String(r.name).slice(0, 60) : ''; }
+    if (type === 'comments') { const r = db.prepare('SELECT content FROM Comment WHERE id = ?').get(id) as any; return r ? String(r.content).slice(0, 40) : ''; }
+    if (type === 'media') { const r = db.prepare('SELECT original FROM Media WHERE id = ?').get(id) as any; return r?.original ? String(r.original).slice(0, 60) : ''; }
+    if (type === 'users') { const r = db.prepare('SELECT username FROM User WHERE id = ?').get(id) as any; return r?.username ? String(r.username).slice(0, 60) : ''; }
+    if (type === 'menus') { const r = db.prepare('SELECT name FROM Menu WHERE id = ?').get(id) as any; return r?.name ? String(r.name).slice(0, 60) : ''; }
+    if (type === 'links') { const r = db.prepare('SELECT name FROM Link WHERE id = ?').get(id) as any; return r?.name ? String(r.name).slice(0, 60) : ''; }
+    if (type === 'sites') { const r = db.prepare('SELECT name FROM Site WHERE id = ?').get(id) as any; return r?.name ? String(r.name).slice(0, 60) : ''; }
+  } catch {}
+  return '';
+}
+
 // Public page cache: caches anonymous GET responses for the frontend content
 // endpoints, so repeated visitors skip DB work. Admin/API clients (Bearer/App
 // auth) are never cached. Content mutations purge the affected prefixes.
@@ -270,11 +293,13 @@ app.use('/api', (req: any, res: any, next: any) => {
           req.originalUrl.startsWith('/api/import') || req.originalUrl.startsWith('/api/install')) purgeAllCaches();
       else purgeContentCaches();
       // Audit trail: record authenticated content mutations (skip public
-      // endpoints like comment submission / password checks)
+      // endpoints like comment submission / password checks). The detail
+      // column carries the affected entity's title so the activity log can
+      // say "updated post「Foo」" instead of a bare API route.
       if (req.user?.userId && !req.originalUrl.includes('/password')) {
         const path = req.originalUrl.split('?')[0];
         try {
-          logActivity(req.user.userId, req.method + ' ' + path.slice(0, 60), '');
+          logActivity(req.user.userId, req.method + ' ' + path.slice(0, 60), resourceTitle(path));
         } catch {}
       }
     }
