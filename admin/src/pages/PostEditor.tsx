@@ -275,6 +275,20 @@ export default function PostEditor() {
           )
         )
       ),
+      // Permalink (matches the visual editor sidebar)
+      React.createElement('div', { className: 'card p-4' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('permalink', getLang())),
+        React.createElement('p', { className: 'text-xs text-gray-500 break-all' }, window.location.origin + '/post/' + (slug || t('untitled', getLang()))),
+        slug && React.createElement('button', { onClick: () => window.open(window.location.origin + '/post/' + slug, '_blank'), className: 'text-xs text-primary-600 hover:text-primary-700 mt-1' }, t('view post', getLang()))
+      ),
+      // Discussion (matches the visual editor sidebar)
+      React.createElement('div', { className: 'card p-4' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('discussion', getLang())),
+        React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer' },
+          React.createElement('input', { type: 'checkbox', checked: allowComments, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setAllowComments(e.target.checked), className: 'rounded border-gray-300 text-primary-600' }),
+          React.createElement('span', { className: 'text-sm text-gray-600' }, t('allow comments', getLang()))
+        )
+      ),
       // SEO panel with Google search preview
       React.createElement('div', { className: 'card p-4' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('seo', getLang())),

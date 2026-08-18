@@ -21,6 +21,8 @@ export default function PageEditor() {
   const [password, setPassword] = useState('');
   const [featured, setFeatured] = useState('');
   const [excerpt, setExcerpt] = useState('');
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [mediaItems, setMediaItems] = useState<any[]>([]);
   const toast = useToast();
   const [visualMode, setVisualMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -29,7 +31,7 @@ export default function PageEditor() {
   const [saving, setSaving] = useState(false);
   const createdIdRef = useRef<string | null>(null);
 
-  useEffect(() => { api.get('/pages').then(r => { const all = r.data; setParentPages(all.filter((p: any) => p.id !== id)); if (id) { const p = all.find((x: any) => x.id === id); if (p) { setTitle(p.title); setSlug(p.slug || ''); setContent(p.content); setStatus(p.status === 'published' && p.password ? 'password' : p.status); setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); setPassword(p.password || ''); if (p.featured) setFeatured(p.featured); if (p.excerpt) setExcerpt(p.excerpt); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } } }); }, [id]);
+  useEffect(() => { api.get('/pages').then(r => { const all = r.data; setParentPages(all.filter((p: any) => p.id !== id)); if (id) { const p = all.find((x: any) => x.id === id); if (p) { setTitle(p.title); setSlug(p.slug || ''); setContent(p.content); setStatus(p.status === 'published' && p.password ? 'password' : p.status); setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); setPassword(p.password || ''); if (p.featured) setFeatured(p.featured); if (p.excerpt) setExcerpt(p.excerpt); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } } }); api.get('/media').then(r => setMediaItems(r.data.media || [])).catch(() => {}); }, [id]);
 
   // stay=false (publish): navigate to pages; stay=true (draft from the builder):
   // keep editing in place
@@ -162,6 +164,37 @@ export default function PageEditor() {
         React.createElement(RichEditor, { value: content, onChange: setContent, placeholder: t('write page content', getLang()) })
       ),
       React.createElement('div', { className: 'space-y-4' },
+        // Featured image (same picker as the post editor's text mode)
+        React.createElement('div', { className: 'card p-4' },
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('featured image', getLang())),
+          featured ? React.createElement('div', null,
+            React.createElement('img', { src: featured, alt: t('featured', getLang()), className: 'w-full h-32 object-cover rounded-lg mb-2' }),
+            React.createElement('button', { onClick: () => setFeatured(''), className: 'text-xs text-red-600 hover:text-red-700' }, t('remove', getLang()))
+          ) : React.createElement('div', null,
+            React.createElement('button', { onClick: () => setShowMediaPicker(!showMediaPicker), className: 'btn-secondary w-full justify-center text-xs' }, t('select from media', getLang())),
+            showMediaPicker && React.createElement('div', { className: 'mt-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg' },
+              mediaItems.length === 0
+                ? React.createElement('p', { className: 'text-xs text-gray-400 p-3' }, t('no media uploaded yet', getLang()))
+                : mediaItems.filter((m: any) => m.mimeType?.startsWith('image/')).map((m: any) =>
+                    React.createElement('div', { key: m.id, onClick: () => { setFeatured(m.url); setShowMediaPicker(false); }, className: 'flex items-center gap-2 p-2 hover:bg-gray-50 cursor-pointer border-b border-gray-100 last:border-0' },
+                      React.createElement('img', { src: m.thumbnail || m.url, alt: m.original, className: 'w-10 h-10 object-cover rounded' }),
+                      React.createElement('span', { className: 'text-xs text-gray-600 truncate flex-1' }, m.original)
+                    )
+                  )
+            )
+          )
+        ),
+        // Excerpt (matches the visual editor sidebar)
+        React.createElement('div', { className: 'card p-4' },
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('excerpt', getLang())),
+          React.createElement('textarea', { value: excerpt, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setExcerpt(e.target.value), placeholder: t('write a short excerpt', getLang()), className: 'input-field', rows: 3 })
+        ),
+        // Permalink (matches the visual editor sidebar)
+        React.createElement('div', { className: 'card p-4' },
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('permalink', getLang())),
+          React.createElement('p', { className: 'text-xs text-gray-500 break-all' }, window.location.origin + '/page/' + (slug || t('untitled', getLang()))),
+          slug && React.createElement('button', { onClick: () => window.open(window.location.origin + '/page/' + slug, '_blank'), className: 'text-xs text-primary-600 hover:text-primary-700 mt-1' }, t('view page', getLang()))
+        ),
         React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('status', getLang())),
           React.createElement('select', { value: status, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setStatus(e.target.value), className: 'input-field' },
