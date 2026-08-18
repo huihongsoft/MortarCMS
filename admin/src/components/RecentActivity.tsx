@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import api from "../lib/api";
 import { t, getLang } from "../lib/i18n";
+import { describeActivity } from "../lib/activity";
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -20,7 +21,7 @@ export default function RecentActivity() {
     logs.map((l: any) => React.createElement("div", { key: l.id, className: "flex items-center gap-2 text-xs text-gray-600 py-1" },
       React.createElement("span", { className: "w-1.5 h-1.5 rounded-full bg-primary-500 flex-shrink-0" }),
       React.createElement("span", { className: "font-medium" }, l.username || t("system", getLang())),
-      React.createElement("span", { className: "text-gray-400" }, l.action),
+      React.createElement("span", { className: "text-gray-400" }, describeActivity(l.action, getLang())),
       React.createElement("span", { className: "text-gray-400 ml-auto" }, timeAgo(l.createdAt))
     ))
   );

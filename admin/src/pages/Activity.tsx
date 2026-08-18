@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { History, Search, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import { describeActivity } from '../lib/activity';
 
 // Audit trail: every authenticated content mutation + security events
 export default function Activity() {
@@ -60,7 +61,7 @@ export default function Activity() {
                   React.createElement('td', { className: 'px-4 py-2.5' },
                     React.createElement('div', { className: 'flex items-center gap-2 flex-wrap' },
                       React.createElement('span', { className: 'px-1.5 py-0.5 text-[10px] rounded font-bold ' + methodColor(l.action) }, l.action.split(' ')[0]),
-                      React.createElement('code', { className: 'text-xs text-gray-600 dark:text-gray-300' }, l.action.split(' ').slice(1).join(' '))
+                      React.createElement('code', { className: 'text-xs text-gray-600 dark:text-gray-300' }, describeActivity(l.action, getLang()))
                     )
                   )
                 )
