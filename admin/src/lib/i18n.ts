@@ -1182,6 +1182,38 @@ const zh: Record<string, string> = {
 'trait max': '最大值',
 'trait step': '步长',
 
+// Selector manager (Classes module)
+'classes': '类',
+'selected': '已选中',
+'- state -': '- 状态 -',
+'hover state': '悬停',
+'click state': '点击',
+'even/odd state': '奇偶',
+
+// Style manager property labels
+'property font-size': '字号',
+'property font-weight': '字重',
+'property text-align': '对齐',
+'property color': '颜色',
+'property line-height': '行高',
+'property letter-spacing': '字间距',
+'property padding': '内边距',
+'property margin': '外边距',
+'property background-color': '背景色',
+'property background': '背景',
+'property border-radius': '圆角',
+'property border': '边框',
+'property width': '宽度',
+'property max-width': '最大宽度',
+'property height': '高度',
+'property display': '显示',
+'property flex-direction': '排列方向',
+'property justify-content': '主轴对齐',
+'property align-items': '交叉轴对齐',
+'property opacity': '不透明度',
+'property box-shadow': '阴影',
+'property transform': '变换',
+
 // Site reset (Settings → Tools)
 'reset site': '初始化站点',
 'reset site hint': '清空所有内容数据（文章、分类、标签、媒体、评论、菜单、链接、AI 数据、活动与访问统计），恢复到全新空站点。用户账号、角色权限与系统设置保留。此操作不可撤销。',

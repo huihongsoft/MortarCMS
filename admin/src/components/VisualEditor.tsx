@@ -540,12 +540,30 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         `,
       },
       plugins: [cmsPlugin],
-      // Localize GrapesJS chrome (style manager empty hint, trait labels)
+      // Localize GrapesJS chrome (style manager, selector manager, trait labels)
       i18n: {
         locale: lang === 'zh' ? 'zh' : 'en',
         messages: {
           zh: {
-            styleManager: { empty: __('select an element before using style manager') },
+            selectorManager: {
+              label: __('classes'), selected: __('selected'), emptyState: __('- state -'),
+              states: { hover: __('hover state'), active: __('click state'), 'nth-of-type(2n)': __('even/odd state') },
+            },
+            styleManager: {
+              empty: __('select an element before using style manager'),
+              properties: {
+                'font-size': __('property font-size'), 'font-weight': __('property font-weight'),
+                'text-align': __('property text-align'), 'color': __('property color'),
+                'line-height': __('property line-height'), 'letter-spacing': __('property letter-spacing'),
+                'padding': __('property padding'), 'margin': __('property margin'),
+                'background-color': __('property background-color'), 'background': __('property background'),
+                'border-radius': __('property border-radius'), 'border': __('property border'),
+                'width': __('property width'), 'max-width': __('property max-width'), 'height': __('property height'),
+                'display': __('property display'), 'flex-direction': __('property flex-direction'),
+                'justify-content': __('property justify-content'), 'align-items': __('property align-items'),
+                'opacity': __('property opacity'), 'box-shadow': __('property box-shadow'), 'transform': __('property transform'),
+              },
+            },
             traitManager: { traits: { labels: {
               title: __('trait title'), href: __('trait href'), target: __('trait target'),
               alt: __('trait alt'), src: __('trait src'), name: __('trait name'), value: __('trait value'),
@@ -1237,15 +1255,29 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         postPanel.setAttribute('data-gpanel', 'post');
         postPanel.innerHTML = '<div class="ve-guten-post-panel" id="ve-post-panel"></div>';
 
-        // Wrap style manager + traits in a block-panel div
-        const smSectors = viewsEl.querySelector('.gjs-sm-sectors') as HTMLElement;
-        const trTraits = viewsEl.querySelector('.gjs-trt-traits') as HTMLElement;
+        // Wrap the GrapesJS block-side panels (selector manager, traits,
+        // style manager) in a block-panel div. Anything GrapesJS rendered
+        // into the views container that is not ours belongs to the Block tab
+        // — otherwise it leaks onto the Post tab (e.g. the Classes module).
         const blockPanel = document.createElement('div');
         blockPanel.className = 've-guten-tab-panel';
         blockPanel.setAttribute('data-gpanel', 'block');
         blockPanel.style.display = 'none';
-        if (smSectors) { smSectors.style.display = ''; blockPanel.appendChild(smSectors); }
-        if (trTraits) { trTraits.style.display = ''; blockPanel.appendChild(trTraits); }
+        const blockModules: HTMLElement[] = [];
+        const smSectors = viewsEl.querySelector('.gjs-sm-sectors') as HTMLElement;
+        const trTraits = viewsEl.querySelector('.gjs-trt-traits') as HTMLElement;
+        // Selector manager wrapper (outer div holds .gjs-clm-tags)
+        const selmWrap = viewsEl.querySelector('.gjs-clm-tags')?.parentElement?.parentElement as HTMLElement;
+        if (selmWrap) blockModules.push(selmWrap);
+        if (trTraits) blockModules.push(trTraits);
+        if (smSectors) blockModules.push(smSectors);
+        // Safety net: any other direct child that is neither our header nor a
+        // tab panel also moves into the Block tab
+        [...viewsEl.children].forEach((el) => {
+          const e = el as HTMLElement;
+          if (!e.classList.contains('ve-guten-sidebar-hdr') && !e.classList.contains('ve-guten-tab-panel') && !blockModules.includes(e)) blockModules.push(e);
+        });
+        blockModules.forEach((el) => { el.style.display = ''; blockPanel.appendChild(el); });
 
         // Insert into views container: header first, then panels
         // The views container already has the sectors/traits, we wrapped them in blockPanel
