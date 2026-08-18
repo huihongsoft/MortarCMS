@@ -234,8 +234,11 @@ app.use('/api', appPasswordAuth);
 
 // Look up the affected entity's title for the activity log (e.g. the post
 // title behind PUT /api/posts/:id), so entries read "更新文章「Foo」".
+// Covers every resource that has a name/title in the DB (or in the URL):
+// posts/pages/categories/tags/comments/media/users/menus/links/sites/roles,
+// plus themes & plugins whose name IS the route segment.
 function resourceTitle(path: string): string {
-  const m = path.match(/^\/api\/(posts|pages|categories|tags|comments|media|users|menus|links|sites)\/([^/]+)/);
+  const m = path.match(/^\/api\/(posts|pages|categories|tags|comments|media|users|menus|links|sites|roles|themes|plugins)\/([^/]+)/);
   if (!m) return '';
   const [, type, id] = m;
   try {
@@ -251,6 +254,8 @@ function resourceTitle(path: string): string {
     if (type === 'menus') { const r = db.prepare('SELECT name FROM Menu WHERE id = ?').get(id) as any; return r?.name ? String(r.name).slice(0, 60) : ''; }
     if (type === 'links') { const r = db.prepare('SELECT name FROM Link WHERE id = ?').get(id) as any; return r?.name ? String(r.name).slice(0, 60) : ''; }
     if (type === 'sites') { const r = db.prepare('SELECT name FROM Site WHERE id = ?').get(id) as any; return r?.name ? String(r.name).slice(0, 60) : ''; }
+    if (type === 'roles') { const r = db.prepare('SELECT name FROM Role WHERE slug = ? OR id = ?').get(id, id) as any; return r?.name ? String(r.name).slice(0, 60) : ''; }
+    if (type === 'themes' || type === 'plugins') { return id.slice(0, 60); }  // the route segment IS the name
   } catch {}
   return '';
 }

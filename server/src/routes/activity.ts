@@ -18,7 +18,7 @@ export function logActivity(userId: string, action: string, detail = '') {
 function backfillDetails(rows: any[]): void {
   for (const row of rows) {
     if (row.detail) continue;
-    const m = String(row.action || '').match(/^\/api\/(posts|pages|categories|tags|comments|media|users|menus|links|sites)\/([^/]+)/);
+    const m = String(row.action || '').match(/^\/api\/(posts|pages|categories|tags|comments|media|users|menus|links|sites|roles|themes|plugins)\/([^/]+)/);
     if (!m) continue;
     const [, type, id] = m;
     let title = '';
@@ -50,6 +50,11 @@ function backfillDetails(rows: any[]): void {
       } else if (type === 'sites') {
         const r = db.prepare('SELECT name FROM Site WHERE id = ?').get(id) as any;
         title = r?.name ? String(r.name).slice(0, 60) : '';
+      } else if (type === 'roles') {
+        const r = db.prepare('SELECT name FROM Role WHERE slug = ? OR id = ?').get(id, id) as any;
+        title = r?.name ? String(r.name).slice(0, 60) : '';
+      } else if (type === 'themes' || type === 'plugins') {
+        title = id.slice(0, 60);  // the route segment IS the name
       }
     } catch {}
     if (title) {
