@@ -14,7 +14,7 @@ const commentSchema = z.object({
   author: z.string().max(50).optional(),
   email: z.string().email().max(254).optional().or(z.literal('')),
   website: z.string().max(500).optional().or(z.literal('')),
-  parentId: z.string().optional(),
+  parentId: z.string().nullable().optional(),
   postId: z.string(),
   subscribe: z.boolean().optional(),
 });

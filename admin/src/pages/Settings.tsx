@@ -62,7 +62,10 @@ export default function Settings() {
 
   async function saveSettings() {
     try {
-      await api.put('/settings', settings);
+      // The settings schema only accepts string/number/boolean — drop any
+      // null/undefined values instead of letting the request 400
+      const payload = Object.fromEntries(Object.entries(settings).filter(([, v]) => v !== null && v !== undefined));
+      await api.put('/settings', payload);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       // Let the sidebar re-read dev_mode so the developer-mode menu entries
