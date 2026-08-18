@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson, Trash2 } from 'lucide-react';
-import api from '../lib/api';
+import api, { downloadFile } from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
 type TabKey = 'general' | 'reading' | 'discussion' | 'privacy' | 'smtp' | 'maintenance' | 'tools';
@@ -406,8 +406,8 @@ export default function Settings() {
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3' }, t('content', getLang())),
         React.createElement('p', { className: 'text-sm text-gray-500 dark:text-gray-400 mb-4' }, t('export all content as json or import from a previously exported file.', getLang())),
         React.createElement('div', { className: 'flex flex-wrap gap-3' },
-          React.createElement('a', { href: '/api/export/export', className: 'btn-secondary text-sm', target: '_blank' }, React.createElement(Download, { size: 14 }), t('download export', getLang())),
-          React.createElement('a', { href: '/api/db/backup', className: 'btn-secondary text-sm', target: '_blank' }, React.createElement(Download, { size: 14 }), t('download db backup', getLang())),
+          React.createElement('button', { onClick: () => { if (!downloadFile('/export/export', 'mortar-export.json')) alert(t('download failed', getLang())); }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('download export', getLang())),
+          React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup', 'mortar-backup.db')) alert(t('download failed', getLang())); }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('download db backup', getLang())),
         React.createElement('button', { onClick: () => {
           const input = document.createElement('input');
           input.type = 'file'; input.accept = '.json';
@@ -491,8 +491,8 @@ export default function Settings() {
         React.createElement('div', { className: 'flex flex-wrap gap-3' },
           React.createElement('button', { onClick: async () => { try { const r = await api.get('/db/optimize'); alert(r.data?.message || t('database optimized', getLang())); api.get('/db/status').then(x => setDbStatus(x.data)); } catch (e: any) { alert(e.response?.data?.error || t('optimize failed', getLang())); } }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('optimize database', getLang())),
           React.createElement('button', { onClick: async () => { try { const r = await api.get('/db/integrity'); setDbCheck(r.data); } catch (e: any) { alert(e.response?.data?.error || t('check failed', getLang())); } }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('integrity check', getLang())),
-          React.createElement('a', { href: '/api/db/backup', className: 'btn-secondary text-sm', target: '_blank' }, React.createElement(Download, { size: 14 }), t('download db backup', getLang())),
-          React.createElement('a', { href: '/api/db/backup-full', className: 'btn-secondary text-sm', target: '_blank' }, React.createElement(Download, { size: 14 }), t('full backup (json)', getLang())),
+          React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup', 'mortar-backup.db')) alert(t('download failed', getLang())); }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('download db backup', getLang())),
+          React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup-full', 'mortar-backup.zip')) alert(t('download failed', getLang())); }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('full backup (json)', getLang())),
           React.createElement('button', { onClick: async () => { try { await api.post('/system/tasks/backup_database/run'); loadBackups(); alert(t('backup created', getLang())); } catch (e: any) { alert(e.response?.data?.error || t('backup failed', getLang())); } }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('backup now', getLang())),
         ),
         // Retention + backup list
@@ -509,7 +509,7 @@ export default function Settings() {
                     React.createElement('span', { className: 'flex-1 truncate font-mono' }, b.name),
                     React.createElement('span', { className: 'text-gray-400' }, b.sizeKB + ' KB'),
                     React.createElement('span', { className: 'text-gray-400' }, new Date(b.at).toLocaleDateString()),
-                    React.createElement('a', { href: '/api/db/backups/' + encodeURIComponent(b.name), className: 'text-primary-600 hover:text-primary-700' }, t('download', getLang())),
+                    React.createElement('button', { onClick: () => { if (!downloadFile('/db/backups/' + encodeURIComponent(b.name), b.name)) alert(t('download failed', getLang())); }, className: 'text-primary-600 hover:text-primary-700' }, t('download', getLang())),
                     React.createElement('button', { onClick: async () => { if (!confirm(t('delete this backup?', getLang()))) return; await api.delete('/db/backups/' + encodeURIComponent(b.name)); loadBackups(); }, className: 'text-red-500 hover:text-red-700' }, t('delete', getLang()))
                   )
                 )

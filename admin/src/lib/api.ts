@@ -45,3 +45,25 @@ api.interceptors.response.use(
 );
 
 export default api;
+
+// Download a file through the authenticated API. Plain <a href> navigation
+// cannot carry the Bearer token, so protected downloads (backups etc.) would
+// 401 — fetch the blob with the token and save it via a temporary link.
+export async function downloadFile(url: string, fallbackName: string): Promise<boolean> {
+  try {
+    const token = localStorage.getItem('mortar_token');
+    const r = await fetch('/api' + url, { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+    if (!r.ok) return false;
+    const blob = await r.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    const cd = r.headers.get('Content-Disposition') || '';
+    const m = cd.match(/filename="?([^";]+)"?/i);
+    a.download = m ? m[1] : fallbackName;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    return true;
+  } catch { return false; }
+}

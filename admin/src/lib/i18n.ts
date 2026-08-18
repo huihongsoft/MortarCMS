@@ -1052,6 +1052,7 @@ const zh: Record<string, string> = {
 'no backups yet. run the backup task or create one manually.': '暂无备份。可运行备份任务或手动创建。',
 'delete this backup?': '删除此备份？',
 'download': '下载',
+'download failed': '下载失败',
 
 'activity log': '活动日志',
 'filter by action': '按操作筛选',

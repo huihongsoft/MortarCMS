@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Server, Database, Cpu, HardDrive, CheckCircle2, XCircle, Activity, RefreshCw, X } from 'lucide-react';
-import api from '../lib/api';
+import api, { downloadFile } from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
 export default function SystemInfo() {
@@ -76,8 +76,8 @@ export default function SystemInfo() {
       React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('backup', getLang())),
       React.createElement('p', { className: 'text-xs text-gray-500 mb-4' }, t('backup description', getLang())),
       React.createElement('div', { className: 'flex flex-wrap gap-3 items-center' },
-        React.createElement('a', { href: '/api/db/backup-full', className: 'btn-primary text-xs' }, t('download full backup', getLang())),
-        React.createElement('a', { href: '/api/db/backup', className: 'btn-secondary text-xs' }, t('download db backup', getLang())),
+        React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup-full', 'mortar-backup.zip')) alert(t('download failed', getLang())); }, className: 'btn-primary text-xs' }, t('download full backup', getLang())),
+        React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup', 'mortar-backup.db')) alert(t('download failed', getLang())); }, className: 'btn-secondary text-xs' }, t('download db backup', getLang())),
         React.createElement('label', { className: 'btn-secondary text-xs cursor-pointer' },
           t('restore backup', getLang()),
           React.createElement('input', {
