@@ -34,6 +34,13 @@ api.interceptors.response.use(
   },
   (err) => {
     setProgressBar(false);
+    // Zod validation errors arrive as an array of {code, expected, received,
+    // path, message} objects. Callers render these as strings — flatten the
+    // array here so an object never ends up as a React child (error #31).
+    const d = err.response?.data;
+    if (d && Array.isArray(d.error)) {
+      d.error = d.error.map((x: any) => (x && typeof x === 'object' && x.message) ? String(x.message) : JSON.stringify(x)).join('; ');
+    }
     if (err.response?.status === 401) {
       localStorage.removeItem('mortar_token');
       if (window.location.pathname.startsWith('/admin') && !window.location.pathname.includes('/login')) {

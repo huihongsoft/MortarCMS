@@ -8,9 +8,15 @@ const ToastContext = createContext<{ toast: (msg: string, type?: 'success' | 'er
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
 
-  const addToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+  const addToast = useCallback((message: any, type: 'success' | 'error' = 'success') => {
+    // Guard against non-string payloads (e.g. a zod error array from a 400):
+    // rendering an object as a React child crashes the whole app.
+    const text = typeof message === 'string' ? message
+      : Array.isArray(message) ? message.map((m: any) => (m && typeof m === 'object' && 'message' in m) ? String(m.message) : String(m)).join('; ')
+      : message && typeof message === 'object' ? JSON.stringify(message)
+      : String(message ?? '');
     const id = Date.now();
-    setToasts(prev => [...prev, { id, message, type }]);
+    setToasts(prev => [...prev, { id, message: text, type }]);
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   }, []);
 

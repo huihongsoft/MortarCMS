@@ -5,7 +5,8 @@ import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { slugify } from '../utils/slug';
 
 const router = Router();
-const categorySchema = z.object({ name: z.string().min(1).max(50), description: z.string().max(500).optional(), parentId: z.string().optional() });
+// parentId must accept null — the admin UI sends null for "no parent"
+const categorySchema = z.object({ name: z.string().min(1).max(50), description: z.string().max(500).optional(), parentId: z.string().nullable().optional() });
 
 router.get('/', (req: AuthRequest, res: Response) => {
   try {
