@@ -74,6 +74,7 @@ const zh: Record<string, string> = {
   'bio': '简介',
   'block templates': '块模板',
   'blockquote': '引用块',
+  'block': '区块',
   'blocks': '块',
   'body font': '正文字体',
   'bold': '加粗',
