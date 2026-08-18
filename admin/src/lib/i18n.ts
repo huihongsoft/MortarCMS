@@ -1055,13 +1055,11 @@ const zh: Record<string, string> = {
 'download failed': '下载失败',
 
 // Activity log — human-readable action descriptions
-'create': '创建',
+// (create/delete/activity already exist above; only the missing ones are added)
 'update': '更新',
-'delete': '删除',
 'view': '查看',
 'roles': '角色',
 'themes': '主题',
-'activity': '动态',
 
 'activity log': '活动日志',
 'filter by action': '按操作筛选',
