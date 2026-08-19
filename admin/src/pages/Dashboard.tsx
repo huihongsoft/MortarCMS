@@ -159,7 +159,7 @@ export default function Dashboard() {
                   React.createElement('p', { className: 'font-medium text-gray-900 truncate' }, p.title),
                   React.createElement('p', { className: 'text-xs text-gray-500' }, `${t('by', getLang())} ${p.author?.username} · ${new Date(p.createdAt).toLocaleDateString()}`)
                 ),
-                React.createElement('span', { className: `px-2 py-1 text-xs rounded-full font-medium shrink-0 ${p.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}` }, p.status)
+                React.createElement('span', { className: `px-2 py-1 text-xs rounded-full font-medium shrink-0 ${p.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}` }, t(p.status, getLang()))
               )
             ))
       ),
