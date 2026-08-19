@@ -1,6 +1,8 @@
 import { Router, Response } from 'express';
 import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { SiteRequest } from '../middleware/site';
+import { verifyToken } from '../utils/jwt';
 import { slugify } from '../utils/slug';
 
 const router = Router();
@@ -47,13 +49,31 @@ function enrichLinks(links: any[]): any[] {
   return links;
 }
 
-// Public: all links (ordered by category, then menuOrder)
-router.get('/', (_req: AuthRequest, res: Response) => {
+// Public: all links (ordered by category, then menuOrder). Anonymous
+// visitors get only the current site's links plus global ones (siteId IS
+// NULL = visible everywhere, same semantics as posts); admins see all.
+router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
-    const links = db.prepare('SELECT * FROM Link ORDER BY categoryId ASC, menuOrder ASC, createdAt ASC').all() as any[];
+    let sql = 'SELECT * FROM Link';
+    const params: any[] = [];
+    if (req.siteId && !isAdminReq(req)) {
+      sql += ' WHERE siteId IS NULL OR siteId = ?';
+      params.push(req.siteId);
+    }
+    sql += ' ORDER BY categoryId ASC, menuOrder ASC, createdAt ASC';
+    const links = db.prepare(sql).all(...params) as any[];
     res.json(enrichLinks(links));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
+
+// A valid Bearer token means an admin request (management view shows all
+// sites' links); anything else is a public visitor filtered by site.
+function isAdminReq(req: AuthRequest): boolean {
+  if (req.user) return true;
+  const header = req.headers.authorization || '';
+  if (!header.startsWith('Bearer ')) return false;
+  return !!verifyToken(header.slice(7));
+}
 
 // Admin: create link
 router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
