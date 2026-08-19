@@ -239,7 +239,7 @@ app.use('/api', appPasswordAuth);
 // posts/pages/categories/tags/comments/media/users/menus/links/sites/roles,
 // plus themes & plugins whose name IS the route segment.
 function resourceTitle(path: string): string {
-  const m = path.match(/^\/api\/(posts|pages|categories|tags|comments|media|users|menus|links|sites|roles|themes|plugins)\/([^/]+)/);
+  const m = path.match(/^\/api\/(posts|pages|categories|tags|comments|media|users|menus|links|sites|roles|themes|plugins|friend-links)\/([^/]+)/);
   if (!m) return '';
   const [, type, id] = m;
   try {
@@ -257,6 +257,7 @@ function resourceTitle(path: string): string {
     if (type === 'sites') { const r = db.prepare('SELECT name FROM Site WHERE id = ?').get(id) as any; return r?.name ? String(r.name).slice(0, 60) : ''; }
     if (type === 'roles') { const r = db.prepare('SELECT name FROM Role WHERE slug = ? OR id = ?').get(id, id) as any; return r?.name ? String(r.name).slice(0, 60) : ''; }
     if (type === 'themes' || type === 'plugins') { return id.slice(0, 60); }  // the route segment IS the name
+    if (type === 'friend-links') { const r = db.prepare('SELECT name FROM FriendLink WHERE id = ?').get(id) as any; return r?.name ? String(r.name).slice(0, 60) : ''; }
   } catch {}
   return '';
 }

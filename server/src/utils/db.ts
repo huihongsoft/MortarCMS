@@ -454,12 +454,17 @@ export function initDB(): void {
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_post_views ON Post (views DESC)"); } catch {}
   // One-time migration: legacy friend links lived in the Link table before
   // the navigation model existed — copy them to FriendLink so the blogroll
-  // keeps working while Link becomes the navigation-site model.
+  // keeps working while Link becomes the navigation-site model. Only rows
+  // with NO navigation features are copied (a bare link is a friend link);
+  // categorized/site-bound/ordered/clicked/associated links stay in Link.
   try {
     const friendCount = (db.prepare('SELECT COUNT(*) as c FROM FriendLink').get() as any)?.c || 0;
-    const linkCount = (db.prepare('SELECT COUNT(*) as c FROM Link').get() as any)?.c || 0;
-    if (friendCount === 0 && linkCount > 0) {
-      db.exec('INSERT INTO FriendLink (id, name, url, avatar, description, createdAt) SELECT id, name, url, avatar, description, createdAt FROM Link');
+    if (friendCount === 0) {
+      db.exec(`INSERT INTO FriendLink (id, name, url, avatar, description, createdAt)
+        SELECT id, name, url, avatar, description, createdAt FROM Link
+        WHERE categoryId IS NULL AND siteId IS NULL AND pageId IS NULL
+          AND (menuOrder IS NULL OR menuOrder = 0) AND active = 1 AND clicks = 0
+          AND NOT EXISTS (SELECT 1 FROM LinkPost lp WHERE lp.linkId = Link.id)`);
     }
   } catch {}
 }
