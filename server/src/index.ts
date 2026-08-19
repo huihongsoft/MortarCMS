@@ -239,9 +239,14 @@ app.use('/api', appPasswordAuth);
 // posts/pages/categories/tags/comments/media/users/menus/links/sites/roles,
 // plus themes & plugins whose name IS the route segment.
 function resourceTitle(path: string): string {
-  const m = path.match(/^\/api\/(posts|pages|categories|tags|comments|media|users|menus|links|sites|roles|themes|plugins|friend-links)\/([^/]+)/);
-  if (!m) return '';
-  const [, type, id] = m;
+  const m = path.match(/^\/api\/links\/categories\/([^/]+)/);
+  if (m) {
+    const r = db.prepare('SELECT name FROM LinkCategory WHERE id = ?').get(m[1]) as any;
+    return r?.name ? String(r.name).slice(0, 60) : '';
+  }
+  const m2 = path.match(/^\/api\/(posts|pages|categories|tags|comments|media|users|menus|links|sites|roles|themes|plugins|friend-links)\/([^/]+)/);
+  if (!m2) return '';
+  const [, type, id] = m2;
   try {
     if (type === 'posts' || type === 'pages') {
       const p = db.prepare('SELECT title FROM Post WHERE id = ?').get(id) as any;

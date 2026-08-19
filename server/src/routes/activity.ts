@@ -18,9 +18,15 @@ export function logActivity(userId: string, action: string, detail = '') {
 function backfillDetails(rows: any[]): void {
   for (const row of rows) {
     if (row.detail) continue;
-    const m = String(row.action || '').match(/^\/api\/(posts|pages|categories|tags|comments|media|users|menus|links|sites|roles|themes|plugins|friend-links)\/([^/]+)/);
-    if (!m) continue;
-    const [, type, id] = m;
+    const m = String(row.action || '').match(/^\/api\/links\/categories\/([^/]+)/);
+    if (m) {
+      const c = db.prepare('SELECT name FROM LinkCategory WHERE id = ?').get(m[1]) as any;
+      if (c?.name) { try { db.prepare('UPDATE Activity SET detail = ? WHERE id = ?').run(String(c.name).slice(0, 60), row.id); } catch {} }
+      continue;
+    }
+    const m2 = String(row.action || '').match(/^\/api\/(posts|pages|categories|tags|comments|media|users|menus|links|sites|roles|themes|plugins|friend-links)\/([^/]+)/);
+    if (!m2) continue;
+    const [, type, id] = m2;
     let title = '';
     try {
       if (type === 'posts' || type === 'pages') {
