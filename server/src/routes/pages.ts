@@ -219,7 +219,13 @@ router.put('/:id/revisions/:revId/restore', authenticate, authorize('admin', 'ed
 });
 
 router.delete('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
-  try { db.prepare('DELETE FROM Post WHERE id = ? AND type = ?').run(req.params.id, 'page'); res.json({ success: true }); } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try {
+    db.prepare('DELETE FROM Post WHERE id = ? AND type = ?').run(req.params.id, 'page');
+    // Categories may point at this page as their landing page — clear the
+    // dangling reference so menu jumps don't 404
+    db.prepare('UPDATE LinkCategory SET pageId = NULL WHERE pageId = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 export default router;

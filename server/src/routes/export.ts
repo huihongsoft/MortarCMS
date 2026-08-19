@@ -85,7 +85,7 @@ router.post('/import', authenticate, authorize('admin'), (req: AuthRequest, res:
       } catch {}
     }
     if (data.linkCategories) for (const lc of data.linkCategories) {
-      db.prepare('INSERT OR IGNORE INTO LinkCategory (id, name, slug, description, menuOrder, siteId, createdAt) VALUES (?,?,?,?,?,?,?)').run(lc.id||cuid_import(), lc.name, lc.slug, lc.description||'', lc.menuOrder||0, lc.siteId||null, lc.createdAt||new Date().toISOString());
+      db.prepare('INSERT OR IGNORE INTO LinkCategory (id, name, slug, description, menuOrder, siteId, pageId, createdAt) VALUES (?,?,?,?,?,?,?,?)').run(lc.id||cuid_import(), lc.name, lc.slug, lc.description||'', lc.menuOrder||0, lc.siteId||null, lc.pageId||null, lc.createdAt||new Date().toISOString());
       count++;
     }
     if (data.links) for (const l of data.links) {
