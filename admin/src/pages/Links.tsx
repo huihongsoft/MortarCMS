@@ -184,7 +184,10 @@ export default function Links() {
             React.createElement('div', { className: 'flex items-center gap-3' },
               // input-field carries w-full, so the order input needs an inline
               // width or it would push the enabled toggle onto its own line
-              React.createElement('input', { type: 'number', value: menuOrder, onChange: e => setMenuOrder(parseInt(e.target.value) || 0), placeholder: t('order', getLang()), className: 'input-field text-sm', style: { width: 88 }, title: t('order hint', getLang()) }),
+              React.createElement('div', { className: 'flex items-center gap-1.5' },
+                React.createElement('label', { className: 'text-xs text-gray-500 whitespace-nowrap' }, t('order', getLang())),
+                React.createElement('input', { type: 'number', value: menuOrder, onChange: e => setMenuOrder(parseInt(e.target.value) || 0), className: 'input-field text-sm', style: { width: 64 }, title: t('order hint', getLang()) })
+              ),
               React.createElement('label', { title: t('enabled hint', getLang()), className: 'flex items-center gap-2 text-sm text-gray-600 cursor-pointer whitespace-nowrap' },
                 React.createElement('input', { type: 'checkbox', checked: active, onChange: e => setActive(e.target.checked), className: 'rounded border-gray-300 text-primary-600' }),
                 t('enabled', getLang())
@@ -195,7 +198,9 @@ export default function Links() {
               React.createElement('p', { className: 'text-xs font-medium text-gray-500 mb-1' }, t('associated posts', getLang())),
               React.createElement('div', { className: 'relative' },
                 React.createElement(Search, { size: 13, className: 'absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400' }),
-                React.createElement('input', { value: postSearch, onChange: e => searchPosts(e.target.value), placeholder: t('search posts to associate', getLang()), className: 'input-field text-sm pl-8' })
+                // pl-8 is overridden by .input-field's px-3.5, which would put
+                // the placeholder text on top of the icon — inline padding wins
+                React.createElement('input', { value: postSearch, onChange: e => searchPosts(e.target.value), placeholder: t('search posts to associate', getLang()), className: 'input-field text-sm', style: { paddingLeft: 32 } })
               ),
               postResults.length > 0 && React.createElement('div', { className: 'mt-2 max-h-36 overflow-y-auto border border-gray-200 rounded-lg' },
                 postResults.map(p => React.createElement('div', { key: p.id, onClick: () => togglePost(p.id), className: 'flex items-center gap-2 px-2.5 py-1.5 text-sm cursor-pointer hover:bg-gray-50 ' + (postIds.includes(p.id) ? 'bg-primary-50' : '') },
