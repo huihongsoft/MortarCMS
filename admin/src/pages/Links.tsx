@@ -18,8 +18,6 @@ export default function Links() {
   const [description, setDescription] = useState('');
   const [avatar, setAvatar] = useState('');
   const [categoryId, setCategoryId] = useState('');
-  const [siteId, setSiteId] = useState('');
-  const [pageId, setPageId] = useState('');
   const [menuOrder, setMenuOrder] = useState(0);
   const [active, setActive] = useState(true);
   const [postIds, setPostIds] = useState<string[]>([]);
@@ -78,7 +76,7 @@ export default function Links() {
   async function save() {
     if (!name || !url) return;
     try {
-      const payload: any = { name, url, description, avatar, categoryId: categoryId || null, siteId: siteId || null, pageId: pageId || null, menuOrder, active, postIds };
+      const payload: any = { name, url, description, avatar, categoryId: categoryId || null, menuOrder, active, postIds };
       if (editing) await api.put('/links/' + editing.id, payload);
       else await api.post('/links', payload);
       toast.toast(editing ? t('link updated', getLang()) : t('link created', getLang()));
@@ -86,10 +84,10 @@ export default function Links() {
     } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
   }
 
-  function reset() { setName(''); setUrl(''); setDescription(''); setAvatar(''); setCategoryId(''); setSiteId(''); setPageId(''); setMenuOrder(0); setActive(true); setPostIds([]); setEditing(null); setPostSearch(''); setPostResults([]); }
+  function reset() { setName(''); setUrl(''); setDescription(''); setAvatar(''); setCategoryId(''); setMenuOrder(0); setActive(true); setPostIds([]); setEditing(null); setPostSearch(''); setPostResults([]); }
   function startEdit(l: any) {
     setEditing(l); setName(l.name); setUrl(l.url); setDescription(l.description || ''); setAvatar(l.avatar || '');
-    setCategoryId(l.categoryId || ''); setSiteId(l.siteId || ''); setPageId(l.pageId || ''); setMenuOrder(l.menuOrder || 0);
+    setCategoryId(l.categoryId || ''); setMenuOrder(l.menuOrder || 0);
     setActive(l.active !== 0); setPostIds((l.posts || []).map((p: any) => p.id));
     setPostTitles(prev => { const n = { ...prev }; (l.posts || []).forEach((p: any) => { n[p.id] = p.title; }); return n; });
   }
@@ -183,14 +181,6 @@ export default function Links() {
             React.createElement('select', { value: categoryId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setCategoryId(e.target.value), className: 'input-field text-sm' },
               React.createElement('option', { value: '' }, '(' + t('no category', getLang()) + ')'),
               categories.map(c => React.createElement('option', { key: c.id, value: c.id }, c.name))
-            ),
-            React.createElement('select', { value: siteId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSiteId(e.target.value), className: 'input-field text-sm' },
-              React.createElement('option', { value: '' }, '(' + t('global (all sites)', getLang()) + ')'),
-              sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name + (st.isPrimary === 1 ? ' (primary)' : '')))
-            ),
-            React.createElement('select', { value: pageId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setPageId(e.target.value), className: 'input-field text-sm' },
-              React.createElement('option', { value: '' }, '(' + t('select page', getLang()) + ')'),
-              pages.map(p => React.createElement('option', { key: p.id, value: p.id }, p.title))
             ),
             React.createElement('div', { className: 'flex items-center gap-3' },
               // input-field carries w-full, so the order input needs an inline

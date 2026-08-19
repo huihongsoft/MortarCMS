@@ -33,27 +33,9 @@ function enrichLinks(links: any[]): any[] {
   const postsByLink = new Map<string, any[]>();
   (db.prepare('SELECT lp.linkId, p.id, p.title, p.slug FROM LinkPost lp JOIN Post p ON p.id = lp.postId WHERE lp.linkId IN (' + qmarks + ') ORDER BY p.createdAt DESC').all(...ids) as any[])
     .forEach((r: any) => { if (!postsByLink.has(r.linkId)) postsByLink.set(r.linkId, []); postsByLink.get(r.linkId)!.push({ id: r.id, title: r.title, slug: r.slug }); });
-  // Linked page title
-  const pages = new Map<string, any>();
-  const pageIds = links.map((l: any) => l.pageId).filter(Boolean);
-  if (pageIds.length) {
-    const pq = pageIds.map(() => '?').join(',');
-    (db.prepare('SELECT id, title, slug FROM Post WHERE id IN (' + pq + ')').all(...pageIds) as any[])
-      .forEach((p: any) => pages.set(p.id, p));
-  }
-  // Site names
-  const sites = new Map<string, any>();
-  const siteIds = links.map((l: any) => l.siteId).filter(Boolean);
-  if (siteIds.length) {
-    const sq = siteIds.map(() => '?').join(',');
-    (db.prepare('SELECT id, name FROM Site WHERE id IN (' + sq + ')').all(...siteIds) as any[])
-      .forEach((s: any) => sites.set(s.id, s));
-  }
   links.forEach((l: any) => {
     l.category = l.categoryId ? cats.get(l.categoryId) || null : null;
     l.posts = postsByLink.get(l.id) || [];
-    l.page = l.pageId ? pages.get(l.pageId) || null : null;
-    l.site = l.siteId ? sites.get(l.siteId) || null : null;
   });
   return links;
 }
@@ -66,11 +48,10 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     let sql = 'SELECT l.* FROM Link l LEFT JOIN LinkCategory c ON c.id = l.categoryId';
     const params: any[] = [];
     if (req.siteId && !isAdminReq(req)) {
-      // Public visitors: active links only, visible when the link's own
-      // siteId matches (or is global) — and a link WITHOUT a siteId inherits
-      // its category's site ownership
-      sql += " WHERE l.active = 1 AND ((l.siteId IS NULL AND (c.siteId IS NULL OR c.siteId = ?)) OR l.siteId = ?)";
-      params.push(req.siteId, req.siteId);
+      // Public visitors: active links only, visibility follows the category
+      // (global category = everywhere, site-owned category = that site)
+      sql += " WHERE l.active = 1 AND (c.siteId IS NULL OR c.siteId = ?)";
+      params.push(req.siteId);
     }
     sql += ' ORDER BY l.categoryId ASC, l.menuOrder ASC, l.createdAt ASC';
     const links = db.prepare(sql).all(...params) as any[];
@@ -90,11 +71,11 @@ function isAdminReq(req: AuthRequest): boolean {
 // Admin: create link
 router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
-    const { name, url, description, avatar, icon, categoryId, siteId, pageId, menuOrder, active } = req.body || {};
+    const { name, url, description, avatar, icon, categoryId, menuOrder, active } = req.body || {};
     if (!name || !url) { res.status(400).json({ error: 'name and url required' }); return; }
     const id = cuid();
-    db.prepare('INSERT INTO Link (id, name, url, description, avatar, icon, categoryId, siteId, pageId, menuOrder, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, name, url, description || '', avatar || '', icon || '', categoryId || null, siteId || null, pageId || null, menuOrder || 0, active === false ? 0 : 1);
+    db.prepare('INSERT INTO Link (id, name, url, description, avatar, icon, categoryId, menuOrder, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, name, url, description || '', avatar || '', icon || '', categoryId || null, menuOrder || 0, active === false ? 0 : 1);
     // Link-post associations
     const postIds = Array.isArray(req.body?.postIds) ? req.body.postIds : [];
     for (const pid of postIds) db.prepare('INSERT OR IGNORE INTO LinkPost (linkId, postId) VALUES (?, ?)').run(id, pid);
@@ -105,7 +86,7 @@ router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, 
 // Admin: update link
 router.put('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
-    const { name, url, description, avatar, icon, categoryId, siteId, pageId, menuOrder, active } = req.body || {};
+    const { name, url, description, avatar, icon, categoryId, menuOrder, active } = req.body || {};
     const sets: string[] = []; const vals: any[] = [];
     if (name !== undefined) { sets.push('name = ?'); vals.push(name); }
     if (url !== undefined) { sets.push('url = ?'); vals.push(url); }
@@ -113,8 +94,6 @@ router.put('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest
     if (avatar !== undefined) { sets.push('avatar = ?'); vals.push(avatar); }
     if (icon !== undefined) { sets.push('icon = ?'); vals.push(icon); }
     if (categoryId !== undefined) { sets.push('categoryId = ?'); vals.push(categoryId || null); }
-    if (siteId !== undefined) { sets.push('siteId = ?'); vals.push(siteId || null); }
-    if (pageId !== undefined) { sets.push('pageId = ?'); vals.push(pageId || null); }
     if (menuOrder !== undefined) { sets.push('menuOrder = ?'); vals.push(menuOrder || 0); }
     if (active !== undefined) { sets.push('active = ?'); vals.push(active === false ? 0 : 1); }
     if (sets.length > 0) { vals.push(req.params.id); db.prepare('UPDATE Link SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
@@ -171,7 +150,7 @@ router.get('/categories', (req: AuthRequest & SiteRequest, res: Response) => {
     const counts = new Map<string, number>();
     if (req.siteId && !isAdminReq(req)) {
       // Count only links this site can actually see (site + inheritance)
-      (db.prepare("SELECT l.categoryId, COUNT(*) as cnt FROM Link l LEFT JOIN LinkCategory c ON c.id = l.categoryId WHERE l.categoryId IS NOT NULL AND l.active = 1 AND ((l.siteId IS NULL AND (c.siteId IS NULL OR c.siteId = ?)) OR l.siteId = ?) GROUP BY l.categoryId").all(req.siteId, req.siteId) as any[])
+      (db.prepare("SELECT l.categoryId, COUNT(*) as cnt FROM Link l LEFT JOIN LinkCategory c ON c.id = l.categoryId WHERE l.categoryId IS NOT NULL AND l.active = 1 AND (c.siteId IS NULL OR c.siteId = ?) GROUP BY l.categoryId").all(req.siteId) as any[])
         .forEach((r: any) => counts.set(r.categoryId, r.cnt));
     } else {
       (db.prepare("SELECT categoryId, COUNT(*) as cnt FROM Link WHERE categoryId IS NOT NULL AND active = 1 GROUP BY categoryId").all() as any[])

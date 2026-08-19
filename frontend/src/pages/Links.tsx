@@ -78,15 +78,11 @@ export default function LinksPage({ settings }: { settings: Record<string, strin
                   ? React.createElement('img', { src: l.avatar, alt: '', className: 'w-10 h-10 rounded-full object-cover flex-shrink-0' })
                   : React.createElement('span', { className: 'w-10 h-10 rounded-full bg-primary-100 text-primary-700 flex items-center justify-center text-sm font-bold flex-shrink-0' }, (l.name || '?')[0].toUpperCase()),
                 React.createElement('div', { className: 'min-w-0' },
-                  React.createElement('p', { className: 'font-semibold text-gray-900 truncate' }, l.name),
-                  l.site && React.createElement('p', { className: 'text-[10px] text-gray-400' }, l.site.name)
+                  React.createElement('p', { className: 'font-semibold text-gray-900 truncate' }, l.name)
                 )
               ),
               l.description && React.createElement('p', { className: 'text-xs text-gray-500 mt-2 leading-relaxed line-clamp-2' }, l.description),
-              // Linked internal page
-              l.page && React.createElement('p', { className: 'text-xs mt-1.5' },
-                React.createElement(Link, { to: '/page/' + l.page.slug, className: 'text-primary-600 hover:underline' }, '↗ ' + l.page.title)
-              ),
+
               // Associated posts (e.g. the site's tutorials)
               (l.posts || []).length > 0 && React.createElement('div', { className: 'mt-2.5 flex flex-wrap gap-1' },
                 l.posts.slice(0, 3).map((p: any) => (

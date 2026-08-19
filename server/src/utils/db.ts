@@ -456,9 +456,13 @@ export function initDB(): void {
   try { db.exec('ALTER TABLE LinkCategory ADD COLUMN pageId TEXT'); } catch {}
   // Site/category lookups on links and link categories (navigation pages and
   // site-scoped filtering query these per request)
-  try { db.exec("CREATE INDEX IF NOT EXISTS idx_link_site ON Link (siteId)"); } catch {}
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_link_category ON Link (categoryId)"); } catch {}
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_linkcat_site ON LinkCategory (siteId)"); } catch {}
+  // Link-level site/page ownership was removed — ownership lives on the
+  // category now. Drop the leftover columns (and their index).
+  try { db.exec("DROP INDEX IF EXISTS idx_link_site"); } catch {}
+  try { db.exec("ALTER TABLE Link DROP COLUMN siteId"); } catch {}
+  try { db.exec("ALTER TABLE Link DROP COLUMN pageId"); } catch {}
   // The views index must be created after the column exists (fresh installs
   // create the column via the ALTER TABLE migrations above).
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_post_views ON Post (views DESC)"); } catch {}

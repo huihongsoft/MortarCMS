@@ -163,12 +163,12 @@ addShortcode('link-list', (attrs, _content, ctx) => {
   let sql = "SELECT l.*, c.name as catName FROM Link l LEFT JOIN LinkCategory c ON c.id = l.categoryId WHERE l.active = 1";
   const params: any[] = [];
   if (catSlug) { sql += ' AND c.slug = ?'; params.push(catSlug); }
-  // Scoped to the page/post's site when the content has one (inheritance:
-  // global links + the site's own links, category ownership inherited)
+  // Scoped to the page/post's site when the content has one — visibility
+  // follows the category (global category = everywhere, site-owned = that site)
   const siteId = ctx?.siteId;
   if (siteId) {
-    sql += ' AND ((l.siteId IS NULL AND (c.siteId IS NULL OR c.siteId = ?)) OR l.siteId = ?)';
-    params.push(siteId, siteId);
+    sql += ' AND (c.siteId IS NULL OR c.siteId = ?)';
+    params.push(siteId);
   }
   sql += ' ORDER BY l.categoryId ASC, l.menuOrder ASC, l.createdAt ASC';
   const links = db.prepare(sql).all(...params) as any[];
