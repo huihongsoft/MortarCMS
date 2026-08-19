@@ -733,6 +733,7 @@ const zh: Record<string, string> = {
   'video': '视频',
   'view post': '查看文章',
   'views': '阅读',
+'hot tags': '热门标签',
   'visual': '可视化',
   'vs': '对比',
   'widgets': '小工具',

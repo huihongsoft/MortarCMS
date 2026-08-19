@@ -55,13 +55,16 @@ export default function Tags() {
                 React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('name', getLang())),
                 React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('slug (unique)', getLang())),
                 React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('posts', getLang())),
+                React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('views', getLang())),
                 React.createElement('th', { className: 'text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('actions', getLang())),
               )),
-              React.createElement('tbody', null, tags.map(tg =>
+              // Hot tags first: order by the aggregated published-post views
+              React.createElement('tbody', null, [...tags].sort((a: any, b: any) => (b._count?.views || 0) - (a._count?.views || 0)).map(tg =>
                 React.createElement('tr', { key: tg.id, className: 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800' },
                   React.createElement('td', { className: 'px-4 py-3 font-medium text-gray-900' }, tg.name),
                   React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, '/' + tg.slug),
                   React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, tg._count?.posts || 0),
+                  React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, (tg._count?.views || 0).toLocaleString()),
                   React.createElement('td', { className: 'px-4 py-3' },
                     React.createElement('div', { className: 'flex justify-end gap-1' },
                       React.createElement('button', { onClick: () => startEdit(tg), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),

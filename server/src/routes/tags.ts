@@ -10,13 +10,18 @@ const tagSchema = z.object({ name: z.string().min(1).max(50) });
 router.get('/', (req: AuthRequest, res: Response) => {
   try {
     const tags = db.prepare('SELECT * FROM Tag ORDER BY name ASC').all() as any[];
-    // Count only published posts so the tag cloud matches the tag page
+    // Count only published posts so the tag cloud matches the tag page.
+    // Also aggregate the published posts' views (hotness): a tag with one
+    // viral post ranks higher than one with many unread posts.
     if (tags.length > 0) {
       // One count query for all tags instead of one per tag
       const counts = new Map<string, number>();
+      const views = new Map<string, number>();
       (db.prepare("SELECT pt.tagId, COUNT(*) as cnt FROM PostTag pt JOIN Post p ON p.id = pt.postId WHERE pt.tagId IN (" + tags.map(() => '?').join(',') + ") AND p.type = 'post' AND p.status = 'published' GROUP BY pt.tagId").all(...tags.map((t: any) => t.id)) as any[])
         .forEach((r: any) => counts.set(r.tagId, r.cnt));
-      tags.forEach((t: any) => { t._count = { posts: counts.get(t.id) || 0 }; });
+      (db.prepare("SELECT pt.tagId, SUM(p.views) as v FROM PostTag pt JOIN Post p ON p.id = pt.postId WHERE pt.tagId IN (" + tags.map(() => '?').join(',') + ") AND p.type = 'post' AND p.status = 'published' GROUP BY pt.tagId").all(...tags.map((t: any) => t.id)) as any[])
+        .forEach((r: any) => views.set(r.tagId, r.v));
+      tags.forEach((t: any) => { t._count = { posts: counts.get(t.id) || 0, views: views.get(t.id) || 0 }; });
     }
     res.json(tags);
   } catch (err: any) { res.status(500).json({ error: err.message }); }

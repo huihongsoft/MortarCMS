@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [commentStatus, setCommentStatus] = useState<Record<string, number>>({});
   const [recent, setRecent] = useState<any[]>([]);
   const [recentComments, setRecentComments] = useState<any[]>([]);
+  const [hotTags, setHotTags] = useState<any[]>([]);
   const [statsData, setStatsData] = useState<any>(null);
   const [quickTitle, setQuickTitle] = useState('');
   const [quickContent, setQuickContent] = useState('');
@@ -40,6 +41,8 @@ export default function Dashboard() {
       setRecentComments(r.data.recent?.comments || []);
     }).catch(() => {});
     api.get('/stats?days=14').then(r => setStatsData(r.data)).catch(() => {});
+    // Hot tags: aggregated published-post views, top 8
+    api.get('/tags').then(r => setHotTags((r.data || []).sort((a: any, b: any) => (b._count?.views || 0) - (a._count?.views || 0)).slice(0, 8))).catch(() => {});
   }, []);
 
   const cards = [
@@ -173,6 +176,20 @@ export default function Dashboard() {
                 React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, `${c.author} · ${new Date(c.createdAt).toLocaleDateString()}`)
               )
             ))
+      )
+    ),
+    // Row 4: Hot tags (ranked by aggregated published-post views)
+    hotTags.length > 0 && React.createElement('div', { className: 'card p-5' },
+      React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2' }, React.createElement(TagIcon, { size: 15, className: 'text-primary-500' }), t('hot tags', getLang())),
+      React.createElement('div', { className: 'flex flex-wrap gap-2' },
+        hotTags.map((tg, i) =>
+          React.createElement('button', {
+            key: tg.id,
+            onClick: () => navigate('/tags'),
+            className: 'px-2.5 py-1 text-xs rounded-full border ' + (i < 3 ? 'bg-primary-50 border-primary-200 text-primary-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-primary-300'),
+            title: (tg._count?.views || 0).toLocaleString() + ' ' + t('views', getLang()),
+          }, `#${i + 1} ${tg.name} · ${(tg._count?.views || 0).toLocaleString()}`)
+        )
       )
     )
   );
