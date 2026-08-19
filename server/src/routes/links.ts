@@ -128,6 +128,24 @@ router.post('/:id/click', (req: AuthRequest, res: Response) => {
   try { db.prepare('UPDATE Link SET clicks = clicks + 1 WHERE id = ?').run(req.params.id); res.json({ success: true }); } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+
+// Menu items store their URL as a snapshot; when a link category is renamed
+// or deleted, fix any menu item that points at its slug so it doesn't dangle.
+function syncMenuCategoryUrls(oldSlug: string, newUrl: string): void {
+  try {
+    const menus = db.prepare('SELECT id, items FROM Menu').all() as any[];
+    for (const m of menus) {
+      let items: any[] = [];
+      try { items = JSON.parse(m.items || '[]'); } catch { continue; }
+      let changed = false;
+      for (const it of items) {
+        if (it.url === '/links?category=' + oldSlug) { it.url = newUrl; changed = true; }
+      }
+      if (changed) db.prepare('UPDATE Menu SET items = ? WHERE id = ?').run(JSON.stringify(items), m.id);
+    }
+  } catch {}
+}
+
 // ---------- Link categories ----------
 
 // Public: categories (with link counts)
@@ -174,21 +192,27 @@ router.post('/categories', authenticate, requireCap('manage_options'), (req: Aut
 router.put('/categories/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
     const { name, description, menuOrder, siteId } = req.body || {};
+    const existing = db.prepare('SELECT slug FROM LinkCategory WHERE id = ?').get(req.params.id) as any;
     const sets: string[] = []; const vals: any[] = [];
     if (name !== undefined) { sets.push('name = ?'); vals.push(name); sets.push('slug = ?'); vals.push(slugify(name)); }
     if (description !== undefined) { sets.push('description = ?'); vals.push(description); }
     if (menuOrder !== undefined) { sets.push('menuOrder = ?'); vals.push(menuOrder || 0); }
     if (siteId !== undefined) { sets.push('siteId = ?'); vals.push(siteId || null); }
     if (sets.length > 0) { vals.push(req.params.id); db.prepare('UPDATE LinkCategory SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
+    // Renamed: keep menu items pointing at this category working
+    if (name !== undefined && existing?.slug) syncMenuCategoryUrls(existing.slug, '/links?category=' + slugify(name));
     res.json(db.prepare('SELECT * FROM LinkCategory WHERE id = ?').get(req.params.id));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Admin: delete category (links keep existing, categoryId set null)
+// Admin: delete category (links keep existing, categoryId set null; menu
+// items pointing at the category fall back to the links page)
 router.delete('/categories/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
+    const existing = db.prepare('SELECT slug FROM LinkCategory WHERE id = ?').get(req.params.id) as any;
     db.prepare('UPDATE Link SET categoryId = NULL WHERE categoryId = ?').run(req.params.id);
     db.prepare('DELETE FROM LinkCategory WHERE id = ?').run(req.params.id);
+    if (existing?.slug) syncMenuCategoryUrls(existing.slug, '/links');
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

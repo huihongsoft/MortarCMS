@@ -452,6 +452,11 @@ export function initDB(): void {
   // Category-level site ownership: a category bound to a site (and its links,
   // unless a link overrides with its own siteId) only shows on that site
   try { db.exec("ALTER TABLE LinkCategory ADD COLUMN siteId TEXT"); } catch {}
+  // Site/category lookups on links and link categories (navigation pages and
+  // site-scoped filtering query these per request)
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_link_site ON Link (siteId)"); } catch {}
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_link_category ON Link (categoryId)"); } catch {}
+  try { db.exec("CREATE INDEX IF NOT EXISTS idx_linkcat_site ON LinkCategory (siteId)"); } catch {}
   // The views index must be created after the column exists (fresh installs
   // create the column via the ALTER TABLE migrations above).
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_post_views ON Post (views DESC)"); } catch {}

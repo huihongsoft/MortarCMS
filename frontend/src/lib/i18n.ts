@@ -114,6 +114,7 @@ const zh: Record<string, string> = {
   'friend links': '友情链接',
   'navigation links': '导航链接',
   'all categories': '全部分类',
+  'category not found hint': '分类不存在或已被删除/改名',
   'featured': '精选',
   'switch language': '切换语言',
   'username must be at least 3 characters': '用户名至少需要 3 个字符',

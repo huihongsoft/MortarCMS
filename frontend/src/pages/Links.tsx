@@ -51,7 +51,9 @@ export default function LinksPage({ settings }: { settings: Record<string, strin
 
   if (loading) return React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-12' }, React.createElement('p', { className: 'text-gray-400' }, t('loading') + '…'));
   if (groups.length === 0) return React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-12' }, React.createElement('p', { className: 'text-gray-500' }, t('no links yet')));
-  if (visibleGroups.length === 0) return React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-12' }, React.createElement('p', { className: 'text-gray-500' }, t('no links yet')));
+  if (visibleGroups.length === 0) return React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-12' },
+    React.createElement('p', { className: 'text-gray-500 mb-3' }, t('category not found hint')),
+    React.createElement(Link, { to: '/links', className: 'text-sm text-primary-600 hover:underline' }, '← ' + t('all categories')));
 
   return React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-10' },
     React.createElement('h1', { className: 'text-2xl sm:text-3xl font-bold text-gray-900 mb-8', style: { fontSize: 'var(--heading-max-size, 30px)' } },
