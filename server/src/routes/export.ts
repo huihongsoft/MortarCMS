@@ -89,7 +89,7 @@ router.post('/import', authenticate, authorize('admin'), (req: AuthRequest, res:
       count++;
     }
     if (data.links) for (const l of data.links) {
-      db.prepare('INSERT OR IGNORE INTO Link (id, name, url, description, avatar, icon, categoryId, siteId, pageId, menuOrder, active, clicks, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)').run(l.id||cuid_import(), l.name, l.url, l.description||'', l.avatar||'', l.icon||'', l.categoryId||null, l.siteId||null, l.pageId||null, l.menuOrder||0, l.active===0?0:1, l.clicks||0, l.createdAt||new Date().toISOString());
+      db.prepare('INSERT OR IGNORE INTO Link (id, name, url, description, avatar, icon, categoryId, menuOrder, active, clicks, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(l.id||cuid_import(), l.name, l.url, l.description||'', l.avatar||'', l.icon||'', l.categoryId||null, l.menuOrder||0, l.active===0?0:1, l.clicks||0, l.createdAt||new Date().toISOString());
       count++;
     }
     if (data.linkPosts) for (const lp of data.linkPosts) {

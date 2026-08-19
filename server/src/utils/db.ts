@@ -476,7 +476,7 @@ export function initDB(): void {
     if (friendCount === 0) {
       db.exec(`INSERT INTO FriendLink (id, name, url, avatar, description, createdAt)
         SELECT id, name, url, avatar, description, createdAt FROM Link
-        WHERE categoryId IS NULL AND siteId IS NULL AND pageId IS NULL
+        WHERE categoryId IS NULL
           AND (menuOrder IS NULL OR menuOrder = 0) AND active = 1 AND clicks = 0
           AND NOT EXISTS (SELECT 1 FROM LinkPost lp WHERE lp.linkId = Link.id)`);
     }
