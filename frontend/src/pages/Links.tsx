@@ -17,22 +17,21 @@ export default function LinksPage({ settings }: { settings: Record<string, strin
   useEffect(() => {
     api.get('/links').then((r) => {
       const links: any[] = (r.data || []).filter((l: any) => l.active !== 0);
-      const byCat = new Map<string, any[]>();
+      // Group by the links' OWN enriched category — the categories endpoint
+      // is site-filtered, so a link that inherits its category's site (or
+      // overrides with its own siteId) would lose its category header there
+      const byCat = new Map<string, { category: any; links: any[] }>();
       for (const l of links) {
         const key = l.categoryId || '';
-        if (!byCat.has(key)) byCat.set(key, []);
-        byCat.get(key)!.push(l);
+        if (!byCat.has(key)) byCat.set(key, { category: l.category || null, links: [] });
+        byCat.get(key)!.links.push(l);
       }
-      api.get('/links/categories').then((cr) => {
-        const cats = new Map<string, any>();
-        (cr.data || []).forEach((c: any) => cats.set(c.id, c));
-        const sorted = [...byCat.keys()].sort((a, b) => {
-          if (!a) return 1; if (!b) return -1;
-          return (cats.get(a)?.menuOrder || 0) - (cats.get(b)?.menuOrder || 0);
-        });
-        setGroups(sorted.map((k) => ({ category: k ? cats.get(k) : null, links: byCat.get(k)! })));
-        setLoading(false);
-      }).catch(() => { setGroups([...byCat.entries()].map(([k, v]) => ({ category: null, links: v }))); setLoading(false); });
+      const sorted = [...byCat.values()].sort((a, b) => {
+        if (!a.category) return 1; if (!b.category) return -1;
+        return (a.category.menuOrder || 0) - (b.category.menuOrder || 0);
+      });
+      setGroups(sorted);
+      setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
 
@@ -45,8 +44,8 @@ export default function LinksPage({ settings }: { settings: Record<string, strin
     siteTitle: settings.site_title,
     title: t('navigation links'),
     url: window.location.origin + '/links',
-    jsonLd: groups.flatMap(g => g.links.map((l: any) => ({ '@type': 'ListItem', position: 1, name: l.name, url: l.url }))).length
-      ? [{ '@context': 'https://schema.org', '@type': 'ItemList', itemListElement: groups.flatMap(g => g.links.slice(0, 8).map((l: any) => ({ '@type': 'ListItem', position: 1, name: l.name, url: l.url }))) }]
+    jsonLd: visibleGroups.flatMap(g => g.links.map((l: any) => ({ '@type': 'ListItem', position: 1, name: l.name, url: l.url }))).length
+      ? [{ '@context': 'https://schema.org', '@type': 'ItemList', itemListElement: visibleGroups.flatMap(g => g.links.slice(0, 8).map((l: any) => ({ '@type': 'ListItem', position: 1, name: l.name, url: l.url }))) }]
       : [],
   });
 
