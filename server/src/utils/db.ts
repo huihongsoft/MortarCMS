@@ -385,6 +385,23 @@ export function initDB(): void {
       updatedAt TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_aisession_user ON AiSession (userId, updatedAt DESC);
+
+    CREATE TABLE IF NOT EXISTS LinkCategory (
+      id TEXT PRIMARY KEY,
+      name TEXT UNIQUE NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      description TEXT DEFAULT '',
+      menuOrder INTEGER NOT NULL DEFAULT 0,
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    CREATE TABLE IF NOT EXISTS LinkPost (
+      linkId TEXT NOT NULL REFERENCES Link(id) ON DELETE CASCADE,
+      postId TEXT NOT NULL REFERENCES Post(id) ON DELETE CASCADE,
+      PRIMARY KEY (linkId, postId)
+    );
+    CREATE INDEX IF NOT EXISTS idx_linkpost_link ON LinkPost (linkId);
+    CREATE INDEX IF NOT EXISTS idx_linkpost_post ON LinkPost (postId);
   `);
 
   // Schema migrations (best-effort; column may already exist on fresh DBs)
@@ -412,6 +429,15 @@ export function initDB(): void {
   try { db.exec("ALTER TABLE Media ADD COLUMN width INTEGER"); } catch {}
   try { db.exec("ALTER TABLE Media ADD COLUMN height INTEGER"); } catch {}
   try { db.exec("ALTER TABLE Media ADD COLUMN srcset TEXT"); } catch {}
+  // Navigation-site link model: categories, sub-site ownership, linked page
+  // and post associations, ordering, enabled state, click counter
+  try { db.exec("ALTER TABLE Link ADD COLUMN categoryId TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Link ADD COLUMN siteId TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Link ADD COLUMN pageId TEXT"); } catch {}
+  try { db.exec("ALTER TABLE Link ADD COLUMN menuOrder INTEGER DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE Link ADD COLUMN active INTEGER DEFAULT 1"); } catch {}
+  try { db.exec("ALTER TABLE Link ADD COLUMN clicks INTEGER DEFAULT 0"); } catch {}
+  try { db.exec("ALTER TABLE Link ADD COLUMN icon TEXT DEFAULT ''"); } catch {}
   // The views index must be created after the column exists (fresh installs
   // create the column via the ALTER TABLE migrations above).
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_post_views ON Post (views DESC)"); } catch {}

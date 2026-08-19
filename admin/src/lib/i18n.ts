@@ -750,6 +750,13 @@ const zh: Record<string, string> = {
   'your most recent posts': '你的最新文章',
 
 'links': '友情链接',
+  'link categories': '链接分类',
+  'no category': '无分类',
+  'associated posts': '关联文章',
+  'search posts to associate': '搜索要关联的文章',
+  'clicks': '点击量',
+  'delete category': '删除分类',
+  'category deleted': '分类已删除',
   'new link': '新建链接',
   'edit link': '编辑链接',
   'link created': '链接已创建',
