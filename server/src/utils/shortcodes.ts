@@ -140,17 +140,20 @@ addShortcode('archive', () => {
 }, 'Monthly archive list');
 
 addShortcode('tag-cloud', () => {
-  const tags = db.prepare('SELECT t.name, t.slug, COUNT(pt.postId) as cnt FROM Tag t JOIN PostTag pt ON pt.tagId = t.id GROUP BY t.id ORDER BY cnt DESC LIMIT 30').all() as any[];
+  // Hotness matches the frontend tag cloud: order/size by the aggregated
+  // views of published posts, count only published posts (a tag with one
+  // viral post outranks one with many unread posts).
+  const tags = db.prepare("SELECT t.name, t.slug, COUNT(CASE WHEN p.status = 'published' AND p.type = 'post' THEN 1 END) as cnt, COALESCE(SUM(CASE WHEN p.status = 'published' AND p.type = 'post' THEN p.views ELSE 0 END), 0) as v FROM Tag t LEFT JOIN PostTag pt ON pt.tagId = t.id LEFT JOIN Post p ON p.id = pt.postId GROUP BY t.id ORDER BY v DESC, cnt DESC LIMIT 30").all() as any[];
   if (tags.length === 0) return '<p class="text-gray-400 text-sm italic">No tags yet.</p>';
-  const maxCnt = Math.max(...tags.map((t: any) => t.cnt || 1), 1);
+  const maxCnt = Math.max(...tags.map((t: any) => t.v || 0), 1);
   const items = tags.map((t: any) => {
-    const ratio = (t.cnt || 1) / maxCnt;
+    const ratio = (t.v || 0) / maxCnt;
     const size = 12 + Math.round(ratio * 16); // 12px ~ 28px
     const name = esc(t.name);
-    return '<a href="/tag/' + esc(t.slug) + '" style="display:inline-block;margin:4px 8px 4px 0;font-size:' + size + 'px;color:#6b7280;text-decoration:none;transition:color .15s;" onmouseover="this.style.color=\'#3b82f6\'" onmouseout="this.style.color=\'#6b7280\'">' + name + '</a>';
+    return '<a href="/tag/' + esc(t.slug) + '" title="' + (t.cnt || 0) + ' posts · ' + (t.v || 0) + ' views" style="display:inline-block;margin:4px 8px 4px 0;font-size:' + size + 'px;color:#6b7280;text-decoration:none;transition:color .15s;" onmouseover="this.style.color=\'#3b82f6\'" onmouseout="this.style.color=\'#6b7280\'">' + name + '</a>';
   }).join('');
   return '<div class="cms-rendered-tag-cloud" style="line-height:2;">' + items + '</div>';
-}, 'Tag cloud sized by usage');
+}, 'Tag cloud sized by views');
 
 // Replace VisualEditor CMS placeholder blocks with rendered shortcodes.
 // Detects <div data-cms="xxx"> elements and replaces them entirely with
