@@ -291,7 +291,9 @@ app.use('/api', (req: any, res: any, next: any) => {
   res.json = (body: any) => {
     const status = res.statusCode;
     const r = origJson(body);
-    if (status < 400) {
+    // Click counters (e.g. POST /api/links/:id/click) don't change content —
+    // purging the whole content cache on every click would thrash it.
+    if (status < 400 && !req.originalUrl.includes('/click')) {
       // Imports, settings and site changes can affect every page
       if (req.originalUrl.startsWith('/api/settings') || req.originalUrl.startsWith('/api/sites') ||
           req.originalUrl.startsWith('/api/themes') || req.originalUrl.startsWith('/api/export/import') ||

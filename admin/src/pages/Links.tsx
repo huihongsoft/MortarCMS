@@ -27,6 +27,8 @@ export default function Links() {
   // Post picker
   const [postSearch, setPostSearch] = useState('');
   const [postResults, setPostResults] = useState<any[]>([]);
+  // id → title map so chips render even for freshly picked (unsaved) posts
+  const [postTitles, setPostTitles] = useState<Record<string, string>>({});
   // Category form
   const [catName, setCatName] = useState('');
   const [catDesc, setCatDesc] = useState('');
@@ -59,6 +61,7 @@ export default function Links() {
     setEditing(l); setName(l.name); setUrl(l.url); setDescription(l.description || ''); setAvatar(l.avatar || '');
     setCategoryId(l.categoryId || ''); setSiteId(l.siteId || ''); setPageId(l.pageId || ''); setMenuOrder(l.menuOrder || 0);
     setActive(l.active !== 0); setPostIds((l.posts || []).map((p: any) => p.id));
+    setPostTitles(prev => { const n = { ...prev }; (l.posts || []).forEach((p: any) => { n[p.id] = p.title; }); return n; });
   }
 
   async function del(l: any) {
@@ -72,7 +75,9 @@ export default function Links() {
     setPostSearch(q);
     if (!q.trim()) { setPostResults([]); return; }
     api.get('/posts/admin?limit=10&search=' + encodeURIComponent(q.trim())).then(r => {
-      setPostResults((r.data?.posts || []).filter((p: any) => p.status === 'published'));
+      const found = (r.data?.posts || []).filter((p: any) => p.status === 'published');
+      setPostResults(found);
+      setPostTitles(prev => { const n = { ...prev }; found.forEach((p: any) => { n[p.id] = p.title; }); return n; });
     }).catch(() => {});
   }
   function togglePost(pid: string) {
@@ -96,7 +101,7 @@ export default function Links() {
     catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
   }
 
-  const selectedPosts = postIds.map(pid => links.flatMap((l: any) => l.posts || []).find((p: any) => p.id === pid) || pages.find((p: any) => p.id === pid) || null).filter(Boolean);
+  const selectedPosts = postIds.filter(pid => postTitles[pid]).map(pid => ({ id: pid, title: postTitles[pid] }));
 
   return React.createElement('div', null,
     React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2' }, React.createElement(Link2, { size: 22 }), t('links', getLang())),
