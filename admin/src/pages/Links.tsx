@@ -33,6 +33,7 @@ export default function Links() {
   const [catName, setCatName] = useState('');
   const [catDesc, setCatDesc] = useState('');
   const [catOrder, setCatOrder] = useState(0);
+  const [catSiteId, setCatSiteId] = useState('');
   const [catEditing, setCatEditing] = useState<any>(null);
   const toast = useToast();
   // ---- Tab: navigation links vs friend links (blogroll) ----
@@ -116,10 +117,11 @@ export default function Links() {
   async function saveCategory() {
     if (!catName) return;
     try {
-      if (catEditing) await api.put('/links/categories/' + catEditing.id, { name: catName, description: catDesc, menuOrder: catOrder });
-      else await api.post('/links/categories', { name: catName, description: catDesc, menuOrder: catOrder });
+      const catPayload: any = { name: catName, description: catDesc, menuOrder: catOrder, siteId: catSiteId || null };
+      if (catEditing) await api.put('/links/categories/' + catEditing.id, catPayload);
+      else await api.post('/links/categories', catPayload);
       toast.toast(catEditing ? t('category updated', getLang()) : t('category created', getLang()));
-      setCatName(''); setCatDesc(''); setCatOrder(0); setCatEditing(null);
+      setCatName(''); setCatDesc(''); setCatOrder(0); setCatSiteId(''); setCatEditing(null);
       api.get('/links/categories').then(r => setCategories(r.data || [])).catch(() => {});
     } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
   }
@@ -147,16 +149,20 @@ export default function Links() {
             React.createElement('input', { value: catName, onChange: e => setCatName(e.target.value), placeholder: t('new category', getLang()), className: 'input-field text-sm' }),
             React.createElement('input', { value: catDesc, onChange: e => setCatDesc(e.target.value), placeholder: t('description (optional)', getLang()), className: 'input-field text-sm' }),
             React.createElement('input', { type: 'number', value: catOrder, onChange: e => setCatOrder(parseInt(e.target.value) || 0), placeholder: t('order', getLang()), className: 'input-field text-sm' }),
+            React.createElement('select', { value: catSiteId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setCatSiteId(e.target.value), className: 'input-field text-sm', title: t('category site hint', getLang()) },
+              React.createElement('option', { value: '' }, '(' + t('global (all sites)', getLang()) + ')'),
+              sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name + (st.isPrimary === 1 ? ' (primary)' : '')))
+            ),
             React.createElement('div', { className: 'flex gap-2' },
               React.createElement('button', { onClick: saveCategory, disabled: !catName, className: 'btn-primary text-sm' }, catEditing ? t('update', getLang()) : t('add', getLang())),
-              catEditing && React.createElement('button', { onClick: () => { setCatName(''); setCatDesc(''); setCatOrder(0); setCatEditing(null); }, className: 'btn-secondary text-sm' }, React.createElement(X, { size: 14 }), t('cancel', getLang()))
+              catEditing && React.createElement('button', { onClick: () => { setCatName(''); setCatDesc(''); setCatOrder(0); setCatSiteId(''); setCatEditing(null); }, className: 'btn-secondary text-sm' }, React.createElement(X, { size: 14 }), t('cancel', getLang()))
             )
           ),
           categories.length > 0 && React.createElement('div', { className: 'mt-3 space-y-1 max-h-56 overflow-y-auto' },
             categories.map(c => React.createElement('div', { key: c.id, className: 'flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 group' },
               React.createElement('span', { className: 'flex-1 text-sm text-gray-700 truncate' }, c.name),
               React.createElement('span', { className: 'text-xs text-gray-400' }, c.count || 0),
-              React.createElement('button', { onClick: () => { setCatEditing(c); setCatName(c.name); setCatDesc(c.description || ''); setCatOrder(c.menuOrder || 0); }, className: 'p-1 text-gray-300 hover:text-primary-600 opacity-0 group-hover:opacity-100', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 14 })),
+              React.createElement('button', { onClick: () => { setCatEditing(c); setCatName(c.name); setCatDesc(c.description || ''); setCatOrder(c.menuOrder || 0); setCatSiteId(c.siteId || ''); }, className: 'p-1 text-gray-300 hover:text-primary-600 opacity-0 group-hover:opacity-100', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 14 })),
               React.createElement('button', { onClick: () => delCategory(c), className: 'p-1 text-gray-300 hover:text-red-600 opacity-0 group-hover:opacity-100', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 14 }))
             ))
           )

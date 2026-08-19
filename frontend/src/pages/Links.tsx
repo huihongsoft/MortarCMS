@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import useSEO from '../hooks/useSEO';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
@@ -10,6 +10,9 @@ import { t } from '../lib/i18n';
 export default function LinksPage({ settings }: { settings: Record<string, string> }) {
   const [groups, setGroups] = useState<{ category: any; links: any[] }[]>([]);
   const [loading, setLoading] = useState(true);
+  // ?category=slug (menu items point here) filters to a single category
+  const [searchParams] = useSearchParams();
+  const categoryFilter = searchParams.get('category') || '';
 
   useEffect(() => {
     api.get('/links').then((r) => {
@@ -33,6 +36,11 @@ export default function LinksPage({ settings }: { settings: Record<string, strin
     }).catch(() => setLoading(false));
   }, []);
 
+  // ?category=slug: show only that category's links
+  const visibleGroups = categoryFilter
+    ? groups.filter((g) => g.category && g.category.slug === categoryFilter)
+    : groups;
+
   useSEO({
     siteTitle: settings.site_title,
     title: t('navigation links'),
@@ -44,10 +52,15 @@ export default function LinksPage({ settings }: { settings: Record<string, strin
 
   if (loading) return React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-12' }, React.createElement('p', { className: 'text-gray-400' }, t('loading') + '…'));
   if (groups.length === 0) return React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-12' }, React.createElement('p', { className: 'text-gray-500' }, t('no links yet')));
+  if (visibleGroups.length === 0) return React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-12' }, React.createElement('p', { className: 'text-gray-500' }, t('no links yet')));
 
   return React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-10' },
-    React.createElement('h1', { className: 'text-2xl sm:text-3xl font-bold text-gray-900 mb-8', style: { fontSize: 'var(--heading-max-size, 30px)' } }, t('navigation links')),
-    groups.map((g) => (
+    React.createElement('h1', { className: 'text-2xl sm:text-3xl font-bold text-gray-900 mb-8', style: { fontSize: 'var(--heading-max-size, 30px)' } },
+      categoryFilter ? (visibleGroups[0]?.category?.name || t('navigation links')) : t('navigation links')),
+    categoryFilter && React.createElement('p', { className: 'mb-6' },
+      React.createElement(Link, { to: '/links', className: 'text-sm text-primary-600 hover:underline' }, '← ' + t('all categories'))
+    ),
+    visibleGroups.map((g) => (
       React.createElement('section', { key: g.category?.id || 'uncat', className: 'mb-10' },
         g.category && React.createElement('h2', { className: 'text-lg font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-100' }, g.category.name),
         React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4' },

@@ -155,6 +155,35 @@ addShortcode('tag-cloud', () => {
   return '<div class="cms-rendered-tag-cloud" style="line-height:2;">' + items + '</div>';
 }, 'Tag cloud sized by views');
 
+// [link-list category="slug"] — render a navigation-site category's links
+// (icon, name, description, associated posts) inside any page content.
+// category is optional: without it, all active links are listed.
+addShortcode('link-list', (attrs) => {
+  const catSlug = String(attrs.category || '').trim();
+  let sql = "SELECT l.*, c.name as catName FROM Link l LEFT JOIN LinkCategory c ON c.id = l.categoryId WHERE l.active = 1";
+  const params: any[] = [];
+  if (catSlug) { sql += ' AND c.slug = ?'; params.push(catSlug); }
+  sql += ' ORDER BY l.categoryId ASC, l.menuOrder ASC, l.createdAt ASC';
+  const links = db.prepare(sql).all(...params) as any[];
+  if (links.length === 0) return '<p class="text-gray-400 text-sm italic">No links yet.</p>';
+  // Associated posts for the listed links (one batch query)
+  const postsByLink = new Map<string, any[]>();
+  const ids = links.map((l: any) => l.id);
+  (db.prepare('SELECT lp.linkId, p.id, p.title, p.slug FROM LinkPost lp JOIN Post p ON p.id = lp.postId WHERE lp.linkId IN (' + ids.map(() => '?').join(',') + ') ORDER BY p.createdAt DESC').all(...ids) as any[])
+    .forEach((r: any) => { if (!postsByLink.has(r.linkId)) postsByLink.set(r.linkId, []); postsByLink.get(r.linkId)!.push(r); });
+  const items = links.map((l: any) => {
+    const posts = postsByLink.get(l.id) || [];
+    const avatar = l.avatar ? '<img src="' + esc(l.avatar) + '" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">'
+      : '<span style="width:36px;height:36px;border-radius:50%;background:#e0edff;color:#1d4ed8;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;">' + esc((l.name || '?')[0].toUpperCase()) + '</span>';
+    const desc = l.description ? '<p style="margin:4px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">' + esc(l.description) + '</p>' : '';
+    const postLinks = posts.map((p: any) => '<a href="/post/' + esc(p.slug) + '" style="display:inline-block;margin:6px 6px 0 0;padding:2px 10px;border-radius:999px;background:#e0edff;color:#1d4ed8;font-size:12px;text-decoration:none;">' + esc(p.title) + '</a>').join('');
+    const postWrap = postLinks ? '<div style="margin-top:6px;">' + postLinks + '</div>' : '';
+    return '<div style="display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #e5e7eb;">' + avatar +
+      '<div style="min-width:0;flex:1;"><a href="' + esc(l.url) + '" target="_blank" rel="noopener noreferrer" style="font-weight:600;font-size:14px;color:#111827;text-decoration:none;">' + esc(l.name) + '</a>' + desc + postWrap + '</div></div>';
+  }).join('');
+  return '<div class="cms-rendered-link-list">' + items + '</div>';
+}, 'Links of a navigation category (category=slug, optional)');
+
 // Replace VisualEditor CMS placeholder blocks with rendered shortcodes.
 // Detects <div data-cms="xxx"> elements and replaces them entirely with
 // the corresponding shortcode output. Uses depth counting so nested divs

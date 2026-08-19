@@ -12,7 +12,8 @@ export default function MenuEditor() {
   const [pages, setPages] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [showAdd, setShowAdd] = useState(false);
-  const [newItem, setNewItem] = useState<{ type: string; label: string; url: string; pageId: string; categoryId: string; parentId: string }>({ type: 'page', label: '', url: '', pageId: '', categoryId: '', parentId: '' });
+  const [linkCats, setLinkCats] = useState<any[]>([]);
+  const [newItem, setNewItem] = useState<{ type: string; label: string; url: string; pageId: string; categoryId: string; linkCategoryId: string; parentId: string }>({ type: 'page', label: '', url: '', pageId: '', categoryId: '', linkCategoryId: '', parentId: '' });
   const [editParent, setEditParent] = useState<{ id: string; parentId: string } | null>(null);
 
   useEffect(() => {
@@ -20,6 +21,7 @@ export default function MenuEditor() {
     api.get('/sites').then(r => setSites(r.data?.sites || r.data || []));
     api.get('/pages').then(r => setPages(r.data.filter((p: any) => p.status === 'published')));
     api.get('/categories').then(r => setCategories(r.data));
+    api.get('/links/categories').then(r => setLinkCats(r.data || [])).catch(() => {});
   }, [id]);
 
   function addItem() {
@@ -27,8 +29,9 @@ export default function MenuEditor() {
     let url = newItem.url;
     if (newItem.type === 'page' && newItem.pageId) url = '/page/' + pages.find(p => p.id === newItem.pageId)?.slug;
     if (newItem.type === 'category' && newItem.categoryId) url = '/category/' + categories.find(c => c.id === newItem.categoryId)?.slug;
+    if (newItem.type === 'linkcat' && newItem.linkCategoryId) url = '/links?category=' + linkCats.find(c => c.id === newItem.linkCategoryId)?.slug;
     setItems([...items, { id: Date.now().toString(), label: newItem.label, url: url || '#', parentId: newItem.parentId || null }]);
-    setShowAdd(false); setNewItem({ type: 'page', label: '', url: '', pageId: '', categoryId: '', parentId: '' });
+    setShowAdd(false); setNewItem({ type: 'page', label: '', url: '', pageId: '', categoryId: '', linkCategoryId: '', parentId: '' });
   }
 
   function removeItem(idx: number) { setItems(items.filter((_, i) => i !== idx)); }
@@ -79,7 +82,7 @@ export default function MenuEditor() {
   function startAddTop() {
     setEditingIdx(null);
     setShowAdd(true);
-    setNewItem({ type: 'custom', label: '', url: '', pageId: '', categoryId: '', parentId: '' });
+    setNewItem({ type: 'custom', label: '', url: '', pageId: '', categoryId: '', linkCategoryId: '', parentId: '' });
   }
 
   // editingIdx === -1: editing the MENU itself (name/location/site)
@@ -257,7 +260,7 @@ export default function MenuEditor() {
             : t('add item', getLang())),
           React.createElement('div', { className: 'space-y-3' },
             React.createElement('select', { value: newItem.type, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, type: e.target.value }), className: 'input-field' },
-              React.createElement('option', { value: 'page' }, t('page', getLang())), React.createElement('option', { value: 'category' }, t('category', getLang())), React.createElement('option', { value: 'custom' }, t('custom link', getLang()))
+              React.createElement('option', { value: 'page' }, t('page', getLang())), React.createElement('option', { value: 'category' }, t('category', getLang())), React.createElement('option', { value: 'linkcat' }, t('link categories', getLang())), React.createElement('option', { value: 'custom' }, t('custom link', getLang()))
             ),
             React.createElement('input', { value: newItem.label, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setNewItem({ ...newItem, label: e.target.value }), placeholder: t('label', getLang()), className: 'input-field' }),
             newItem.type === 'page' && React.createElement('select', { value: newItem.pageId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, pageId: e.target.value }), className: 'input-field' },
@@ -265,6 +268,9 @@ export default function MenuEditor() {
             ),
             newItem.type === 'category' && React.createElement('select', { value: newItem.categoryId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, categoryId: e.target.value }), className: 'input-field' },
               React.createElement('option', { value: '' }, t('select category', getLang()) + '...'), categories.map((c: any) => React.createElement('option', { key: c.id, value: c.id }, c.name))
+            ),
+            newItem.type === 'linkcat' && React.createElement('select', { value: newItem.linkCategoryId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, linkCategoryId: e.target.value }), className: 'input-field' },
+              React.createElement('option', { value: '' }, t('select category', getLang()) + '...'), linkCats.map((c: any) => React.createElement('option', { key: c.id, value: c.id }, c.name))
             ),
             newItem.type === 'custom' && React.createElement('input', { value: newItem.url, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setNewItem({ ...newItem, url: e.target.value }), placeholder: 'URL (https://...)', className: 'input-field' }),
             items.length > 0 && React.createElement('select', { value: newItem.parentId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, parentId: e.target.value }), className: 'input-field' },

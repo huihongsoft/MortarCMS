@@ -762,6 +762,7 @@ const zh: Record<string, string> = {
   'enabled hint': '启用：控制链接是否在前台导航站显示',
   'delete category': '删除分类',
   'category deleted': '分类已删除',
+  'category site hint': '站点：该分类（及分类下的链接）只在所选站点的导航站显示；不选 = 所有站点可见',
   'new link': '新建链接',
   'edit link': '编辑链接',
   'link created': '链接已创建',

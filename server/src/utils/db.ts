@@ -449,6 +449,9 @@ export function initDB(): void {
   try { db.exec("ALTER TABLE Link ADD COLUMN active INTEGER DEFAULT 1"); } catch {}
   try { db.exec("ALTER TABLE Link ADD COLUMN clicks INTEGER DEFAULT 0"); } catch {}
   try { db.exec("ALTER TABLE Link ADD COLUMN icon TEXT DEFAULT ''"); } catch {}
+  // Category-level site ownership: a category bound to a site (and its links,
+  // unless a link overrides with its own siteId) only shows on that site
+  try { db.exec("ALTER TABLE LinkCategory ADD COLUMN siteId TEXT"); } catch {}
   // The views index must be created after the column exists (fresh installs
   // create the column via the ALTER TABLE migrations above).
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_post_views ON Post (views DESC)"); } catch {}

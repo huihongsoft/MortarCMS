@@ -54,13 +54,15 @@ function enrichLinks(links: any[]): any[] {
 // NULL = visible everywhere, same semantics as posts); admins see all.
 router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
-    let sql = 'SELECT * FROM Link';
+    let sql = 'SELECT l.* FROM Link l LEFT JOIN LinkCategory c ON c.id = l.categoryId';
     const params: any[] = [];
     if (req.siteId && !isAdminReq(req)) {
-      sql += ' WHERE siteId IS NULL OR siteId = ?';
-      params.push(req.siteId);
+      // A link is visible when its own siteId matches (or is global) — and a
+      // link WITHOUT a siteId inherits its category's site ownership
+      sql += " WHERE (l.siteId IS NULL AND (c.siteId IS NULL OR c.siteId = ?)) OR l.siteId = ?";
+      params.push(req.siteId, req.siteId);
     }
-    sql += ' ORDER BY categoryId ASC, menuOrder ASC, createdAt ASC';
+    sql += ' ORDER BY l.categoryId ASC, l.menuOrder ASC, l.createdAt ASC';
     const links = db.prepare(sql).all(...params) as any[];
     res.json(enrichLinks(links));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -128,9 +130,16 @@ router.post('/:id/click', (req: AuthRequest, res: Response) => {
 // ---------- Link categories ----------
 
 // Public: categories (with link counts)
-router.get('/categories', (_req: AuthRequest, res: Response) => {
+router.get('/categories', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
-    const cats = db.prepare('SELECT * FROM LinkCategory ORDER BY menuOrder ASC, name ASC').all() as any[];
+    let sql = 'SELECT * FROM LinkCategory';
+    const params: any[] = [];
+    if (req.siteId && !isAdminReq(req)) {
+      sql += ' WHERE siteId IS NULL OR siteId = ?';
+      params.push(req.siteId);
+    }
+    sql += ' ORDER BY menuOrder ASC, name ASC';
+    const cats = db.prepare(sql).all(...params) as any[];
     const counts = new Map<string, number>();
     (db.prepare("SELECT categoryId, COUNT(*) as cnt FROM Link WHERE categoryId IS NOT NULL AND active = 1 GROUP BY categoryId").all() as any[])
       .forEach((r: any) => counts.set(r.categoryId, r.cnt));
@@ -142,14 +151,14 @@ router.get('/categories', (_req: AuthRequest, res: Response) => {
 // Admin: create category
 router.post('/categories', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, menuOrder } = req.body || {};
+    const { name, description, menuOrder, siteId } = req.body || {};
     if (!name) { res.status(400).json({ error: 'name required' }); return; }
     const slug = slugify(name);
     const exists = db.prepare('SELECT id FROM LinkCategory WHERE slug = ?').get(slug);
     if (exists) { res.status(400).json({ error: 'Category already exists' }); return; }
     const id = cuid();
-    db.prepare('INSERT INTO LinkCategory (id, name, slug, description, menuOrder) VALUES (?, ?, ?, ?, ?)')
-      .run(id, name, slug, description || '', menuOrder || 0);
+    db.prepare('INSERT INTO LinkCategory (id, name, slug, description, menuOrder, siteId) VALUES (?, ?, ?, ?, ?, ?)')
+      .run(id, name, slug, description || '', menuOrder || 0, siteId || null);
     res.status(201).json(db.prepare('SELECT * FROM LinkCategory WHERE id = ?').get(id));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -157,11 +166,12 @@ router.post('/categories', authenticate, requireCap('manage_options'), (req: Aut
 // Admin: update category
 router.put('/categories/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, menuOrder } = req.body || {};
+    const { name, description, menuOrder, siteId } = req.body || {};
     const sets: string[] = []; const vals: any[] = [];
     if (name !== undefined) { sets.push('name = ?'); vals.push(name); sets.push('slug = ?'); vals.push(slugify(name)); }
     if (description !== undefined) { sets.push('description = ?'); vals.push(description); }
     if (menuOrder !== undefined) { sets.push('menuOrder = ?'); vals.push(menuOrder || 0); }
+    if (siteId !== undefined) { sets.push('siteId = ?'); vals.push(siteId || null); }
     if (sets.length > 0) { vals.push(req.params.id); db.prepare('UPDATE LinkCategory SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
     res.json(db.prepare('SELECT * FROM LinkCategory WHERE id = ?').get(req.params.id));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
