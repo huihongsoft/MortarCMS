@@ -158,11 +158,18 @@ addShortcode('tag-cloud', () => {
 // [link-list category="slug"] — render a navigation-site category's links
 // (icon, name, description, associated posts) inside any page content.
 // category is optional: without it, all active links are listed.
-addShortcode('link-list', (attrs) => {
+addShortcode('link-list', (attrs, _content, ctx) => {
   const catSlug = String(attrs.category || '').trim();
   let sql = "SELECT l.*, c.name as catName FROM Link l LEFT JOIN LinkCategory c ON c.id = l.categoryId WHERE l.active = 1";
   const params: any[] = [];
   if (catSlug) { sql += ' AND c.slug = ?'; params.push(catSlug); }
+  // Scoped to the page/post's site when the content has one (inheritance:
+  // global links + the site's own links, category ownership inherited)
+  const siteId = ctx?.siteId;
+  if (siteId) {
+    sql += ' AND ((l.siteId IS NULL AND (c.siteId IS NULL OR c.siteId = ?)) OR l.siteId = ?)';
+    params.push(siteId, siteId);
+  }
   sql += ' ORDER BY l.categoryId ASC, l.menuOrder ASC, l.createdAt ASC';
   const links = db.prepare(sql).all(...params) as any[];
   if (links.length === 0) return '<p class="text-gray-400 text-sm italic">No links yet.</p>';

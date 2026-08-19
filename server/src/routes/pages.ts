@@ -4,6 +4,7 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import db, { cuid } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { SiteRequest } from '../middleware/site';
 import { uniqueSlug } from '../utils/slug';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 
@@ -51,7 +52,7 @@ function getPassCookie(req: any, pageId: string): string | null {
 //    published). Visitors must POST the correct password; a signed cookie
 //    then unlocks the page for the session (7 days).
 //  - Private: only logged-in admin/editor can view.
-router.get('/slug/:slug', (req: AuthRequest, res: Response) => {
+router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     const page = db.prepare('SELECT * FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'page') as any;
     if (!page || page.status === 'trash') { res.status(404).json({ error: 'Page not found' }); return; }
@@ -85,7 +86,7 @@ router.get('/slug/:slug', (req: AuthRequest, res: Response) => {
     page.meta = {};
     metaRows.forEach((r: any) => { page.meta[r.key] = r.value; });
     delete page.password;
-    page.content = renderCmsBlocks(applyShortcodes(page.content || ''));
+    page.content = renderCmsBlocks(applyShortcodes(page.content || '', { siteId: req.siteId }));
     res.json(page);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

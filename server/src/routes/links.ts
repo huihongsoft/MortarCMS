@@ -57,9 +57,10 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     let sql = 'SELECT l.* FROM Link l LEFT JOIN LinkCategory c ON c.id = l.categoryId';
     const params: any[] = [];
     if (req.siteId && !isAdminReq(req)) {
-      // A link is visible when its own siteId matches (or is global) — and a
-      // link WITHOUT a siteId inherits its category's site ownership
-      sql += " WHERE (l.siteId IS NULL AND (c.siteId IS NULL OR c.siteId = ?)) OR l.siteId = ?";
+      // Public visitors: active links only, visible when the link's own
+      // siteId matches (or is global) — and a link WITHOUT a siteId inherits
+      // its category's site ownership
+      sql += " WHERE l.active = 1 AND ((l.siteId IS NULL AND (c.siteId IS NULL OR c.siteId = ?)) OR l.siteId = ?)";
       params.push(req.siteId, req.siteId);
     }
     sql += ' ORDER BY l.categoryId ASC, l.menuOrder ASC, l.createdAt ASC';
@@ -141,8 +142,14 @@ router.get('/categories', (req: AuthRequest & SiteRequest, res: Response) => {
     sql += ' ORDER BY menuOrder ASC, name ASC';
     const cats = db.prepare(sql).all(...params) as any[];
     const counts = new Map<string, number>();
-    (db.prepare("SELECT categoryId, COUNT(*) as cnt FROM Link WHERE categoryId IS NOT NULL AND active = 1 GROUP BY categoryId").all() as any[])
-      .forEach((r: any) => counts.set(r.categoryId, r.cnt));
+    if (req.siteId && !isAdminReq(req)) {
+      // Count only links this site can actually see (site + inheritance)
+      (db.prepare("SELECT l.categoryId, COUNT(*) as cnt FROM Link l LEFT JOIN LinkCategory c ON c.id = l.categoryId WHERE l.categoryId IS NOT NULL AND l.active = 1 AND ((l.siteId IS NULL AND (c.siteId IS NULL OR c.siteId = ?)) OR l.siteId = ?) GROUP BY l.categoryId").all(req.siteId, req.siteId) as any[])
+        .forEach((r: any) => counts.set(r.categoryId, r.cnt));
+    } else {
+      (db.prepare("SELECT categoryId, COUNT(*) as cnt FROM Link WHERE categoryId IS NOT NULL AND active = 1 GROUP BY categoryId").all() as any[])
+        .forEach((r: any) => counts.set(r.categoryId, r.cnt));
+    }
     cats.forEach((c: any) => { c.count = counts.get(c.id) || 0; });
     res.json(cats);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
