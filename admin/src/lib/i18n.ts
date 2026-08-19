@@ -763,6 +763,7 @@ const zh: Record<string, string> = {
   'delete category': '删除分类',
   'category deleted': '分类已删除',
   'category site hint': '站点：该分类（及分类下的链接）只在所选站点的导航站显示；不选 = 所有站点可见',
+  'category page hint': '关联页面：菜单点击该分类时优先进入此页面（页面内可用 [link-list] 短代码展示分类链接）；不选 = 跳转导航站分类',
   'new link': '新建链接',
   'edit link': '编辑链接',
   'link created': '链接已创建',

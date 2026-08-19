@@ -29,7 +29,11 @@ export default function MenuEditor() {
     let url = newItem.url;
     if (newItem.type === 'page' && newItem.pageId) url = '/page/' + pages.find(p => p.id === newItem.pageId)?.slug;
     if (newItem.type === 'category' && newItem.categoryId) url = '/category/' + categories.find(c => c.id === newItem.categoryId)?.slug;
-    if (newItem.type === 'linkcat' && newItem.linkCategoryId) url = '/links?category=' + linkCats.find(c => c.id === newItem.linkCategoryId)?.slug;
+    if (newItem.type === 'linkcat' && newItem.linkCategoryId) {
+      const cat = linkCats.find(c => c.id === newItem.linkCategoryId);
+      const catPage = cat?.pageId ? pages.find(pg => pg.id === cat.pageId) : null;
+      url = catPage ? '/page/' + catPage.slug : '/links?category=' + cat?.slug;
+    }
     setItems([...items, { id: Date.now().toString(), label: newItem.label, url: url || '#', parentId: newItem.parentId || null }]);
     setShowAdd(false); setNewItem({ type: 'page', label: '', url: '', pageId: '', categoryId: '', linkCategoryId: '', parentId: '' });
   }

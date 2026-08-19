@@ -19,6 +19,15 @@ function enrichLinks(links: any[]): any[] {
     const cq = catIds.map(() => '?').join(',');
     (db.prepare('SELECT * FROM LinkCategory WHERE id IN (' + cq + ')').all(...catIds) as any[])
       .forEach((c: any) => cats.set(c.id, c));
+    // Category-linked page titles (landing page)
+    const catPageIds = [...new Set([...cats.values()].map((c: any) => c.pageId).filter(Boolean))];
+    if (catPageIds.length) {
+      const cpq = catPageIds.map(() => '?').join(',');
+      const catPages = new Map<string, any>();
+      (db.prepare('SELECT id, title, slug FROM Post WHERE id IN (' + cpq + ')').all(...catPageIds) as any[])
+        .forEach((pg: any) => catPages.set(pg.id, pg));
+      cats.forEach((c: any) => { if (c.pageId) c.page = catPages.get(c.pageId) || null; });
+    }
   }
   // Associated posts (title + slug for navigation links)
   const postsByLink = new Map<string, any[]>();
@@ -176,14 +185,14 @@ router.get('/categories', (req: AuthRequest & SiteRequest, res: Response) => {
 // Admin: create category
 router.post('/categories', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, menuOrder, siteId } = req.body || {};
+    const { name, description, menuOrder, siteId, pageId } = req.body || {};
     if (!name) { res.status(400).json({ error: 'name required' }); return; }
     const slug = slugify(name);
     const exists = db.prepare('SELECT id FROM LinkCategory WHERE slug = ?').get(slug);
     if (exists) { res.status(400).json({ error: 'Category already exists' }); return; }
     const id = cuid();
-    db.prepare('INSERT INTO LinkCategory (id, name, slug, description, menuOrder, siteId) VALUES (?, ?, ?, ?, ?, ?)')
-      .run(id, name, slug, description || '', menuOrder || 0, siteId || null);
+    db.prepare('INSERT INTO LinkCategory (id, name, slug, description, menuOrder, siteId, pageId) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(id, name, slug, description || '', menuOrder || 0, siteId || null, pageId || null);
     res.status(201).json(db.prepare('SELECT * FROM LinkCategory WHERE id = ?').get(id));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -191,13 +200,14 @@ router.post('/categories', authenticate, requireCap('manage_options'), (req: Aut
 // Admin: update category
 router.put('/categories/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
-    const { name, description, menuOrder, siteId } = req.body || {};
+    const { name, description, menuOrder, siteId, pageId } = req.body || {};
     const existing = db.prepare('SELECT slug FROM LinkCategory WHERE id = ?').get(req.params.id) as any;
     const sets: string[] = []; const vals: any[] = [];
     if (name !== undefined) { sets.push('name = ?'); vals.push(name); sets.push('slug = ?'); vals.push(slugify(name)); }
     if (description !== undefined) { sets.push('description = ?'); vals.push(description); }
     if (menuOrder !== undefined) { sets.push('menuOrder = ?'); vals.push(menuOrder || 0); }
     if (siteId !== undefined) { sets.push('siteId = ?'); vals.push(siteId || null); }
+    if (pageId !== undefined) { sets.push('pageId = ?'); vals.push(pageId || null); }
     if (sets.length > 0) { vals.push(req.params.id); db.prepare('UPDATE LinkCategory SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
     // Renamed: keep menu items pointing at this category working
     if (name !== undefined && existing?.slug) syncMenuCategoryUrls(existing.slug, '/links?category=' + slugify(name));
