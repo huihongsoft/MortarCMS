@@ -479,6 +479,10 @@ export function initDB(): void {
         WHERE categoryId IS NULL
           AND (menuOrder IS NULL OR menuOrder = 0) AND active = 1 AND clicks = 0
           AND NOT EXISTS (SELECT 1 FROM LinkPost lp WHERE lp.linkId = Link.id)`);
+      // The migrated rows now live in FriendLink under the same id — remove
+      // them from Link so the navigation list stays clean (only rows that
+      // were actually copied are deleted; navigation links are never touched)
+      db.exec('DELETE FROM Link WHERE id IN (SELECT id FROM FriendLink)');
     }
   } catch {}
 }

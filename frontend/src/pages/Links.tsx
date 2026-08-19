@@ -43,7 +43,7 @@ export default function LinksPage({ settings }: { settings: Record<string, strin
   useSEO({
     siteTitle: settings.site_title,
     title: t('navigation links'),
-    url: window.location.origin + '/links',
+    url: window.location.origin + '/links' + (categoryFilter ? '?category=' + encodeURIComponent(categoryFilter) : ''),
     jsonLd: visibleGroups.flatMap(g => g.links.map((l: any) => ({ '@type': 'ListItem', position: 1, name: l.name, url: l.url }))).length
       ? [{ '@context': 'https://schema.org', '@type': 'ItemList', itemListElement: visibleGroups.flatMap(g => g.links.slice(0, 8).map((l: any) => ({ '@type': 'ListItem', position: 1, name: l.name, url: l.url }))) }]
       : [],

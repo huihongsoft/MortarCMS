@@ -38,7 +38,7 @@ describe('importDemoData', () => {
     expect(count('Category')).toBe(6);
     expect(count('Tag')).toBe(12);
     expect(count('Menu')).toBe(1);
-    expect(count('Link')).toBe(3);
+    expect(count('FriendLink')).toBe(3);
   });
 
   it('activates the softstore theme and writes a carousel', () => {

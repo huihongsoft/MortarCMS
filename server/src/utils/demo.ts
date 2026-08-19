@@ -212,7 +212,7 @@ export function importDemoData(): { posts: number; categories: number; tags: num
 
   // Friend links
   for (const [name, url, desc] of [['软件烩', 'https://huirj.cn/', '汇集精品软件'], ['开源中国', 'https://www.oschina.net/', '开源技术社区'], ['GitHub', 'https://github.com/', '全球最大的代码托管平台']] as [string, string, string][]) {
-    run('INSERT INTO Link (id, name, url, description) VALUES (?, ?, ?, ?)', cuid(), name, url, desc);
+    run('INSERT INTO FriendLink (id, name, url, description) VALUES (?, ?, ?, ?)', cuid(), name, url, desc);
   }
 
   // Settings: activate the softstore theme for the demo look + carousel
