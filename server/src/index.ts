@@ -38,6 +38,7 @@ import pluginsRoutes from './routes/plugins';
 import siteRoutes from './routes/sites';
 import themeRoutes from './routes/themes';
 import linkRoutes from './routes/links';
+import friendLinkRoutes from './routes/friendLinks';
 import statsRoutes from './routes/stats';
 import installRoutes, { installed as isInstalled } from './routes/install';
 import securityRoutes from './routes/security';
@@ -265,7 +266,7 @@ function resourceTitle(path: string): string {
 // auth) are never cached. Content mutations purge the affected prefixes.
 // '/api/comments' (not just '/api/comments/post') so new submissions and
 // moderation changes (PUT/DELETE /api/comments/:id) also purge the cache
-const CACHE_PREFIXES = ['/api/posts', '/api/pages', '/api/menus', '/api/categories', '/api/tags', '/api/links', '/api/comments', '/api/settings', '/api/feed', '/api/themes'];
+const CACHE_PREFIXES = ['/api/posts', '/api/pages', '/api/menus', '/api/categories', '/api/tags', '/api/links', '/api/friend-links', '/api/comments', '/api/settings', '/api/feed', '/api/themes'];
 app.use('/api', (req: any, res: any, next: any) => {
   if (req.method !== 'GET' || req.headers.authorization) { next(); return; }
   if (!CACHE_PREFIXES.some((p: string) => req.originalUrl.startsWith(p))) { next(); return; }
@@ -335,6 +336,7 @@ app.use('/api/plugins', pluginsRoutes);
 app.use('/api/sites', siteRoutes);
 app.use('/api/themes', themeRoutes);
 app.use('/api/links', linkRoutes);
+app.use('/api/friend-links', friendLinkRoutes);
 app.use('/api/install', installRoutes);
 app.use('/api/security', securityRoutes);
 app.use('/api/stats', statsRoutes);

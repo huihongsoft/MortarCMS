@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Pencil, Check, X, Link2, FolderPlus, Search } from 'lucide-react';
+import { Plus, Trash2, Pencil, Check, X, Link2, FolderPlus, Search, Handshake } from 'lucide-react';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
@@ -35,6 +35,15 @@ export default function Links() {
   const [catOrder, setCatOrder] = useState(0);
   const [catEditing, setCatEditing] = useState<any>(null);
   const toast = useToast();
+  // ---- Tab: navigation links vs friend links (blogroll) ----
+  const [tab, setTab] = useState<'nav' | 'friends'>('nav');
+  // Friend-link form state
+  const [friends, setFriends] = useState<any[]>([]);
+  const [fName, setFName] = useState('');
+  const [fUrl, setFUrl] = useState('');
+  const [fAvatar, setFAvatar] = useState('');
+  const [fDesc, setFDesc] = useState('');
+  const [fEditing, setFEditing] = useState<any>(null);
 
   useEffect(() => { fetchAll(); }, []);
   async function fetchAll() {
@@ -42,8 +51,27 @@ export default function Links() {
     api.get('/links/categories').then(r => setCategories(r.data || [])).catch(() => {});
     api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {});
     api.get('/pages').then(r => setPages((r.data || []).filter((p: any) => p.status === 'published'))).catch(() => {});
+    api.get('/friend-links').then(r => setFriends(r.data || [])).catch(() => {});
   }
   async function fetchLinks() { api.get('/links').then(r => setLinks(r.data || [])).catch(() => {}); }
+
+  // ---- Friend links (blogroll) CRUD ----
+  async function saveFriend() {
+    if (!fName || !fUrl) return;
+    try {
+      if (fEditing) await api.put('/friend-links/' + fEditing.id, { name: fName, url: fUrl, avatar: fAvatar, description: fDesc });
+      else await api.post('/friend-links', { name: fName, url: fUrl, avatar: fAvatar, description: fDesc });
+      toast.toast(fEditing ? t('link updated', getLang()) : t('link created', getLang()));
+      setFName(''); setFUrl(''); setFAvatar(''); setFDesc(''); setFEditing(null);
+      api.get('/friend-links').then(r => setFriends(r.data || [])).catch(() => {});
+    } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+  }
+  function startEditFriend(f: any) { setFEditing(f); setFName(f.name); setFUrl(f.url); setFAvatar(f.avatar || ''); setFDesc(f.description || ''); }
+  async function delFriend(f: any) {
+    if (!confirm(t('delete link', getLang()) + ' "' + f.name + '"?')) return;
+    try { await api.delete('/friend-links/' + f.id); toast.toast(t('link deleted', getLang())); api.get('/friend-links').then(r => setFriends(r.data || [])).catch(() => {}); }
+    catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
+  }
 
   async function save() {
     if (!name || !url) return;
@@ -104,8 +132,12 @@ export default function Links() {
   const selectedPosts = postIds.filter(pid => postTitles[pid]).map(pid => ({ id: pid, title: postTitles[pid] }));
 
   return React.createElement('div', null,
-    React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 mb-6 flex items-center gap-2' }, React.createElement(Link2, { size: 22 }), t('links', getLang())),
-    React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
+    React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2' }, React.createElement(Link2, { size: 22 }), t('links', getLang())),
+    React.createElement('div', { className: 'flex items-center gap-1 border-b border-gray-200 dark:border-gray-700 mb-5' },
+      React.createElement('button', { onClick: () => setTab('nav'), className: 'px-3 py-2 text-sm border-b-2 -mb-px transition-colors ' + (tab === 'nav' ? 'border-primary-600 text-primary-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700') }, t('navigation links', getLang())),
+      React.createElement('button', { onClick: () => setTab('friends'), className: 'px-3 py-2 text-sm border-b-2 -mb-px transition-colors ' + (tab === 'friends' ? 'border-primary-600 text-primary-600 font-medium' : 'border-transparent text-gray-500 hover:text-gray-700') }, t('friend links', getLang()))
+    ),
+    tab === 'nav' && React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
       // Left column: categories + link form
       React.createElement('div', { className: 'space-y-4' },
         // Categories
@@ -221,6 +253,52 @@ export default function Links() {
                     React.createElement('div', { className: 'flex justify-end gap-1' },
                       React.createElement('button', { onClick: () => startEdit(l), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),
                       React.createElement('button', { onClick: () => del(l), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 }))
+                    )
+                  )
+                )
+              ))
+            )
+      )
+    ),
+    tab === 'friends' && React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
+      React.createElement('div', { className: 'card p-5' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4' }, fEditing ? t('edit link', getLang()) : t('new friend link', getLang())),
+        React.createElement('div', { className: 'space-y-3' },
+          React.createElement('input', { value: fName, onChange: e => setFName(e.target.value), placeholder: t('name', getLang()), className: 'input-field text-sm' }),
+          React.createElement('input', { value: fUrl, onChange: e => setFUrl(e.target.value), placeholder: 'https://...', className: 'input-field text-sm' }),
+          React.createElement('input', { value: fAvatar, onChange: e => setFAvatar(e.target.value), placeholder: t('avatar url', getLang()), className: 'input-field text-sm' }),
+          React.createElement('input', { value: fDesc, onChange: e => setFDesc(e.target.value), placeholder: t('description (optional)', getLang()), className: 'input-field text-sm' }),
+          React.createElement('div', { className: 'flex gap-2' },
+            React.createElement('button', { onClick: saveFriend, disabled: !fName || !fUrl, className: 'btn-primary text-sm' }, React.createElement(Check, { size: 14 }), fEditing ? t('update', getLang()) : t('add', getLang())),
+            fEditing && React.createElement('button', { onClick: () => { setFName(''); setFUrl(''); setFAvatar(''); setFDesc(''); setFEditing(null); }, className: 'btn-secondary text-sm' }, React.createElement(X, { size: 14 }), t('cancel', getLang()))
+          )
+        )
+      ),
+      React.createElement('div', { className: 'card overflow-hidden lg:col-span-2' },
+        friends.length === 0
+          ? React.createElement('p', { className: 'text-sm text-gray-400 p-6' }, t('no links yet', getLang()))
+          : React.createElement('table', { className: 'w-full' },
+              React.createElement('thead', null, React.createElement('tr', { className: 'border-b border-gray-200 bg-gray-50 dark:bg-gray-800' },
+                React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('name', getLang())),
+                React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase hidden md:table-cell' }, t('url', getLang())),
+                React.createElement('th', { className: 'text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('actions', getLang())),
+              )),
+              React.createElement('tbody', null, friends.map(f =>
+                React.createElement('tr', { key: f.id, className: 'border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-800' },
+                  React.createElement('td', { className: 'px-4 py-3' },
+                    React.createElement('div', { className: 'flex items-center gap-2' },
+                      f.avatar ? React.createElement('img', { src: f.avatar, alt: '', className: 'w-7 h-7 rounded-full object-cover' }) : React.createElement('div', { className: 'w-7 h-7 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-medium' }, f.name.charAt(0).toUpperCase()),
+                      React.createElement('div', null,
+                        React.createElement('p', { className: 'font-medium text-gray-900' }, f.name),
+                        f.description && React.createElement('p', { className: 'text-xs text-gray-400 truncate max-w-[220px]' }, f.description)
+                      )
+                    )
+                  ),
+                  React.createElement('td', { className: 'px-4 py-3 hidden md:table-cell' }, React.createElement('a', { href: f.url, target: '_blank', rel: 'noopener noreferrer', className: 'text-sm text-primary-600 hover:underline truncate block max-w-[220px]' }, f.url)),
+                  React.createElement('td', { className: 'px-4 py-3' },
+                    React.createElement('div', { className: 'flex justify-end gap-1' },
+                      React.createElement('button', { onClick: () => startEditFriend(f), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),
+                      React.createElement('button', { onClick: () => delFriend(f), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 }))
                     )
                   )
                 )

@@ -111,6 +111,8 @@ const zh: Record<string, string> = {
   'tag': '标签',
   'category': '分类',
   'links': '友情链接',
+  'friend links': '友情链接',
+  'navigation links': '导航链接',
   'featured': '精选',
   'switch language': '切换语言',
   'username must be at least 3 characters': '用户名至少需要 3 个字符',

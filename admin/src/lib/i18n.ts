@@ -749,7 +749,10 @@ const zh: Record<string, string> = {
   'write your post content': '编写文章内容...',
   'your most recent posts': '你的最新文章',
 
-'links': '友情链接',
+'links': '链接',
+  'navigation links': '导航链接',
+  'friend links': '友情链接',
+  'new friend link': '新建友情链接',
   'link categories': '链接分类',
   'no category': '无分类',
   'associated posts': '关联文章',

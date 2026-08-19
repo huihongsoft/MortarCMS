@@ -24,6 +24,7 @@ const PostPage = lazyWithRetry(() => import('./pages/Post'));
 const PageView = lazyWithRetry(() => import('./pages/Page'));
 const SearchPage = lazyWithRetry(() => import('./pages/Search'));
 const ArchivePage = lazyWithRetry(() => import('./pages/Archive'));
+const LinksPage = lazyWithRetry(() => import('./pages/Links'));
 const AuthorPage = lazyWithRetry(() => import('./pages/Author'));
 const NotFound = lazyWithRetry(() => import('./pages/NotFound'));
 const ShareView = lazyWithRetry(() => import('./pages/ShareView'));
@@ -58,6 +59,7 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
           React.createElement(Route, { path: '/post/:slug', element: React.createElement(PostPage, { settings }) }),
           React.createElement(Route, { path: '/page/:slug', element: React.createElement(PageView, { settings }) }),
           React.createElement(Route, { path: '/archive/:year/:month', element: React.createElement(ArchivePage, { settings }) }),
+          React.createElement(Route, { path: '/links', element: React.createElement(LinksPage, { settings }) }),
           React.createElement(Route, { path: '/author/:username', element: React.createElement(AuthorPage, { settings }) }),
           React.createElement(Route, { path: '/search', element: React.createElement(SearchPage, { settings }) }),
           React.createElement(Route, { path: '/register', element: React.createElement(Register) }),

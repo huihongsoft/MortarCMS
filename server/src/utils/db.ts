@@ -402,6 +402,17 @@ export function initDB(): void {
     );
     CREATE INDEX IF NOT EXISTS idx_linkpost_link ON LinkPost (linkId);
     CREATE INDEX IF NOT EXISTS idx_linkpost_post ON LinkPost (postId);
+
+    -- Friend links (blogroll): lightweight list, separate from the
+    -- navigation-site Link model (categories / post associations / sites)
+    CREATE TABLE IF NOT EXISTS FriendLink (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      avatar TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
   `);
 
   // Schema migrations (best-effort; column may already exist on fresh DBs)
@@ -441,6 +452,16 @@ export function initDB(): void {
   // The views index must be created after the column exists (fresh installs
   // create the column via the ALTER TABLE migrations above).
   try { db.exec("CREATE INDEX IF NOT EXISTS idx_post_views ON Post (views DESC)"); } catch {}
+  // One-time migration: legacy friend links lived in the Link table before
+  // the navigation model existed — copy them to FriendLink so the blogroll
+  // keeps working while Link becomes the navigation-site model.
+  try {
+    const friendCount = (db.prepare('SELECT COUNT(*) as c FROM FriendLink').get() as any)?.c || 0;
+    const linkCount = (db.prepare('SELECT COUNT(*) as c FROM Link').get() as any)?.c || 0;
+    if (friendCount === 0 && linkCount > 0) {
+      db.exec('INSERT INTO FriendLink (id, name, url, avatar, description, createdAt) SELECT id, name, url, avatar, description, createdAt FROM Link');
+    }
+  } catch {}
 }
 
 // Runtime driver reconfiguration (install wizard): switch SQLite <-> MySQL/PG
