@@ -146,7 +146,11 @@ export default function PageEditor() {
             )
           )
         )
-      )
+      ),
+      // Bottom spacer the height of the admin status bar (~42px), which stays
+      // visible above this full-screen overlay — the editor area ends here so
+      // canvas content can scroll fully into view without being covered.
+      React.createElement('div', { className: 'shrink-0 bg-white dark:bg-gray-800 h-[42px]', 'aria-hidden': 'true' }),
     ),
     // ---- TEXT MODE: original 3-col grid ----
     !visualMode && React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },

@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
 import db, { cuid, reconfigureDb } from '../utils/db';
-import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -22,7 +22,7 @@ router.get('/status', (_req: AuthRequest, res: Response) => {
 });
 
 // Admin: current database configuration
-router.get('/', authenticate, requireCap('manage_options'), (_req: AuthRequest, res: Response) => {
+router.get('/', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
     const driver = (db as any).driver || 'sqlite';
     const url = process.env.DATABASE_URL || '';
@@ -91,7 +91,7 @@ router.post('/', async (req: AuthRequest, res: Response) => {
 });
 
 // Admin only: switch the database driver at runtime (keeps the site installed)
-router.post('/switch', authenticate, requireCap('manage_options'), async (req: AuthRequest, res: Response) => {
+router.post('/switch', authenticate, authorize('admin'), async (req: AuthRequest, res: Response) => {
   try {
     const { dbType, dbConfig } = req.body || {};
     if (dbType !== 'sqlite' && dbType !== 'mysql' && dbType !== 'postgres') { res.status(400).json({ error: 'Invalid database type' }); return; }
@@ -112,7 +112,7 @@ router.post('/switch', authenticate, requireCap('manage_options'), async (req: A
 });
 
 // Admin only: remove the installed marker (re-run the install wizard)
-router.post('/reset', authenticate, requireCap('manage_options'), (_req: AuthRequest, res: Response) => {
+router.post('/reset', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
     db.prepare("DELETE FROM Setting WHERE key = 'installed'").run();
     res.json({ success: true, message: 'Installation marker removed. Restart to re-run the wizard.' });

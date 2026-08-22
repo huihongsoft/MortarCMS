@@ -42,7 +42,17 @@ router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, re
 });
 
 router.delete('/:id', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
-  try { db.prepare('DELETE FROM User WHERE id = ?').run(req.params.id); res.json({ success: true }); } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try {
+    // Post.authorId cascades on delete — refuse so a user's posts are never
+    // silently destroyed. Transfer or delete the content first.
+    const posts = (db.prepare('SELECT COUNT(*) as c FROM Post WHERE authorId = ?').get(req.params.id) as any)?.c || 0;
+    if (posts > 0) {
+      res.status(400).json({ error: '该用户仍有 ' + posts + ' 篇文章，请先转移或删除其内容' });
+      return;
+    }
+    db.prepare('DELETE FROM User WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 export default router;

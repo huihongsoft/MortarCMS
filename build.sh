@@ -33,5 +33,5 @@ echo ""
 echo "=== Ready ==="
 echo "Admin:  http://localhost:3001/admin"
 echo "Site:   http://localhost:3001"
-echo "Login:  admin@mortar.dev / admin123"
+echo "First visit: /install creates the admin account"
 wait

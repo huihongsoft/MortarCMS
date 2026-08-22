@@ -163,7 +163,10 @@ export default function Links() {
           ),
           categories.length > 0 && React.createElement('div', { className: 'mt-3 space-y-1 max-h-56 overflow-y-auto' },
             categories.map(c => React.createElement('div', { key: c.id, className: 'flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 group' },
-              React.createElement('span', { className: 'flex-1 text-sm text-gray-700 truncate' }, c.name),
+              React.createElement('span', { className: 'flex-1 text-sm text-gray-700 truncate' },
+                c.name,
+                c.pageId && React.createElement('span', { className: 'text-xs text-gray-400' }, ' · ' + t('landing page', getLang()) + ': ' + (pages.find((pg: any) => pg.id === c.pageId)?.title || '?'))
+              ),
               React.createElement('span', { className: 'text-xs text-gray-400' }, c.count || 0),
               React.createElement('button', { onClick: () => { setCatEditing(c); setCatName(c.name); setCatDesc(c.description || ''); setCatOrder(c.menuOrder || 0); setCatSiteId(c.siteId || ''); setCatPageId(c.pageId || ''); }, className: 'p-1 text-gray-300 hover:text-primary-600 opacity-0 group-hover:opacity-100', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 14 })),
               React.createElement('button', { onClick: () => delCategory(c), className: 'p-1 text-gray-300 hover:text-red-600 opacity-0 group-hover:opacity-100', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 14 }))

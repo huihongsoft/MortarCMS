@@ -80,7 +80,8 @@ function enrichPosts(posts: any[]): any[] {
   // Comment + revision counts
   const comments = new Map<string, number>();
   const revisions = new Map<string, number>();
-  (db.prepare('SELECT postId, COUNT(*) as cnt FROM Comment WHERE postId IN (' + qmarks + ') GROUP BY postId').all(...ids) as any[])
+  // Public comment count: approved only (same口径 as the page view count)
+  (db.prepare("SELECT postId, COUNT(*) as cnt FROM Comment WHERE postId IN (" + qmarks + ") AND status = 'approved' GROUP BY postId").all(...ids) as any[])
     .forEach((r: any) => comments.set(r.postId, r.cnt));
   (db.prepare('SELECT postId, COUNT(*) as cnt FROM Revision WHERE postId IN (' + qmarks + ') GROUP BY postId').all(...ids) as any[])
     .forEach((r: any) => revisions.set(r.postId, r.cnt));
@@ -113,8 +114,11 @@ function enrichPosts(posts: any[]): any[] {
 
 router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    // Clamp pagination: negative/zero limits would return the whole table
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
+    // Escape LIKE wildcards so user input ("100%", "a_b") matches literally
+    const escLike = (s: string) => s.replace(/[\\%_]/g, (m) => '\\' + m);
     const search = (req.query.search as string) || '';
     const category = req.query.category as string;
     const tag = req.query.tag as string;
@@ -128,28 +132,32 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     params.push(type, 'published', now);
     if (req.siteId) { sql += ' AND (p.siteId IS NULL OR p.siteId = ?)'; params.push(req.siteId); }
     if (!isLoggedIn(req)) sql += MEMBERS_ONLY_EXCLUDE;
-    if (search) { sql += ' AND (p.title LIKE ? OR p.content LIKE ? OR p.excerpt LIKE ?)'; params.push('%' + search + '%', '%' + search + '%', '%' + search + '%'); }
+    if (search) {
+      const sp = '%' + escLike(search) + '%';
+      sql += " AND (p.title LIKE ? ESCAPE '\\' OR p.content LIKE ? ESCAPE '\\' OR p.excerpt LIKE ? ESCAPE '\\')";
+      params.push(sp, sp, sp);
+    }
     if (category) { sql += ' AND c.slug = ?'; params.push(category); }
     if (tag) { sql += ' AND t.slug = ?'; params.push(tag); }
     // Relevance: title matches rank above body matches
     if (search) {
-      const sp = '%' + search + '%';
-      sql += ' ORDER BY p.sticky DESC, CASE WHEN p.title LIKE ? THEN 0 ELSE 1 END, p.publishedAt DESC LIMIT ? OFFSET ?';
+      const sp = '%' + escLike(search) + '%';
+      sql += " ORDER BY p.sticky DESC, CASE WHEN p.title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END, p.publishedAt DESC LIMIT ? OFFSET ?";
       params.push(sp, limit, (page - 1) * limit);
     } else {
       sql += ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?';
       params.push(limit, (page - 1) * limit);
     }
     const postsData = db.prepare(sql).all(...params) as any[];
-    const countSql = 'SELECT COUNT(DISTINCT p.id) as cnt FROM Post p' + (category ? ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId' : '') + (tag ? ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId' : '') + ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + (req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '') + (!isLoggedIn(req) ? MEMBERS_ONLY_EXCLUDE : '') + (search ? ' AND (p.title LIKE ? OR p.content LIKE ? OR p.excerpt LIKE ?)' : '') + (category ? ' AND c.slug = ?' : '') + (tag ? ' AND t.slug = ?' : '');
+    const countSql = 'SELECT COUNT(DISTINCT p.id) as cnt FROM Post p' + (category ? ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId' : '') + (tag ? ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId' : '') + ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + (req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '') + (!isLoggedIn(req) ? MEMBERS_ONLY_EXCLUDE : '') + (search ? " AND (p.title LIKE ? ESCAPE '\\' OR p.content LIKE ? ESCAPE '\\' OR p.excerpt LIKE ? ESCAPE '\\')" : '') + (category ? ' AND c.slug = ?' : '') + (tag ? ' AND t.slug = ?' : '');
     const countParams: any[] = [type, 'published', now];
     if (req.siteId) countParams.push(req.siteId);
-    if (search) countParams.push('%' + search + '%', '%' + search + '%', '%' + search + '%');
+    if (search) { const sp = '%' + escLike(search) + '%'; countParams.push(sp, sp, sp); }
     if (category) countParams.push(category);
     if (tag) countParams.push(tag);
     const total = (db.prepare(countSql).get(...countParams) as any)?.cnt || 0;
     const posts = enrichPosts(postsData);
-    posts.forEach((p: any) => { p.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', p.content || '', p), p)); });
+    posts.forEach((p: any) => { p.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', p.content || '', p), p), { siteId: req.siteId }); });
     res.json({ posts, total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -159,8 +167,11 @@ router.get('/suggest', (req: AuthRequest, res: Response) => {
   try {
     const q = String(req.query.q || '').trim().slice(0, 60);
     if (!q) { res.json({ suggestions: [] }); return; }
-    const like = '%' + q + '%';
-    const rows = db.prepare("SELECT id, title, slug, type, publishedAt FROM Post WHERE type IN ('post','page') AND status = 'published' AND (title LIKE ? OR slug LIKE ?) ORDER BY CASE WHEN title LIKE ? THEN 0 ELSE 1 END, publishedAt DESC LIMIT 6").all(like, like, like) as any[];
+    const escLike = (s: string) => s.replace(/[\\%_]/g, (m) => '\\' + m);
+    const like = '%' + escLike(q) + '%';
+    const now = new Date().toISOString();
+    // Same visibility as the public list: never suggest scheduled posts
+    const rows = db.prepare("SELECT id, title, slug, type, publishedAt FROM Post WHERE type IN ('post','page') AND status = 'published' AND (publishedAt IS NULL OR publishedAt <= ?) AND (title LIKE ? ESCAPE '\\' OR slug LIKE ? ESCAPE '\\') ORDER BY CASE WHEN title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END, publishedAt DESC LIMIT 6").all(now, like, like, like) as any[];
     res.json({ suggestions: rows.map((p: any) => ({ id: p.id, title: p.title, slug: p.slug, type: p.type, date: p.publishedAt })) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -171,6 +182,12 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
       ? db.prepare('SELECT * FROM Post WHERE slug = ? AND type = ? AND (siteId IS NULL OR siteId = ?)').get(req.params.slug, 'post', req.siteId)
       : db.prepare('SELECT * FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'post')) as any;
     if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
+    // Scheduled posts (published but publishedAt in the future) are invisible
+    // to anonymous visitors, matching the public lists; logged-in users may
+    // still reach them for preview.
+    if (post.status === 'published' && post.publishedAt && post.publishedAt > new Date().toISOString() && !req.user) {
+      res.status(404).json({ error: 'Post not found' }); return;
+    }
     // WordPress-style password protection: cookie (hashed) unlocks the post.
     // Admins/editors bypass.
     if (post.password && (!req.user || !['admin', 'editor'].includes(req.user.role))) {
@@ -202,7 +219,7 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
     // Never expose the protection password to the public API
     enriched.hasPassword = !!post.password;
     delete enriched.password;
-    enriched.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', enriched.content || '', enriched), enriched));
+    enriched.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', enriched.content || '', enriched), enriched), { siteId: req.siteId });
     res.json(enriched);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -260,7 +277,7 @@ router.get('/archive/:year/:month', (req: AuthRequest, res: Response) => {
 // Public: archive months list
 router.get('/archives', (_req: AuthRequest, res: Response) => {
   try {
-    const months = db.prepare("SELECT strftime('%Y-%m', publishedAt) as month, COUNT(*) as count FROM Post WHERE type = 'post' AND status = 'published' AND publishedAt IS NOT NULL GROUP BY month ORDER BY month DESC LIMIT 24").all() as any[];
+    const months = db.prepare("SELECT strftime('%Y-%m', publishedAt) as month, COUNT(*) as count FROM Post WHERE type = 'post' AND status = 'published' AND publishedAt IS NOT NULL AND publishedAt <= ? GROUP BY month ORDER BY month DESC LIMIT 24").all(new Date().toISOString()) as any[];
     res.json(months);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -352,7 +369,16 @@ router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contrib
     if (data.title !== undefined) { sets.push('title = ?'); vals.push(data.title); }
     if (data.content !== undefined) { sets.push('content = ?'); vals.push(data.content); }
     if (data.excerpt !== undefined) { sets.push('excerpt = ?'); vals.push(data.excerpt); }
-    if (data.status !== undefined) { sets.push('status = ?'); vals.push(data.status); if (data.status === 'published' && !existing.publishedAt) { sets.push('publishedAt = ?'); vals.push(new Date().toISOString()); } }
+    if (data.status !== undefined) {
+      sets.push('status = ?'); vals.push(data.status);
+      if (data.status === 'published') {
+        // Publishing must not keep a FUTURE publishedAt: the post would be
+        // status=published yet invisible to the public lists (publishedAt<=now)
+        // while still reachable by slug — inconsistent visibility.
+        const future = existing.publishedAt && existing.publishedAt > new Date().toISOString();
+        if (!existing.publishedAt || future) { sets.push('publishedAt = ?'); vals.push(new Date().toISOString()); }
+      }
+    }
     if (data.featured !== undefined) { sets.push('featured = ?'); vals.push(data.featured); }
     if (data.menuOrder !== undefined) { sets.push('menuOrder = ?'); vals.push(data.menuOrder); }
     if (data.password !== undefined) { sets.push('password = ?'); vals.push(data.password); }
@@ -384,14 +410,16 @@ router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contrib
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
+// Single delete goes to the trash too (same flow as bulk-trash) so nothing
+// is ever destroyed without the recovery path — restore is /:id/restore.
 router.delete('/:id', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
     if (req.user!.role === 'author' && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot delete another author\'s post' }); return; }
     doAction('delete_post', req.params.id);
-    db.prepare('DELETE FROM Post WHERE id = ?').run(req.params.id);
-    res.json({ success: true });
+    db.prepare('UPDATE Post SET status = ?, updatedAt = ? WHERE id = ?').run('trash', new Date().toISOString(), req.params.id);
+    res.json({ success: true, trashed: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

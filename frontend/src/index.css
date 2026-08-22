@@ -1,6 +1,21 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+/* Shared form-control / button components. These mirror the admin SPA's
+   .input-field / .btn-* classes — the public site (Register, Login, Install,
+   comment forms) uses them but they were never defined, so inputs had no
+   border and buttons no background. Colours follow the theme's --primary-color. */
+@layer components {
+  .input-field { @apply w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm outline-none transition-all duration-200 placeholder-gray-400 bg-white; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03); }
+  .input-field:hover { border-color: #d1d5db; }
+  .input-field:focus { border-color: var(--primary-color, #2563eb); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02), 0 0 0 4px color-mix(in srgb, var(--primary-color, #2563eb) 12%, transparent); }
+  .btn-primary { @apply inline-flex items-center gap-2 px-4 py-2 text-white text-sm font-medium rounded-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed; }
+  .btn-primary:not(:disabled) { background-image: linear-gradient(135deg, var(--primary-color, #2563eb), color-mix(in srgb, var(--primary-color, #2563eb) 75%, #1d4ed8)); box-shadow: 0 2px 8px -2px color-mix(in srgb, var(--primary-color, #2563eb) 55%, transparent), 0 1px 2px rgba(0,0,0,0.08); }
+  .btn-primary:not(:disabled):hover { box-shadow: 0 4px 14px -2px color-mix(in srgb, var(--primary-color, #2563eb) 60%, transparent), 0 2px 4px rgba(0,0,0,0.1); filter: brightness(1.05); }
+  .btn-primary:active:not(:disabled) { transform: scale(0.97); }
+  .btn-primary:disabled { background-image: none; background: #e5e7eb; color: #9ca3af; box-shadow: none; opacity: 1; }
+  .btn-secondary { @apply inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-700 text-sm font-medium rounded-xl transition-all duration-200 disabled:opacity-50; box-shadow: 0 1px 2px rgba(0,0,0,0.04); }
+}
 /* Theme font variables (set by the active theme settings) */
 :root { --body-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; --heading-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; }
 /* Body background/text follow the active theme's variables (dark themes etc.),

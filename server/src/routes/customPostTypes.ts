@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import db, { cuid } from '../utils/db';
-import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
 import { purgeContentCaches } from '../utils/cache';
 
 const router = Router();
@@ -37,7 +37,7 @@ router.get('/', (_req: AuthRequest, res: Response) => {
 });
 
 // Admin: register a new custom post type
-router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const slug = String((req.body || {}).slug || '').trim().toLowerCase();
     const label = String((req.body || {}).label || '').trim();
@@ -52,7 +52,7 @@ router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, 
 });
 
 // Admin: unregister a custom post type (its content is kept but no longer listed)
-router.delete('/:slug', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.delete('/:slug', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const slug = req.params.slug;
     if (BUILTIN_TYPES.some(t => t.slug === slug)) { res.status(400).json({ error: '内置类型不能删除' }); return; }

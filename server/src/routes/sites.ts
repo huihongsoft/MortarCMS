@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import db, { cuid } from '../utils/db';
-import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 
 const router = Router();
@@ -18,7 +18,7 @@ router.get('/current', (req: SiteRequest, res: Response) => {
 });
 
 // Admin: list all sites with per-site content stats
-router.get('/', authenticate, requireCap('manage_options'), (_req: AuthRequest, res: Response) => {
+router.get('/', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
     const sites = db.prepare('SELECT * FROM Site ORDER BY isPrimary DESC, createdAt ASC').all() as any[];
     const countBySite = (table: string, siteId: string, type?: string): number => {
@@ -48,7 +48,7 @@ router.get('/', authenticate, requireCap('manage_options'), (_req: AuthRequest, 
 });
 
 // Admin: create site
-router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const { name, slug, domain, description } = req.body || {};
     if (!name || !slug || !domain) { res.status(400).json({ error: 'name, slug and domain required' }); return; }
@@ -64,7 +64,7 @@ router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, 
 });
 
 // Admin: update site
-router.put('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Site WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Site not found' }); return; }
@@ -81,7 +81,7 @@ router.put('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest
 });
 
 // Admin: set site as primary
-router.post('/:id/primary', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/:id/primary', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT id FROM Site WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Site not found' }); return; }
@@ -92,7 +92,7 @@ router.post('/:id/primary', authenticate, requireCap('manage_options'), (req: Au
 });
 
 // Admin: read site settings overrides
-router.get('/:id/settings', authenticate, requireCap('manage_options'), (req: SiteRequest, res: Response) => {
+router.get('/:id/settings', authenticate, authorize('admin'), (req: SiteRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT id FROM Site WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Site not found' }); return; }
@@ -104,7 +104,7 @@ router.get('/:id/settings', authenticate, requireCap('manage_options'), (req: Si
 });
 
 // Admin: site settings overrides
-router.put('/:id/settings', authenticate, requireCap('manage_options'), (req: SiteRequest, res: Response) => {
+router.put('/:id/settings', authenticate, authorize('admin'), (req: SiteRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT id FROM Site WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Site not found' }); return; }
@@ -116,7 +116,7 @@ router.put('/:id/settings', authenticate, requireCap('manage_options'), (req: Si
 });
 
 // Admin: content assignable to a site (posts/pages/media/comments with their current siteId)
-router.get('/:id/content', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.get('/:id/content', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT id FROM Site WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Site not found' }); return; }
@@ -134,7 +134,7 @@ router.get('/:id/content', authenticate, requireCap('manage_options'), (req: Aut
 });
 
 // Admin: assign content to this site
-router.post('/:id/content/assign', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/:id/content/assign', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT id FROM Site WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Site not found' }); return; }
@@ -148,7 +148,7 @@ router.post('/:id/content/assign', authenticate, requireCap('manage_options'), (
 });
 
 // Admin: make content global (visible on every site)
-router.post('/:id/content/global', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/:id/content/global', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const { type, ids } = req.body || {};
     const tableMap: Record<string, string> = { post: 'Post', page: 'Post', media: 'Media', comment: 'Comment' };
@@ -160,7 +160,7 @@ router.post('/:id/content/global', authenticate, requireCap('manage_options'), (
 });
 
 // Admin: duplicate a site (row + settings overrides + menus with fresh ids)
-router.post('/:id/duplicate', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/:id/duplicate', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const src = db.prepare('SELECT * FROM Site WHERE id = ?').get(req.params.id) as any;
     if (!src) { res.status(404).json({ error: 'Site not found' }); return; }
@@ -186,7 +186,7 @@ router.post('/:id/duplicate', authenticate, requireCap('manage_options'), (req: 
 });
 
 // Admin: delete site
-router.delete('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Site WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Site not found' }); return; }

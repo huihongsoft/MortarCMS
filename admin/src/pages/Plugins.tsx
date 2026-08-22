@@ -184,7 +184,7 @@ export default function Plugins() {
             )
           )
     ),
-    detail && React.createElement('div', { className: 'fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4', onClick: (e: React.MouseEvent) => { if (e.target === e.currentTarget) setDetail(null); } },
+    detail && React.createElement('div', { className: 'fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4', onClick: (e: React.MouseEvent) => { if (e.target === e.currentTarget) setDetail(null); } },
       React.createElement('div', { className: 'card w-full max-w-md p-6' },
         React.createElement('div', { className: 'flex items-center justify-between mb-3' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900' }, detail.name + ' '),
@@ -210,7 +210,7 @@ export default function Plugins() {
       )
     ),
     // Plugin settings modal (rendered from the plugin's settingsSchema)
-    settingsFor && React.createElement('div', { className: 'fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4', onClick: (e: React.MouseEvent) => { if (e.target === e.currentTarget) setSettingsFor(null); } },
+    settingsFor && React.createElement('div', { className: 'fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4', onClick: (e: React.MouseEvent) => { if (e.target === e.currentTarget) setSettingsFor(null); } },
       React.createElement('div', { className: 'card w-full max-w-md p-6 max-h-[85vh] overflow-y-auto' },
         React.createElement('div', { className: 'flex items-center justify-between mb-1' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 flex items-center gap-2' }, React.createElement(Settings, { size: 15, className: 'text-primary-500' }), settingsFor.name + ' ' + t('settings', getLang())),

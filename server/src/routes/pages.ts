@@ -33,9 +33,11 @@ function normalizePage(data: any, existingPassword = ''): { status: string; pass
 }
 
 
-router.get('/public', (req: AuthRequest, res: Response) => {
+router.get('/public', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
-    const pages = db.prepare('SELECT id, title, slug, status, menuOrder FROM Post WHERE type = ? AND status = ? ORDER BY menuOrder ASC').all('page', 'published') as any[];
+    const pages = (req.siteId
+      ? db.prepare('SELECT id, title, slug, status, menuOrder FROM Post WHERE type = ? AND status = ? AND (siteId IS NULL OR siteId = ?) ORDER BY menuOrder ASC').all('page', 'published', req.siteId)
+      : db.prepare('SELECT id, title, slug, status, menuOrder FROM Post WHERE type = ? AND status = ? ORDER BY menuOrder ASC').all('page', 'published')) as any[];
     res.json(pages);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -54,7 +56,9 @@ function getPassCookie(req: any, pageId: string): string | null {
 //  - Private: only logged-in admin/editor can view.
 router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
-    const page = db.prepare('SELECT * FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'page') as any;
+    const page = (req.siteId
+      ? db.prepare('SELECT * FROM Post WHERE slug = ? AND type = ? AND (siteId IS NULL OR siteId = ?)').get(req.params.slug, 'page', req.siteId)
+      : db.prepare('SELECT * FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'page')) as any;
     if (!page || page.status === 'trash') { res.status(404).json({ error: 'Page not found' }); return; }
     const isAdmin = !!req.user && ['admin', 'editor'].includes(req.user.role);
     // Draft pages are never public (WordPress behavior).
@@ -86,7 +90,7 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
     page.meta = {};
     metaRows.forEach((r: any) => { page.meta[r.key] = r.value; });
     delete page.password;
-    page.content = renderCmsBlocks(applyShortcodes(page.content || '', { siteId: req.siteId }));
+    page.content = renderCmsBlocks(applyShortcodes(page.content || '', { siteId: req.siteId }), { siteId: req.siteId });
     res.json(page);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

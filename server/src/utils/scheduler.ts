@@ -186,6 +186,27 @@ export function registerBuiltinTasks(): void {
   });
 
   registerTask({
+    id: 'prune_revisions',
+    name: 'Prune old revisions',
+    desc: 'Keeps the newest 30 revisions per post and removes older ones',
+    intervalMs: 7 * 86_400_000,
+    fn: () => {
+      try {
+        const posts = db.prepare('SELECT DISTINCT postId FROM Revision').all() as any[];
+        let pruned = 0;
+        for (const { postId } of posts) {
+          const keep = (db.prepare('SELECT id FROM Revision WHERE postId = ? ORDER BY createdAt DESC, id DESC LIMIT 30').all(postId) as any[]).map((r: any) => r.id);
+          if (keep.length < 30) continue;
+          const marks = keep.map(() => '?').join(',');
+          const r = db.prepare('DELETE FROM Revision WHERE postId = ? AND id NOT IN (' + marks + ')').run(postId, ...keep);
+          pruned += r.changes;
+        }
+        if (pruned > 0) console.log('[Task] Pruned ' + pruned + ' old revisions');
+      } catch {}
+    },
+  });
+
+  registerTask({
     id: 'backup_database',
     name: 'Backup database',
     desc: 'Copies the database to the backups folder; keeps only the newest backups (retention setting)',

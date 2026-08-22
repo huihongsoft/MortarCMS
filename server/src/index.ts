@@ -210,7 +210,7 @@ app.use((req, res, next) => {
   next();
 });
 
-const uploadsDir = path.join(__dirname, '..', 'uploads');
+import { UPLOADS_DIR as uploadsDir } from './utils/paths';
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 const cacheControl = (maxAge: string, immutable = false) => (_req: any, res: any, next: any) => {
   res.setHeader('Cache-Control', 'public, max-age=' + maxAge + (immutable ? ', immutable' : ''));

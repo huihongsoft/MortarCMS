@@ -213,7 +213,7 @@ export default function Sites() {
           )
         ),
     // ---- Content management modal ----
-    contentSite && React.createElement('div', { className: 'fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4', onClick: (e: React.MouseEvent) => { if (e.target === e.currentTarget) setContentSite(null); } },
+    contentSite && React.createElement('div', { className: 'fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4', onClick: (e: React.MouseEvent) => { if (e.target === e.currentTarget) setContentSite(null); } },
       React.createElement('div', { className: 'card w-full max-w-2xl max-h-[80vh] flex flex-col' },
         React.createElement('div', { className: 'flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-700' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100' }, t('manage content', getLang()) + ': ' + contentSite.name),

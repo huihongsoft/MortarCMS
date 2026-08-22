@@ -7,6 +7,7 @@ import ScrollToTop from './components/ScrollToTop';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Routes, Route } from 'react-router-dom';
 import { ThemeProvider, useTheme } from './themes';
+import { sanitizeCss } from './lib/safeCss';
 import { headingCss } from './lib/typography';
 import api from './lib/api';
 import { initLightbox } from './lib/lightbox';
@@ -16,6 +17,15 @@ import { initLightbox } from './lib/lightbox';
 // means reloading the chunk, so the boundary's reload action is the recovery).
 function lazyWithRetry(factory: () => Promise<{ default: React.ComponentType<any> }>) {
   return lazy(factory);
+}
+
+// Menu items can point at /admin (or /admin/…). Inside the SPA that route
+// does not exist — a <Link> click would hit the 404 page while the address
+// bar still shows /admin (the server only redirects to /admin/ on a full
+// page load). Bounce such navigations to the real admin entry.
+function AdminBounce() {
+  React.useEffect(() => { window.location.replace('/admin/'); }, []);
+  return null;
 }
 
 // Route-level code splitting: Home stays eager (first paint), the rest load on demand
@@ -68,6 +78,10 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
           React.createElement(Route, { path: '/tag/:slug', element: React.createElement(Home, { settings }) }),
           React.createElement(Route, { path: '/category/:slug', element: React.createElement(Home, { settings }) }),
           React.createElement(Route, { path: '/type/:slug', element: React.createElement(Home, { settings }) }),
+          // Admin lives in a separate SPA — SPA-internal clicks on /admin
+          // links (e.g. menu items) get bounced there instead of a 404
+          React.createElement(Route, { path: '/admin', element: React.createElement(AdminBounce) }),
+          React.createElement(Route, { path: '/admin/*', element: React.createElement(AdminBounce) }),
           React.createElement(Route, { path: '*', element: React.createElement(NotFound) }),
         ),
         ),
@@ -105,8 +119,14 @@ export default function App() {
         .map(k => {
           const v = r.data['theme_' + k];
           if (!v) return '';
-          const val = (k === 'heading_font' || k === 'body_font') ? (fontStacks[v] || v) : v;
-          return '--' + k.replace(/_/g, '-') + ':' + val;
+          if (k === 'heading_font' || k === 'body_font') {
+            // Font names only via the whitelist — never inject a raw value
+            if (!fontStacks[v]) return '';
+            return '--' + k.replace(/_/g, '-') + ':' + fontStacks[v];
+          }
+          // Colors only as hex — a raw value containing } could escape :root{}
+          if (!/^#[0-9a-fA-F]{3,8}$/.test(v)) return '';
+          return '--' + k.replace(/_/g, '-') + ':' + v;
         })
         .filter(Boolean).join(';');
       if (vars) {
@@ -128,17 +148,17 @@ export default function App() {
       // Unsaved custom CSS preview (Appearance panel opens ?preview_css=...).
       // Security: the query parameter is attacker-controllable (a crafted link
       // could inject arbitrary CSS, e.g. attribute-selector data exfiltration),
-      // so it is only honored for signed-in users and stripped of the worst
-      // primitives (@import / url() / expression) before injection.
+      // so it is only honored for signed-in users and goes through the same
+      // sanitizer as every other injected stylesheet.
       const previewCss = new URLSearchParams(window.location.search).get('preview_css');
       let cssToApply = r.data.theme_custom_css || '';
       if (previewCss !== null && previewCss !== '' && localStorage.getItem('mortar_token')) {
-        cssToApply = previewCss.replace(/@import[^;]+;?/gi, '').replace(/url\([^)]*\)/gi, 'url()').replace(/expression\([^)]*\)/gi, '');
+        cssToApply = sanitizeCss(previewCss);
       }
       if (cssToApply) {
         let el = document.getElementById('mortar-theme-css') as HTMLStyleElement | null;
         if (!el) { el = document.createElement('style'); el.id = 'mortar-theme-css'; document.head.appendChild(el); }
-        el.textContent = cssToApply;
+        el.textContent = sanitizeCss(cssToApply);
       }
       const titleEl = document.getElementById('site-title');
       if (titleEl && r.data.site_title) titleEl.textContent = r.data.site_title;

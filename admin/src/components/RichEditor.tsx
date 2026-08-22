@@ -431,7 +431,7 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
       onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => { setHtmlBuffer(e.target.value); emit(DOMPurify.sanitize(e.target.value)); },
     }),
     // Media picker modal
-    showMedia && React.createElement('div', { className: 'fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4' },
+    showMedia && React.createElement('div', { className: 'fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4' },
       React.createElement('div', { className: 'bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col' },
         React.createElement('div', { className: 'flex items-center justify-between px-4 py-3 border-b border-gray-200' },
           React.createElement('h3', { className: 'font-semibold text-gray-900' }, t('insert media', getLang())),
@@ -473,7 +473,7 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
       ),
     ),
     // Template library modal
-    showTemplates && React.createElement('div', { className: 'fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4' },
+    showTemplates && React.createElement('div', { className: 'fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4' },
       React.createElement('div', { className: 'bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col' },
         React.createElement('div', { className: 'flex items-center justify-between px-4 py-3 border-b border-gray-200' },
           React.createElement('h3', { className: 'font-semibold text-gray-900' }, t('block templates', getLang())),

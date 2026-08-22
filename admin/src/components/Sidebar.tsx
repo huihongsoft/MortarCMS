@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers } from 'lucide-react';
+import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3 } from 'lucide-react';
 import CommentBadge from './CommentBadge';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -52,6 +52,7 @@ const groups: { title: string; items: { to: string; icon: any; label: string; ro
       { to: '/import', icon: UploadCloud, label: t('import', getLang()), role: 'admin' },
       { to: '/security', icon: ShieldCheck, label: t('security audit', getLang()), role: 'admin' },
       { to: '/sysinfo', icon: ServerIcon, label: t('system', getLang()), role: 'admin', devModeOnly: true },
+      { to: '/stats', icon: BarChart3, label: t('visit stats', getLang()), role: 'admin' },
       { to: '/hooks', icon: Workflow, label: t('hooks browser', getLang()), role: 'admin', devModeOnly: true },
       { to: '/api-docs', icon: Code, label: t('api docs & test center', getLang()), role: 'admin', devModeOnly: true },
       { to: '/activity', icon: History, label: t('activity log', getLang()), role: 'admin', devModeOnly: true },

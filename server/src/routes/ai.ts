@@ -67,8 +67,10 @@ router.get('/settings', authenticate, requireCap('ai_manage', 'manage_options'),
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Save providers (apiKey kept if masked)
-router.put('/settings', authenticate, requireCap('ai_manage', 'manage_options'), (req: AuthRequest, res: Response) => {
+// Save providers (apiKey kept if masked). ai_manage only — falling back to
+// manage_options would let editors overwrite provider API keys and grant
+// themselves tool permissions (ai_allowed_roles / ai_tool_permissions).
+router.put('/settings', authenticate, requireCap('ai_manage'), (req: AuthRequest, res: Response) => {
   try {
     const incoming = req.body?.providers as AIProvider[];
     if (!Array.isArray(incoming)) { res.status(400).json({ error: 'providers array required' }); return; }

@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import db from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { UPLOADS_DIR as uploadsDir } from '../utils/paths';
 
 const router = Router();
 
@@ -58,7 +59,6 @@ router.get('/audit', authenticate, requireCap('manage_options'), (req: AuthReque
 
     // 7. Sensitive files exposure
     const envPath = path.join(__dirname, '../..', '.env');
-    const uploadsDir = path.join(__dirname, '../..', 'uploads');
     let envExposed = false;
     if (fs.existsSync(envPath)) {
       const stat = fs.statSync(envPath);

@@ -4,6 +4,7 @@ import path from 'path';
 import os from 'os';
 import db from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { UPLOADS_DIR as uploadsDir } from '../utils/paths';
 
 const router = Router();
 
@@ -39,7 +40,6 @@ router.get('/health/detail', authenticate, requireCap('manage_options'), (_req: 
 
     // Uploads directory writable
     try {
-      const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
       if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
       const probe = path.join(uploadsDir, '.write-test-' + Date.now());
       fs.writeFileSync(probe, 'ok');
@@ -78,7 +78,6 @@ router.get('/health/detail', authenticate, requireCap('manage_options'), (_req: 
 
     // Uploads directory size
     try {
-      const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
       let size = 0;
       if (fs.existsSync(uploadsDir)) {
         const walk = (d: string) => { for (const f of fs.readdirSync(d)) { const p = path.join(d, f); const s = fs.statSync(p); if (s.isDirectory()) walk(p); else size += s.size; } };
@@ -100,7 +99,6 @@ router.get('/health/detail', authenticate, requireCap('manage_options'), (_req: 
 
     // Uploads directory writability (permissions check)
     try {
-      const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
       if (!fs.existsSync(uploadsDir)) { checks.permissions = { ok: false, error: 'uploads directory missing' }; }
       else {
         const probe = path.join(uploadsDir, '.health-probe-' + Date.now());

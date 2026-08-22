@@ -166,6 +166,7 @@ const CMS_BLOCKS = [
   { id: 'search', label: 'Search', category: 'CMS Data', media: WPI.searchBlock, content: cmsPlaceholder('search', 'Search', 'Site search form', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>') },
   { id: 'archive', label: 'Archive', category: 'CMS Data', media: WPI.blockDefault, content: cmsPlaceholder('archive', 'Archive', 'Monthly post archive', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>') },
   { id: 'tag-cloud', label: 'Tag Cloud', category: 'CMS Data', media: WPI.blockDefault, content: cmsPlaceholder('tag-cloud', 'Tag Cloud', 'All site tags by popularity', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>') },
+  { id: 'link-list', label: 'Link List', category: 'CMS Data', media: WPI.listBlock, content: cmsPlaceholder('link-list', 'Link List', 'Links of a selected navigation category', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>') },
 ];
 
 const LAYOUT_BLOCKS = [
@@ -227,19 +228,39 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
   const cmsPlugin = useCallback((editor: Editor) => {
     // Register CMS data block component types with live preview
     CMS_BLOCKS.forEach(block => {
+      const isLinkList = block.id === 'link-list';
+      const traits: any[] = isLinkList
+        // Link List: pick the navigation category whose links are shown
+        ? [{ type: 'select', name: 'data-category', label: t('link categories', getLang()), options: [{ id: '', name: '(' + t('all categories', getLang()) + ')' }] }]
+        : [{ type: 'text', name: 'title', label: t('trait title', getLang()) }];
       editor.DomComponents.addType(`cms-${block.id}`, {
-        model: { defaults: { tagName: 'div', draggable: true, droppable: false, traits: [{ type: 'text', name: 'title', label: t('trait title', getLang()) }] } },
+        model: { defaults: { tagName: 'div', draggable: true, droppable: false, traits } },
         view: {
           init() {
             this.previewHtml = '';
             this.fetchPreview();
             this.model.on('change', () => this.applyPreview());
+            // Re-fetch only when the link-list category actually changed, so
+            // the preview matches what will render (other attribute changes,
+            // e.g. drop-assigned ids, keep the cached preview)
+            this.model.on('change:attributes', () => {
+              const prev = (this.model.previous('attributes') || {})['data-category'];
+              const cur = (this.model.get('attributes') || {})['data-category'];
+              if (prev !== cur) this.fetchPreview();
+            });
           },
           fetchPreview() {
             const h = new Headers();
             const tk = localStorage.getItem('mortar_token');
             if (tk) h.set('Authorization', 'Bearer ' + tk);
-            fetch('/api/editor/preview-cms/' + block.id, { headers: h })
+            // data-* attributes become query params so the preview matches the
+            // block's settings (e.g. data-category → ?category=)
+            const qs = new URLSearchParams();
+            Object.entries(this.model.getAttributes() || {}).forEach(([k, v]) => {
+              if (k.startsWith('data-') && k !== 'data-cms' && k !== 'data-gjs-type' && v) qs.set(k.slice(5), String(v));
+            });
+            const q = qs.toString();
+            fetch('/api/editor/preview-cms/' + block.id + (q ? '?' + q : ''), { headers: h })
               .then(r => r.json())
               .then((d: any) => { if (d.html && this.el && (this.el as HTMLElement).isConnected) { this.previewHtml = d.html; this.applyPreview(); } })
               .catch(() => {});
@@ -247,6 +268,23 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           applyPreview() { if (this.previewHtml && this.el) { (this.el as HTMLElement).innerHTML = this.previewHtml; } },
         },
       });
+      // Link List: fill the category dropdown once categories are loaded
+      if (isLinkList) {
+        const h = new Headers();
+        const tk = localStorage.getItem('mortar_token');
+        if (tk) h.set('Authorization', 'Bearer ' + tk);
+        fetch('/api/links/categories', { headers: h }).then(r => r.json()).then((d: any) => {
+          const opts = [{ id: '', name: '(' + t('all categories', getLang()) + ')' }, ...(d || []).map((c: any) => ({ id: c.slug, name: c.name }))];
+          const type = editor.DomComponents.getType('cms-link-list');
+          if (type?.model?.prototype?.defaults?.traits) type.model.prototype.defaults.traits[0].options = opts;
+          // Refresh trait options on already-inserted blocks
+          try {
+            editor.getComponents().each((c: any) => {
+              if (c.get('type') === 'cms-link-list') { const tr = c.get('traits')?.get('data-category'); if (tr) tr.set('options', opts); }
+            });
+          } catch {}
+        }).catch(() => {});
+      }
     });
 
     // Add custom blocks to BlockManager
@@ -269,7 +307,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         }).catch(() => {});
 
       const style = canvas.createElement('style');
-      style.textContent = `html,body{margin:0!important;padding:0!important;width:100%!important;max-width:none!important;box-sizing:border-box!important;display:block!important;position:static!important}html{height:100%!important;overflow:visible!important;background:#fff;color-scheme:light}body{min-height:100%!important;height:auto!important;overflow:visible!important;background:#fff}.cms-post-list,.cms-categories,.cms-comments,.cms-search,.cms-archive,.cms-tag-cloud{min-height:40px}`;
+      style.textContent = `html,body{margin:0!important;padding:0!important;width:100%!important;max-width:none!important;box-sizing:border-box!important;display:block!important;position:static!important}html{height:100%!important;overflow:visible!important;background:#fff;color-scheme:light}body{min-height:100%!important;height:auto!important;overflow:visible!important;background:#fff}.cms-post-list,.cms-categories,.cms-comments,.cms-search,.cms-archive,.cms-tag-cloud,.cms-link-list{min-height:40px}`;
       canvas.head.appendChild(style);
 
       fetch('/api/settings').then(r => r.json()).then(s => {

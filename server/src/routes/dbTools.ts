@@ -6,6 +6,7 @@ import db, { listSlowQueries } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { assertSafeArchive } from '../utils/archive';
+import { UPLOADS_DIR as uploadsDir } from '../utils/paths';
 
 const router = Router();
 
@@ -143,7 +144,6 @@ router.get('/backup', authenticate, authorize('admin'), (_req: AuthRequest, res:
 // Admin: download a full backup (database + uploads) as a zip
 router.get('/backup-full', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
-    const uploadsDir = path.join(__dirname, '../..', 'uploads');
     const tmpZip = path.join(require('os').tmpdir(), 'mortar-backup-' + Date.now() + '.zip');
     db.pragma('wal_checkpoint(TRUNCATE)');
     const files = ['data/mortar.db'];
@@ -167,12 +167,28 @@ router.post('/restore-full', authenticate, authorize('admin'), upload.single('fi
     const tmpDir = path.join(require('os').tmpdir(), 'mortar-restore-' + Date.now());
     fs.mkdirSync(tmpDir, { recursive: true });
     // Zip-slip guard: reject traversal entries BEFORE anything hits the disk
-    assertSafeArchive(req.file.path);
+    const archiveEntries = assertSafeArchive(req.file.path);
+    // Bound the archive (zip bomb / resource exhaustion): entry count first
+    if (archiveEntries.length > 5000) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      res.status(400).json({ error: 'Invalid backup: too many file entries' });
+      return;
+    }
     execFileSync('unzip', ['-q', req.file.path, '-d', tmpDir]);
     // zip-slip guard: every entry must be a plain file in the extraction root
-    // (no nested dirs, no ../, no absolute paths) before it can overwrite uploads
-    const badEntries = fs.readdirSync(tmpDir).filter((f: string) => f === '..' || !/^[a-zA-Z0-9._-]+$/.test(f) || f.startsWith('/'));
-    if (badEntries.length > 0) {
+    // (no nested dirs, no ../, no absolute paths) before it can overwrite
+    // uploads. Directories and symlinks are rejected too: copyFileSync would
+    // follow a symlink and copy a server-readable file into public /uploads.
+    const tmpEntries = fs.readdirSync(tmpDir);
+    let totalBytes = 0;
+    const badEntries = tmpEntries.filter((f: string) => {
+      if (f === '..' || !/^[a-zA-Z0-9._-]+$/.test(f) || f.startsWith('/')) return true;
+      const st = fs.lstatSync(path.join(tmpDir, f));
+      if (!st.isFile()) return true;
+      totalBytes += st.size;
+      return false;
+    });
+    if (badEntries.length > 0 || totalBytes > 1024 * 1024 * 1024) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
       res.status(400).json({ error: 'Invalid backup: unsafe file entries' });
       return;
@@ -182,7 +198,6 @@ router.post('/restore-full', authenticate, authorize('admin'), upload.single('fi
     const dataDir = path.join(__dirname, '../..', 'data');
     const liveDb = path.join(dataDir, 'mortar.db');
     db.pragma('wal_checkpoint(TRUNCATE)');
-    const uploadsDir = path.join(__dirname, '../..', 'uploads');
     for (const f of fs.readdirSync(tmpDir)) {
       if (f === 'mortar.db' || f === 'mortar.db-wal' || f === 'mortar.db-shm') continue;
       const dest = path.join(uploadsDir, f);

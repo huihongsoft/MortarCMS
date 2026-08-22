@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import db, { cuid } from '../utils/db';
-import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { purgeAllCaches } from '../utils/cache';
 import { execFileSync, execSync } from 'child_process';
@@ -82,7 +82,7 @@ router.get('/', (_req: AuthRequest, res: Response) => {
 });
 
 // Admin: activate a theme
-router.post('/:name/activate', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/:name/activate', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const t = readTheme(req.params.name);
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
@@ -92,7 +92,7 @@ router.post('/:name/activate', authenticate, requireCap('manage_options'), (req:
 });
 
 // Admin: save theme setting overrides
-router.put('/:name/settings', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.put('/:name/settings', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const t = readTheme(req.params.name);
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
@@ -104,7 +104,7 @@ router.put('/:name/settings', authenticate, requireCap('manage_options'), (req: 
 });
 
 // Admin: install a theme from a zip (theme.json + optional screenshot.css etc.)
-router.post('/install', authenticate, requireCap('manage_options'), upload.single('file'), (req: AuthRequest, res: Response) => {
+router.post('/install', authenticate, authorize('admin'), upload.single('file'), (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) { res.status(400).json({ error: 'No theme zip uploaded' }); return; }
     const tmpDir = path.join(require('os').tmpdir(), 'mortar-theme-' + Date.now());
@@ -144,7 +144,7 @@ router.post('/install', authenticate, requireCap('manage_options'), upload.singl
 
 // Admin: rebuild built-in theme bundles from frontend source
 // (frontend/src/themes/<name>/ -> vite build -> server/themes/<name>/theme.js)
-router.post('/rebuild', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/rebuild', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const frontendDir = path.join(__dirname, '..', '..', '..', 'frontend');
     if (!fs.existsSync(path.join(frontendDir, 'package.json'))) {
@@ -180,7 +180,7 @@ router.post('/rebuild', authenticate, requireCap('manage_options'), (req: AuthRe
 });
 
 // Admin: delete a theme (cannot delete the active theme or the default)
-router.delete('/:name', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.delete('/:name', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const name = req.params.name;
     if (name === 'default') { res.status(400).json({ error: 'Cannot delete the default theme' }); return; }
@@ -202,7 +202,7 @@ function safeThemePath(themeName: string, rel: string): string | null {
   if (!full.startsWith(path.resolve(path.join(themesDir, themeName)) + path.sep)) return null;
   return full;
 }
-router.get('/:name/files', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.get('/:name/files', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const dir = path.join(themesDir, req.params.name);
     if (!fs.existsSync(dir)) { res.status(404).json({ error: 'Theme not found' }); return; }
@@ -222,7 +222,7 @@ router.get('/:name/files', authenticate, requireCap('manage_options'), (req: Aut
     res.json({ files: walk(dir) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
-router.get('/:name/file', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.get('/:name/file', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const full = safeThemePath(req.params.name, String(req.query.path || ''));
     if (!full || !fs.existsSync(full)) { res.status(404).json({ error: 'File not found' }); return; }
@@ -231,7 +231,7 @@ router.get('/:name/file', authenticate, requireCap('manage_options'), (req: Auth
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 // Admin: edit a CSS file (the only writable type — safe from code injection)
-router.put('/:name/file', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.put('/:name/file', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const rel = String(req.body.path || '');
     if (!rel.endsWith('.css')) { res.status(400).json({ error: 'Only CSS files are editable' }); return; }
@@ -255,7 +255,7 @@ router.get('/sections', (_req: AuthRequest, res: Response) => {
 });
 
 // Admin: save a theme section for a hook location
-router.put('/sections/:location', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.put('/sections/:location', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const { location } = req.params;
     const { html, css } = req.body || {};
@@ -325,7 +325,7 @@ function deleteThemeBackup(id: string): boolean {
   return !!snap;
 }
 
-router.get('/:name/backups', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.get('/:name/backups', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const t = readTheme(req.params.name);
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
@@ -333,7 +333,7 @@ router.get('/:name/backups', authenticate, requireCap('manage_options'), (req: A
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/:name/backups', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/:name/backups', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const t = readTheme(req.params.name);
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
@@ -342,7 +342,7 @@ router.post('/:name/backups', authenticate, requireCap('manage_options'), (req: 
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/:name/backups/:id/restore', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/:name/backups/:id/restore', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const t = readTheme(req.params.name);
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
@@ -370,7 +370,7 @@ router.post('/:name/backups/:id/restore', authenticate, requireCap('manage_optio
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/:name/backups/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.delete('/:name/backups/:id', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     if (!deleteThemeBackup(req.params.id)) { res.status(404).json({ error: '备份不存在' }); return; }
     res.json({ success: true });

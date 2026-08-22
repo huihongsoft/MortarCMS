@@ -21,10 +21,10 @@ export function listShortcodes(): { name: string; desc?: string }[] {
 }
 
 // Render a single shortcode by name with attrs (used for live previews)
-export function renderShortcode(name: string, attrs: Record<string, string> = {}): string {
+export function renderShortcode(name: string, attrs: Record<string, string> = {}, ctx: any = {}): string {
   const sc = shortcodes.get(name);
   if (!sc) return '';
-  try { return sc.fn(attrs, '', {}); } catch { return ''; }
+  try { return sc.fn(attrs, '', ctx); } catch { return ''; }
 }
 
 // Parse and render all shortcodes in an HTML string (server-side, like WP do_shortcode)
@@ -195,9 +195,9 @@ addShortcode('link-list', (attrs, _content, ctx) => {
 // Detects <div data-cms="xxx"> elements and replaces them entirely with
 // the corresponding shortcode output. Uses depth counting so nested divs
 // (e.g. blocks wrapped in sections/columns) are matched correctly.
-export function renderCmsBlocks(html: string): string {
+export function renderCmsBlocks(html: string, ctx: any = {}): string {
   if (!html) return html;
-  const cmsTypes = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud'];
+  const cmsTypes = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud', 'link-list'];
   let out = html;
   for (const type of cmsTypes) {
     const sc = shortcodes.get(type);
@@ -235,8 +235,17 @@ export function renderCmsBlocks(html: string): string {
         }
       }
       if (closeEnd === -1) { searchFrom = markerIdx + marker.length; continue; }
+      // data-* attributes on the block (e.g. data-category="ai") become
+      // shortcode attrs, so blocks with settings render like the text shortcode
+      const attrs: Record<string, string> = {};
+      for (const m of out.slice(openStart, openEnd + 1).matchAll(/(\w[\w-]*)="([^"]*)"/g)) {
+        const key = m[1], val = m[2];
+        if (key.startsWith('data-') && key !== 'data-cms' && key !== 'data-gjs-type') {
+          attrs[key.slice(5)] = val.replace(/&quot;/g, '"').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+        }
+      }
       let rendered: string;
-      try { rendered = sc.fn({}, '', {}); } catch { rendered = ''; }
+      try { rendered = sc.fn(attrs, '', ctx); } catch { rendered = ''; }
       out = out.slice(0, openStart) + rendered + out.slice(closeEnd + '</div>'.length);
       searchFrom = openStart + rendered.length;
     }

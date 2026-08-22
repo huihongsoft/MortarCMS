@@ -1,6 +1,8 @@
 import axios from 'axios';
 
-const api = axios.create({ baseURL: '/api', withCredentials: true });
+// 15s timeout so a hung request surfaces as an error instead of hanging
+// the UI forever (AI calls can take a while — those endpoints get 60s below)
+const api = axios.create({ baseURL: '/api', withCredentials: true, timeout: 15000 });
 
 // ---- Global top progress bar while any API request is in flight ----
 let pendingRequests = 0;
@@ -23,6 +25,8 @@ function setProgressBar(active: boolean) {
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('mortar_token');
   if (token) config.headers.Authorization = `Bearer ${token}`;
+  // AI generation can take well over 15s (long-form writing)
+  if (config.url?.startsWith('/ai/')) config.timeout = 60000;
   setProgressBar(true);
   return config;
 });

@@ -3,7 +3,8 @@ import { t } from '../lib/i18n';
 
 // Cookie consent banner — hidden when the site disables it, text configurable
 export default function CookieConsent({ settings }: { settings?: Record<string, string> }) {
-  const [hidden, setHidden] = useState(localStorage.getItem('cookie_consent') === '1');
+  // Both accept ('1') and decline ('0') dismiss the banner persistently
+  const [hidden, setHidden] = useState(localStorage.getItem('cookie_consent') !== null);
   if (hidden || settings?.cookie_consent_enabled === '0') return null;
 
   const text = settings?.cookie_consent_text || t('this site uses cookies to improve your experience');

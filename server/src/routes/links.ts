@@ -188,8 +188,18 @@ router.put('/categories/:id', authenticate, requireCap('manage_options'), (req: 
     if (siteId !== undefined) { sets.push('siteId = ?'); vals.push(siteId || null); }
     if (pageId !== undefined) { sets.push('pageId = ?'); vals.push(pageId || null); }
     if (sets.length > 0) { vals.push(req.params.id); db.prepare('UPDATE LinkCategory SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
-    // Renamed: keep menu items pointing at this category working
-    if (name !== undefined && existing?.slug) syncMenuCategoryUrls(existing.slug, '/links?category=' + slugify(name));
+    // Renamed / landing page changed: keep menu items pointing at this
+    // category working. Resolution mirrors the menu editor — the landing
+    // page wins, otherwise the filtered links page.
+    if (existing?.slug && (name !== undefined || pageId !== undefined)) {
+      let newUrl = '/links?category=' + slugify(name ?? existing.slug);
+      const cat = db.prepare('SELECT pageId FROM LinkCategory WHERE id = ?').get(req.params.id) as any;
+      if (cat?.pageId) {
+        const pg = db.prepare('SELECT slug FROM Post WHERE id = ?').get(cat.pageId) as any;
+        if (pg?.slug) newUrl = '/page/' + pg.slug;
+      }
+      syncMenuCategoryUrls(existing.slug, newUrl);
+    }
     res.json(db.prepare('SELECT * FROM LinkCategory WHERE id = ?').get(req.params.id));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

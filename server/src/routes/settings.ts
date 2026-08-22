@@ -14,7 +14,8 @@ const CRED_KEYS = new Set(['ai_providers', 'ai_bindings', 'installed', 'active_p
 const CRED_PREFIXES = ['jwt_', 'market_', 'db_'];
 // Extra keys hidden from anonymous visitors (admin-only configuration)
 const ADMIN_KEYS = new Set(['admin_email']);
-const ADMIN_PREFIXES = ['smtp_', 'custom_templates', 'maintenance_', 'ai_'];
+// widgets_* holds admin-authored custom HTML — never expose it anonymously
+const ADMIN_PREFIXES = ['smtp_', 'custom_templates', 'maintenance_', 'ai_', 'widgets_'];
 
 // Settings that may never be written through the generic PUT endpoint (they
 // are managed by dedicated code paths: install wizard, plugins, jwt, backups)

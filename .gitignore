@@ -20,3 +20,6 @@ server/data/.jwt-secret
 mortarctl.sh
 *.bak
 backups/
+
+# Local SQLite data directory (mortar.db + backups + WAL sidecar files)
+server/data/

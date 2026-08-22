@@ -1,9 +1,10 @@
-import multer from 'multer';
 import path from 'path';
+import multer from 'multer';
+import { UPLOADS_DIR } from '../utils/paths';
 
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => {
-    cb(null, path.join(__dirname, '../../uploads'));
+    cb(null, UPLOADS_DIR);
   },
   filename: (_req, file, cb) => {
     const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
@@ -22,6 +23,7 @@ const extMimeMap: Record<string, string[]> = {
   '.doc': ['application/msword'],
   '.docx': ['application/vnd.openxmlformats-officedocument.wordprocessingml.document'],
   '.mp3': ['audio/mpeg', 'audio/mp3'],
+  '.wav': ['audio/wav', 'audio/x-wav'],
   '.mp4': ['video/mp4'],
   // octet-stream included: browsers disagree on the MIME they send for .zip
   // (macOS Chrome sends application/zip, some send application/octet-stream).

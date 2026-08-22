@@ -3,9 +3,10 @@ import fs from 'fs';
 import path from 'path';
 import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { SiteRequest } from '../middleware/site';
 import { renderShortcode, listShortcodes } from '../utils/shortcodes';
 
-const CMS_TYPES = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud'];
+const CMS_TYPES = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud', 'link-list'];
 
 const router = Router();
 
@@ -33,11 +34,16 @@ router.get('/canvas-css', authenticate, requireCap('edit_posts'), (_req: AuthReq
 });
 
 // Public: live preview HTML for a CMS data block (used by the visual editor canvas)
-router.get('/preview-cms/:type', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
+router.get('/preview-cms/:type', authenticate, requireCap('edit_posts'), (req: AuthRequest & SiteRequest, res: Response) => {
   const type = req.params.type;
   if (!CMS_TYPES.includes(type)) { res.status(400).json({ error: 'Unknown CMS block type' }); return; }
   try {
-    const html = renderShortcode(type, { limit: String(req.query.limit || 5) });
+    // Query params become shortcode attrs (e.g. ?category=ai for link-list)
+    const attrs: Record<string, string> = {};
+    Object.entries(req.query).forEach(([k, v]) => { if (typeof v === 'string') attrs[k] = v; });
+    if (!('limit' in attrs)) attrs.limit = '5';
+    // Site-scoped preview: same visibility rules as the rendered page
+    const html = renderShortcode(type, attrs, { siteId: req.siteId });
     res.json({ html });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

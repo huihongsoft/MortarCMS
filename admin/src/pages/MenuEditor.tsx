@@ -31,8 +31,10 @@ export default function MenuEditor() {
     if (newItem.type === 'category' && newItem.categoryId) url = '/category/' + categories.find(c => c.id === newItem.categoryId)?.slug;
     if (newItem.type === 'linkcat' && newItem.linkCategoryId) {
       const cat = linkCats.find(c => c.id === newItem.linkCategoryId);
-      const catPage = cat?.pageId ? pages.find(pg => pg.id === cat.pageId) : null;
-      url = catPage ? '/page/' + catPage.slug : '/links?category=' + cat?.slug;
+      if (cat) {
+        const catPage = cat.pageId ? pages.find(pg => pg.id === cat.pageId) : null;
+        url = catPage ? '/page/' + catPage.slug : '/links?category=' + cat.slug;
+      }
     }
     setItems([...items, { id: Date.now().toString(), label: newItem.label, url: url || '#', parentId: newItem.parentId || null }]);
     setShowAdd(false); setNewItem({ type: 'page', label: '', url: '', pageId: '', categoryId: '', linkCategoryId: '', parentId: '' });
@@ -54,7 +56,7 @@ export default function MenuEditor() {
   const [menuLocation, setMenuLocation] = useState('primary');
   const [menuSiteId, setMenuSiteId] = useState('');
   const [editingIdx, setEditingIdx] = useState<number | null>(null);
-  const [editForm, setEditForm] = useState<{ label: string; url: string; parentId: string }>({ label: '', url: '', parentId: '' });
+  const [editForm, setEditForm] = useState<{ type: string; label: string; url: string; pageId: string; categoryId: string; linkCategoryId: string; parentId: string }>({ type: 'custom', label: '', url: '', pageId: '', categoryId: '', linkCategoryId: '', parentId: '' });
   const [sites, setSites] = useState<any[]>([]);
   // Drop a dragged item onto another item to make it a CHILD of that item
   // (reordering is done with the up/down arrows). Cycle guard: you cannot
@@ -90,19 +92,53 @@ export default function MenuEditor() {
   }
 
   // editingIdx === -1: editing the MENU itself (name/location/site)
-  // editingIdx >= 0: editing a menu item's label/url/parent
+  // editingIdx >= 0: editing a menu item — the panel offers the same fields
+  // as the add-item panel. Menu items store URLs (not their source type), so
+  // the type is inferred back from the URL snapshot; a link whose page was
+  // deleted falls back to a plain custom link so the URL stays editable.
   function startEdit(idx: number) {
     setEditingIdx(idx);
     if (idx >= 0) {
       const it = items[idx];
-      setEditForm({ label: it.label || '', url: it.url || '', parentId: it.parentId || '' });
+      const url = it.url || '';
+      let type = 'custom', pageId = '', categoryId = '', linkCategoryId = '';
+      if (url.startsWith('/page/')) {
+        // A link-category landing page first (its menu item URL is /page/…)
+        const lp = linkCats.find((c: any) => c.pageId && pages.find((p: any) => p.id === c.pageId && '/page/' + p.slug === url));
+        if (lp) { type = 'linkcat'; linkCategoryId = lp.id; }
+        else {
+          const pg = pages.find((p: any) => '/page/' + p.slug === url);
+          if (pg) { type = 'page'; pageId = pg.id; }
+          // Page deleted: stay custom so the URL stays editable
+        }
+      }
+      else if (url.startsWith('/category/')) {
+        const c = categories.find((c: any) => '/category/' + c.slug === url);
+        if (c) { type = 'category'; categoryId = c.id; }
+      }
+      else if (url.startsWith('/links?category=')) {
+        const lc = linkCats.find((c: any) => '/links?category=' + c.slug === url);
+        if (lc) { type = 'linkcat'; linkCategoryId = lc.id; }
+      }
+      setEditForm({ type, label: it.label || '', url, pageId, categoryId, linkCategoryId, parentId: it.parentId || '' });
     }
   }
   function startEditMenu() { startEdit(-1); }
   function saveEdit() {
     if (editingIdx === null) return;
     if (editingIdx === -1) { setEditingIdx(null); return; } // menu info saved via saveMenuNow
-    const next = items.map((it, i) => i === editingIdx ? { ...it, label: editForm.label, url: editForm.url || '#', parentId: editForm.parentId || null } : it);
+    // Resolve the URL from the selected type, mirroring addItem
+    let url = editForm.url;
+    if (editForm.type === 'page' && editForm.pageId) url = '/page/' + pages.find(p => p.id === editForm.pageId)?.slug;
+    if (editForm.type === 'category' && editForm.categoryId) url = '/category/' + categories.find(c => c.id === editForm.categoryId)?.slug;
+    if (editForm.type === 'linkcat' && editForm.linkCategoryId) {
+      const cat = linkCats.find(c => c.id === editForm.linkCategoryId);
+      if (cat) {
+        const catPage = cat.pageId ? pages.find(pg => pg.id === cat.pageId) : null;
+        url = catPage ? '/page/' + catPage.slug : '/links?category=' + cat.slug;
+      }
+    }
+    const next = items.map((it, i) => i === editingIdx ? { ...it, label: editForm.label, url: url || '#', parentId: editForm.parentId || null } : it);
     setItems(next);
     setEditingIdx(null);
   }
@@ -189,7 +225,7 @@ export default function MenuEditor() {
                         items.filter(it => it.id !== item.id).map(it => React.createElement('option', { key: it.id, value: it.id }, it.label)))
                     )
                   ),
-                  !isChild && React.createElement('button', { onClick: () => startEdit(itemIdx), className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 12 }), t('edit', getLang())),
+                  React.createElement('button', { onClick: () => startEdit(itemIdx), className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 12 }), t('edit', getLang())),
                   !isChild && React.createElement('button', { onClick: startAddTop, className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Plus, { size: 12 }), t('add item', getLang())),
                   React.createElement('button', { onClick: () => removeItem(itemIdx), className: 'p-1 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 }))
                 ));
@@ -247,8 +283,22 @@ export default function MenuEditor() {
         : editingIdx !== null ? React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('edit item', getLang())),
           React.createElement('div', { className: 'space-y-3' },
+            React.createElement('select', { value: editForm.type, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, type: e.target.value }), className: 'input-field' },
+              React.createElement('option', { value: 'page' }, t('page', getLang())), React.createElement('option', { value: 'category' }, t('category', getLang())), React.createElement('option', { value: 'linkcat' }, t('link categories', getLang())), React.createElement('option', { value: 'custom' }, t('custom link', getLang()))
+            ),
             React.createElement('input', { value: editForm.label, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, label: e.target.value }), placeholder: t('label', getLang()), className: 'input-field' }),
-            React.createElement('input', { value: editForm.url, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, url: e.target.value }), placeholder: 'URL (/page/xxx 或 https://...)', className: 'input-field' }),
+            editForm.type === 'page' && React.createElement('select', { value: editForm.pageId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, pageId: e.target.value }), className: 'input-field' },
+              React.createElement('option', { value: '' }, t('select page', getLang()) + '...'), pages.map((p: any) => React.createElement('option', { key: p.id, value: p.id }, p.title))
+            ),
+            editForm.type === 'category' && React.createElement('select', { value: editForm.categoryId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, categoryId: e.target.value }), className: 'input-field' },
+              React.createElement('option', { value: '' }, t('select category', getLang()) + '...'), categories.map((c: any) => React.createElement('option', { key: c.id, value: c.id }, c.name))
+            ),
+            editForm.type === 'linkcat' && React.createElement('select', { value: editForm.linkCategoryId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, linkCategoryId: e.target.value }), className: 'input-field' },
+              React.createElement('option', { value: '' }, t('select category', getLang()) + '...'), linkCats.map((c: any) => React.createElement('option', { key: c.id, value: c.id },
+                c.name + (c.pageId ? ' · ' + t('landing page', getLang()) + ': ' + (pages.find((p: any) => p.id === c.pageId)?.title || '?') : ''))
+              )
+            ),
+            editForm.type === 'custom' && React.createElement('input', { value: editForm.url, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, url: e.target.value }), placeholder: 'URL (/page/xxx 或 https://...)', className: 'input-field' }),
             items.length > 1 && React.createElement('select', { value: editForm.parentId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, parentId: e.target.value }), className: 'input-field' },
               React.createElement('option', { value: '' }, t('top level', getLang())),
               items.filter((it: any, i: number) => i !== editingIdx).map((it: any) => React.createElement('option', { key: it.id, value: it.id }, it.label))),
@@ -274,7 +324,9 @@ export default function MenuEditor() {
               React.createElement('option', { value: '' }, t('select category', getLang()) + '...'), categories.map((c: any) => React.createElement('option', { key: c.id, value: c.id }, c.name))
             ),
             newItem.type === 'linkcat' && React.createElement('select', { value: newItem.linkCategoryId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, linkCategoryId: e.target.value }), className: 'input-field' },
-              React.createElement('option', { value: '' }, t('select category', getLang()) + '...'), linkCats.map((c: any) => React.createElement('option', { key: c.id, value: c.id }, c.name))
+              React.createElement('option', { value: '' }, t('select category', getLang()) + '...'), linkCats.map((c: any) => React.createElement('option', { key: c.id, value: c.id },
+                c.name + (c.pageId ? ' · ' + t('landing page', getLang()) + ': ' + (pages.find((p: any) => p.id === c.pageId)?.title || '?') : ''))
+              )
             ),
             newItem.type === 'custom' && React.createElement('input', { value: newItem.url, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setNewItem({ ...newItem, url: e.target.value }), placeholder: 'URL (https://...)', className: 'input-field' }),
             items.length > 0 && React.createElement('select', { value: newItem.parentId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, parentId: e.target.value }), className: 'input-field' },

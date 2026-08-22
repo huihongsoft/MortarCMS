@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
 import { listHooks, addAction, addFilter, removeAction, removeFilter, removeAllHooks, KNOWN_ACTIONS, KNOWN_FILTERS } from '../utils/hooks';
 
 const router = Router();
@@ -14,7 +14,7 @@ router.get('/system/hooks', authenticate, requireCap('view_system_info'), (_req:
 // Hooks are registered in code (plugins/themes/core) — no runtime persistence needed.
 // The following admin endpoints only manage the in-process registrations, useful for
 // plugins that expose dynamic hooks or for debugging/tests.
-router.post('/system/hooks/actions/:name', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/system/hooks/actions/:name', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const { priority = 10, source = 'admin' } = req.body || {};
     addAction(req.params.name, () => {}, Number(priority) || 10, String(source).slice(0, 50));
@@ -22,7 +22,7 @@ router.post('/system/hooks/actions/:name', authenticate, requireCap('manage_opti
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/system/hooks/filters/:name', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/system/hooks/filters/:name', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const { priority = 10, source = 'admin' } = req.body || {};
     addFilter(req.params.name, (v: any) => v, Number(priority) || 10, String(source).slice(0, 50));
@@ -30,7 +30,7 @@ router.post('/system/hooks/filters/:name', authenticate, requireCap('manage_opti
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/system/hooks/:kind/:name', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.delete('/system/hooks/:kind/:name', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const { kind, name } = req.params;
     if (kind === 'action') removeAction(name);
@@ -41,7 +41,7 @@ router.delete('/system/hooks/:kind/:name', authenticate, requireCap('manage_opti
 });
 
 // Reset a hook to its canonical state (remove all dynamic listeners)
-router.delete('/system/hooks/:kind/:name/reset', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.delete('/system/hooks/:kind/:name/reset', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const { kind, name } = req.params;
     if ((kind === 'action' && !KNOWN_ACTIONS.includes(name)) || (kind === 'filter' && !KNOWN_FILTERS.includes(name))) {

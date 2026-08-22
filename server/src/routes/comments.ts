@@ -106,7 +106,7 @@ router.get('/admin', authenticate, requireCap('moderate_comments'), (req: AuthRe
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, requireCap('moderate_comments'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Comment WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Comment not found' }); return; }
@@ -114,7 +114,11 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest
     // WordPress-style: moderators can edit the content and the author name
     if (req.body.content !== undefined) { sets.push('content = ?'); vals.push(String(req.body.content).slice(0, 2000)); }
     if (req.body.author !== undefined) { sets.push('author = ?'); vals.push(String(req.body.author).slice(0, 100)); }
-    if (req.body.status !== undefined) { sets.push('status = ?'); vals.push(req.body.status); }
+    if (req.body.status !== undefined) {
+      const status = String(req.body.status);
+      if (!['pending', 'approved', 'spam', 'trash'].includes(status)) { res.status(400).json({ error: 'Invalid comment status' }); return; }
+      sets.push('status = ?'); vals.push(status);
+    }
     if (sets.length) { vals.push(req.params.id); db.prepare('UPDATE Comment SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
     if (req.body.status === 'approved') {
       doAction('comment_approved', req.params.id);
@@ -145,7 +149,7 @@ function notifyThreadSubscribers(postId: string, comment: any): void {
   } catch {}
 }
 
-router.delete('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticate, requireCap('moderate_comments'), (req: AuthRequest, res: Response) => {
   try { doAction('delete_comment', req.params.id); db.prepare('DELETE FROM Comment WHERE id = ?').run(req.params.id); res.json({ success: true }); } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -154,12 +158,14 @@ router.post('/bulk-action', authenticate, requireCap('moderate_comments'), (req:
   try {
     const { ids, action } = req.body;
     if (!ids || !Array.isArray(ids) || !action) { res.status(400).json({ error: 'ids and action required' }); return; }
+    // 'trash' moves to the recycle bin (status=trash, restorable), matching
+    // single-comment PUT; 'delete' is the only permanent removal
     const validActions = ['approved', 'pending', 'spam', 'trash', 'delete'];
     if (!validActions.includes(action)) { res.status(400).json({ error: 'Invalid action' }); return; }
-    if (action === 'trash' || action === 'delete') {
-      for (const id of ids) db.prepare('DELETE FROM Comment WHERE id = ?').run(id);
-    } else {
-      for (const id of ids) {
+    for (const id of ids) {
+      if (action === 'delete') {
+        db.prepare('DELETE FROM Comment WHERE id = ?').run(id);
+      } else {
         db.prepare('UPDATE Comment SET status = ? WHERE id = ?').run(action, id);
         if (action === 'approved') doAction('comment_approved', id);
         if (action === 'spam') doAction('comment_spam', id);

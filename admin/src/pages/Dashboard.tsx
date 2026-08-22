@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, Files, MessageSquare, Users, Image, Tag as TagIcon, PenLine, Sparkles, Clock, AlertCircle, Trash2 } from 'lucide-react';
+import { FileText, Files, MessageSquare, Users, Image, Tag as TagIcon, PenLine, Sparkles, Clock, AlertCircle, Trash2, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { t, getLang } from '../lib/i18n';
 import RecentActivity from '../components/RecentActivity';
@@ -46,11 +46,11 @@ export default function Dashboard() {
   }, []);
 
   const cards = [
-    { label: t('posts', getLang()), value: stats.posts, icon: FileText, gradient: 'linear-gradient(135deg,#60a5fa,#2563eb)' },
-    { label: t('pages', getLang()), value: stats.pages, icon: Files, gradient: 'linear-gradient(135deg,#34d399,#059669)' },
-    { label: t('comments', getLang()), value: stats.comments, icon: MessageSquare, gradient: 'linear-gradient(135deg,#a78bfa,#7c3aed)' },
-    { label: t('users', getLang()), value: stats.users, icon: Users, gradient: 'linear-gradient(135deg,#fb923c,#ea580c)' },
-    { label: t('media', getLang()), value: stats.media, icon: Image, gradient: 'linear-gradient(135deg,#f472b6,#db2777)' },
+    { label: t('posts', getLang()), value: stats.posts || 0, icon: FileText, gradient: 'linear-gradient(135deg,#60a5fa,#2563eb)' },
+    { label: t('pages', getLang()), value: stats.pages || 0, icon: Files, gradient: 'linear-gradient(135deg,#34d399,#059669)' },
+    { label: t('comments', getLang()), value: stats.comments || 0, icon: MessageSquare, gradient: 'linear-gradient(135deg,#a78bfa,#7c3aed)' },
+    { label: t('users', getLang()), value: stats.users || 0, icon: Users, gradient: 'linear-gradient(135deg,#fb923c,#ea580c)' },
+    { label: t('media', getLang()), value: stats.media || 0, icon: Image, gradient: 'linear-gradient(135deg,#f472b6,#db2777)' },
     { label: t('tags', getLang()), value: (stats as any).tags || 0, icon: TagIcon, gradient: 'linear-gradient(135deg,#2dd4bf,#0d9488)' },
   ];
 
@@ -105,9 +105,12 @@ export default function Dashboard() {
       React.createElement('div', { className: 'card p-5 lg:col-span-2' },
         React.createElement('div', { className: 'flex items-center justify-between mb-3' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900' }, t('visit stats', getLang()) + ' (14 ' + t('days', getLang()) + ')'),
-          React.createElement('div', { className: 'flex gap-4 text-xs text-gray-500' },
-            React.createElement('span', null, React.createElement('span', { className: 'inline-block w-2 h-2 rounded-full bg-primary-500 mr-1' }), 'PV ' + statsData.total.pv),
-            React.createElement('span', null, React.createElement('span', { className: 'inline-block w-2 h-2 rounded-full bg-green-500 mr-1' }), 'UV ' + statsData.total.uv),
+          React.createElement('div', { className: 'flex items-center gap-3' },
+            React.createElement('div', { className: 'flex gap-4 text-xs text-gray-500' },
+              React.createElement('span', null, React.createElement('span', { className: 'inline-block w-2 h-2 rounded-full bg-primary-500 mr-1' }), 'PV ' + statsData.total.pv),
+              React.createElement('span', null, React.createElement('span', { className: 'inline-block w-2 h-2 rounded-full bg-green-500 mr-1' }), 'UV ' + statsData.total.uv),
+            ),
+            React.createElement('button', { onClick: () => navigate('/stats'), className: 'inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-medium border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, t('more', getLang()), React.createElement(ArrowRight, { size: 12 })),
           ),
         ),
         React.createElement('div', { className: 'flex items-end gap-1 h-32' },
@@ -179,7 +182,7 @@ export default function Dashboard() {
       )
     ),
     // Row 4: Hot tags (ranked by aggregated published-post views)
-    hotTags.length > 0 && React.createElement('div', { className: 'card p-5' },
+    hotTags.length > 0 && React.createElement('div', { className: 'card p-5 mt-8' },
       React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2' }, React.createElement(TagIcon, { size: 15, className: 'text-primary-500' }), t('hot tags', getLang())),
       React.createElement('div', { className: 'flex flex-wrap gap-2' },
         hotTags.map((tg, i) =>

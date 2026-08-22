@@ -112,6 +112,9 @@ if (DATABASE_URL) {
   db.raw = new Database(DB_PATH);
   db.raw.pragma('journal_mode = WAL');
   db.raw.pragma('foreign_keys = ON');
+  // WAL allows one writer at a time; busy_timeout keeps concurrent writes
+  // (views/comments/ai usage) from failing with SQLITE_BUSY
+  db.raw.pragma('busy_timeout = 5000');
   console.log('[DB] Using SQLite at ' + DB_PATH);
 }
 

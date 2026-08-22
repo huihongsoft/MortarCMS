@@ -203,7 +203,7 @@ export default function Media() {
       onDragLeave: () => setDragOver(false),
       onDrop: (e: React.DragEvent) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length > 0) uploadPasted(Array.from(e.dataTransfer.files)); },
     },
-    dragOver && React.createElement('div', { className: 'fixed inset-0 z-50 bg-primary-600/20 border-4 border-dashed border-primary-500 rounded-2xl pointer-events-none flex items-center justify-center' },
+    dragOver && React.createElement('div', { className: 'fixed inset-0 z-[60] bg-primary-600/20 border-4 border-dashed border-primary-500 rounded-2xl pointer-events-none flex items-center justify-center' },
       React.createElement('p', { className: 'text-2xl font-bold text-primary-700 bg-white/80 px-8 py-4 rounded-2xl' }, t('drop to upload', getLang()))
     ),
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
@@ -273,7 +273,7 @@ export default function Media() {
       ),
 
     // ---- Preview modal ----
-    preview && React.createElement('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-black/60', onClick: closePreview },
+    preview && React.createElement('div', { className: 'fixed inset-0 z-[60] flex items-center justify-center bg-black/60', onClick: closePreview },
       React.createElement('div', { className: 'bg-white rounded-lg shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto', onClick: (e: React.MouseEvent) => e.stopPropagation() },
         // Header
         React.createElement('div', { className: 'flex items-center justify-between p-4 border-b border-gray-200' },

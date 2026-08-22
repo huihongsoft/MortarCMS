@@ -5,6 +5,21 @@ import { SiteRequest } from '../middleware/site';
 
 const router = Router();
 
+// Menu item URLs are rendered into frontend <a href> — only allow safe forms:
+// site-relative paths (never protocol-relative //), #anchors, http(s) and
+// mailto. Anything else (javascript:, data:, vbscript: …) is rejected so an
+// editor can't store an XSS payload that every visitor executes.
+function assertSafeMenuItems(items: any): void {
+  for (const it of items || []) {
+    const u = String(it?.url ?? '');
+    const ok = u === '' || u.startsWith('#') ||
+      (u.startsWith('/') && !u.startsWith('//')) ||
+      /^https?:\/\//i.test(u) ||
+      /^mailto:/i.test(u);
+    if (!ok) throw new Error('Invalid menu item URL: ' + u);
+  }
+}
+
 // Public: get menu by location
 router.get('/location/:location', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
@@ -28,6 +43,7 @@ router.get('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, r
 router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
   try {
     const { name, location, items, siteId } = req.body;
+    assertSafeMenuItems(items);
     const id = cuid();
     db.prepare('INSERT INTO Menu (id, name, location, items, siteId) VALUES (?, ?, ?, ?, ?)').run(id, name || 'Menu', location || 'primary', JSON.stringify(items || []), siteId || null);
     const created = db.prepare('SELECT * FROM Menu WHERE id = ?').get(id) as any;
@@ -39,6 +55,7 @@ router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, 
 router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
   try {
     const { name, items, location, siteId } = req.body;
+    if (items) assertSafeMenuItems(items);
     if (name !== undefined) db.prepare('UPDATE Menu SET name = ? WHERE id = ?').run(name, req.params.id);
     if (items) db.prepare('UPDATE Menu SET items = ? WHERE id = ?').run(JSON.stringify(items), req.params.id);
     if (location !== undefined) db.prepare('UPDATE Menu SET location = ? WHERE id = ?').run(location, req.params.id);

@@ -9,6 +9,7 @@ import { userCan } from '../middleware/auth';
 import { activeThemeName, createThemeBackup } from '../routes/themes';
 import { purgeAllCaches, purgeContentCaches } from './cache';
 import { sanitizeHtml } from './sanitize';
+import { UPLOADS_DIR as uploadsDir } from './paths';
 import type { AIToolFunction, AIToolCall } from './ai';
 
 export interface ToolContext {
@@ -635,7 +636,6 @@ register('generate_image', '生成一张配图（如文章封面、插画）并�
     buf = Buffer.from(imgData, 'base64');
   }
 
-  const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
   const filename = 'ai-' + Date.now() + '.png';
   fs.writeFileSync(path.join(uploadsDir, filename), buf);
@@ -653,11 +653,19 @@ register('get_post', '获取单篇文章的完整内容，通过 id 或 slug', {
     id: { type: 'string', description: '文章 id' },
     slug: { type: 'string', description: '文章 slug' },
   },
-}, async (args) => {
+}, async (args, ctx) => {
   const row = args.id
     ? db.prepare("SELECT * FROM Post WHERE id = ?").get(args.id)
-    : db.prepare("SELECT * FROM Post WHERE slug = ?").get(args.slug);
-  return row || { error: '文章未找到' };
+    : db.prepare("SELECT * FROM Post WHERE slug = ?").get(args.slug) as any;
+  if (!row) return { error: '文章未找到' };
+  // Drafts / password-protected posts are visible only to their author (or
+  // anyone with edit_others_posts) — never hand them to another user's AI
+  if (row.status !== 'published' && row.authorId !== ctx.userId && !userCan(ctx, 'edit_others_posts')) {
+    return { error: '无权查看该文章' };
+  }
+  // Never leak the protection password back into the AI conversation
+  const { password, ...safe } = row;
+  return safe;
 });
 
 // Fallback excerpt for AI posts: when the model does not provide one, derive
@@ -740,9 +748,12 @@ register('update_post', '更新文章的部分字段（标题、内容、摘要�
     status: { type: 'string', enum: ['draft', 'published', 'trash'] },
   },
   required: ['id'],
-}, async (args) => {
+}, async (args, ctx) => {
   const existing = db.prepare('SELECT * FROM Post WHERE id = ? AND type = ?').get(args.id, 'post') as any;
   if (!existing) return { error: '文章未找到' };
+  // AI tools act on the calling user's behalf — never let a prompt-injected
+  // id mutate someone else's post (unless the user may edit others' posts)
+  if (existing.authorId !== ctx.userId && !userCan(ctx, 'edit_others_posts')) return { error: '无权修改他人文章' };
   const sets: string[] = []; const vals: any[] = [];
   if (args.title !== undefined) { sets.push('title = ?'); vals.push(args.title); }
   if (args.content !== undefined) { sets.push('content = ?'); vals.push(prepareAiContent(args.content)); }
@@ -868,6 +879,11 @@ register('translate_post', '将站内一篇文章翻译成指定语言并创建�
 }, async (args, ctx) => {
   const post = db.prepare("SELECT * FROM Post WHERE id = ? AND type = 'post'").get(args.id) as any;
   if (!post) return { error: '文章未找到' };
+  // Translating a post copies its content — never let a prompt-injected id
+  // exfiltrate someone else's draft / password-protected post
+  if (post.status !== 'published' && post.authorId !== ctx.userId && !userCan(ctx, 'edit_others_posts')) {
+    return { error: '无权翻译该文章' };
+  }
   const lang = String(args.language || 'English');
   const provider = getDefaultProvider();
   if (!provider) return { error: '未配置 AI 服务商' };
@@ -911,6 +927,8 @@ register('complete_post', '完善一篇文章：自动生成摘要、SEO 标题/
 }, async (args, ctx) => {
   const post = db.prepare("SELECT * FROM Post WHERE id = ?").get(args.id) as any;
   if (!post) return { error: '文章未找到' };
+  // Same ownership rule as update_post: complete only your own posts
+  if (post.authorId !== ctx.userId && !userCan(ctx, 'edit_others_posts')) return { error: '无权修改他人文章' };
   const provider = getDefaultProvider();
   if (!provider) return { error: '未配置 AI 服务商' };
   const plain = (post.title || '') + '\n' + (post.content || '').replace(/<[^>]*>/g, '').slice(0, 2500);
@@ -1003,7 +1021,9 @@ register('analyze_image', '分析媒体库中的一张图片：描述内容、�
   }
   if (!localPath) return { error: '仅支持本站 /uploads/ 目录中的图片' };
   const filePath = path.join(__dirname, '../..', localPath);
-  if (!filePath.startsWith(path.join(__dirname, '../..', 'uploads'))) return { error: '仅支持本站 /uploads/ 目录中的图片' };
+  // Boundary-aware prefix check: "uploads" must not match "uploads2/…"
+  const inUploads = filePath === uploadsDir || filePath.startsWith(uploadsDir + path.sep);
+  if (!inUploads) return { error: '仅支持本站 /uploads/ 目录中的图片' };
   if (!fs.existsSync(filePath)) return { error: '无法读取图片' };
   const buf = fs.readFileSync(filePath);
   const mime = 'image/' + (path.extname(filePath).slice(1).toLowerCase() === 'jpg' ? 'jpeg' : path.extname(filePath).slice(1).toLowerCase() || 'png');

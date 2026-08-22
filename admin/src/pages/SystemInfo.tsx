@@ -95,7 +95,7 @@ export default function SystemInfo() {
         ),
       ),
     ),
-    showDbSwitch && React.createElement('div', { className: 'fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4' },
+    showDbSwitch && React.createElement('div', { className: 'fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4' },
       React.createElement('div', { className: 'bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full p-6' },
         React.createElement('div', { className: 'flex items-center justify-between mb-4' },
           React.createElement('h3', { className: 'font-semibold text-gray-900 dark:text-gray-100' }, t('switch database', getLang())),

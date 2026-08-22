@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import db, { cuid } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
+import { uploadPath } from '../utils/paths';
 
 const router = Router();
 
@@ -20,9 +21,9 @@ const imageVariantLimiter = rateLimit({ windowMs: 60 * 1000, max: 90, standardHe
 function ensureResponsiveVariants(m: any): void {
   if (!m || (m.mimeType && !m.mimeType.startsWith('image/'))) return;
   if (m.thumbnail && m.srcset) return;
-  const srcPath = path.join(__dirname, '../..', 'uploads', m.filename);
+  const srcPath = uploadPath(m.filename);
   if (!fs.existsSync(srcPath)) return;
-  const thumbsDir = path.join(__dirname, '../..', 'uploads', 'thumbs');
+  const thumbsDir = uploadPath('thumbs');
   if (!fs.existsSync(thumbsDir)) fs.mkdirSync(thumbsDir, { recursive: true });
   (async () => {
     try {
@@ -155,7 +156,7 @@ router.post('/upload', authenticate, authorize('admin', 'editor', 'author'), upl
       try {
         width = meta.width || null;
         height = meta.height || null;
-        const thumbsDir = path.join(__dirname, '../..', 'uploads', 'thumbs');
+        const thumbsDir = uploadPath('thumbs');
         if (!fs.existsSync(thumbsDir)) fs.mkdirSync(thumbsDir, { recursive: true });
         const thumbName = id + '-thumb.jpg';
         await sharp(srcPath).resize({ width: 300, withoutEnlargement: true }).jpeg({ quality: 80 }).toFile(path.join(thumbsDir, thumbName));
@@ -203,7 +204,7 @@ router.get('/:id/img', imageVariantLimiter, async (req: AuthRequest, res: Respon
     if (!['jpeg', 'webp', 'avif'].includes(fmt)) { res.status(400).json({ error: 'fmt must be jpeg, webp or avif' }); return; }
     const srcPath = path.join(__dirname, '../..', 'uploads', media.filename);
     if (!fs.existsSync(srcPath)) { res.status(404).json({ error: 'File missing' }); return; }
-    const thumbsDir = path.join(__dirname, '../..', 'uploads', 'thumbs');
+    const thumbsDir = uploadPath('thumbs');
     if (!fs.existsSync(thumbsDir)) fs.mkdirSync(thumbsDir, { recursive: true });
     const outPath = path.join(thumbsDir, media.id + '-w' + w + '.' + fmt);
     const mime = fmt === 'webp' ? 'image/webp' : fmt === 'avif' ? 'image/avif' : 'image/jpeg';
@@ -253,12 +254,26 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Remove the original file plus generated variants (thumbs are named by
+// media id: {id}-thumb.jpg, {id}-w480.webp, …) so deletion leaves no orphans
+function removeMediaFiles(media: any): void {
+  const filePath = path.join(__dirname, '../..', media.url);
+  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  try {
+    const thumbsDir = path.join(__dirname, '../..', 'uploads', 'thumbs');
+    if (fs.existsSync(thumbsDir)) {
+      for (const f of fs.readdirSync(thumbsDir)) {
+        if (f.startsWith(media.id)) fs.unlinkSync(path.join(thumbsDir, f));
+      }
+    }
+  } catch {}
+}
+
 router.delete('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
   try {
     const media = db.prepare('SELECT * FROM Media WHERE id = ?').get(req.params.id) as any;
     if (!media) { res.status(404).json({ error: 'Media not found' }); return; }
-    const filePath = path.join(__dirname, '../..', media.url);
-    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    removeMediaFiles(media);
     db.prepare('DELETE FROM Media WHERE id = ?').run(req.params.id);
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -272,8 +287,7 @@ router.post('/bulk-delete', authenticate, authorize('admin', 'editor'), (req: Au
     for (const id of ids) {
       const m = db.prepare('SELECT * FROM Media WHERE id = ?').get(id) as any;
       if (m) {
-        const filePath = require('path').join(__dirname, '../..', m.url);
-        if (require('fs').existsSync(filePath)) require('fs').unlinkSync(filePath);
+        removeMediaFiles(m);
         db.prepare('DELETE FROM Media WHERE id = ?').run(id);
       }
     }

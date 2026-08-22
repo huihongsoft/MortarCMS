@@ -434,9 +434,13 @@ export default function Appearance() {
             height: '100%',
           })
         ),
+        // Bottom spacer the height of the admin status bar (~42px), which stays
+        // visible above this full-screen overlay — the editor area ends here so
+        // canvas content can scroll fully into view without being covered.
+        React.createElement('div', { className: 'shrink-0 bg-white dark:bg-gray-800 h-[42px]', 'aria-hidden': 'true' }),
       ),
       // ---- Theme file browser/editor modal ----
-      fileBrowser && React.createElement('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4', onClick: () => setFileBrowser(null) },
+      fileBrowser && React.createElement('div', { className: 'fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4', onClick: () => setFileBrowser(null) },
         React.createElement('div', { className: 'bg-white rounded-xl shadow-2xl max-w-3xl w-full h-[80vh] flex flex-col', onClick: (e: React.MouseEvent) => e.stopPropagation() },
           React.createElement('div', { className: 'flex items-center justify-between px-5 py-3 border-b border-gray-200' },
             React.createElement('h3', { className: 'text-base font-semibold text-gray-900' }, t('theme files', getLang()) + ': ' + fileBrowser.theme),
@@ -469,7 +473,7 @@ export default function Appearance() {
         )
       ),
       // ---- Theme details modal ----
-      themeDetail && React.createElement('div', { className: 'fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4', onClick: () => setThemeDetail(null) },
+      themeDetail && React.createElement('div', { className: 'fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4', onClick: () => setThemeDetail(null) },
         React.createElement('div', { className: 'bg-white rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto', onClick: (e: React.MouseEvent) => e.stopPropagation() },
           React.createElement('div', { className: 'p-6' },
             React.createElement('div', { className: 'flex items-start justify-between mb-4' },

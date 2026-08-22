@@ -9,12 +9,12 @@ import { doAction } from './hooks';
 // removes it. Content tables are cleared in dependency order (children first),
 // user accounts / roles / system settings / sites are preserved.
 
-const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
+import { UPLOADS_DIR as uploadsDir } from './paths';
 
 // Tables that hold site content — wiped by resetSite()
 const CONTENT_TABLES = [
   'PostCategory', 'PostTag', 'PostMeta', 'Revision', 'Comment',
-  'Post', 'Category', 'Tag', 'Media', 'Menu', 'Link',
+  'Post', 'Category', 'Tag', 'Media', 'Menu', 'Link', 'LinkCategory', 'FriendLink',
   'AiSession', 'AiTask', 'AiMemory', 'AiAudit', 'AiUsage', 'AiNotification', 'Activity', 'Visit',
 ];
 

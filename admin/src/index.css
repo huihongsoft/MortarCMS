@@ -1215,7 +1215,7 @@ table tbody tr { transition: background-color 0.12s ease; }
 
 .ve-zoom-bar {
   position: absolute;
-  bottom: 42px; left: 12px;
+  bottom: 12px; left: 12px;
   z-index: 20;
   display: flex;
   align-items: center;
@@ -1347,7 +1347,7 @@ table tbody tr { transition: background-color 0.12s ease; }
 /* ---- Save snackbar (bottom-right, WordPress style) ---- */
 .ve-snackbar {
   position: absolute;
-  bottom: 48px;
+  bottom: 16px;
   right: 16px;
   z-index: 100;
   background: #1e1e1e;
@@ -1364,7 +1364,7 @@ table tbody tr { transition: background-color 0.12s ease; }
 .ve-snackbar.ve-snackbar-out { opacity: 0; }
 
 .ve-hint {
-  position: absolute; bottom: 48px; left: 50%; transform: translateX(-50%);
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
   z-index: 50;
   background: #1e1e1e; color: #fff;
   font-size: 13px; padding: 8px 16px; border-radius: 4px;

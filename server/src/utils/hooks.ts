@@ -36,20 +36,39 @@ export function removeFilter(hook: string, fn?: HookFn): void {
   filters[hook] = fn ? filters[hook].filter(l => l.fn !== fn) : [];
 }
 
+// Reset a hook to its canonical state: drop every dynamic (plugin/admin)
+// listener but keep core registrations so built-in behavior stays intact.
 export function removeAllHooks(hook: string): void {
-  delete actions[hook];
-  delete filters[hook];
+  if (actions[hook]) actions[hook] = actions[hook].filter(l => l.source === 'core');
+  if (filters[hook]) filters[hook] = filters[hook].filter(l => l.source === 'core');
 }
 
 export function hasAction(hook: string): boolean { return (actions[hook] || []).length > 0; }
 export function hasFilter(hook: string): boolean { return (filters[hook] || []).length > 0; }
 
+// Depth guard: a listener that re-triggers the same hook (directly or via a
+// filter chain) would otherwise recurse forever. Listeners run against a
+// snapshot so ones registered mid-dispatch don't fire in the same pass.
+const MAX_HOOK_DEPTH = 25;
+let hookDepth = 0;
+
+function runListeners(list: HookListener[], args: any[], apply: (l: HookListener) => any): void {
+  if (hookDepth >= MAX_HOOK_DEPTH) { console.error('[Hooks] recursion depth exceeded'); return; }
+  hookDepth++;
+  try {
+    for (const l of [...list]) {
+      try { apply(l); } catch (e) { console.error('[Hooks] listener error:', e); }
+    }
+  } finally { hookDepth--; }
+}
+
 export function doAction(hook: string, ...args: any[]): void {
-  (actions[hook] || []).forEach(l => l.fn(...args));
+  runListeners(actions[hook] || [], args, l => l.fn(...args));
 }
 
 export function applyFilters(hook: string, value: any, ...args: any[]): any {
-  (filters[hook] || []).forEach(l => { value = l.fn(value, ...args); });
+  const list = filters[hook] || [];
+  runListeners(list, args, l => { value = l.fn(value, ...args); });
   return value;
 }
 
