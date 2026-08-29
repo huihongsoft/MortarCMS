@@ -53,7 +53,7 @@ export default function SoftstorePostLayout(props: any) {
   return React.createElement('div', { className: 'bg-[#f5f5f5] min-h-screen' },
     React.createElement('div', { className: 'max-w-6xl mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-3 gap-4' },
       React.createElement('div', { className: 'lg:col-span-2 min-w-0' },
-        React.createElement(Breadcrumbs, { items: [
+        settings.theme_show_breadcrumb !== '0' && React.createElement(Breadcrumbs, { items: [
           { label: t('home', settings), to: '/' },
           ...(category ? [{ label: category.name, to: '/category/' + category.slug }] : []),
           { label: post.title || t('post', settings) },

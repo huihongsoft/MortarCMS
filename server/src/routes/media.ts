@@ -5,8 +5,10 @@ import sharp from 'sharp';
 import rateLimit from 'express-rate-limit';
 import db, { cuid } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { doAction } from '../utils/hooks';
 import { upload } from '../middleware/upload';
 import { uploadPath } from '../utils/paths';
+import { getStorageConfig, storeFile, deleteRemoteFile, keyFromUrl } from '../utils/storage';
 
 const router = Router();
 
@@ -172,6 +174,39 @@ router.post('/upload', authenticate, authorize('admin', 'editor', 'author'), upl
       } catch (e: any) { console.log('[Media] thumbnail gen failed:', e.message); }
     }
     db.prepare('INSERT INTO Media (id, filename, original, mimeType, size, url, alt, title, userId, width, height, thumbnail, srcset) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, '/uploads/' + req.file.filename, req.body.alt || '', req.body.title || '', req.user!.userId, width, height, thumbnail, srcsetField);
+    // Object storage: push the original + derived variants to the remote store
+    // and rewrite the URLs; local scratch files are removed afterwards.
+    try {
+      const cfg = getStorageConfig();
+      if (cfg.provider === 's3') {
+        const keyBase = new Date().toISOString().slice(0, 7) + '/' + id;
+        const origUrl = await storeFile(keyBase + (path.extname(req.file.filename) || ''), fs.readFileSync(srcPath), req.file.mimetype);
+        let remoteThumb: string | null = thumbnail;
+        if (thumbnail) {
+          const tp = uploadPath('thumbs/' + id + '-thumb.jpg');
+          if (fs.existsSync(tp)) remoteThumb = await storeFile(keyBase + '-thumb.jpg', fs.readFileSync(tp), 'image/jpeg');
+        }
+        const remoteSrcset: Record<string, string> = {};
+        if (srcsetField) {
+          try {
+            const parsed = JSON.parse(srcsetField);
+            for (const [size, p] of Object.entries(parsed)) {
+              const pp = uploadPath(String(p).replace(/^\/uploads\/thumbs\//, 'thumbs/'));
+              if (fs.existsSync(pp)) remoteSrcset[size] = await storeFile(keyBase + '-w' + size + '.webp', fs.readFileSync(pp), 'image/webp');
+            }
+          } catch {}
+        }
+        db.prepare('UPDATE Media SET url = ?, thumbnail = ?, srcset = ? WHERE id = ?')
+          .run(origUrl, remoteThumb, Object.keys(remoteSrcset).length ? JSON.stringify(remoteSrcset) : srcsetField, id);
+        // Remove local scratch files (original + thumbs) — remote is now the source of truth
+        try { fs.unlinkSync(srcPath); } catch {}
+        try {
+          const thumbsDir = uploadPath('thumbs');
+          if (fs.existsSync(thumbsDir)) for (const f of fs.readdirSync(thumbsDir)) if (f.startsWith(id)) fs.unlinkSync(path.join(thumbsDir, f));
+        } catch {}
+      }
+    } catch (e: any) { console.log('[Storage] remote upload failed:', e.message); }
+    try { doAction('media_uploaded', id); } catch {}
     res.status(201).json(db.prepare('SELECT * FROM Media WHERE id = ?').get(id));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -255,8 +290,20 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest
 });
 
 // Remove the original file plus generated variants (thumbs are named by
-// media id: {id}-thumb.jpg, {id}-w480.webp, …) so deletion leaves no orphans
+// media id: {id}-thumb.jpg, {id}-w480.webp, …) so deletion leaves no orphans.
+// Remote-stored media (object storage) deletes the objects instead.
 function removeMediaFiles(media: any): void {
+  if (media.url && !String(media.url).startsWith('/uploads/')) {
+    try { deleteRemoteFile(keyFromUrl(media.url)); } catch {}
+    try { if (media.thumbnail && !String(media.thumbnail).startsWith('/uploads/')) deleteRemoteFile(keyFromUrl(media.thumbnail)); } catch {}
+    if (media.srcset) {
+      try {
+        const parsed = JSON.parse(media.srcset);
+        for (const u of Object.values(parsed)) if (typeof u === 'string' && !u.startsWith('/uploads/')) deleteRemoteFile(keyFromUrl(u));
+      } catch {}
+    }
+    return;
+  }
   const filePath = path.join(__dirname, '../..', media.url);
   if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
   try {

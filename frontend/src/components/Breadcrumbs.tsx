@@ -5,11 +5,14 @@ import { ChevronRight, Home } from 'lucide-react';
 interface Crumb { label: string; to?: string; }
 
 export default function Breadcrumbs({ items }: { items: Crumb[] }) {
+  // The leading home icon already links to '/' — skip a first "home" label item
+  // with the same target so we don't show "🏠 → 首页 → …" both pointing home.
+  const crumbs = items.filter((it, i) => !(i === 0 && it.to === '/'));
   return React.createElement('nav', { className: 'flex items-center gap-1 text-sm text-gray-500 mb-6', 'aria-label': 'Breadcrumb' },
     React.createElement(Link, { to: '/', className: 'hover:text-gray-700 flex items-center gap-1' }, React.createElement(Home, { size: 14 })),
-    items.map((item, i) => React.createElement(React.Fragment, { key: i },
+    crumbs.map((item, i) => React.createElement(React.Fragment, { key: i },
       React.createElement(ChevronRight, { size: 12, className: 'text-gray-300' }),
-      i === items.length - 1 || !item.to
+      i === crumbs.length - 1 || !item.to
         ? React.createElement('span', { className: 'text-gray-900 font-medium' }, item.label)
         : React.createElement(Link, { to: item.to, className: 'hover:text-gray-700' }, item.label)
     ))

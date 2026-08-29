@@ -264,9 +264,9 @@ export function initDB(): void {
     -- Seed system roles with their default capability sets
     INSERT OR IGNORE INTO Role (id, slug, name, capabilities, isSystem, createdAt) VALUES
       ('role-admin', 'admin', '管理员', '["*"]', 1, '2024-01-01'),
-      ('role-editor', 'editor', '编辑', '["edit_posts","edit_others_posts","publish_posts","delete_posts","delete_others_posts","moderate_comments","manage_categories","manage_tags","manage_links","upload_files","edit_media","delete_media","edit_pages","publish_pages","delete_pages","manage_options","ai_use","ai_review","ai_tasks","view_system_info"]', 1, '2024-01-01'),
-      ('role-author', 'author', '作者', '["edit_posts","publish_posts","delete_posts","upload_files","edit_media","ai_use"]', 1, '2024-01-01'),
-      ('role-subscriber', 'subscriber', '订阅者', '[]', 1, '2024-01-01');
+      ('role-editor', 'editor', '编辑', '["edit_posts","edit_others_posts","publish_posts","delete_posts","delete_others_posts","moderate_comments","review_posts","manage_categories","manage_tags","manage_links","manage_forms","upload_files","edit_media","delete_media","edit_pages","publish_pages","delete_pages","manage_options","ai_use","ai_review","ai_tasks","view_system_info"]', 1, '2024-01-01'),
+      ('role-author', 'author', '作者', '["edit_posts","publish_posts","delete_posts","submit_posts","upload_files","edit_media","ai_use"]', 1, '2024-01-01'),
+      ('role-subscriber', 'subscriber', '订阅者', '["submit_posts"]', 1, '2024-01-01');
 
     CREATE TABLE IF NOT EXISTS AiMemory (
       id TEXT PRIMARY KEY,
@@ -416,6 +416,62 @@ export function initDB(): void {
       description TEXT DEFAULT '',
       createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
     );
+
+    -- Outbound webhooks: notify external systems when content events fire.
+    -- events is a JSON array of hook names; secret signs each delivery body
+    -- with HMAC-SHA256 (X-Webhook-Signature header).
+    CREATE TABLE IF NOT EXISTS Webhook (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      url TEXT NOT NULL,
+      events TEXT NOT NULL DEFAULT '[]',
+      secret TEXT NOT NULL DEFAULT '',
+      active INTEGER NOT NULL DEFAULT 1,
+      lastStatus INTEGER,
+      lastError TEXT DEFAULT '',
+      lastSentAt TEXT,
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    -- Form builder: contact/application forms rendered via [form id="slug"].
+    -- fields is a JSON array of {name,label,type,required,placeholder,options}.
+    CREATE TABLE IF NOT EXISTS Form (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      slug TEXT UNIQUE NOT NULL,
+      fields TEXT NOT NULL DEFAULT '[]',
+      successMessage TEXT NOT NULL DEFAULT '',
+      emailTo TEXT NOT NULL DEFAULT '',
+      emailSubject TEXT NOT NULL DEFAULT '',
+      enabled INTEGER NOT NULL DEFAULT 1,
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP),
+      updatedAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    CREATE TABLE IF NOT EXISTS FormSubmission (
+      id TEXT PRIMARY KEY,
+      formId TEXT NOT NULL REFERENCES Form(id) ON DELETE CASCADE,
+      data TEXT NOT NULL DEFAULT '{}',
+      ip TEXT DEFAULT '',
+      userId TEXT,
+      spam INTEGER NOT NULL DEFAULT 0,
+      status TEXT NOT NULL DEFAULT 'new',
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+    CREATE INDEX IF NOT EXISTS idx_formsub_form ON FormSubmission (formId, createdAt DESC);
+
+    -- Newsletter subscribers: double opt-in via confirmToken; the digest
+    -- scheduler only emails confirmed + subscribed addresses.
+    CREATE TABLE IF NOT EXISTS Subscriber (
+      id TEXT PRIMARY KEY,
+      email TEXT UNIQUE NOT NULL,
+      name TEXT DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'subscribed',
+      confirmed INTEGER NOT NULL DEFAULT 0,
+      confirmToken TEXT DEFAULT '',
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+    CREATE INDEX IF NOT EXISTS idx_subscriber_status ON Subscriber (status);
   `);
 
   // Schema migrations (best-effort; column may already exist on fresh DBs)

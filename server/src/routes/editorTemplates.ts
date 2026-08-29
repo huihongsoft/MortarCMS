@@ -55,6 +55,15 @@ router.get('/shortcodes', authenticate, requireCap('edit_posts'), (_req: AuthReq
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Editor: enabled forms for the [form id="..."] shortcode inserter
+// (id/name/slug only — submissions are never exposed here)
+router.get('/forms', authenticate, requireCap('edit_posts'), (_req: AuthRequest, res: Response) => {
+  try {
+    const forms = db.prepare('SELECT id, name, slug FROM Form WHERE enabled = 1 ORDER BY name').all() as any[];
+    res.json({ forms });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // Editor: custom block templates (admin-only)
 router.get('/templates', authenticate, requireCap('edit_posts'), (_req: AuthRequest, res: Response) => {
   try {

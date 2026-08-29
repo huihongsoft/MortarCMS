@@ -260,6 +260,111 @@ export function registerBuiltinTasks(): void {
   });
 
   registerTask({
+    id: 'newsletter_digest',
+    name: 'Newsletter digest',
+    desc: 'Emails confirmed subscribers the latest posts (daily by default; weekly via newsletter_frequency setting)',
+    intervalMs: 86_400_000,
+    fn: async () => {
+      try {
+        const freq = (db.prepare("SELECT value FROM Setting WHERE key = 'newsletter_frequency'").get() as any)?.value || 'daily';
+        const lastRaw = (db.prepare("SELECT value FROM Setting WHERE key = 'newsletter_last_sent_at'").get() as any)?.value || '';
+        const lastSent = lastRaw ? new Date(lastRaw).getTime() : 0;
+        const nowMs = Date.now();
+        if (freq === 'weekly' && lastSent && nowMs - lastSent < 7 * 86_400_000) return; // not due yet
+        // Only the first run (no cursor) sends — afterwards the cursor gates it
+        if (!lastRaw) return;
+        const since = new Date(lastSent).toISOString();
+        const posts = db.prepare("SELECT id, title, slug, excerpt FROM Post WHERE type = 'post' AND status = 'published' AND publishedAt > ? ORDER BY publishedAt DESC LIMIT 10").all(since) as any[];
+        if (posts.length === 0) return;
+        const subs = db.prepare("SELECT id, email, confirmToken FROM Subscriber WHERE status = 'subscribed' AND confirmed = 1 AND email != ''").all() as any[];
+        if (subs.length === 0) return;
+        const sendEmailMod = await import('./mailer');
+        const info = {
+          title: (db.prepare("SELECT value FROM Setting WHERE key = 'site_title'").get() as any)?.value || 'Mortar',
+          url: (db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || '',
+        };
+        const base = info.url || 'http://localhost:3001';
+        const items = posts.map(p =>
+          '<div style="margin-bottom:16px;"><a href="' + base + '/post/' + p.slug + '" style="font-size:16px;font-weight:600;color:#2563eb;text-decoration:none;">' + String(p.title).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</a>' +
+          (p.excerpt ? '<p style="margin:4px 0 0;font-size:13px;color:#4b5563;">' + String(p.excerpt).substring(0, 200).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>' : '') + '</div>').join('');
+        let sent = 0;
+        for (const s of subs) {
+          try {
+            const tpl = sendEmailMod.renderTemplate('newsletter_digest', {
+              site_title: info.title,
+              posts_html: items,
+              unsubscribe_link: base + '/newsletter/unsubscribe?token=' + s.confirmToken,
+              site_url: base,
+            });
+            if (tpl) {
+              const r = await sendEmailMod.sendEmail(s.email, tpl.subject, tpl.html);
+              if (r.ok) sent++;
+            }
+          } catch {}
+        }
+        db.prepare("INSERT INTO Setting (id, key, value) VALUES ('newsletter_last_sent_at', 'newsletter_last_sent_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date(nowMs).toISOString());
+        if (sent > 0) console.log('[Task] Newsletter digest sent to ' + sent + ' subscriber(s)');
+      } catch {}
+    },
+  });
+
+  registerTask({
+    id: 'sync_media_to_storage',
+    name: 'Migrate media to object storage',
+    desc: 'Uploads locally-stored media to the configured object store and rewrites URLs (idempotent)',
+    intervalMs: 86_400_000,
+    fn: async () => {
+      try {
+        const { getStorageConfig, storeFile, keyFromUrl } = await import('./storage');
+        const cfg = getStorageConfig();
+        if (cfg.provider !== 's3') return;
+        const rows = db.prepare("SELECT id, url, thumbnail, srcset, mimeType FROM Media WHERE url LIKE '/uploads/%' ORDER BY createdAt DESC LIMIT 200").all() as any[];
+        if (rows.length === 0) return;
+        const fsMod = await import('fs');
+        const pathMod = await import('path');
+        const readLocal = (p: string): Buffer | null => {
+          try {
+            const fp = pathMod.default.join(__dirname, '../..', p);
+            return fsMod.default.existsSync(fp) ? fsMod.default.readFileSync(fp) : null;
+          } catch { return null; }
+        };
+        let migrated = 0;
+        for (const m of rows) {
+          try {
+            const buf = readLocal(m.url);
+            if (!buf) continue;
+            const key = m.id + '-' + String(m.url).replace(/^\/uploads\//, '').replace(/^.*\//, '');
+            const url = await storeFile(key, buf, m.mimeType || 'application/octet-stream');
+            let thumb: string | null = m.thumbnail;
+            if (m.thumbnail && m.thumbnail.startsWith('/uploads/')) {
+              const tb = readLocal(m.thumbnail);
+              if (tb) thumb = await storeFile(m.id + '-thumb.jpg', tb, 'image/jpeg');
+            }
+            let srcset: string | null = m.srcset;
+            if (m.srcset) {
+              try {
+                const parsed = JSON.parse(m.srcset);
+                const out: Record<string, string> = {};
+                for (const [size, p] of Object.entries(parsed)) {
+                  if (typeof p === 'string' && p.startsWith('/uploads/')) {
+                    const sb = readLocal(p);
+                    if (sb) out[size] = await storeFile(m.id + '-w' + size + '.webp', sb, 'image/webp');
+                    else out[size] = p;
+                  } else if (typeof p === 'string') out[size] = p;
+                }
+                srcset = JSON.stringify(out);
+              } catch {}
+            }
+            db.prepare('UPDATE Media SET url = ?, thumbnail = ?, srcset = ? WHERE id = ?').run(url, thumb, srcset, m.id);
+            migrated++;
+          } catch (e: any) { console.log('[Task] media migrate failed for ' + m.id + ': ' + e.message); }
+        }
+        if (migrated > 0) console.log('[Task] Migrated ' + migrated + ' media item(s) to object storage');
+      } catch {}
+    },
+  });
+
+  registerTask({
     id: 'prune_visits',
     name: 'Prune visit logs',
     desc: 'Deletes visit records (which store raw visitor IPs) older than 180 days — GDPR retention',

@@ -3,6 +3,7 @@ import { Puzzle, Zap, Filter, Link2, PlusCircle, RefreshCw, ToggleLeft, ToggleRi
 import { useToast } from '../lib/toast';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import Select from '../components/Select';
 
 const actionIcons: Record<string, any> = { init: Zap, post_published: RefreshCw, comment_added: PlusCircle, post_created: PlusCircle, post_updated: RefreshCw };
 const filterIcons: Record<string, any> = { post_content: Filter };
@@ -226,7 +227,7 @@ export default function Plugins() {
                     React.createElement('input', { type: 'checkbox', checked: settingsValues[f.key] === '1', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettingsValues({ ...settingsValues, [f.key]: e.target.checked ? '1' : '0' }), className: 'rounded border-gray-300 text-primary-600' }),
                     React.createElement('span', { className: 'text-sm text-gray-600' }, settingsValues[f.key] === '1' ? t('enabled', getLang()) : t('disabled', getLang())))
                 : f.type === 'select'
-                  ? React.createElement('select', { value: settingsValues[f.key] || '', onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSettingsValues({ ...settingsValues, [f.key]: e.target.value }), className: 'input-field text-sm' },
+                  ? React.createElement(Select, { value: settingsValues[f.key] || '', onChange: (v: string) => setSettingsValues({ ...settingsValues, [f.key]: v }), className: 'input-field text-sm' },
                       (f.options || []).map((o: string) => React.createElement('option', { key: o, value: o }, o)))
                   : f.type === 'textarea'
                     ? React.createElement('textarea', { value: settingsValues[f.key] || '', onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setSettingsValues({ ...settingsValues, [f.key]: e.target.value }), rows: 3, className: 'input-field font-mono text-xs' })

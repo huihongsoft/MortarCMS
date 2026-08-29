@@ -53,7 +53,7 @@ export default function PostLayout(props: any) {
   );
 
   return React.createElement('div', { className: 'max-w-5xl mx-auto px-6 py-14' },
-    React.createElement(Breadcrumbs, { items: [{ label: t('blog', settings), to: '/' }, { label: post.title || t('post', settings) }] }),
+    settings.theme_show_breadcrumb !== '0' && React.createElement(Breadcrumbs, { items: [{ label: t('blog', settings), to: '/' }, { label: post.title || t('post', settings) }] }),
     React.createElement('article', null,
       post.format && post.format !== 'standard' && React.createElement('span', { className: 'inline-block text-xs font-medium uppercase tracking-[0.2em] text-indigo-600 mb-4' }, post.format),
       React.createElement('h1', { className: 'font-bold tracking-tight text-gray-900 leading-tight mb-6', style: { fontSize: 'var(--heading-max-size, 36px)' } }, post.title),

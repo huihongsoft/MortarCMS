@@ -3,6 +3,7 @@ import { Plus, Trash2, MessageCircle, Bell, Copy, KeyRound, Send, Clock, Calenda
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
+import Select from '../components/Select';
 
 interface Binding {
   id: string;
@@ -116,10 +117,10 @@ export default function AIBindings() {
     React.createElement('div', { className: 'card p-6 mb-6' },
       React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4' }, t('create binding', getLang())),
       React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-4 gap-3' },
-        React.createElement('select', { value: platform, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setPlatform(e.target.value), className: 'input-field' },
+        React.createElement(Select, { value: platform, onChange: (v: string) => setPlatform(v), className: 'input-field' },
           React.createElement('option', { value: 'wechat' }, '微信 WeChat'),
           React.createElement('option', { value: 'dingtalk' }, '钉钉 DingTalk')),
-        React.createElement('select', { value: userId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setUserId(e.target.value), className: 'input-field' },
+        React.createElement(Select, { value: userId, onChange: (v: string) => setUserId(v), className: 'input-field' },
           React.createElement('option', { value: '' }, t('select user', getLang())),
           users.map(u => React.createElement('option', { key: u.id, value: u.id }, u.username + ' (' + u.role + ')'))),
         React.createElement('input', { value: label, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setLabel(e.target.value), placeholder: t('binding label', getLang()), className: 'input-field' }),
@@ -201,14 +202,14 @@ export default function AIBindings() {
         React.createElement('input', { value: schName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSchName(e.target.value), placeholder: t('schedule name', getLang()), className: 'input-field text-sm' }),
         React.createElement('input', { value: schPrompt, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSchPrompt(e.target.value), placeholder: t('schedule prompt', getLang()), className: 'input-field text-sm' })),
       React.createElement('div', { className: 'flex flex-wrap gap-2 mb-4' },
-        React.createElement('select', { value: schType, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSchType(e.target.value), className: 'input-field w-32 text-sm' },
+        React.createElement(Select, { value: schType, onChange: (v: string) => setSchType(v), className: 'input-field w-32 text-sm' },
           React.createElement('option', { value: 'interval' }, t('every n minutes', getLang())),
           React.createElement('option', { value: 'daily' }, t('daily at', getLang())),
           React.createElement('option', { value: 'weekly' }, t('weekly on', getLang()))),
         schType === 'interval'
           ? React.createElement('input', { type: 'number', min: 5, value: schInterval, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSchInterval(parseInt(e.target.value) || 60), className: 'input-field w-24 text-sm' }, null)
           : React.createElement('input', { type: 'time', value: schTime, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSchTime(e.target.value), className: 'input-field w-32 text-sm' }, null),
-        schType === 'weekly' && React.createElement('select', { value: schWeekday, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSchWeekday(parseInt(e.target.value)), className: 'input-field w-32 text-sm' },
+        schType === 'weekly' && React.createElement(Select, { value: schWeekday, onChange: (v: string) => setSchWeekday(parseInt(v)), className: 'input-field w-32 text-sm' },
           [['1', '周一'], ['2', '周二'], ['3', '周三'], ['4', '周四'], ['5', '周五'], ['6', '周六'], ['0', '周日']].map(([v, l]) => React.createElement('option', { key: v, value: v }, l))),
         React.createElement('button', { onClick: addSchedule, disabled: !schName.trim() || !schPrompt.trim(), className: 'btn-primary text-sm' }, React.createElement(Plus, { size: 15 }), t('create', getLang()))),
       schedules.length === 0

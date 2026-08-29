@@ -78,10 +78,10 @@ export function authorize(...roles: string[]) {
 // Fallback capability map (used only if a role row is missing from the DB)
 const FALLBACK_CAPABILITIES: Record<string, string[]> = {
   admin: ['*'],
-  editor: ['edit_posts', 'edit_others_posts', 'publish_posts', 'delete_posts', 'delete_others_posts', 'moderate_comments', 'manage_categories', 'upload_files', 'edit_pages', 'publish_pages', 'manage_options'],
-  author: ['edit_posts', 'publish_posts', 'delete_posts', 'upload_files'],
+  editor: ['edit_posts', 'edit_others_posts', 'publish_posts', 'delete_posts', 'delete_others_posts', 'moderate_comments', 'review_posts', 'manage_categories', 'manage_forms', 'upload_files', 'edit_pages', 'publish_pages', 'manage_options'],
+  author: ['edit_posts', 'publish_posts', 'delete_posts', 'submit_posts', 'upload_files'],
   contributor: ['edit_posts', 'delete_posts'],
-  subscriber: [],
+  subscriber: ['submit_posts'],
 };
 
 // Role → capabilities, cached briefly to avoid DB hits on every request.

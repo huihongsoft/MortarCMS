@@ -41,6 +41,9 @@ const ShareView = lazyWithRetry(() => import('./pages/ShareView'));
 const Register = lazyWithRetry(() => import('./pages/Register'));
 const Login = lazyWithRetry(() => import('./pages/Login'));
 const Install = lazyWithRetry(() => import('./pages/Install'));
+const SubmitPost = lazyWithRetry(() => import('./pages/SubmitPost'));
+const MyPosts = lazyWithRetry(() => import('./pages/MyPosts'));
+const NewsletterConfirm = lazyWithRetry(() => import('./pages/NewsletterConfirm'));
 
 function SiteLayout({ settings }: { settings: Record<string, string> }) {
   const theme = useTheme();
@@ -74,6 +77,10 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
           React.createElement(Route, { path: '/search', element: React.createElement(SearchPage, { settings }) }),
           React.createElement(Route, { path: '/register', element: React.createElement(Register) }),
           React.createElement(Route, { path: '/login', element: React.createElement(Login) }),
+          React.createElement(Route, { path: '/submit-post', element: React.createElement(SubmitPost, { settings }) }),
+          React.createElement(Route, { path: '/my-posts', element: React.createElement(MyPosts, { settings }) }),
+          React.createElement(Route, { path: '/newsletter/confirm', element: React.createElement(NewsletterConfirm, { settings, mode: 'confirm' }) }),
+          React.createElement(Route, { path: '/newsletter/unsubscribe', element: React.createElement(NewsletterConfirm, { settings, mode: 'unsubscribe' }) }),
           React.createElement(Route, { path: '/share/ai/:token', element: React.createElement(ShareView, { settings }) }),
           React.createElement(Route, { path: '/tag/:slug', element: React.createElement(Home, { settings }) }),
           React.createElement(Route, { path: '/category/:slug', element: React.createElement(Home, { settings }) }),
@@ -145,6 +152,8 @@ export default function App() {
         isDark = lum < 128;
       }
       document.body.dataset.theme = isDark ? 'dark' : 'light';
+      // Content width used by .prose.prose-gray.prose-lg (article/page body)
+      document.body.dataset.contentWidth = r.data.content_width || 'normal';
       // Unsaved custom CSS preview (Appearance panel opens ?preview_css=...).
       // Security: the query parameter is attacker-controllable (a crafted link
       // could inject arbitrary CSS, e.g. attribute-selector data exfiltration),

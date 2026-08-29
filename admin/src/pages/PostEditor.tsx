@@ -8,6 +8,7 @@ import VisualEditor from '../components/VisualEditor';
 import RevisionsPanel from '../components/RevisionsPanel';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import Select from '../components/Select';
 
 export default function PostEditor() {
   const { id } = useParams();
@@ -112,7 +113,9 @@ export default function PostEditor() {
       // (published / private / scheduled...), falling back to published.
       // A publish date only applies when actually publishing (drafts never
       // carry one); an empty date means "publish now" like WordPress.
-      const finalStatus = s === 'draft' ? 'draft' : (status === 'draft' ? 'published' : status);
+      // pending is a review state (managed via the review endpoint): editing
+      // a pending post and hitting Publish means "approve" — publish it.
+      const finalStatus = s === 'draft' ? 'draft' : (status === 'draft' || status === 'pending' ? 'published' : status);
       const payload: any = { title, slug: slug || undefined, content, excerpt, status: finalStatus, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: finalStatus !== 'draft' && schedDate ? new Date(schedDate).toISOString() : undefined, authorId: authorId || undefined, siteId: siteId || null, allowComments, password };
       payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc, _seo_noindex: seoNoindex ? '1' : '', _seo_canonical: seoCanonical, _seo_og_image: seoOgImage };
       // Custom fields (user-defined key/value pairs) ride along in meta
@@ -209,9 +212,9 @@ export default function PostEditor() {
       ),
       aiOpen && React.createElement('div', null,
         React.createElement('div', { className: 'flex flex-wrap gap-1.5 mb-3' },
-          React.createElement('select', { value: aiStyle, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setAiStyle(e.target.value), className: 'input-field w-28 text-xs' },
+          React.createElement(Select, { value: aiStyle, onChange: (v: string) => setAiStyle(v), className: 'input-field w-28 text-xs' },
             [['formal', '正式'], ['casual', '口语化'], ['marketing', '营销'], ['concise', '简洁']].map(([v, l]) => React.createElement('option', { key: v, value: v }, l))),
-          React.createElement('select', { value: aiLang, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setAiLang(e.target.value), className: 'input-field w-28 text-xs' },
+          React.createElement(Select, { value: aiLang, onChange: (v: string) => setAiLang(v), className: 'input-field w-28 text-xs' },
             ['简体中文', 'English', '日本語', '한국어', 'Français', 'Deutsch', 'Español'].map(l => React.createElement('option', { key: l, value: l }, l))),
           AI_ACTIONS.map(a => React.createElement('button', {
             key: a.key,
@@ -344,7 +347,7 @@ export default function PostEditor() {
       id && React.createElement(RevisionsPanel, { postId: id, onRestore: (post: any) => { setTitle(post.title); setContent(post.content || ''); setExcerpt(post.excerpt || ''); } }),
       sites.length > 0 && React.createElement('div', { className: 'card p-4' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('site', getLang())),
-        React.createElement('select', { value: siteId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSiteId(e.target.value), className: 'input-field' },
+        React.createElement(Select, { value: siteId, onChange: (v: string) => setSiteId(v), className: 'input-field' },
           React.createElement('option', { value: '' }, t('global (all sites)', getLang())),
           sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name + (st.isPrimary === 1 ? ' (primary)' : '')))
         ),
@@ -352,7 +355,7 @@ export default function PostEditor() {
       ),
       React.createElement('div', { className: 'card p-4' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('format', getLang())),
-        React.createElement('select', { value: format, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setFormat(e.target.value), className: 'input-field' },
+        React.createElement(Select, { value: format, onChange: (v: string) => setFormat(v), className: 'input-field' },
           React.createElement('option', { value: 'standard' }, t('standard', getLang())),
           React.createElement('option', { value: 'gallery' }, t('gallery', getLang())),
           React.createElement('option', { value: 'video' }, t('video', getLang())),
@@ -363,18 +366,19 @@ export default function PostEditor() {
       ),
       React.createElement('div', { className: 'card p-4' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('author', getLang())),
-        React.createElement('select', { value: authorId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setAuthorId(e.target.value), className: 'input-field' },
+        React.createElement(Select, { value: authorId, onChange: (v: string) => setAuthorId(v), className: 'input-field' },
           React.createElement('option', { value: '' }, t('select author', getLang())),
           users.map((u: any) => React.createElement('option', { key: u.id, value: u.id }, u.username))
         )
       ),
       React.createElement('div', { className: 'card p-4' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('status', getLang())),
-        React.createElement('select', { value: status, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setStatus(e.target.value), className: 'input-field' },
+        React.createElement(Select, { value: status, onChange: (v: string) => setStatus(v), className: 'input-field' },
           React.createElement('option', { value: 'draft' }, t('draft', getLang())),
           React.createElement('option', { value: 'published' }, t('published', getLang())),
           React.createElement('option', { value: 'scheduled' }, t('scheduled', getLang())),
-          React.createElement('option', { value: 'private' }, t('private', getLang()))
+          React.createElement('option', { value: 'private' }, t('private', getLang())),
+          status === 'pending' && React.createElement('option', { value: 'pending' }, t('pending', getLang()))
         ),
         React.createElement('div', { className: 'mt-3' },
           React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('publish date (for scheduled)', getLang())),

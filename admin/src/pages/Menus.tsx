@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Plus, Edit2, Trash2, Menu as MenuIcon } from 'lucide-react';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
+import Select from '../components/Select';
 
 export default function Menus() {
   const [menus, setMenus] = useState<any[]>([]);
@@ -45,12 +46,12 @@ export default function Menus() {
       React.createElement('h3', { className: 'text-sm font-semibold mb-3' }, t('create menu', getLang())),
       React.createElement('div', { className: 'space-y-3' },
         React.createElement('input', { value: newName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setNewName(e.target.value), placeholder: t('menu name', getLang()), className: 'input-field' }),
-        React.createElement('select', { value: newLocation, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewLocation(e.target.value), className: 'input-field' },
+        React.createElement(Select, { value: newLocation, onChange: (v: string) => setNewLocation(v), className: 'input-field' },
           React.createElement('option', { value: 'primary' }, t('primary (header)', getLang())),
           React.createElement('option', { value: 'footer' }, t('footer', getLang())),
           React.createElement('option', { value: 'sidebar' }, t('sidebar', getLang()))
         ),
-        sites.length > 0 && React.createElement('select', { value: newSiteId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewSiteId(e.target.value), className: 'input-field' },
+        sites.length > 0 && React.createElement(Select, { value: newSiteId, onChange: (v: string) => setNewSiteId(v), className: 'input-field' },
           React.createElement('option', { value: '' }, t('global (all sites)', getLang())),
           sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name))
         ),

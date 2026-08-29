@@ -3,6 +3,7 @@ import { Save, GripVertical } from 'lucide-react';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
+import Select from '../components/Select';
 
 const availableWidgets = [
   { id: 'search', name: t('search', getLang()), desc: t('a search form for your site', getLang()) },
@@ -80,7 +81,7 @@ export default function Widgets() {
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
       React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('widgets', getLang())),
       React.createElement('div', { className: 'flex items-center gap-3' },
-        sites.length > 0 && React.createElement('select', { value: siteId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => { setSiteId(e.target.value); load(e.target.value); }, className: 'input-field w-48' },
+        sites.length > 0 && React.createElement(Select, { value: siteId, onChange: (v: string) => { setSiteId(v); load(v); }, className: 'input-field w-48' },
           React.createElement('option', { value: '' }, t('global (all sites)', getLang())),
           sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name))
         ),

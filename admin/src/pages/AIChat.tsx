@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell, Download, Settings2, Share2, Mic, BookOpen, X, Upload, Menu, Rocket, MoreHorizontal, LayoutTemplate, Bookmark } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import Select from '../components/Select';
 
 interface ChatMsg {
   role: 'user' | 'assistant';
@@ -1058,7 +1059,7 @@ export default function AIChat() {
               React.createElement('input', { type: 'range', min: 0, max: 2, step: 0.1, value: temperature, onChange: e => setTemperature(parseFloat(e.target.value)), className: 'w-full' })),
             React.createElement('div', null,
               React.createElement('label', { className: 'block text-[11px] text-gray-500 mb-1' }, t('max tokens', getLang())),
-              React.createElement('select', { value: maxTokens, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setMaxTokens(parseInt(e.target.value)), className: 'input-field text-xs' },
+              React.createElement(Select, { value: maxTokens, onChange: (v: string) => setMaxTokens(parseInt(v)), className: 'input-field text-xs' },
                 [512, 1024, 2048, 4096, 8192, 16384].map(v => React.createElement('option', { key: v, value: v }, v))))
           ),
         ),

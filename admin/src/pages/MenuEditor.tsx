@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Plus, Trash2, GripVertical, Save, Edit2 } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import Select from '../components/Select';
 
 export default function MenuEditor() {
   const { id } = useParams();
@@ -213,10 +214,10 @@ export default function MenuEditor() {
                       isChild && React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-gray-200 text-gray-500' }, t('sub item', getLang()))),
                     React.createElement('div', { className: 'flex items-center gap-2 mt-0.5' },
                       React.createElement('span', { className: 'text-xs text-gray-400 truncate' }, item.url),
-                      React.createElement('select', {
+                      React.createElement(Select, {
                         value: item.parentId || '',
-                        onChange: (e: React.ChangeEvent<HTMLSelectElement>) => {
-                          const next = items.map(it => it.id === item.id ? { ...it, parentId: e.target.value || null } : it);
+                        onChange: (v: string) => {
+                          const next = items.map(it => it.id === item.id ? { ...it, parentId: v || null } : it);
                           setItems(next);
                         },
                         className: 'text-[11px] border border-gray-200 rounded px-1 py-0.5 bg-white',
@@ -265,13 +266,13 @@ export default function MenuEditor() {
               React.createElement('input', { value: menuName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setMenuName(e.target.value), className: 'input-field text-sm' })),
             React.createElement('div', null,
               React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('location', getLang())),
-              React.createElement('select', { value: menuLocation, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setMenuLocation(e.target.value), className: 'input-field text-sm' },
+              React.createElement(Select, { value: menuLocation, onChange: (v: string) => setMenuLocation(v), className: 'input-field text-sm' },
                 React.createElement('option', { value: 'primary' }, t('primary (header)', getLang())),
                 React.createElement('option', { value: 'footer' }, t('footer', getLang())),
                 React.createElement('option', { value: 'sidebar' }, t('sidebar', getLang())))),
             sites.length > 0 && React.createElement('div', null,
               React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('site', getLang())),
-              React.createElement('select', { value: menuSiteId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setMenuSiteId(e.target.value), className: 'input-field text-sm' },
+              React.createElement(Select, { value: menuSiteId, onChange: (v: string) => setMenuSiteId(v), className: 'input-field text-sm' },
                 React.createElement('option', { value: '' }, t('global (all sites)', getLang())),
                 sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name)))),
             React.createElement('div', { className: 'flex gap-2' },
@@ -283,23 +284,23 @@ export default function MenuEditor() {
         : editingIdx !== null ? React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('edit item', getLang())),
           React.createElement('div', { className: 'space-y-3' },
-            React.createElement('select', { value: editForm.type, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, type: e.target.value }), className: 'input-field' },
+            React.createElement(Select, { value: editForm.type, onChange: (v: string) => setEditForm({ ...editForm, type: v }), className: 'input-field' },
               React.createElement('option', { value: 'page' }, t('page', getLang())), React.createElement('option', { value: 'category' }, t('category', getLang())), React.createElement('option', { value: 'linkcat' }, t('link categories', getLang())), React.createElement('option', { value: 'custom' }, t('custom link', getLang()))
             ),
             React.createElement('input', { value: editForm.label, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, label: e.target.value }), placeholder: t('label', getLang()), className: 'input-field' }),
-            editForm.type === 'page' && React.createElement('select', { value: editForm.pageId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, pageId: e.target.value }), className: 'input-field' },
+            editForm.type === 'page' && React.createElement(Select, { value: editForm.pageId, onChange: (v: string) => setEditForm({ ...editForm, pageId: v }), className: 'input-field' },
               React.createElement('option', { value: '' }, t('select page', getLang()) + '...'), pages.map((p: any) => React.createElement('option', { key: p.id, value: p.id }, p.title))
             ),
-            editForm.type === 'category' && React.createElement('select', { value: editForm.categoryId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, categoryId: e.target.value }), className: 'input-field' },
+            editForm.type === 'category' && React.createElement(Select, { value: editForm.categoryId, onChange: (v: string) => setEditForm({ ...editForm, categoryId: v }), className: 'input-field' },
               React.createElement('option', { value: '' }, t('select category', getLang()) + '...'), categories.map((c: any) => React.createElement('option', { key: c.id, value: c.id }, c.name))
             ),
-            editForm.type === 'linkcat' && React.createElement('select', { value: editForm.linkCategoryId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, linkCategoryId: e.target.value }), className: 'input-field' },
+            editForm.type === 'linkcat' && React.createElement(Select, { value: editForm.linkCategoryId, onChange: (v: string) => setEditForm({ ...editForm, linkCategoryId: v }), className: 'input-field' },
               React.createElement('option', { value: '' }, t('select category', getLang()) + '...'), linkCats.map((c: any) => React.createElement('option', { key: c.id, value: c.id },
                 c.name + (c.pageId ? ' · ' + t('landing page', getLang()) + ': ' + (pages.find((p: any) => p.id === c.pageId)?.title || '?') : ''))
               )
             ),
             editForm.type === 'custom' && React.createElement('input', { value: editForm.url, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, url: e.target.value }), placeholder: 'URL (/page/xxx 或 https://...)', className: 'input-field' }),
-            items.length > 1 && React.createElement('select', { value: editForm.parentId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setEditForm({ ...editForm, parentId: e.target.value }), className: 'input-field' },
+            items.length > 1 && React.createElement(Select, { value: editForm.parentId, onChange: (v: string) => setEditForm({ ...editForm, parentId: v }), className: 'input-field' },
               React.createElement('option', { value: '' }, t('top level', getLang())),
               items.filter((it: any, i: number) => i !== editingIdx).map((it: any) => React.createElement('option', { key: it.id, value: it.id }, it.label))),
             React.createElement('div', { className: 'flex gap-2' },
@@ -313,23 +314,23 @@ export default function MenuEditor() {
             ? t('add sub item', getLang()) + ' → ' + (items.find((it: any) => it.id === newItem.parentId)?.label || '')
             : t('add item', getLang())),
           React.createElement('div', { className: 'space-y-3' },
-            React.createElement('select', { value: newItem.type, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, type: e.target.value }), className: 'input-field' },
+            React.createElement(Select, { value: newItem.type, onChange: (v: string) => setNewItem({ ...newItem, type: v }), className: 'input-field' },
               React.createElement('option', { value: 'page' }, t('page', getLang())), React.createElement('option', { value: 'category' }, t('category', getLang())), React.createElement('option', { value: 'linkcat' }, t('link categories', getLang())), React.createElement('option', { value: 'custom' }, t('custom link', getLang()))
             ),
             React.createElement('input', { value: newItem.label, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setNewItem({ ...newItem, label: e.target.value }), placeholder: t('label', getLang()), className: 'input-field' }),
-            newItem.type === 'page' && React.createElement('select', { value: newItem.pageId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, pageId: e.target.value }), className: 'input-field' },
+            newItem.type === 'page' && React.createElement(Select, { value: newItem.pageId, onChange: (v: string) => setNewItem({ ...newItem, pageId: v }), className: 'input-field' },
               React.createElement('option', { value: '' }, t('select page', getLang()) + '...'), pages.map((p: any) => React.createElement('option', { key: p.id, value: p.id }, p.title))
             ),
-            newItem.type === 'category' && React.createElement('select', { value: newItem.categoryId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, categoryId: e.target.value }), className: 'input-field' },
+            newItem.type === 'category' && React.createElement(Select, { value: newItem.categoryId, onChange: (v: string) => setNewItem({ ...newItem, categoryId: v }), className: 'input-field' },
               React.createElement('option', { value: '' }, t('select category', getLang()) + '...'), categories.map((c: any) => React.createElement('option', { key: c.id, value: c.id }, c.name))
             ),
-            newItem.type === 'linkcat' && React.createElement('select', { value: newItem.linkCategoryId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, linkCategoryId: e.target.value }), className: 'input-field' },
+            newItem.type === 'linkcat' && React.createElement(Select, { value: newItem.linkCategoryId, onChange: (v: string) => setNewItem({ ...newItem, linkCategoryId: v }), className: 'input-field' },
               React.createElement('option', { value: '' }, t('select category', getLang()) + '...'), linkCats.map((c: any) => React.createElement('option', { key: c.id, value: c.id },
                 c.name + (c.pageId ? ' · ' + t('landing page', getLang()) + ': ' + (pages.find((p: any) => p.id === c.pageId)?.title || '?') : ''))
               )
             ),
             newItem.type === 'custom' && React.createElement('input', { value: newItem.url, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setNewItem({ ...newItem, url: e.target.value }), placeholder: 'URL (https://...)', className: 'input-field' }),
-            items.length > 0 && React.createElement('select', { value: newItem.parentId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setNewItem({ ...newItem, parentId: e.target.value }), className: 'input-field' },
+            items.length > 0 && React.createElement(Select, { value: newItem.parentId, onChange: (v: string) => setNewItem({ ...newItem, parentId: v }), className: 'input-field' },
               React.createElement('option', { value: '' }, t('top level', getLang())),
               items.map(it => React.createElement('option', { key: it.id, value: it.id }, it.label))),
             React.createElement('button', { onClick: addItem, className: 'btn-primary w-full justify-center' }, React.createElement(Plus, { size: 16 }), t('add to menu', getLang()))

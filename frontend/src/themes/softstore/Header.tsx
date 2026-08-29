@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { Menu, X, Search } from 'lucide-react';
 import api from '../../lib/api';
 import { t } from '../../lib/i18n';
+import { navWidthClass } from '../navWidth';
 
 // huirj.cn style header: WHITE top bar, logo left, centered category nav,
 // search box right. Sticky with a subtle shadow on scroll.
@@ -27,7 +28,7 @@ export default function SoftstoreHeader({ settings }: { settings: Record<string,
   };
 
   return React.createElement('header', { className: 'sticky top-0 z-40 bg-white border-b border-[#eee] transition-shadow ' + (scrolled ? 'shadow-sm' : '') },
-    React.createElement('div', { className: 'max-w-6xl mx-auto px-4' },
+    React.createElement('div', { className: navWidthClass(settings.nav_width, 'max-w-6xl') + ' mx-auto px-4' },
       React.createElement('div', { className: 'flex items-center gap-4 h-[70px]' },
         React.createElement(Link, { to: '/', className: 'flex items-center gap-2 shrink-0' },
           React.createElement('span', { className: 'w-9 h-9 rounded-xl flex items-center justify-center text-white text-lg font-bold', style: { background: '#5066e1' } }, (settings.site_title || 'M')[0].toUpperCase()),

@@ -1,15 +1,22 @@
 import React, { useEffect, useState } from 'react';
-import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson, Trash2 } from 'lucide-react';
+import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson, Trash2, Edit, HardDrive } from 'lucide-react';
+import { useNavigate, useLocation } from 'react-router-dom';
+import Select from '../components/Select';
 import api, { downloadFile } from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
-type TabKey = 'general' | 'reading' | 'discussion' | 'privacy' | 'smtp' | 'maintenance' | 'tools';
+type TabKey = 'general' | 'reading' | 'discussion' | 'privacy' | 'smtp' | 'storage' | 'maintenance' | 'tools';
 
 export default function Settings() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
-  const [tab, setTab] = useState<TabKey>('general');
+  // Return from the homepage editor lands back on the Reading tab
+  const [tab, setTab] = useState<TabKey>(((location.state as any)?.tab as TabKey) || 'general');
   const [pages, setPages] = useState<any[]>([]);
+  const [roles, setRoles] = useState<any[]>([]);
+  const [gdprUserId, setGdprUserId] = useState('');
   const [cacheInfo, setCacheInfo] = useState<any>(null);
   const [cacheTtl, setCacheTtl] = useState(60);
   const [mailTemplates, setMailTemplates] = useState<any[]>([]);
@@ -23,6 +30,7 @@ export default function Settings() {
   useEffect(() => {
     api.get('/settings').then(r => setSettings(r.data));
     api.get('/pages').then(r => setPages(r.data)).catch(() => {});
+    api.get('/roles').then(r => setRoles(r.data?.roles || [])).catch(() => {});
     api.get('/system/cache').then(r => { setCacheInfo(r.data); setCacheTtl(r.data?.ttlSeconds || 60); }).catch(() => {});
     api.get('/mailer/templates').then(r => setMailTemplates(r.data?.templates || [])).catch(() => {});
     api.get('/users').then(r => setGdprUsers(r.data || [])).catch(() => {});
@@ -60,19 +68,31 @@ export default function Settings() {
     } catch { alert(t('purge failed', getLang())); }
   }
 
-  async function saveSettings() {
+  // Returns true on success so callers can gate navigation (e.g. the "edit
+  // homepage" button must persist show_on_front='custom' before opening the
+  // editor, otherwise the front end never switches to the custom homepage).
+  async function saveSettings(): Promise<boolean> {
     try {
       // The settings schema only accepts string/number/boolean — drop any
-      // null/undefined values instead of letting the request 400
-      const payload = Object.fromEntries(Object.entries(settings).filter(([, v]) => v !== null && v !== undefined));
+      // null/undefined values instead of letting the request 400.
+      // homepage_html/homepage_css are managed solely by the HomeEditor page —
+      // exclude them so saving the settings form can never roll the front page
+      // back to a stale snapshot held in this page's state.
+      // storage_secret is never returned by the API (credential): an empty
+      // input means "keep the stored value", so it is excluded from the payload.
+      const payload = Object.fromEntries(
+        Object.entries(settings).filter(([k, v]) => v !== null && v !== undefined && k !== 'homepage_html' && k !== 'homepage_css' && !(k === 'storage_secret' && !v))
+      );
       await api.put('/settings', payload);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       // Let the sidebar re-read dev_mode so the developer-mode menu entries
       // appear/disappear immediately
       window.dispatchEvent(new CustomEvent('mortar-settings-saved'));
+      return true;
     } catch (e: any) {
       alert(e.response?.data?.error || t('save failed', getLang()));
+      return false;
     }
   }
 
@@ -90,6 +110,7 @@ export default function Settings() {
     { key: 'discussion', label: t('discussion', getLang()), icon: ShieldCheck },
     { key: 'privacy', label: t('privacy', getLang()), icon: ShieldCheck },
     { key: 'smtp', label: t('email / smtp', getLang()), icon: Mail },
+    { key: 'storage', label: t('storage', getLang()), icon: HardDrive },
     { key: 'maintenance', label: t('maintenance mode', getLang()), icon: Wrench },
     { key: 'tools', label: t('tools', getLang()), icon: Download },
   ];
@@ -121,7 +142,7 @@ export default function Settings() {
         // Default language + date format on the same row
         React.createElement('div', null,
           React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('default site language', getLang())),
-          React.createElement('select', { value: settings.site_lang || '', onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSettings({ ...settings, site_lang: e.target.value }), className: 'input-field' },
+          React.createElement(Select, { value: settings.site_lang || '', onChange: (v: string) => setSettings({ ...settings, site_lang: v }), className: 'input-field' },
             React.createElement('option', { value: '' }, t('follow visitor preference', getLang())),
             React.createElement('option', { value: 'en' }, 'English'),
             React.createElement('option', { value: 'zh' }, '中文')),
@@ -153,17 +174,44 @@ export default function Settings() {
         // WordPress "Your homepage displays"
         React.createElement('div', null,
           React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('your homepage displays', getLang())),
-          React.createElement('select', { value: settings.show_on_front || 'posts', onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSettings({ ...settings, show_on_front: e.target.value }), className: 'input-field' },
+          React.createElement(Select, { value: settings.show_on_front || 'posts', onChange: (v: string) => setSettings({ ...settings, show_on_front: v }), className: 'input-field' },
             React.createElement('option', { value: 'posts' }, t('your latest posts', getLang())),
-            React.createElement('option', { value: 'page' }, t('a static page', getLang())))),
+            React.createElement('option', { value: 'page' }, t('a static page', getLang())),
+            React.createElement('option', { value: 'custom' }, t('custom homepage', getLang())))),
         settings.show_on_front === 'page' && React.createElement('div', null,
           React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('homepage', getLang())),
-          React.createElement('select', { value: settings.page_on_front || '', onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSettings({ ...settings, page_on_front: e.target.value }), className: 'input-field' },
+          React.createElement(Select, { value: settings.page_on_front || '', onChange: (v: string) => setSettings({ ...settings, page_on_front: v }), className: 'input-field' },
             React.createElement('option', { value: '' }, t('select a page', getLang()) + '...'),
             pages.filter((p: any) => p.status === 'published').map((p: any) => React.createElement('option', { key: p.id, value: p.slug }, p.title)))),
+        // In "custom homepage" mode the edit button sits in the right column
+        // (where "posts per page" would be), vertical-centre aligned with the
+        // homepage dropdown — never squeezed next to it.
+        settings.show_on_front === 'custom' && React.createElement('div', { className: 'flex items-center pt-6' },
+          React.createElement('div', { className: 'flex items-center gap-2 flex-wrap' },
+            React.createElement('button', { onClick: async () => { if (await saveSettings()) navigate('/home-editor'); }, className: 'btn-secondary text-xs whitespace-nowrap' }, React.createElement(Edit, { size: 13 }), t('edit homepage', getLang())),
+            React.createElement('span', { className: 'text-xs text-gray-500' }, settings.homepage_html ? t('homepage editor hint', getLang()) : t('homepage empty hint', getLang())))),
         field('posts_per_page', t('posts per page', getLang()), 'number'),
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('content width', getLang())),
+          React.createElement(Select, { value: settings.content_width || 'normal', onChange: (v: string) => setSettings({ ...settings, content_width: v }), className: 'input-field' },
+            React.createElement('option', { value: 'narrow' }, t('narrow', getLang())),
+            React.createElement('option', { value: 'normal' }, t('normal', getLang())),
+            React.createElement('option', { value: 'wide' }, t('wide', getLang())),
+            React.createElement('option', { value: 'full' }, t('full width', getLang())))),
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('nav width', getLang())),
+          React.createElement(Select, { value: settings.nav_width || 'normal', onChange: (v: string) => setSettings({ ...settings, nav_width: v }), className: 'input-field' },
+            React.createElement('option', { value: 'narrow' }, t('narrow', getLang())),
+            React.createElement('option', { value: 'normal' }, t('normal', getLang())),
+            React.createElement('option', { value: 'wide' }, t('wide', getLang())),
+            React.createElement('option', { value: 'full' }, t('full width', getLang()))),
+          React.createElement('p', { className: 'text-xs text-gray-400 mt-1.5' }, t('nav width hint', getLang()))),
         field('permalink_structure', t('permalink structure (/post/%slug%)', getLang())),
-        field('default_role', t('default user role', getLang())),
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('default user role', getLang())),
+          React.createElement(Select, { value: settings.default_role || 'author', onChange: (v: string) => setSettings({ ...settings, default_role: v }), className: 'input-field' },
+            React.createElement('option', { value: '' }, t('no role', getLang())),
+            roles.map(r => React.createElement('option', { key: r.slug, value: r.slug }, r.name)))),
       )
     ),
     tab === 'discussion' && React.createElement('div', { className: 'card p-6' },
@@ -221,11 +269,11 @@ export default function Settings() {
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3' }, t('manage user data', getLang())),
         React.createElement('p', { className: 'text-sm text-gray-500 dark:text-gray-400 mb-4' }, t('export or erase the personal data of any registered user.', getLang())),
         React.createElement('div', { className: 'flex items-center gap-2 flex-wrap' },
-          React.createElement('select', { id: 'gdpr-user', className: 'input-field w-56 text-sm' },
+          React.createElement(Select, { value: gdprUserId, onChange: (v: string) => setGdprUserId(v), className: 'input-field w-56 text-sm', placeholder: t('select a user', getLang()) },
             gdprUsers.map((u: any) => React.createElement('option', { key: u.id, value: u.id }, u.username + ' (' + u.email + ')')))),
         React.createElement('div', { className: 'flex gap-2 mt-3' },
           React.createElement('button', { onClick: async () => {
-            const id = (document.getElementById('gdpr-user') as HTMLSelectElement)?.value;
+            const id = gdprUserId;
             if (!id) return;
             const r = await api.get('/gdpr/admin/export/' + id);
             const blob = new Blob([JSON.stringify(r.data, null, 2)], { type: 'application/json' });
@@ -256,7 +304,7 @@ export default function Settings() {
           field('smtp_from', t('from email', getLang())),
           React.createElement('div', null,
             React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('security', getLang())),
-            React.createElement('select', { value: settings.smtp_secure || 'tls', onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSettings({ ...settings, smtp_secure: e.target.value }), className: 'input-field' },
+            React.createElement(Select, { value: settings.smtp_secure || 'tls', onChange: (v: string) => setSettings({ ...settings, smtp_secure: v }), className: 'input-field' },
               React.createElement('option', { value: 'tls' }, t('tls', getLang())), React.createElement('option', { value: 'ssl' }, t('ssl', getLang())), React.createElement('option', { value: 'none' }, t('none', getLang()))))
         ),
         // Save + send test email
@@ -294,6 +342,39 @@ export default function Settings() {
               )
             )
           )
+        )
+      )
+    ),
+    tab === 'storage' && React.createElement('div', { className: 'space-y-4' },
+      React.createElement('div', { className: 'card p-6' },
+        React.createElement('p', { className: 'text-sm text-gray-500 dark:text-gray-400 mb-4' }, t('storage description', getLang())),
+        React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('provider', getLang())),
+            React.createElement(Select, { value: settings.storage_provider || 'local', onChange: (v: string) => setSettings({ ...settings, storage_provider: v }), className: 'input-field' },
+              React.createElement('option', { value: 'local' }, t('local storage', getLang())),
+              React.createElement('option', { value: 's3' }, t('s3 compatible', getLang())))
+          ),
+          field('storage_endpoint', t('endpoint', getLang())),
+          field('storage_bucket', t('bucket', getLang())),
+          field('storage_region', t('region', getLang())),
+          field('storage_key', t('access key', getLang())),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('secret key', getLang())),
+            React.createElement('input', { type: 'password', value: settings.storage_secret || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, storage_secret: e.target.value }), className: 'input-field' })),
+          field('storage_public_url', t('public url', getLang())),
+        ),
+        React.createElement('div', { className: 'mt-5 pt-5 border-t border-gray-100 dark:border-gray-700 flex flex-wrap items-end gap-3' },
+          React.createElement('button', { onClick: saveSettings, className: 'btn-primary text-sm' }, t('save changes', getLang())),
+          React.createElement('button', { onClick: async () => {
+            try { await api.post('/settings/storage/test'); alert(t('connection ok', getLang())); }
+            catch (e: any) { alert(e.response?.data?.error || t('connection failed', getLang())); }
+          }, className: 'btn-secondary text-sm' }, t('test connection', getLang())),
+          React.createElement('button', { onClick: async () => {
+            if (!window.confirm(t('migrate confirm', getLang()))) return;
+            try { await api.post('/system/tasks/sync_media_to_storage/run'); alert(t('migrate started', getLang())); }
+            catch (e: any) { alert(e.response?.data?.error || t('migrate failed', getLang())); }
+          }, className: 'btn-secondary text-sm' }, t('migrate media now', getLang()))
         )
       )
     ),

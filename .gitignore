@@ -23,3 +23,6 @@ backups/
 
 # Local SQLite data directory (mortar.db + backups + WAL sidecar files)
 server/data/
+
+# img2text tool logs accidentally created inside the workspace
+*img2text*

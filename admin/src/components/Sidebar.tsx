@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3 } from 'lucide-react';
+import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3, Webhook, ClipboardList, Mail } from 'lucide-react';
 import CommentBadge from './CommentBadge';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -23,6 +23,8 @@ const groups: { title: string; items: { to: string; icon: any; label: string; ro
       { to: '/categories', icon: FolderTree, label: t('categories', getLang()) },
       { to: '/tags', icon: TagIcon, label: t('tags', getLang()) },
       { to: '/links', icon: Link2, label: t('links', getLang()) },
+      { to: '/forms', icon: ClipboardList, label: t('forms', getLang()) },
+      { to: '/subscribers', icon: Mail, label: t('subscribers', getLang()) },
     ],
   },
   {
@@ -56,6 +58,7 @@ const groups: { title: string; items: { to: string; icon: any; label: string; ro
       { to: '/hooks', icon: Workflow, label: t('hooks browser', getLang()), role: 'admin', devModeOnly: true },
       { to: '/api-docs', icon: Code, label: t('api docs & test center', getLang()), role: 'admin', devModeOnly: true },
       { to: '/activity', icon: History, label: t('activity log', getLang()), role: 'admin', devModeOnly: true },
+      { to: '/webhooks', icon: Webhook, label: t('webhooks', getLang()), role: 'admin' },
       { to: '/settings', icon: Settings, label: t('settings', getLang()), role: 'admin' },
     ],
   },

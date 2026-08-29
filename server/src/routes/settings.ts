@@ -10,7 +10,7 @@ const router = Router();
 
 // Credentials / system state: never returned by the general settings GET,
 // even to admins (dedicated endpoints exist: /ai/settings, /api/db/*)
-const CRED_KEYS = new Set(['ai_providers', 'ai_bindings', 'installed', 'active_plugins']);
+const CRED_KEYS = new Set(['ai_providers', 'ai_bindings', 'installed', 'active_plugins', 'storage_secret']);
 const CRED_PREFIXES = ['jwt_', 'market_', 'db_'];
 // Extra keys hidden from anonymous visitors (admin-only configuration)
 const ADMIN_KEYS = new Set(['admin_email']);
@@ -92,6 +92,17 @@ router.put('/', authenticate, authorize('admin'), (req: AuthRequest, res: Respon
     if (bad) { res.status(400).json({ error: 'Setting key is not writable via this endpoint: ' + bad }); return; }
     const upsert = db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const [key, value] of Object.entries(entries)) upsert.run(cuid(), key, String(value));
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: test the object-storage connection (reads the saved settings)
+router.post('/storage/test', authenticate, authorize('admin'), async (_req: AuthRequest, res: Response) => {
+  try {
+    const { testStorageConnection, invalidateStorageConfig } = await import('../utils/storage');
+    invalidateStorageConfig();
+    const r = await testStorageConnection();
+    if (!r.ok) { res.status(400).json({ error: r.error || 'Connection failed' }); return; }
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

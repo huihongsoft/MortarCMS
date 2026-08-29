@@ -7,7 +7,7 @@ import Image from '@tiptap/extension-image';
 import MarkdownIt from 'markdown-it';
 import TurndownService from 'turndown';
 import DOMPurify from 'dompurify';
-import { Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Quote, Code, Link2, ImagePlus, Undo2, Redo2, Eye, PenLine, Code2, X, LayoutGrid as BlocksIcon, Braces, LayoutTemplate, Check as CheckIcon, Trash2 as TrashIcon } from 'lucide-react';
+import { Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Quote, Code, Link2, ImagePlus, Undo2, Redo2, Eye, PenLine, Code2, X, LayoutGrid as BlocksIcon, Braces, LayoutTemplate, Check as CheckIcon, Trash2 as TrashIcon, Zap } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
@@ -124,6 +124,9 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
   const [newTplName, setNewTplName] = useState('');
   const [newTplHtml, setNewTplHtml] = useState('');
   const [showTplForm, setShowTplForm] = useState(false);
+  const [showShortcodes, setShowShortcodes] = useState(false);
+  const [formList, setFormList] = useState<any[]>([]);
+  const htmlRef = useRef<HTMLTextAreaElement>(null);
   const lastEmitted = useRef<string>(value || '');
 
   const editor = useEditor({
@@ -202,6 +205,33 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
     // would crash the list render with "E.map is not a function")
     try { const r = await api.get('/media'); setMediaList(r.data?.media || []); } catch {}
     setShowMedia(true);
+  }
+
+  // Shortcode inserter: [form id="slug"] / [newsletter] and friends. Inserts
+  // at the cursor in every mode (rich via TipTap, markdown/html via textarea).
+  async function loadShortcodes() {
+    try { const r = await api.get('/editor/forms'); setFormList(r.data?.forms || []); } catch {}
+  }
+
+  function insertShortcode(text: string) {
+    if (mode === 'rich' && editor) {
+      editor.chain().focus().insertContent(text).run();
+    } else if (mode === 'markdown') {
+      insertMdSyntax(text, '', '');
+    } else {
+      const el = htmlRef.current;
+      if (el) {
+        const start = el.selectionStart ?? htmlBuffer.length;
+        const next = htmlBuffer.slice(0, start) + text + htmlBuffer.slice(el.selectionEnd ?? htmlBuffer.length);
+        setHtmlBuffer(next);
+        emit(DOMPurify.sanitize(next));
+        requestAnimationFrame(() => { el.focus(); el.setSelectionRange(start + text.length, start + text.length); });
+      } else {
+        setHtmlBuffer(h => h + text);
+        emit(DOMPurify.sanitize(htmlBuffer + text));
+      }
+    }
+    setShowShortcodes(false);
   }
 
   // Block panel operations: reorder / remove / locate / image settings
@@ -348,6 +378,7 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
         btn(t('image', getLang()), () => openMedia(), false, React.createElement(ImagePlus, { size: 14 })),
         btn(t('html block', getLang()), () => insertHtmlBlock(), false, React.createElement(Braces, { size: 14 })),
         btn(t('templates', getLang()), () => { setShowTemplates(!showTemplates); if (!showTemplates) loadCustomTemplates(); }, showTemplates, React.createElement(LayoutTemplate, { size: 14 })),
+        btn(t('insert shortcode', getLang()), () => { setShowShortcodes(!showShortcodes); if (!showShortcodes) loadShortcodes(); }, showShortcodes, React.createElement(Zap, { size: 14 })),
         React.createElement('span', { className: 'w-px h-4 bg-gray-200 mx-1' }),
         btn(t('undo', getLang()), () => editor.chain().focus().undo().run(), false, React.createElement(Undo2, { size: 14 })),
         btn(t('redo', getLang()), () => editor.chain().focus().redo().run(), false, React.createElement(Redo2, { size: 14 })),
@@ -425,11 +456,45 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
       ),
     ),
     mode === 'html' && React.createElement('textarea', {
+      ref: htmlRef,
       className: 'p-3 min-h-[300px] font-mono text-sm w-full focus:outline-none resize-y',
       value: htmlBuffer,
       placeholder: placeholder || t('write html...', getLang()),
       onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => { setHtmlBuffer(e.target.value); emit(DOMPurify.sanitize(e.target.value)); },
     }),
+    // Shortcode inserter modal
+    showShortcodes && React.createElement('div', { className: 'fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4' },
+      React.createElement('div', { className: 'bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full' },
+        React.createElement('div', { className: 'flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700' },
+          React.createElement('h3', { className: 'font-semibold text-gray-900 dark:text-gray-100' }, t('insert shortcode', getLang())),
+          React.createElement('button', { onClick: () => setShowShortcodes(false), className: 'p-1 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 18 })),
+        ),
+        React.createElement('div', { className: 'p-3 space-y-1 max-h-72 overflow-auto' },
+          // Static shortcodes
+          [['[newsletter]', t('newsletter subscribe form', getLang())], ['[gallery ids="1,2,3"]', t('gallery shortcode hint', getLang())]].map(([code, hint]) =>
+            React.createElement('button', {
+              key: code, onClick: () => insertShortcode(code),
+              className: 'w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2',
+            },
+              React.createElement('code', { className: 'text-xs font-semibold text-primary-600 dark:text-primary-400 whitespace-nowrap' }, code),
+              React.createElement('span', { className: 'text-xs text-gray-500 dark:text-gray-400 truncate' }, hint))
+          ),
+          // Enabled forms → [form id="slug"]
+          formList.length > 0 && React.createElement('div', { className: 'mt-2 pt-2 border-t border-gray-100 dark:border-gray-700' },
+            React.createElement('p', { className: 'px-3 pb-1 text-[10px] uppercase tracking-wider text-gray-400 font-medium' }, t('forms', getLang())),
+            formList.map((f: any) =>
+              React.createElement('button', {
+                key: f.id, onClick: () => insertShortcode('[form id="' + f.slug + '"]'),
+                className: 'w-full text-left px-3 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2',
+              },
+                React.createElement('code', { className: 'text-xs font-semibold text-primary-600 dark:text-primary-400 whitespace-nowrap' }, '[form id="' + f.slug + '"]'),
+                React.createElement('span', { className: 'text-xs text-gray-500 dark:text-gray-400 truncate' }, f.name))
+            )
+          ),
+          formList.length === 0 && React.createElement('p', { className: 'px-3 py-2 text-xs text-gray-400 italic' }, t('no forms yet', getLang())),
+        ),
+      ),
+    ),
     // Media picker modal
     showMedia && React.createElement('div', { className: 'fixed inset-0 bg-black/40 z-[60] flex items-center justify-center p-4' },
       React.createElement('div', { className: 'bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col' },

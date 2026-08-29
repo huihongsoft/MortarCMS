@@ -186,6 +186,33 @@ const zh: Record<string, string> = {
   'sample data imported': '示例数据已导入',
   'sample data import failed': '示例数据导入失败，站点已安装',
   'no data': '暂无数据',
+
+  // Frontend post submission
+  'submit a post': '投稿',
+  'submit post description': '提交您的文章，审核通过后将自动发布',
+  'submit post note': '投稿将进入审核队列，编辑批准后才会公开显示',
+  'post title': '文章标题',
+  'post title required': '请输入文章标题',
+  'post content': '正文内容',
+  'post content required': '请输入正文内容',
+  'excerpt (optional)': '摘要（可选）',
+  'submit for review': '提交审核',
+  'submission received': '投稿已提交',
+  'your submission is pending review': '您的投稿已进入审核队列，审核通过后将自动发布',
+  'submission failed': '提交失败',
+  'my submissions': '我的投稿',
+  'pending review': '待审核',
+  'login to submit': '请先登录后投稿',
+
+  // Newsletter
+  'confirm subscription': '确认订阅',
+  'subscription confirmed': '订阅已确认',
+  'subscription confirmed note': '您已成功订阅本站 Newsletter，最新文章将第一时间发送到您的邮箱',
+  'unsubscribe': '退订',
+  'unsubscribed': '已退订',
+  'unsubscribed note': '您已成功退订本站 Newsletter，欢迎随时回来',
+  'invalid token': '链接无效',
+  'invalid token note': '链接无效或已过期，请重新订阅',
 };
 
 export function t(key: string, settings?: Record<string, string>): string {

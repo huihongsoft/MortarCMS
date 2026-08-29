@@ -76,7 +76,7 @@ export default function PostLayout(props: any) {
   );
 
   return React.createElement('article', { className: 'max-w-3xl mx-auto px-4 py-8' },
-    React.createElement(Breadcrumbs, { items: [{ label: t('blog', settings), to: '/' }, { label: post.title || t('post', settings) }] }),
+    settings.theme_show_breadcrumb !== '0' && React.createElement(Breadcrumbs, { items: [{ label: t('blog', settings), to: '/' }, { label: post.title || t('post', settings) }] }),
 
     // Header: title + meta (category lives in the meta row below)
     React.createElement('header', { className: 'mb-8' },

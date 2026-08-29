@@ -60,6 +60,10 @@ a:focus-visible, button:focus-visible { outline: 2px solid color-mix(in srgb, va
 .btn-danger:hover { filter: brightness(1.05); box-shadow: 0 4px 12px -2px rgba(239,68,68,0.55); }
 .btn-danger:active:not(:disabled) { transform: scale(0.97); }
 
+/* Night mode root: native form controls (select dropdown list, scrollbars,
+   date pickers) follow the dark scheme instead of staying light */
+.dark { color-scheme: dark; }
+
 /* --- Inputs (soft focus glow) --- */
 .input-field { @apply w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm outline-none transition-all duration-200 placeholder-gray-400 bg-white; box-shadow: inset 0 1px 2px rgba(0,0,0,0.03); }
 .input-field:hover { border-color: #d1d5db; }
@@ -75,8 +79,24 @@ select.input-field {
   background-position: right 0.85rem center;
   padding-right: 2.5rem;
 }
+/* Night mode: select follows the dark surface — use background-color (the
+   .dark .input-field `background` shorthand would reset repeat/position to
+   default and tile the chevron), set light text + darker border, and flip
+   color-scheme so the native dropdown LIST panel renders dark too. */
 .dark select.input-field {
+  background-color: #1f2937;
+  color: #f3f4f6;
+  border-color: #374151;
+  /* The native dropdown LIST panel does not inherit the root's color-scheme in
+     Chromium — set it on the select itself so the open list renders dark. */
+  color-scheme: dark;
   background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239ca3af' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+}
+.dark select.input-field option {
+  background-color: #1f2937;
+  color: #f3f4f6;
 }
 
 /* --- Cards (softer, airy) --- */
@@ -148,6 +168,15 @@ table tbody tr { transition: background-color 0.12s ease; }
 .dark .border-gray-300 { border-color: #4b5563 !important; }
 .dark .border-gray-400 { border-color: #6b7280 !important; }
 .dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #374151 !important; }
+
+/* Rich-text editor + prose previews stay readable in dark mode: Tailwind's
+   prose typography uses a fixed dark-gray body color that vanishes on a dark
+   backdrop. Flip the body/heading/quote colors to light. */
+.dark .prose { color: #d1d5db; }
+.dark .prose strong, .dark .prose b, .dark .prose th, .dark .prose blockquote { color: #f3f4f6; }
+.dark .prose a { color: #93c5fd; }
+.dark .prose code { background: rgba(148,163,184,0.15); color: #e5e7eb; }
+.dark .prose li, .dark .prose td { color: #d1d5db; }
 
 /* Tables */
 .dark thead { @apply bg-gray-800; }

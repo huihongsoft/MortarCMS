@@ -10,6 +10,7 @@
     "test:ai": "tsx scripts/ai-regression.ts && tsx scripts/fix-test.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1121.0",
     "@types/better-sqlite3": "^9.6.0",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^13.0.3",

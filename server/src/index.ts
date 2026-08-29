@@ -45,6 +45,10 @@ import securityRoutes from './routes/security';
 import editorTemplatesRoutes from './routes/editorTemplates';
 import aiRoutes from './routes/ai';
 import rolesRoutes from './routes/roles';
+import webhookRoutes from './routes/webhooks';
+import formRoutes from './routes/forms';
+import newsletterRoutes from './routes/newsletter';
+import { initWebhooks } from './utils/webhooks';
 import { loadActivePlugins } from './plugins/manager';
 import { resolveSite } from './middleware/site';
 
@@ -349,6 +353,9 @@ app.use('/api/stats', statsRoutes);
 app.use('/api/editor', editorTemplatesRoutes);
 app.use('/api/ai', aiRoutes);
 app.use('/api/roles', rolesRoutes);
+app.use('/api', webhookRoutes);
+app.use('/api', formRoutes);
+app.use('/api', newsletterRoutes);
 app.use('/api', sitemapRoutes);
 app.use('/api/feed', cacheControl('600'), feedRoutes);
 app.use('/api/sitemap.xml', cacheControl('600'));
@@ -431,8 +438,35 @@ app.get('/api/schema', (_req, res) => {
     { method: 'GET', path: '/api/system/cache', auth: 'admin', desc: 'Page cache stats' },
     { method: 'POST', path: '/api/system/cache/purge', auth: 'admin', desc: 'Purge all cached responses' },
     { method: 'GET', path: '/api/editor/shortcodes', auth: 'editor+', desc: 'Registered shortcodes with descriptions' },
+    { method: 'GET', path: '/api/editor/forms', auth: 'editor+', desc: 'Enabled forms for the [form] shortcode inserter' },
     { method: 'GET', path: '/api/sites', auth: 'admin', desc: 'Sites with per-site content stats' },
     { method: 'POST', path: '/api/sites/:id/duplicate', auth: 'admin', desc: 'Duplicate a site with settings and menus' },
+    { method: 'GET', path: '/api/admin/webhooks', auth: 'admin', desc: 'List webhooks (secret never returned)' },
+    { method: 'POST', path: '/api/admin/webhooks', auth: 'admin', desc: 'Create a webhook (returns signing secret once)', body: { name: 'Name', url: 'https://hook.example/endpoint', events: ['post_published'] } },
+    { method: 'PUT', path: '/api/admin/webhooks/:id', auth: 'admin', desc: 'Update name/url/events/active' },
+    { method: 'DELETE', path: '/api/admin/webhooks/:id', auth: 'admin', desc: 'Delete a webhook' },
+    { method: 'POST', path: '/api/admin/webhooks/:id/reset-secret', auth: 'admin', desc: 'Rotate the signing secret (returns new one once)' },
+    { method: 'POST', path: '/api/admin/webhooks/:id/test', auth: 'admin', desc: 'Send a test event to the endpoint' },
+    { method: 'POST', path: '/api/forms/:slug/submit', auth: 'public', desc: 'Submit a form (rendered by [form id="slug"])', body: { field_name: 'value' } },
+    { method: 'GET', path: '/api/admin/forms', auth: 'editor+', desc: 'List forms with unread submission counts' },
+    { method: 'POST', path: '/api/admin/forms', auth: 'editor+', desc: 'Create a form', body: { name: 'Contact', fields: [{ name: 'email', label: 'Email', type: 'email', required: true }] } },
+    { method: 'GET', path: '/api/admin/forms/:id', auth: 'editor+', desc: 'Form detail with field definitions' },
+    { method: 'PUT', path: '/api/admin/forms/:id', auth: 'editor+', desc: 'Update name/fields/email settings' },
+    { method: 'DELETE', path: '/api/admin/forms/:id', auth: 'editor+', desc: 'Delete a form and its submissions' },
+    { method: 'GET', path: '/api/admin/forms/:id/submissions', auth: 'editor+', desc: 'Paginated submissions' },
+    { method: 'GET', path: '/api/admin/forms/:id/submissions/export', auth: 'editor+', desc: 'Export submissions as CSV' },
+    { method: 'POST', path: '/api/admin/forms/:id/submissions/read', auth: 'editor+', desc: 'Mark submissions as read (body: submissionId optional)' },
+    { method: 'DELETE', path: '/api/admin/forms/:id/submissions/:sid', auth: 'editor+', desc: 'Delete one submission' },
+    { method: 'POST', path: '/api/posts/frontend/submit-post', auth: 'submit_posts', desc: 'Frontend post submission (enters pending queue)', body: { title: 'Title', content: 'Body', excerpt: 'Summary' } },
+    { method: 'GET', path: '/api/posts/mine', auth: 'logged-in', desc: 'The user\'s own submissions with review status' },
+    { method: 'POST', path: '/api/posts/:id/review', auth: 'review_posts', desc: 'Approve (publish) or reject (draft + notify author) a pending submission', body: { action: 'approve|reject', reason: 'Optional rejection reason' } },
+    { method: 'POST', path: '/api/newsletter/subscribe', auth: 'public', desc: 'Subscribe to the newsletter (double opt-in when SMTP is configured)', body: { email: 'a@b.c', name: 'Optional' } },
+    { method: 'POST', path: '/api/newsletter/confirm', auth: 'public', desc: 'Confirm a subscription via token', body: { token: '...' } },
+    { method: 'POST', path: '/api/newsletter/unsubscribe', auth: 'public', desc: 'Unsubscribe via token', body: { token: '...' } },
+    { method: 'GET', path: '/api/admin/subscribers', auth: 'admin', desc: 'List subscribers (search/status filter/pagination + totals)' },
+    { method: 'DELETE', path: '/api/admin/subscribers/:id', auth: 'admin', desc: 'Delete a subscriber' },
+    { method: 'GET', path: '/api/admin/subscribers/export', auth: 'admin', desc: 'Export subscribers as CSV' },
+    { method: 'POST', path: '/api/admin/newsletter/send', auth: 'admin', desc: 'Send a newsletter (body: to = test send, omit = broadcast)', body: { to: 'optional@test.dev' } },
   ];
   res.json({ name: 'Mortar CMS API', version: '0.1.0', endpoints });
 });
@@ -495,6 +529,10 @@ try {
   cacheConfigure(cEnabled ? cEnabled.value !== '0' : true, cTtl ? parseInt(cTtl.value) || 60 : 60);
 } catch {}
 
+
+// Outbound webhooks: listen on core content hooks (runs after plugins load
+// so plugin-side deliveries use the same event stream as core)
+initWebhooks();
 
 // Unified error handler: any uncaught error -> 500 { error } (details only in dev)
 app.use((err: any, _req: any, res: any, _next: any) => {

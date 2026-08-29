@@ -3,7 +3,7 @@ import crypto from 'crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import db, { cuid } from '../utils/db';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
 import { verifyToken } from '../utils/jwt';
 import { SiteRequest } from '../middleware/site';
 import { slugify, uniqueSlug } from '../utils/slug';
@@ -586,6 +586,67 @@ router.post('/:id/clone', authenticate, authorize('admin', 'editor', 'author'), 
     const tags = db.prepare('SELECT tagId FROM PostTag WHERE postId = ?').all(req.params.id) as any[];
     for (const t of tags) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, t.tagId);
     res.status(201).json(db.prepare('SELECT * FROM Post WHERE id = ?').get(id));
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// ---- Frontend submission + review workflow ----
+// Registered users with submit_posts (default: subscriber) can submit content
+// from the public site; it enters the moderation queue as 'pending' until an
+// editor approves or rejects it via /:id/review.
+
+router.post('/frontend/submit-post', authenticate, requireCap('submit_posts'), (req: AuthRequest & SiteRequest, res: Response) => {
+  try {
+    const title = String(req.body?.title || '').trim();
+    const content = String(req.body?.content || '').trim();
+    if (!title) { res.status(400).json({ error: 'Post title is required' }); return; }
+    if (!content) { res.status(400).json({ error: 'Post content is required' }); return; }
+    const excerpt = String(req.body?.excerpt || '').trim().slice(0, 300);
+    const id = cuid();
+    const allSlugs = (db.prepare("SELECT slug FROM Post WHERE type = 'post'").all() as any[]).map((s: any) => s.slug);
+    const slug = uniqueSlug(title, allSlugs);
+    db.prepare("INSERT INTO Post (id, title, slug, content, excerpt, status, featured, authorId, siteId) VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?, ?)")
+      .run(id, title, slug, content, excerpt, req.user!.userId, (req as any).siteId || null);
+    if (Array.isArray(req.body?.categoryIds)) {
+      for (const cid of req.body.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, cid);
+    }
+    try { doAction('post_submitted', id); } catch {}
+    res.status(201).json({ id, slug });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// The submitter's own submissions with their review status
+router.get('/mine', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const posts = db.prepare("SELECT id, title, slug, status, excerpt, createdAt FROM Post WHERE authorId = ? AND type = 'post' ORDER BY createdAt DESC").all(req.user!.userId) as any[];
+    res.json({ posts });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Editor review: approve (publish) or reject (back to draft + notify author)
+router.post('/:id/review', authenticate, requireCap('review_posts'), (req: AuthRequest, res: Response) => {
+  try {
+    const action = req.body?.action;
+    if (action !== 'approve' && action !== 'reject') { res.status(400).json({ error: 'action must be approve or reject' }); return; }
+    const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
+    if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
+    if (post.status !== 'pending') { res.status(400).json({ error: 'Post is not pending review' }); return; }
+    const now = new Date().toISOString();
+    if (action === 'approve') {
+      db.prepare("UPDATE Post SET status = 'published', publishedAt = ?, updatedAt = ? WHERE id = ?").run(now, now, post.id);
+      try { doAction('post_published', post.id); } catch {}
+    } else {
+      const reason = String(req.body?.reason || '').trim().slice(0, 500);
+      db.prepare("UPDATE Post SET status = 'draft', updatedAt = ? WHERE id = ?").run(now, post.id);
+      // In-app notification for the author (reuses the AiNotification table —
+      // userId/message/read are generic enough to double as a notification box)
+      if (post.authorId) {
+        const msg = reason
+          ? '您的投稿《' + post.title + '》未通过审核：' + reason
+          : '您的投稿《' + post.title + '》未通过审核，请修改后重新提交';
+        try { db.prepare('INSERT INTO AiNotification (id, userId, message, read, createdAt) VALUES (?, ?, ?, 0, ?)').run(cuid(), post.authorId, msg, now); } catch {}
+      }
+    }
+    res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

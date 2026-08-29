@@ -4,12 +4,14 @@ import QRCode from 'qrcode';
 import { useAuth } from '../lib/auth';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
+import Select from '../components/Select';
 
 const roles = ['admin', 'editor', 'author', 'contributor', 'subscriber'];
 
 export default function Users() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<any[]>([]);
+  const [newRole, setNewRole] = useState('author');
   const [roleFilter, setRoleFilter] = useState('');
   const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState('');
@@ -77,7 +79,7 @@ export default function Users() {
     const u = (document.getElementById('new-username') as HTMLInputElement).value;
     const e = (document.getElementById('new-email') as HTMLInputElement).value;
     const p = (document.getElementById('new-password') as HTMLInputElement).value;
-    const r = (document.getElementById('new-role') as HTMLSelectElement).value;
+    const r = newRole;
     if (!u || !e || !p) return alert(t('fill all fields', getLang()));
     try {
       await api.post('/auth/register', { username: u, email: e, password: p, role: r });
@@ -130,7 +132,7 @@ export default function Users() {
             React.createElement('input', { id: 'new-username', placeholder: t('username', getLang()), className: 'input-field' }),
             React.createElement('input', { id: 'new-email', placeholder: t('email', getLang()), type: 'email', className: 'input-field' }),
             React.createElement('input', { id: 'new-password', placeholder: t('password', getLang()), type: 'password', autoComplete: 'new-password', className: 'input-field' }),
-            React.createElement('select', { id: 'new-role', className: 'input-field', defaultValue: 'author' },
+            React.createElement(Select, { value: newRole, onChange: (v: string) => setNewRole(v), className: 'input-field' },
               roles.map(r => React.createElement('option', { key: r, value: r }, t(r, getLang())))
             ),
             React.createElement('button', { onClick: createUser, className: 'btn-primary w-full justify-center text-sm' }, React.createElement(UserPlus, { size: 14 }), t('create user', getLang()))
@@ -232,7 +234,7 @@ export default function Users() {
                     React.createElement('div', { className: 'flex items-center gap-2 whitespace-nowrap' },
                       React.createElement('span', { className: 'px-2 py-0.5 text-[11px] rounded-full font-medium capitalize shrink-0 ' + (roleColors[u.role] || 'bg-gray-100 text-gray-600') }, t(u.role, getLang())),
                       // inline width/padding: .input-field's w-full/py-2.5 override utility classes
-                      React.createElement('select', { value: u.role, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => updateRole(u.id, e.target.value), className: 'input-field text-xs shrink-0', style: { width: 96, paddingTop: 5, paddingBottom: 5 } },
+                      React.createElement(Select, { value: u.role, onChange: (v: string) => updateRole(u.id, v), className: 'input-field text-xs shrink-0', style: { width: 96, paddingTop: 5, paddingBottom: 5 } },
                         roles.map(r => React.createElement('option', { key: r, value: r }, r))
                       )
                     )

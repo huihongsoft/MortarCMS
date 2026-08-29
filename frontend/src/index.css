@@ -36,6 +36,14 @@ body { font-family: var(--body-font); background-color: var(--background, #fffff
 .prose pre code { background: transparent; }
 h1, h2, h3, h4, h5, h6 { font-family: var(--heading-font); }
 
+/* Content width (Settings > Reading > content width). Applied to the article/
+   page body (prose prose-gray prose-lg) so the editor preview and the public
+   site match. Default (data-content-width unset) stays full width. */
+body[data-content-width="narrow"] .prose.prose-gray.prose-lg { max-width: 42rem; }
+body[data-content-width="normal"] .prose.prose-gray.prose-lg { max-width: 48rem; }
+body[data-content-width="wide"] .prose.prose-gray.prose-lg { max-width: 64rem; }
+body[data-content-width="full"] .prose.prose-gray.prose-lg { max-width: none; }
+
 /* Dark-theme adaptation: when the active theme's background is dark
    (body[data-theme="dark"], set from the theme's background color),
    Tailwind's light surfaces and dark text classes flip to dark equivalents

@@ -4,6 +4,10 @@ import { Menu, X } from 'lucide-react';
 import api from '../../lib/api';
 import { t } from '../../lib/i18n';
 
+// Top-nav width (Settings > Reading > nav width). Only applies to top-nav
+// headers; a side-nav theme would ignore it.
+const NAV_W: Record<string, string> = { narrow: 'max-w-3xl', normal: 'max-w-5xl', wide: 'max-w-7xl', full: 'max-w-none' };
+
 export default function Header({ settings }: { settings: Record<string, string> }) {
   const [menuItems, setMenuItems] = useState<any[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -41,7 +45,7 @@ export default function Header({ settings }: { settings: Record<string, string> 
   };
 
   return React.createElement('header', { className: 'bg-white border-b border-gray-200 sticky top-0 z-40' },
-    React.createElement('div', { className: 'max-w-5xl mx-auto px-4 h-16 flex items-center justify-between' },
+    React.createElement('div', { className: (NAV_W[settings.nav_width] || 'max-w-5xl') + ' mx-auto px-4 h-16 flex items-center justify-between' },
       React.createElement(Link, { to: '/', className: 'text-xl font-bold text-gray-900 tracking-tight' }, settings.site_title || 'Mortar'),
       React.createElement('div', { className: 'hidden md:flex items-center gap-6' },
         React.createElement(Link, { to: '/', className: 'text-sm text-gray-600 hover:text-gray-900' }, t('home', settings)),

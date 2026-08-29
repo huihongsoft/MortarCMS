@@ -1,6 +1,5 @@
 import fs from 'fs';
 import path from 'path';
-import dns from 'node:dns/promises';
 import db, { cuid } from './db';
 import { slugify, uniqueSlug } from './slug';
 import { mdToHtml, parseFrontmatter } from './markdown';
@@ -10,6 +9,7 @@ import { activeThemeName, createThemeBackup } from '../routes/themes';
 import { purgeAllCaches, purgeContentCaches } from './cache';
 import { sanitizeHtml } from './sanitize';
 import { UPLOADS_DIR as uploadsDir } from './paths';
+import { fetchUrlGuarded } from './ssrf';
 import type { AIToolFunction, AIToolCall } from './ai';
 
 export interface ToolContext {
@@ -436,51 +436,9 @@ register('web_search', '搜索互联网获取最新信息（标题、链接、�
 });
 
 // ---- Theme: analyze a reference site's visual style (colors/fonts) so the
-// model can imitate it, and apply a style to the active theme. SSRF-guarded:
-// private/loopback hosts are refused. ----
-function isPrivateIp(ip: string): boolean {
-  if (!ip) return true;
-  if (ip.includes(':')) { // IPv6: loopback, link-local, unique-local
-    return /^::1$|^fe80:|^fc|^fd/.test(ip);
-  }
-  const parts = ip.split('.').map(Number);
-  return parts[0] === 127 || parts[0] === 10 || parts[0] === 0 ||
-    (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
-    (parts[0] === 192 && parts[1] === 168) ||
-    (parts[0] === 169 && parts[1] === 254);
-}
-
+// model can imitate it, and apply a style to the active theme. SSRF-guarded
+// fetching lives in ./ssrf (shared with webhook delivery). ----
 const THEME_FETCH_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36';
-
-// SSRF-guarded fetch: follows redirects manually (default fetch follows them
-// transparently, which would let an external page redirect us into an
-// internal network) and re-checks the resolved IP on every hop. Refuses
-// private/loopback addresses. Returns {status, text} or null on refusal/error.
-export async function fetchUrlGuarded(url: string, opts: { headers?: Record<string, string>; timeoutMs?: number }): Promise<{ status: number; text: string } | null> {
-  let current = url;
-  for (let hop = 0; hop < 5; hop++) {
-    let u: URL;
-    try {
-      u = new URL(current);
-      if (!['http:', 'https:'].includes(u.protocol)) return null;
-    } catch { return null; }
-    const addrs = await dns.lookup(u.hostname, { all: true }).catch(() => []);
-    if (addrs.some((a: any) => isPrivateIp(a.address))) return null;
-    let res: Response;
-    try {
-      res = await fetch(current, { headers: opts.headers, redirect: 'manual', signal: AbortSignal.timeout(opts.timeoutMs || 10000) });
-    } catch { return null; }
-    if ([301, 302, 303, 307, 308].includes(res.status)) {
-      const loc = res.headers.get('location');
-      if (!loc) return null;
-      try { current = new URL(loc, current).href; } catch { return null; }
-      continue;
-    }
-    if (!res.ok) return { status: res.status, text: '' };
-    return { status: res.status, text: (await res.text()).slice(0, 2_000_000) };
-  }
-  return null;
-}
 
 function normalizeColor(c: string): string {
   let v = c.toLowerCase().trim();

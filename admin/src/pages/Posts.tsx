@@ -5,6 +5,7 @@ import EmptyState from '../components/EmptyState';
 import { useToast } from '../lib/toast';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import Select from '../components/Select';
 
 export default function Posts() {
   const navigate = useNavigate();
@@ -31,7 +32,7 @@ export default function Posts() {
     window.history.replaceState(null, '', url.toString());
   }, [filter]);
 
-  useEffect(() => { api.get('/posts/admin?limit=1').then(r => setCounts(c => ({...c, all: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=published&limit=1').then(r => setCounts(c => ({...c, published: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=draft&limit=1').then(r => setCounts(c => ({...c, draft: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=trash&limit=1').then(r => setCounts(c => ({...c, trash: r.data.total || 0}))).catch(()=>{}); }, []);
+  useEffect(() => { api.get('/posts/admin?limit=1').then(r => setCounts(c => ({...c, all: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=published&limit=1').then(r => setCounts(c => ({...c, published: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=draft&limit=1').then(r => setCounts(c => ({...c, draft: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=pending&limit=1').then(r => setCounts(c => ({...c, pending: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=trash&limit=1').then(r => setCounts(c => ({...c, trash: r.data.total || 0}))).catch(()=>{}); }, []);
   useEffect(() => { fetchPosts(); }, [page, filter, sortBy, sortDir]);
 
   async function fetchPosts() {
@@ -111,6 +112,20 @@ export default function Posts() {
     fetchPosts();
   }
 
+  // Review workflow: approve publishes the pending submission, reject sends
+  // it back to draft with an optional reason (notified to the author)
+  async function reviewPost(id: string, action: 'approve' | 'reject') {
+    let reason = '';
+    if (action === 'reject') {
+      reason = window.prompt(t('rejection reason prompt', getLang())) || '';
+    }
+    try {
+      await api.post('/posts/' + id + '/review', { action, reason });
+      toast.toast(action === 'approve' ? t('post approved', getLang()) : t('post rejected', getLang()));
+      fetchPosts();
+    } catch (e: any) { toast.toast(e?.response?.data?.error || String(e), 'error'); }
+  }
+
 
   return React.createElement('div', null,
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
@@ -130,7 +145,7 @@ export default function Posts() {
                 React.createElement('button', { onClick: () => bulkStatus('draft'), className: 'btn-secondary text-xs' }, t('draft selected', getLang()) + ' (' + selected.size + ')'),
                 React.createElement('button', { onClick: bulkTrash, className: 'btn-danger text-xs' }, React.createElement(Trash, { size: 14 }), t('trash selected', getLang()) + ' (' + selected.size + ')'),
                 React.createElement('div', { className: 'flex items-center gap-1' },
-                  React.createElement('select', { value: batchLang, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setBatchLang(e.target.value), className: 'input-field w-28 text-xs' },
+                  React.createElement(Select, { value: batchLang, onChange: (v: string) => setBatchLang(v), className: 'input-field w-28 text-xs' },
                     ['English', '日本語', '한국어', 'Français', 'Deutsch', 'Español', '简体中文'].map(l => React.createElement('option', { key: l, value: l }, l))),
                   React.createElement('button', { onClick: batchTranslate, disabled: batchRunning, className: 'btn-secondary text-xs' },
                     React.createElement(Languages, { size: 13 }), batchRunning ? t('translating', getLang()) + '...' : t('ai translate selected', getLang())))
@@ -152,7 +167,7 @@ export default function Posts() {
           )))
       ),
       React.createElement('div', { className: 'flex items-center gap-3 mb-4 flex-wrap' },
-      ['all', 'published', 'draft', 'trash'].map(s =>
+      ['all', 'published', 'draft', 'pending', 'trash'].map(s =>
         
   
       React.createElement('button', { key: s, onClick: () => { setFilter(s === 'all' ? '' : s); setPage(1); }, className: `px-3 py-1.5 text-sm rounded-lg whitespace-nowrap ${(s === 'all' && !filter) || filter === s ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}` }, t(s, getLang()))
@@ -181,7 +196,7 @@ export default function Posts() {
               React.createElement('tr', { key: p.id, className: `border-b border-gray-100 hover:bg-gray-50 ${p.sticky ? 'bg-orange-50/50' : ''}` },
               React.createElement('td', { className: 'px-5 py-4' }, React.createElement('div', { className: 'flex items-center gap-2' }, p.featured ? React.createElement('img', { src: p.featured, alt: '', className: 'w-8 h-8 object-cover rounded' }) : React.createElement('div', { className: 'w-8 h-8 bg-gray-100 rounded flex items-center justify-center' }, React.createElement('span', { className: 'text-xs text-gray-400' }, 'IMG')), React.createElement('span', { className: 'font-medium text-gray-900' }, p.title))),
               React.createElement('td', { className: 'px-5 py-4 text-sm text-gray-500' }, p.author?.username),
-              React.createElement('td', { className: 'px-5 py-4' }, React.createElement('span', { className: 'flex items-center gap-1.5' }, p.password ? React.createElement('span', { className: 'text-xs text-gray-400', title: t('password protected', getLang()) }, '\u{1F512}') : null, p.sticky ? React.createElement(Pin, { size: 12, className: 'text-orange-500' }) : null, React.createElement('span', { className: `px-2 py-1 text-xs rounded-full font-medium ${p.status === 'published' ? 'bg-green-100 text-green-700' : p.status === 'draft' ? 'bg-yellow-100 text-yellow-700' : p.status === 'trash' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}` }, t(p.status, getLang())))),
+              React.createElement('td', { className: 'px-5 py-4' }, React.createElement('span', { className: 'flex items-center gap-1.5' }, p.password ? React.createElement('span', { className: 'text-xs text-gray-400', title: t('password protected', getLang()) }, '\u{1F512}') : null, p.sticky ? React.createElement(Pin, { size: 12, className: 'text-orange-500' }) : null, React.createElement('span', { className: `px-2 py-1 text-xs rounded-full font-medium ${p.status === 'published' ? 'bg-green-100 text-green-700' : p.status === 'draft' ? 'bg-yellow-100 text-yellow-700' : p.status === 'pending' ? 'bg-amber-100 text-amber-700' : p.status === 'trash' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}` }, t(p.status, getLang())))),
               React.createElement('td', { className: 'px-5 py-4 text-sm text-gray-500' }, p.views || 0),
               // Date column: published date for published posts, creation date
               // for drafts (never the literal word "draft")
@@ -189,6 +204,10 @@ export default function Posts() {
               React.createElement('td', { className: 'px-3 py-4' }, React.createElement('input', { type: 'checkbox', checked: selected.has(p.id), onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const next = new Set(selected); e.target.checked ? next.add(p.id) : next.delete(p.id); setSelected(next); } })),
               React.createElement('td', { className: 'px-5 py-4' },
                 React.createElement('div', { className: 'flex items-center justify-end gap-2' },
+                  p.status === 'pending' && React.createElement(React.Fragment, null,
+                    React.createElement('button', { onClick: () => reviewPost(p.id, 'approve'), className: 'px-2 py-1 text-xs rounded-lg bg-green-100 text-green-700 hover:bg-green-200', title: t('approve', getLang()) }, t('approve', getLang())),
+                    React.createElement('button', { onClick: () => reviewPost(p.id, 'reject'), className: 'px-2 py-1 text-xs rounded-lg bg-red-100 text-red-700 hover:bg-red-200', title: t('reject', getLang()) }, t('reject', getLang())),
+                  ),
                   p.status === 'published' && React.createElement('a', { href: '/post/' + p.slug, target: '_blank', className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('view post', getLang()) }, React.createElement(Eye, { size: 16 })),
                   React.createElement(Link, { to: `/posts/${p.id}/edit`, className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Edit2, { size: 16 })),
                   p.status === 'trash' ? React.createElement('button', { onClick: () => restorePost(p.id), className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('restore', getLang()) }, React.createElement('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, className: 'lucide' }, React.createElement('polyline', { points: '1 4 1 10 7 10' }), React.createElement('path', { d: 'M3.51 15a9 9 0 1 0 2.13-9.36L1 10' }))) : React.createElement('button', { onClick: () => toggleSticky(p.id), className: `p-1.5 ${p.sticky ? 'text-orange-500' : 'text-gray-400 hover:text-orange-500'}`, title: p.sticky ? t('unpin', getLang()) : t('pin', getLang()) }, React.createElement(Pin, { size: 16 })),

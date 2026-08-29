@@ -3,6 +3,7 @@ import { Plus, Trash2, Pencil, Check, X, Link2, FolderPlus, Search, Handshake } 
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
+import Select from '../components/Select';
 
 // Navigation-site link model: categorized links with descriptions, sub-site
 // ownership, an optional linked page, and associated posts (e.g. the
@@ -148,11 +149,11 @@ export default function Links() {
             React.createElement('input', { value: catName, onChange: e => setCatName(e.target.value), placeholder: t('new category', getLang()), className: 'input-field text-sm' }),
             React.createElement('input', { value: catDesc, onChange: e => setCatDesc(e.target.value), placeholder: t('description (optional)', getLang()), className: 'input-field text-sm' }),
             React.createElement('input', { type: 'number', value: catOrder, onChange: e => setCatOrder(parseInt(e.target.value) || 0), placeholder: t('order', getLang()), className: 'input-field text-sm' }),
-            React.createElement('select', { value: catSiteId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setCatSiteId(e.target.value), className: 'input-field text-sm', title: t('category site hint', getLang()) },
+            React.createElement(Select, { value: catSiteId, onChange: (v: string) => setCatSiteId(v), className: 'input-field text-sm', title: t('category site hint', getLang()) },
               React.createElement('option', { value: '' }, '(' + t('global (all sites)', getLang()) + ')'),
               sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name + (st.isPrimary === 1 ? ' (primary)' : '')))
             ),
-            React.createElement('select', { value: catPageId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setCatPageId(e.target.value), className: 'input-field text-sm', title: t('category page hint', getLang()) },
+            React.createElement(Select, { value: catPageId, onChange: (v: string) => setCatPageId(v), className: 'input-field text-sm', title: t('category page hint', getLang()) },
               React.createElement('option', { value: '' }, '(' + t('select page', getLang()) + ')'),
               pages.map((pg: any) => React.createElement('option', { key: pg.id, value: pg.id }, pg.title))
             ),
@@ -181,7 +182,7 @@ export default function Links() {
             React.createElement('input', { value: url, onChange: e => setUrl(e.target.value), placeholder: 'https://...', className: 'input-field text-sm' }),
             React.createElement('input', { value: description, onChange: e => setDescription(e.target.value), placeholder: t('description (optional)', getLang()), className: 'input-field text-sm' }),
             React.createElement('input', { value: avatar, onChange: e => setAvatar(e.target.value), placeholder: t('avatar url', getLang()), className: 'input-field text-sm' }),
-            React.createElement('select', { value: categoryId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setCategoryId(e.target.value), className: 'input-field text-sm' },
+            React.createElement(Select, { value: categoryId, onChange: (v: string) => setCategoryId(v), className: 'input-field text-sm' },
               React.createElement('option', { value: '' }, '(' + t('no category', getLang()) + ')'),
               categories.map(c => React.createElement('option', { key: c.id, value: c.id }, c.name))
             ),

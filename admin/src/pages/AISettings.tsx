@@ -3,6 +3,7 @@ import { Save, Zap, Plus, Trash2, KeyRound, Server } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
+import Select from '../components/Select';
 
 interface Provider {
   id: string;
@@ -177,11 +178,11 @@ export default function AISettings() {
       React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-1 uppercase tracking-wider' }, t('model compare', getLang())),
       React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t('compare hint', getLang())),
       React.createElement('div', { className: 'flex flex-wrap gap-2 mb-3' },
-        React.createElement('select', { value: cmpA, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setCmpA(e.target.value), className: 'input-field w-44 text-sm' },
+        React.createElement(Select, { value: cmpA, onChange: (v: string) => setCmpA(v), className: 'input-field w-44 text-sm' },
           React.createElement('option', { value: '' }, t('select model a', getLang())),
           providers.filter(p => p.enabled).map(p => React.createElement('option', { key: p.id, value: p.id }, p.name))),
         React.createElement('span', { className: 'self-center text-gray-400 text-xs' }, 'vs'),
-        React.createElement('select', { value: cmpB, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setCmpB(e.target.value), className: 'input-field w-44 text-sm' },
+        React.createElement(Select, { value: cmpB, onChange: (v: string) => setCmpB(v), className: 'input-field w-44 text-sm' },
           React.createElement('option', { value: '' }, t('select model b', getLang())),
           providers.filter(p => p.enabled).map(p => React.createElement('option', { key: p.id, value: p.id }, p.name))),
         React.createElement('input', { value: cmpPrompt, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCmpPrompt(e.target.value), placeholder: t('compare prompt', getLang()), className: 'input-field flex-1 min-w-40 text-sm' }),

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../lib/api';
 import { t } from '../../lib/i18n';
+import { navWidthClass } from '../navWidth';
 
 // Aurora header: glassy, minimal — logo left, primary menu right
 export default function Header({ settings }: { settings: Record<string, string> }) {
@@ -44,7 +45,7 @@ export default function Header({ settings }: { settings: Record<string, string> 
   return React.createElement('header', {
     className: 'sticky top-0 z-40 transition-all duration-300 ' + (scrolled ? 'bg-white/80 backdrop-blur-xl border-b border-gray-900/[0.06] shadow-sm shadow-gray-900/[0.03]' : 'bg-transparent border-b border-transparent'),
   },
-    React.createElement('div', { className: 'max-w-5xl mx-auto px-6 h-16 flex items-center justify-between' },
+    React.createElement('div', { className: navWidthClass(settings.nav_width, 'max-w-5xl') + ' mx-auto px-6 h-16 flex items-center justify-between' },
       React.createElement(Link, { to: '/', className: 'flex items-center gap-2 group' },
         React.createElement('span', { className: 'w-6 h-6 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 shadow-lg shadow-indigo-500/30 transition-transform group-hover:scale-110' }),
         React.createElement('span', { className: 'text-lg font-semibold tracking-tight text-gray-900' }, settings.site_title || 'Mortar'),

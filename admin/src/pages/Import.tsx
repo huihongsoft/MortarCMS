@@ -3,6 +3,7 @@ import { Upload, FileUp, CheckCircle2, FileText } from 'lucide-react';
 import { useToast } from '../lib/toast';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import Select from '../components/Select';
 
 export default function Import() {
   const [dragging, setDragging] = useState(false);
@@ -90,7 +91,7 @@ export default function Import() {
       React.createElement('p', { className: 'text-sm text-gray-500 mb-3' }, t('import .md files with optional frontmatter (title, date, tags, categories, slug).', getLang())),
       React.createElement('div', { className: 'flex items-center gap-3 flex-wrap' },
         React.createElement('button', { onClick: () => mdRef.current?.click(), disabled: importing, className: 'btn-secondary text-sm' }, React.createElement(FileText, { size: 14 }), t('choose markdown files', getLang())),
-        React.createElement('select', { value: mdStatus, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setMdStatus(e.target.value), className: 'input-field w-32 text-sm' },
+        React.createElement(Select, { value: mdStatus, onChange: (v: string) => setMdStatus(v), className: 'input-field w-32 text-sm' },
           React.createElement('option', { value: 'draft' }, t('draft', getLang())),
           React.createElement('option', { value: 'published' }, t('published', getLang())))
       ),

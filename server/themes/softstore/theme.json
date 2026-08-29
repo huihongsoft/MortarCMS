@@ -16,5 +16,12 @@
     "heading_max": "26"
   },
   "custom_css": ".theme-section { border-radius: 8px; overflow: hidden; }",
-  "settingsSchema": []
+  "settingsSchema": [
+    {
+      "key": "show_breadcrumb",
+      "label": "显示面包屑",
+      "type": "checkbox",
+      "default": "1"
+    }
+  ]
 }

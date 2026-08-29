@@ -7,6 +7,7 @@ import VisualEditor from '../components/VisualEditor';
 import RevisionsPanel from '../components/RevisionsPanel';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import Select from '../components/Select';
 
 export default function PageEditor() {
   const { id } = useParams();
@@ -127,14 +128,14 @@ export default function PageEditor() {
             React.createElement('div', { className: 'p-4 space-y-4' },
               React.createElement('div', { className: 'card p-4' },
                 React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('status', getLang())),
-                React.createElement('select', { value: status, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setStatus(e.target.value), className: 'input-field' },
+                React.createElement(Select, { value: status, onChange: (v: string) => setStatus(v), className: 'input-field' },
                   React.createElement('option', { value: 'draft' }, t('draft', getLang())), React.createElement('option', { value: 'published' }, t('published', getLang())), React.createElement('option', { value: 'password' }, t('password protected', getLang())), React.createElement('option', { value: 'private' }, t('private', getLang()))
                 ),
                 React.createElement('input', { type: 'password', value: password, onChange: e => setPassword(e.target.value), placeholder: t('password protect this page', getLang()), className: 'input-field mt-2' })
               ),
               parentPages.length > 0 && React.createElement('div', { className: 'card p-4' },
                 React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('parent page', getLang())),
-                React.createElement('select', { value: parentId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setParentId(e.target.value), className: 'input-field' },
+                React.createElement(Select, { value: parentId, onChange: (v: string) => setParentId(v), className: 'input-field' },
                   React.createElement('option', { value: '' }, '(' + t('no parent', getLang()) + ')'),
                   parentPages.map((pp: any) => React.createElement('option', { key: pp.id, value: pp.id }, pp.title))
                 )
@@ -204,14 +205,14 @@ export default function PageEditor() {
         ),
         React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('status', getLang())),
-          React.createElement('select', { value: status, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setStatus(e.target.value), className: 'input-field' },
+          React.createElement(Select, { value: status, onChange: (v: string) => setStatus(v), className: 'input-field' },
             React.createElement('option', { value: 'draft' }, t('draft', getLang())), React.createElement('option', { value: 'published' }, t('published', getLang())), React.createElement('option', { value: 'password' }, t('password protected', getLang())), React.createElement('option', { value: 'private' }, t('private', getLang()))
           ),
           status === 'password' && React.createElement('input', { type: 'password', value: password, onChange: e => setPassword(e.target.value), placeholder: t('password protect this page', getLang()), className: 'input-field mt-2' })
         ),
         parentPages.length > 0 && React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('parent page', getLang())),
-          React.createElement('select', { value: parentId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setParentId(e.target.value), className: 'input-field' },
+          React.createElement(Select, { value: parentId, onChange: (v: string) => setParentId(v), className: 'input-field' },
             React.createElement('option', { value: '' }, '(' + t('no parent', getLang()) + ')'),
             parentPages.map((pp: any) => React.createElement('option', { key: pp.id, value: pp.id }, pp.title))
           )

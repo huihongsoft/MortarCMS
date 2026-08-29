@@ -306,16 +306,38 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           urls.forEach((href: string) => { if (!canvas.querySelector('link[href="' + href + '"]')) { const link = canvas.createElement('link'); link.rel = 'stylesheet'; link.href = href; canvas.head.appendChild(link); } });
         }).catch(() => {});
 
+      // Dark mode: when the admin is in night mode, render the canvas with a
+      // dark backdrop so the editor's content area isn't a blinding white sheet.
+      const isDark = document.documentElement.classList.contains('dark');
+      const bg = isDark ? '#111827' : '#fff';
+      const fg = isDark ? '#d1d5db' : '#111827';
       const style = canvas.createElement('style');
-      style.textContent = `html,body{margin:0!important;padding:0!important;width:100%!important;max-width:none!important;box-sizing:border-box!important;display:block!important;position:static!important}html{height:100%!important;overflow:visible!important;background:#fff;color-scheme:light}body{min-height:100%!important;height:auto!important;overflow:visible!important;background:#fff}.cms-post-list,.cms-categories,.cms-comments,.cms-search,.cms-archive,.cms-tag-cloud,.cms-link-list{min-height:40px}`;
+      style.textContent = `html,body{margin:0!important;padding:0!important;width:100%!important;max-width:none!important;box-sizing:border-box!important;display:block!important;position:static!important}html{height:100%!important;overflow:visible!important;background:${bg};color-scheme:${isDark ? 'dark' : 'light'}}body{min-height:100%!important;height:auto!important;overflow:visible!important;background:${bg};color:${fg}}${isDark ? '.prose,.prose strong,.prose b,.prose th,.prose blockquote{color:#e5e7eb}.prose a{color:#93c5fd}.prose code{background:rgba(148,163,184,.15);color:#e5e7eb}' : ''}.cms-post-list,.cms-categories,.cms-comments,.cms-search,.cms-archive,.cms-tag-cloud,.cms-link-list{min-height:40px}`;
       canvas.head.appendChild(style);
 
       fetch('/api/settings').then(r => r.json()).then(s => {
-        const vars: Record<string, string> = { '--primary-color': s.theme_primary_color || '#3b82f6', '--background': s.theme_background || '#ffffff', '--text-color': s.theme_text_color || '#111827', '--link-color': s.theme_link_color || '#2563eb', '--heading-font': s.theme_heading_font || 'inherit', '--body-font': s.theme_body_font || 'inherit' };
+        // In night mode force a light text / dark background on the canvas so
+        // the theme CSS (which reads var(--text-color) / var(--background))
+        // renders readable content — the theme's own colors stay for light mode.
+        const vars: Record<string, string> = {
+          '--primary-color': s.theme_primary_color || '#3b82f6',
+          '--background': isDark ? '#111827' : (s.theme_background || '#ffffff'),
+          '--text-color': isDark ? '#d1d5db' : (s.theme_text_color || '#111827'),
+          '--link-color': isDark ? '#93c5fd' : (s.theme_link_color || '#2563eb'),
+          '--heading-font': s.theme_heading_font || 'inherit',
+          '--body-font': s.theme_body_font || 'inherit',
+        };
         const adminPrimary = getComputedStyle(document.documentElement).getPropertyValue('--admin-primary').trim() || '#3b82f6';
         const vStyle = canvas.createElement('style');
         vStyle.textContent = ':root{' + Object.entries(vars).map(([k, v]) => k + ':' + v + ';').join('') + '--primary:' + adminPrimary + ';--primary-soft:' + adminPrimary + '22;}';
         canvas.head.appendChild(vStyle);
+        // Match the canvas content width to Settings > Reading > content width
+        // so the editor preview looks like the live page (narrow/normal/wide/full)
+        const cwMap: Record<string, string> = { narrow: '42rem', normal: '48rem', wide: '64rem', full: 'none' };
+        const cw = cwMap[s.content_width || 'normal'] || cwMap.normal;
+        const cwStyle = canvas.createElement('style');
+        cwStyle.textContent = '.prose.prose-gray.prose-lg{max-width:' + cw + ';}';
+        canvas.head.appendChild(cwStyle);
         if (s.theme_custom_css) { const tStyle = canvas.createElement('style'); tStyle.textContent = s.theme_custom_css; canvas.head.appendChild(tStyle); }
       }).catch(() => {});
     });
@@ -575,6 +597,8 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
 
     // --- GrapesJS config ---
     const contentEl = ct.querySelector('#ve-guten-content') as HTMLElement;
+    // Shared by the canvas frameStyle + the load-time style injection below
+    const isDark = document.documentElement.classList.contains('dark');
     const config: EditorConfig = {
       container: contentEl,
       height: '100%',
@@ -585,11 +609,13 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       forceClass: false,
       canvas: {
         styles: [],
+        // Canvas frame follows the admin night mode so the editor's content
+        // area isn't a white sheet in dark mode.
         frameStyle: `
           :root{--primary:#3b82f6;--primary-soft:rgba(59,130,246,.08)}
           html,body{margin:0!important;padding:0!important;width:100%!important;max-width:none!important;box-sizing:border-box!important;display:block!important;position:static!important}
-          html{height:100%!important;overflow:visible!important;background:#fff;color-scheme:light}
-          body{min-height:100%!important;height:auto!important;overflow:visible!important;background:#fff;-webkit-font-smoothing:antialiased;font-family:var(--body-font,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif);color:#111827}
+          html{height:100%!important;overflow:visible!important;background:${isDark ? '#111827' : '#fff'};color-scheme:${isDark ? 'dark' : 'light'}}
+          body{min-height:100%!important;height:auto!important;overflow:visible!important;background:${isDark ? '#111827' : '#fff'};-webkit-font-smoothing:antialiased;font-family:var(--body-font,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif);color:${isDark ? '#d1d5db' : '#111827'}}
           h1,h2,h3{font-family:var(--heading-font,inherit);line-height:1.3}
           [data-gjs-highlightable]{outline:none!important;transition:box-shadow .15s ease}
           .gjs-highlighted{outline:1px solid rgba(0,124,186,.35)!important;outline-offset:-1px}

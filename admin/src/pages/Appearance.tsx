@@ -3,6 +3,7 @@ import { Save, CheckCircle2, Upload, Trash2, Palette, X } from 'lucide-react';
 import VisualEditor from '../components/VisualEditor';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import Select from '../components/Select';
 
 export default function Appearance() {
   const [themes, setThemes] = useState<any[]>([]);
@@ -261,11 +262,11 @@ export default function Appearance() {
             React.createElement('div', { key: f.key },
               React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, f.label),
               f.type === 'checkbox'
-                ? React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer mt-1' },
+                ? React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer py-2.5' },
                     React.createElement('input', { type: 'checkbox', checked: (settings['theme_' + f.key] || f.default || '') === '1', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.checked ? '1' : '0' }), className: 'rounded border-gray-300 text-primary-600' }),
                     React.createElement('span', { className: 'text-sm text-gray-600' }, f.label))
                 : f.type === 'select'
-                  ? React.createElement('select', { value: settings['theme_' + f.key] || f.default || '', onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.value }), className: 'input-field' },
+                  ? React.createElement(Select, { value: settings['theme_' + f.key] || f.default || '', onChange: (v: string) => setSettings({ ...settings, ['theme_' + f.key]: v }), className: 'input-field' },
                       (f.options || []).map((o: string) => React.createElement('option', { key: o, value: o }, o)))
                   : f.type === 'textarea'
                     ? React.createElement('textarea', { value: settings['theme_' + f.key] || f.default || '', onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.value }), rows: 3, className: 'input-field' })
@@ -292,7 +293,7 @@ export default function Appearance() {
           selectField(t('body font', getLang()), 'theme_body_font', ['System', 'Serif', 'Sans-serif'], settings, setSettings),
           React.createElement('div', null,
             React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('heading cap', getLang())),
-            React.createElement('select', { value: settings.theme_heading_cap || '2', onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSettings({ ...settings, theme_heading_cap: e.target.value }), className: 'input-field' },
+            React.createElement(Select, { value: settings.theme_heading_cap || '2', onChange: (v: string) => setSettings({ ...settings, theme_heading_cap: v }), className: 'input-field' },
               React.createElement('option', { value: '2' }, '2（从 h2 开始）'),
               React.createElement('option', { value: '1' }, '1（允许 h1）')
             ),
@@ -396,9 +397,9 @@ export default function Appearance() {
       // Theme Sections (visual hook editor)
       React.createElement('details', { className: 'card p-6 mb-6' },
         React.createElement('summary', { className: 'cursor-pointer select-none list-none flex items-center justify-between py-0.5 -my-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 px-2 -mx-2 transition-colors' },
-          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, 'Theme Sections'),
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('theme sections', getLang())),
           React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),
-        React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, 'Visually design custom sections injected at key theme locations.'),
+        React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t('theme sections hint', getLang())),
         React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3' },
           HOOK_LOCATIONS.map(loc => {
             const hasContent = (() => {
@@ -510,7 +511,7 @@ function colorField(label: string, key: string, settings: Record<string, string>
 function selectField(label: string, key: string, options: string[], settings: Record<string, string>, setSettings: any) {
   return React.createElement('div', null,
     React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, label),
-    React.createElement('select', { value: settings[key] || options[0].toLowerCase(), onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSettings({ ...settings, [key]: e.target.value }), className: 'input-field' },
+    React.createElement(Select, { value: settings[key] || options[0].toLowerCase(), onChange: (v: string) => setSettings({ ...settings, [key]: v }), className: 'input-field' },
       options.map(o => React.createElement('option', { key: o, value: o.toLowerCase() }, o))
     )
   );

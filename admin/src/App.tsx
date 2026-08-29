@@ -7,6 +7,7 @@ import PageLoader from './components/PageLoader';
 const Login = React.lazy(() => import('./pages/Login'));
 const Dashboard = React.lazy(() => import('./pages/Dashboard'));
 const StatsPage = React.lazy(() => import('./pages/Stats'));
+const HomeEditor = React.lazy(() => import('./pages/HomeEditor'));
 const Posts = React.lazy(() => import('./pages/Posts'));
 const PostEditor = React.lazy(() => import('./pages/PostEditor'));
 const Pages = React.lazy(() => import('./pages/Pages'));
@@ -35,6 +36,10 @@ const AIChat = React.lazy(() => import('./pages/AIChat'));
 const AISettings = React.lazy(() => import('./pages/AISettings'));
 const AIBindings = React.lazy(() => import('./pages/AIBindings'));
 const Roles = React.lazy(() => import('./pages/Roles'));
+const Webhooks = React.lazy(() => import('./pages/Webhooks'));
+const Forms = React.lazy(() => import('./pages/Forms'));
+const FormSubmissions = React.lazy(() => import('./pages/FormSubmissions'));
+const Subscribers = React.lazy(() => import('./pages/Subscribers'));
 
 
 
@@ -67,6 +72,7 @@ function AnimatedRoutes() {
     React.createElement(Route, { element: React.createElement(ProtectedRoute, null, React.createElement(Layout)) },
       React.createElement(Route, { path: '/', element: React.createElement(Dashboard) }),
       React.createElement(Route, { path: '/stats', element: React.createElement(StatsPage) }),
+      React.createElement(Route, { path: '/home-editor', element: React.createElement(HomeEditor) }),
       React.createElement(Route, { path: '/posts', element: React.createElement(Posts) }),
       React.createElement(Route, { path: '/posts/new', element: React.createElement(PostEditor) }),
       React.createElement(Route, { path: '/posts/:id/edit', element: React.createElement(PostEditor) }),
@@ -97,6 +103,10 @@ function AnimatedRoutes() {
       React.createElement(Route, { path: '/ai/bindings', element: React.createElement(AIBindings) }),
       React.createElement(Route, { path: '/ai/settings', element: React.createElement(AISettings) }),
       React.createElement(Route, { path: '/roles', element: React.createElement(Roles) }),
+      React.createElement(Route, { path: '/webhooks', element: React.createElement(Webhooks) }),
+      React.createElement(Route, { path: '/forms', element: React.createElement(Forms) }),
+      React.createElement(Route, { path: '/forms/:id/submissions', element: React.createElement(FormSubmissions) }),
+      React.createElement(Route, { path: '/subscribers', element: React.createElement(Subscribers) }),
     ),
     React.createElement(Route, { path: '*', element: React.createElement(Navigate, { to: '/', replace: true }) })
   );

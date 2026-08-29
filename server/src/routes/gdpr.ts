@@ -13,6 +13,8 @@ function collectUserData(userId: string): any {
     posts: db.prepare('SELECT title, slug, createdAt FROM Post WHERE authorId = ?').all(userId),
     media: db.prepare('SELECT original, url, createdAt FROM Media WHERE userId = ?').all(userId),
     appPasswords: db.prepare('SELECT name, created_at FROM AppPassword WHERE userId = ?').all(userId),
+    formSubmissions: db.prepare('SELECT data, ip, createdAt FROM FormSubmission WHERE userId = ?').all(userId),
+    newsletterSubscriptions: db.prepare("SELECT email, status, confirmed, createdAt FROM Subscriber WHERE email IN (SELECT email FROM User WHERE id = ?)").all(userId),
     aiUsage: db.prepare('SELECT kind, model, tokens, createdAt FROM AiUsage WHERE userId = ?').all(userId),
     aiNotifications: db.prepare('SELECT message, createdAt FROM AiNotification WHERE userId = ?').all(userId),
     activity: db.prepare('SELECT action, detail, createdAt FROM Activity WHERE userId = ?').all(userId),
@@ -43,6 +45,13 @@ function eraseUserData(userId: string): { mediaDeleted: number } {
     db.prepare('DELETE FROM Media WHERE id = ?').run(m.id);
   }
   db.prepare('DELETE FROM AppPassword WHERE userId = ?').run(userId);
+  // Form submissions keep their content (the site owner's record) but the
+  // account association is removed — same anonymization policy as comments.
+  db.prepare('UPDATE FormSubmission SET userId = NULL WHERE userId = ?').run(userId);
+  // Newsletter subscriptions are keyed by email — erase them when the erased
+  // user's email matches (their consent ends with the account)
+  const userEmail = db.prepare('SELECT email FROM User WHERE id = ?').get(userId) as any;
+  if (userEmail?.email) db.prepare('DELETE FROM Subscriber WHERE email = ?').run(userEmail.email);
   db.prepare('DELETE FROM AiMemory WHERE userId = ?').run(userId);
   db.prepare('DELETE FROM AiUsage WHERE userId = ?').run(userId);
   db.prepare('DELETE FROM AiNotification WHERE userId = ?').run(userId);

@@ -11,6 +11,7 @@ import api from '../lib/api';
 // Map routes to page titles for the admin bar breadcrumb (WordPress-style)
 const routeTitles: [string, string][] = [
   ['/stats', 'visit stats'],
+  ['/home-editor', 'custom homepage'],
   ['/posts', 'posts'],
   ['/pages', 'pages'],
   ['/menus', 'menus'],
@@ -36,6 +37,9 @@ const routeTitles: [string, string][] = [
   ['/ai/settings', 'ai settings'],
   ['/ai', 'ai chat'],
   ['/settings', 'settings'],
+  ['/webhooks', 'webhooks'],
+  ['/forms', 'forms'],
+  ['/subscribers', 'subscribers'],
 ];
 
 export default function Layout() {

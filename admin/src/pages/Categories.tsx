@@ -3,6 +3,7 @@ import { Plus, Trash2, Pencil, Check, X, FolderTree } from 'lucide-react';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
+import Select from '../components/Select';
 
 export default function Categories() {
   const [cats, setCats] = useState<any[]>([]);
@@ -55,7 +56,7 @@ export default function Categories() {
             React.createElement('textarea', { value: description, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setDescription(e.target.value), placeholder: t('description (optional)', getLang()), rows: 3, className: 'input-field' })),
           React.createElement('div', null,
             React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('parent category', getLang())),
-            React.createElement('select', { value: parentId, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setParentId(e.target.value), className: 'input-field' },
+            React.createElement(Select, { value: parentId, onChange: (v: string) => setParentId(v), className: 'input-field' },
               React.createElement('option', { value: '' }, t('no parent', getLang())),
               cats.filter(c => c.id !== editing?.id).map(c => React.createElement('option', { key: c.id, value: c.id }, c.name))
             )),

@@ -161,6 +161,24 @@ const TEMPLATES: MailTemplate[] = [
     render: (v) => layout(v.site_title, '<p>A new comment was posted on <strong>' + v.post_title + '</strong>:</p><blockquote style="margin:12px 0;padding:12px 16px;background:#f3f4f6;border-left:4px solid #2563eb;border-radius:6px;">' + v.comment + '</blockquote><p><a href="' + v.site_url + '/admin#/comments" style="color:#2563eb;">Review in the admin panel</a></p>', 'Sent by ' + v.site_title),
   },
   {
+    name: 'form_notification',
+    subject: 'New form submission: {{form_name}}',
+    desc: 'Notifies the form owner when a visitor submits a form',
+    render: (v) => layout(v.site_title, '<p>A visitor submitted the form <strong>' + v.form_name + '</strong>:</p>' + (v.fields_html || '') + '<p style="margin-top:12px;color:#9ca3af;font-size:12px;">Received at ' + v.sent_at + '</p>', 'Sent by ' + v.site_title),
+  },
+  {
+    name: 'newsletter_confirm',
+    subject: 'Confirm your subscription to {{site_title}}',
+    desc: 'Double opt-in confirmation for newsletter subscribers',
+    render: (v) => layout(v.site_title, '<p>Hello' + (v.name ? ' ' + v.name : '') + ',</p><p>Please confirm your subscription to the <strong>' + v.site_title + '</strong> newsletter by clicking the button below:</p><p><a href="' + v.confirm_link + '" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;">Confirm subscription</a></p><p>If you did not request this, you can safely ignore this email.</p>', 'You received this because someone subscribed this address to ' + v.site_title + ' updates'),
+  },
+  {
+    name: 'newsletter_digest',
+    subject: 'New posts from {{site_title}}',
+    desc: 'Newsletter digest with the latest published posts',
+    render: (v) => layout(v.site_title, '<p>Here are the latest posts from <strong>' + v.site_title + '</strong>:</p>' + (v.posts_html || '') + '<p style="margin-top:20px;"><a href="' + v.site_url + '" style="display:inline-block;padding:10px 20px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;">Visit the site</a></p>', '<a href="' + v.unsubscribe_link + '" style="color:#9ca3af;">Unsubscribe</a> from these emails'),
+  },
+  {
     name: 'password_reset',
     subject: 'Reset your password for {{site_title}}',
     desc: 'Sent when a user requests a password reset',

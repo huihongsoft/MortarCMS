@@ -1,9 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { ListSkeleton } from '../components/Skeleton';
 import { useParams, useLocation } from 'react-router-dom';
 import api from '../lib/api';
 import useSEO from '../hooks/useSEO';
 import { useTheme } from '../themes';
+import { sanitizeCss } from '../lib/safeCss';
 import { t } from '../lib/i18n';
 
 export default function Home({ settings }: { settings: Record<string, string> }) {
@@ -20,6 +22,8 @@ export default function Home({ settings }: { settings: Record<string, string> })
   // WordPress "static front page" — show a page instead of the post list
   const [frontPage, setFrontPage] = useState<any>(null);
   const showStatic = !catSlug && settings.show_on_front === 'page' && !!settings.page_on_front;
+  // "Custom homepage" — HTML built in the admin visual editor
+  const showCustom = !catSlug && settings.show_on_front === 'custom';
   // Must run unconditionally: hooks cannot be called inside a conditional branch
   const theme = useTheme();
 
@@ -28,6 +32,8 @@ export default function Home({ settings }: { settings: Record<string, string> })
       api.get('/pages/slug/' + settings.page_on_front).then(r => setFrontPage(r.data)).catch(() => setFrontPage({ error: true }));
       return;
     }
+    // Custom homepage has no post list — skip the /posts fetch entirely
+    if (showCustom) return;
     setFrontPage(null);
     const p = new URLSearchParams();
     p.set('page', String(page));
@@ -62,6 +68,16 @@ export default function Home({ settings }: { settings: Record<string, string> })
       }] : []),
     ],
   });
+
+  // Custom homepage: HTML authored in the admin visual editor
+  if (showCustom) {
+    const html = settings.homepage_html || '';
+    const css = settings.homepage_css || '';
+    return React.createElement('div', null,
+      css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(css) } }),
+      React.createElement('div', { className: 'prose prose-gray prose-lg max-w-none', dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(html) } }),
+    );
+  }
 
   // Static front page rendering (WordPress page_on_front)
   if (showStatic) {

@@ -15,7 +15,7 @@ export default function PageLayout(props: any) {
   if (!page) return null;
 
   return React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-8' },
-    React.createElement(Breadcrumbs, { items: [{ label: t('home', settings), to: '/' }, { label: page.title }] }),
+    settings.theme_show_breadcrumb !== '0' && React.createElement(Breadcrumbs, { items: [{ label: t('home', settings), to: '/' }, { label: page.title }] }),
     React.createElement('h1', { className: 'text-3xl sm:text-4xl font-bold text-gray-900 leading-tight tracking-tight my-8' }, page.title),
     page.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(page.meta._visual_css) } }),
     React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none', dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(page.content || '') } }),

@@ -191,6 +191,81 @@ addShortcode('link-list', (attrs, _content, ctx) => {
   return '<div class="cms-rendered-link-list">' + items + '</div>';
 }, 'Links of a navigation category (category=slug, optional)');
 
+// [form id="slug"] — render a Form-builder form. Submits via fetch to
+// /api/forms/:slug/submit; the inline script replaces the form with the
+// server-provided success message. Script is static (no user data spliced
+// into it), all DB values pass through esc().
+addShortcode('form', (attrs, _content) => {
+  const slug = String(attrs.id || '').trim();
+  if (!slug) return '';
+  const form = db.prepare('SELECT * FROM Form WHERE slug = ? AND enabled = 1').get(slug) as any;
+  if (!form) return '';
+  let fields: any[] = [];
+  try { fields = JSON.parse(form.fields || '[]'); } catch { return ''; }
+  if (!Array.isArray(fields) || fields.length === 0) return '';
+  const lang = siteLang();
+  const zh = lang === 'zh';
+  const submitLabel = zh ? '提交' : 'Submit';
+  const sendingLabel = zh ? '提交中…' : 'Sending…';
+  const inputs = fields.map((f: any, i: number) => {
+    const name = esc(String(f.name || 'field' + i));
+    const label = esc(String(f.label || f.name || name));
+    const placeholder = esc(String(f.placeholder || ''));
+    const required = f.required ? ' required' : '';
+    const reqMark = f.required ? ' <span style="color:#dc2626;">*</span>' : '';
+    const labelHtml = '<label for="cf-' + i + '" style="display:block;margin:0 0 6px;font-size:14px;font-weight:500;color:#374151;">' + label + reqMark + '</label>';
+    const common = 'id="cf-' + i + '" name="' + name + '" placeholder="' + placeholder + '"' + required +
+      ' style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;font-family:inherit;outline:none;background:#fff;color:#111827;margin:0 0 14px;"';
+    const type = String(f.type || 'text');
+    if (type === 'textarea') return labelHtml + '<textarea ' + common + ' rows="5"></textarea>';
+    if (type === 'select') {
+      const opts = String(f.options || '').split(',').map((s: string) => s.trim()).filter(Boolean);
+      const optHtml = opts.map((o: string) => '<option value="' + esc(o) + '">' + esc(o) + '</option>').join('');
+      return labelHtml + '<select ' + common + '>' + optHtml + '</select>';
+    }
+    const inputType = ['text', 'email', 'number', 'tel', 'url'].includes(type) ? type : 'text';
+    return labelHtml + '<input type="' + inputType + '" ' + common + '>';
+  }).join('');
+  const msg = esc(form.successMessage || (zh ? '提交成功，感谢您的来信！' : 'Thank you! Your message has been sent.'));
+  return '<div class="cms-form" data-form="' + esc(slug) + '">' +
+    '<form class="cms-form-inner" novalidate style="max-width:560px;margin:0 auto;">' +
+    '<input type="hidden" name="_form" value="' + esc(slug) + '">' +
+    '<div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><label>Leave this field empty<input type="text" name="_hp" tabindex="-1" autocomplete="off"></label></div>' +
+    inputs +
+    '<button type="submit" style="padding:10px 22px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">' + submitLabel + '</button>' +
+    '</form>' +
+    '<script>(function(){var f=document.querySelector(".cms-form[data-form=\\"' + esc(slug) + '\\"] form");if(!f)return;f.addEventListener("submit",function(e){e.preventDefault();var b=f.querySelector("button[type=submit]");var o=b?b.textContent:"";if(b)b.textContent="' + sendingLabel + '";fetch("/api/forms/' + esc(slug) + '/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(f)))}).then(function(r){return r.json()}).then(function(d){if(b)b.textContent=o;var w=f.parentNode;if(d&&d.success){w.innerHTML="<p style=\\"padding:14px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;color:#166534;font-size:14px;\\">"+ (d.message||' + JSON.stringify(msg) + ') + "</p>";}else{alert((d&&d.error)||"Request failed");}}).catch(function(){if(b)b.textContent=o;alert("Request failed");});});})();</script>' +
+    '</div>';
+}, 'Render a form builder form (id=slug)');
+
+// [newsletter] — subscribe form for the newsletter digest. Submits via fetch
+// to /api/newsletter/subscribe; the inline script shows the server reply
+// (confirmation sent / subscribed) in place of the form.
+addShortcode('newsletter', () => {
+  const lang = siteLang();
+  const zh = lang === 'zh';
+  const emailLabel = zh ? '邮箱' : 'Email';
+  const nameLabel = zh ? '称呼' : 'Name';
+  const btnLabel = zh ? '订阅' : 'Subscribe';
+  const sentMsg = zh ? '订阅成功，感谢关注！' : 'Subscribed! Thank you for joining.';
+  const confirmMsg = zh ? '确认邮件已发送，请查收并点击确认' : 'A confirmation email has been sent — please check your inbox.';
+  return '<div class="cms-newsletter" data-newsletter>' +
+    '<form class="cms-newsletter-form" novalidate style="max-width:420px;margin:0 auto;display:flex;flex-direction:column;gap:10px;">' +
+    '<div><label for="nl-name" style="display:block;margin:0 0 4px;font-size:13px;color:#4b5563;">' + nameLabel + '</label><input id="nl-name" name="name" type="text" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none;"></div>' +
+    '<div><label for="nl-email" style="display:block;margin:0 0 4px;font-size:13px;color:#4b5563;">' + emailLabel + ' *</label><input id="nl-email" name="email" type="email" required style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none;"></div>' +
+    '<button type="submit" style="padding:9px 18px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">' + btnLabel + '</button>' +
+    '</form>' +
+    '<script>(function(){var f=document.querySelector(".cms-newsletter[data-newsletter] form");if(!f)return;f.addEventListener("submit",function(e){e.preventDefault();var b=f.querySelector("button[type=submit]");var o=b?b.textContent:"";if(b)b.textContent="…";fetch("/api/newsletter/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:document.getElementById("nl-name")?document.getElementById("nl-name").value:"",email:document.getElementById("nl-email").value})}).then(function(r){return r.json()}).then(function(d){if(b)b.textContent=o;var w=f.parentNode;if(d&&d.success){var msg=d.message==="confirmation_sent"?"' + confirmMsg + '":"' + sentMsg + '";w.innerHTML="<p style=\\"padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;color:#166534;font-size:14px;\\">"+msg+"</p>";}else{alert((d&&d.error)||"Request failed");}}).catch(function(){if(b)b.textContent=o;alert("Request failed");});});})();</script>' +
+    '</div>';
+}, 'Newsletter subscribe form');
+
+function siteLang(): string {
+  try {
+    const row = db.prepare("SELECT value FROM Setting WHERE key = 'site_lang'").get() as any;
+    return row?.value === 'zh' ? 'zh' : 'en';
+  } catch { return 'en'; }
+}
+
 // Replace VisualEditor CMS placeholder blocks with rendered shortcodes.
 // Detects <div data-cms="xxx"> elements and replaces them entirely with
 // the corresponding shortcode output. Uses depth counting so nested divs
