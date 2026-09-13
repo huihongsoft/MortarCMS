@@ -51,8 +51,12 @@ router.get('/settings', authenticate, requireCap('ai_manage', 'manage_options'),
   try {
     const providers = getProviders().map((p: AIProvider) => ({
       ...p,
-      apiKey: p.apiKey ? '••••' + p.apiKey.slice(-4) : '',
+      // Never hand the (masked) key back as a value — the client would treat it
+      // as editable and post it straight into an auth header ("Bearer ••••…",
+      // which is not valid Latin-1). Expose only a hint + hasKey.
+      apiKey: '',
       hasKey: !!p.apiKey,
+      keyHint: p.apiKey ? '••••' + p.apiKey.slice(-4) : '',
     }));
     const row = db.prepare("SELECT value FROM Setting WHERE key = 'ai_default_provider'").get() as any;
     res.json({
@@ -99,7 +103,13 @@ router.put('/settings', authenticate, requireCap('ai_manage'), (req: AuthRequest
 // Test a provider connection
 router.post('/test', authenticate, requireCap('ai_manage', 'manage_options'), async (req: AuthRequest, res: Response) => {
   try {
-    const p = req.body?.provider as AIProvider;
+    let p = req.body?.provider as AIProvider | undefined;
+    // Testing an already-saved provider must not require re-typing the key:
+    // fall back to the stored credential by id.
+    if ((!p || !p.apiKey) && req.body?.providerId) {
+      const stored = getProviders().find((x: any) => x.id === req.body.providerId);
+      if (stored) p = { type: stored.type, baseUrl: stored.baseUrl, apiKey: stored.apiKey, model: stored.model } as AIProvider;
+    }
     if (!p?.apiKey || !p?.model) { res.status(400).json({ error: 'provider, apiKey and model required' }); return; }
     const result = await testProvider(p);
     res.json(result);

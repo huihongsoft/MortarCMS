@@ -356,6 +356,11 @@ export function pushToolResults(msgs: AIMessage[], results: { id: string; output
 
 // Test a provider connection
 export async function testProvider(provider: AIProvider): Promise<{ ok: boolean; message: string }> {
+  // HTTP header values must be Latin-1; a key saved as the masked placeholder
+  // ('••••…') otherwise fails deep inside fetch with a ByteString error.
+  if (!provider.apiKey || /[^\x20-\x7e]/.test(provider.apiKey)) {
+    return { ok: false, message: 'API key is missing or contains invalid characters — please re-enter it.' };
+  }
   try {
     await chatComplete(provider, [{ role: 'user', content: 'Reply with the single word: ok' }]);
     return { ok: true, message: '连接成功' };

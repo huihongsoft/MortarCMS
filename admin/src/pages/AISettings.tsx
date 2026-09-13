@@ -14,6 +14,7 @@ interface Provider {
   model: string;
   enabled: boolean;
   hasKey?: boolean;
+  keyHint?: string;
   vision?: boolean;
   imageGen?: boolean;
 }
@@ -90,10 +91,16 @@ export default function AISettings() {
 
   async function test(id: string) {
     const p = providers.find(x => x.id === id);
-    if (!p || !p.apiKey) { toast.toast(t('enter api key first', getLang()), 'error'); return; }
+    if (!p) return;
+    // A saved key is never sent back to the client, so test by id (the server
+    // uses the stored credential); only send a key the user just typed.
+    if (!p.apiKey && !p.hasKey) { toast.toast(t('enter api key first', getLang()), 'error'); return; }
     setTesting(id);
     try {
-      const r = await api.post('/ai/test', { provider: { type: p.type, baseUrl: p.baseUrl, apiKey: p.apiKey, model: p.model } });
+      const body = p.apiKey
+        ? { provider: { type: p.type, baseUrl: p.baseUrl, apiKey: p.apiKey, model: p.model } }
+        : { providerId: id };
+      const r = await api.post('/ai/test', body);
       setTestResult({ ...testResult, [id]: r.data });
     } catch (e: any) {
       setTestResult({ ...testResult, [id]: { ok: false, message: e.response?.data?.error || 'error' } });
@@ -153,7 +160,7 @@ export default function AISettings() {
           React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-3' },
             React.createElement('div', null,
               React.createElement('label', { className: 'block text-xs text-gray-500 mb-1 flex items-center gap-1' }, React.createElement(KeyRound, { size: 10 }), t('api key', getLang())),
-              React.createElement('input', { type: 'password', value: p.hasKey && !p.apiKey ? '' : p.apiKey, placeholder: p.hasKey ? '•••••••• ' + t('(saved)', getLang()) : 'sk-...', onChange: e => updateProvider(p.id, { apiKey: e.target.value }), className: 'input-field text-xs' })),
+              React.createElement('input', { type: 'password', value: p.apiKey || '', placeholder: p.hasKey ? (p.keyHint || '••••••••') + ' ' + t('(saved)', getLang()) : 'sk-...', onChange: e => updateProvider(p.id, { apiKey: e.target.value }), className: 'input-field text-xs' })),
             React.createElement('div', null,
               React.createElement('label', { className: 'block text-xs text-gray-500 mb-1 flex items-center gap-1' }, React.createElement(Server, { size: 10 }), t('base url', getLang())),
               React.createElement('input', { value: p.baseUrl, onChange: e => updateProvider(p.id, { baseUrl: e.target.value }), className: 'input-field text-xs' })),
