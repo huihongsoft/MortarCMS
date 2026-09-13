@@ -3,7 +3,7 @@
 // Enabled state persists in the Setting table; run stats live in memory.
 import fs from 'fs';
 import path from 'path';
-import db, { cuid } from './db';
+import db, { cuid, DB_PATH } from './db';
 import { doAction } from './hooks';
 import { purgeContentCaches } from './cache';
 
@@ -222,11 +222,12 @@ export function registerBuiltinTasks(): void {
     desc: 'Copies the database to the backups folder (mirrors it to object storage when configured); keeps only the newest backups (retention setting)',
     intervalMs: 86_400_000,
     fn: async () => {
-      const dataDir = path.join(__dirname, '..', '..', 'data');
       const backupDir = path.join(__dirname, '..', '..', 'backups');
       fs.mkdirSync(backupDir, { recursive: true });
-      const src = path.join(dataDir, 'mortar.db');
-      if (!fs.existsSync(src)) return;
+      // Use the real database path: a hardcoded server/data/mortar.db would
+      // silently back up nothing when MORTAR_DB_PATH is customised.
+      const src = DB_PATH;
+      if (!fs.existsSync(src)) { console.log('[Task] Backup skipped: database file not found at ' + src); return; }
       const stamp = new Date().toISOString().slice(0, 10) + '-' + Date.now().toString(36).slice(-4);
       const backupFile = path.join(backupDir, 'mortar-' + stamp + '.db');
       fs.copyFileSync(src, backupFile);

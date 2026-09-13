@@ -309,7 +309,7 @@ const zh: Record<string, string> = {
   'run site health check': '运行站点健康检查',
   'check server and database health, plugin/theme status': '检查服务器和数据库健康状况、插件/主题状态',
   'site health': '站点健康',
-  'full backup (json)': '完整备份 (JSON)',
+  'full backup (zip)': '完整备份 (ZIP)',
   'optimize failed': '优化失败',
   'database optimized': '数据库已优化',
   'optimize database': '优化数据库',
