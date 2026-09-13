@@ -1,3 +1,4 @@
+import './utils/loadEnv'; // must be first: populates process.env from server/.env
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';

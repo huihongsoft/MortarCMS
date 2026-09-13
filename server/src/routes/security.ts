@@ -81,8 +81,11 @@ router.get('/audit', authenticate, requireCap('manage_options'), (req: AuthReque
     checks.push({ id: 'backup', label: 'Database backups', status: bakFiles.length > 0 ? 'ok' : 'info', detail: bakFiles.length > 0 ? '{0} automatic backup(s) found.' : 'No .bak backups found yet.', args: { '0': bakFiles.length }, advice: 'Download a full backup (System Info → Backup) regularly.' });
 
     // 11. HTTPS
-    const proto = (req.headers['x-forwarded-proto'] as string) || (req.secure ? 'https' : 'http');
-    checks.push({ id: 'https', label: 'HTTPS', status: proto === 'https' ? 'ok' : 'warn', detail: 'Connection is {0}.', args: { '0': proto }, advice: proto === 'https' ? '' : 'Terminate TLS at your reverse proxy for production.' });
+    // req.secure is derived from the socket and — only when TRUST_PROXY=1 —
+    // from X-Forwarded-Proto. Reading the raw header here would let any client
+    // spoof this check into reporting https.
+    const proto = req.secure ? 'https' : 'http';
+    checks.push({ id: 'https', label: 'HTTPS', status: proto === 'https' ? 'ok' : 'warn', detail: 'Connection is {0}.', args: { '0': proto }, advice: proto === 'https' ? '' : 'Terminate TLS at your reverse proxy (and set TRUST_PROXY=1) for production.' });
 
     // 12. App passwords
     const appPw = db.prepare('SELECT COUNT(*) as c FROM AppPassword').get() as any;

@@ -102,7 +102,11 @@ cd server && npm run build && cd ..
 
 ## Environment
 
-Create `server/.env` (see `server/.env.example`):
+Create `server/.env` (see `server/.env.example`). The server **loads this file
+automatically at startup** (from `server/.env`, relative to the install dir),
+so after editing it just restart the service — real environment variables take
+precedence over the file. `install.sh` also creates it with a generated
+`JWT_SECRET` if one is missing.
 
 ```bash
 # Database: SQLite at server/data/mortar.db (supported production default;
@@ -145,6 +149,8 @@ cd server && npm start          # compiled JS (production)
 
 ## Reverse proxy (Nginx example)
 
+**HTTP only (development / LAN):**
+
 ```nginx
 server {
     listen 80;
@@ -164,6 +170,48 @@ server {
     }
 }
 ```
+
+**HTTPS (production) — terminate TLS at the proxy.** Obtain certificates with
+`certbot` (Let's Encrypt) or your hosting panel, then redirect 80 → 443 and
+forward the original scheme:
+
+```nginx
+# HTTP → HTTPS redirect
+server {
+    listen 80;
+    server_name example.com;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto $scheme;   # required: lets the app know it is https
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    location /uploads/ {
+        proxy_pass http://127.0.0.1:3001;
+        expires 1d;
+    }
+}
+```
+
+So that the app itself knows it is behind HTTPS:
+
+1. Set `TRUST_PROXY=1` in `server/.env` (only when it really is behind a proxy)
+   and `NODE_ENV=production` — the app then reads `X-Forwarded-Proto`, sets HSTS,
+   and the admin **Security** page shows the HTTPS check as passing.
+2. Set the site URL to `https://example.com` (Settings → General) so canonical
+   links, feeds and emails use HTTPS.
+3. Restart the service (`./mortarctl.sh restart` or `systemctl restart mortar`).
 
 Use `certbot` (Let's Encrypt) for TLS, or the 1Panel-style panel of your
 choice.
