@@ -49,15 +49,27 @@ server/src/
 
 ### Database adapter
 
-- **SQLite** (default): `better-sqlite3`, synchronous, file at `server/data/mortar.db`
-- **MySQL/MariaDB / PostgreSQL**: `mysql2` / `pg` run on a worker thread;
-  the main thread blocks with `Atomics.wait` so the existing synchronous
-  call sites (`db.prepare(...).run/get/all`) keep working unchanged
+- **SQLite** (default, supported production path): `better-sqlite3`,
+  synchronous, file at `server/data/mortar.db`; WAL + `busy_timeout` + FK
+  enforcement on.
+- **MySQL/MariaDB / PostgreSQL — experimental, not recommended for
+  production**: `mysql2` / `pg` run on a worker thread; the main thread blocks
+  with `Atomics.wait` so the existing synchronous call sites
+  (`db.prepare(...).run/get/all`) keep working unchanged. The pool is limited
+  to a single connection, so a slow query blocks the whole request loop. Use
+  for local evaluation only.
 - Dialect translation happens in the worker (PostgreSQL `?` → `$n`
   placeholders; MySQL `ON CONFLICT` → `ON DUPLICATE KEY UPDATE`)
 - Select via `DATABASE_URL` or the install wizard
+- **Schema migrations**: an ordered, idempotent migration list (`MIGRATIONS`
+  in `utils/db.ts`) is applied once each and recorded in `_SchemaMigration`;
+  a failed migration aborts startup on SQLite.
+- **Transactions**: `withTransaction(fn)` wraps a synchronous body in a
+  transaction (nested calls become savepoints). Multi-table writes — post
+  create/update/clone, imports, install, GDPR erase, site duplication — run
+  inside one.
 
-### Data model (26 tables)
+### Data model (34 tables + `_SchemaMigration` ledger)
 
 ```
 User ──┬── Post ──┬── PostCategory ── Category

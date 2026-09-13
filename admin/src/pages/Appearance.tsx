@@ -294,8 +294,8 @@ export default function Appearance() {
           React.createElement('div', null,
             React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('heading cap', getLang())),
             React.createElement(Select, { value: settings.theme_heading_cap || '2', onChange: (v: string) => setSettings({ ...settings, theme_heading_cap: v }), className: 'input-field' },
-              React.createElement('option', { value: '2' }, '2（从 h2 开始）'),
-              React.createElement('option', { value: '1' }, '1（允许 h1）')
+              React.createElement('option', { value: '2' }, '2 ' + t('(start from h2)', getLang())),
+              React.createElement('option', { value: '1' }, '1 ' + t('(allow h1)', getLang()))
             ),
             React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, t('heading cap hint', getLang()))
           ),
@@ -338,7 +338,7 @@ export default function Appearance() {
         carouselItems.map((c, i) => React.createElement('div', { key: i, className: 'border border-gray-200 rounded-lg p-3 mb-3 space-y-2 bg-gray-50/50' },
           React.createElement('div', { className: 'flex items-center gap-2' },
             React.createElement('span', { className: 'text-xs text-gray-400 w-6' }, i + 1 + '.'),
-            React.createElement('input', { value: c.image, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...carouselItems]; n[i] = { ...n[i], image: e.target.value }; setCarouselItems(n); setCarouselDirty(true); }, className: 'input-field text-xs flex-1', placeholder: t('image url', getLang()) + ' (https://... 或 /uploads/...)', 'aria-label': t('image url', getLang()) }),
+            React.createElement('input', { value: c.image, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...carouselItems]; n[i] = { ...n[i], image: e.target.value }; setCarouselItems(n); setCarouselDirty(true); }, className: 'input-field text-xs flex-1', placeholder: t('image url', getLang()) + ' (https://... ' + t('or', getLang()) + ' /uploads/...)', 'aria-label': t('image url', getLang()) }),
             React.createElement('button', { onClick: () => { setCarouselItems(carouselItems.filter((_, j) => j !== i)); setCarouselDirty(true); }, className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()), 'aria-label': t('delete', getLang()) }, React.createElement('span', null, '✕'))),
           React.createElement('input', { value: c.title, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...carouselItems]; n[i] = { ...n[i], title: e.target.value }; setCarouselItems(n); setCarouselDirty(true); }, className: 'input-field text-xs', placeholder: t('title', getLang()), 'aria-label': t('title', getLang()) }),
           React.createElement('input', { value: c.link, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...carouselItems]; n[i] = { ...n[i], link: e.target.value }; setCarouselItems(n); setCarouselDirty(true); }, className: 'input-field text-xs', placeholder: t('link', getLang()) + ' (/post/xxx)', 'aria-label': t('link', getLang()) }),

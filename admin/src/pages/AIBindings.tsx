@@ -96,7 +96,7 @@ export default function AIBindings() {
       await api.post('/ai/schedules', { name: schName, prompt: schPrompt, type: schType, intervalMinutes: schInterval, time: schTime, weekday: schWeekday });
       setSchName(''); setSchPrompt('');
       api.get('/ai/schedules').then(r => setSchedules(r.data.schedules || [])).catch(() => {});
-    } catch (e: any) { alert(e.response?.data?.error || '创建失败'); }
+    } catch (e: any) { alert(e.response?.data?.error || t('create failed', getLang())); }
   }
 
   async function delSchedule(id: string) {
@@ -210,7 +210,7 @@ export default function AIBindings() {
           ? React.createElement('input', { type: 'number', min: 5, value: schInterval, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSchInterval(parseInt(e.target.value) || 60), className: 'input-field w-24 text-sm' }, null)
           : React.createElement('input', { type: 'time', value: schTime, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSchTime(e.target.value), className: 'input-field w-32 text-sm' }, null),
         schType === 'weekly' && React.createElement(Select, { value: schWeekday, onChange: (v: string) => setSchWeekday(parseInt(v)), className: 'input-field w-32 text-sm' },
-          [['1', '周一'], ['2', '周二'], ['3', '周三'], ['4', '周四'], ['5', '周五'], ['6', '周六'], ['0', '周日']].map(([v, l]) => React.createElement('option', { key: v, value: v }, l))),
+          [['1', 'monday'], ['2', 'tuesday'], ['3', 'wednesday'], ['4', 'thursday'], ['5', 'friday'], ['6', 'saturday'], ['0', 'sunday']].map(([v, l]) => React.createElement('option', { key: v, value: v }, t(l, getLang())))),
         React.createElement('button', { onClick: addSchedule, disabled: !schName.trim() || !schPrompt.trim(), className: 'btn-primary text-sm' }, React.createElement(Plus, { size: 15 }), t('create', getLang()))),
       schedules.length === 0
         ? React.createElement('p', { className: 'text-sm text-gray-400' }, t('no schedules yet', getLang()))
@@ -221,7 +221,7 @@ export default function AIBindings() {
                 React.createElement('p', { className: 'text-[11px] text-gray-400 truncate' }, sch.prompt),
                 React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' },
                   sch.type === 'interval' ? t('every n minutes', getLang()) + ': ' + sch.intervalMinutes
-                    : sch.type === 'weekly' ? t('weekly on', getLang()) + ' ' + ['日', '一', '二', '三', '四', '五', '六'][sch.weekday] + ' ' + sch.time
+                    : sch.type === 'weekly' ? t('weekly on', getLang()) + ' ' + t(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][sch.weekday] || 'sun', getLang()) + ' ' + sch.time
                     : t('daily at', getLang()) + ' ' + sch.time,
                   sch.lastRun ? ' · ' + t('last run', getLang()) + ': ' + new Date(sch.lastRun).toLocaleString() : '')),
               React.createElement('button', { onClick: () => delSchedule(sch.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 })))

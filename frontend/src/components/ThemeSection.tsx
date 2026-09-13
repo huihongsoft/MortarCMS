@@ -1,4 +1,5 @@
 import React from 'react';
+import { sanitizeHtml } from '../lib/sanitizeHtml';
 import { sanitizeCss } from '../lib/safeCss';
 
 // Renders a theme hook section (HTML+CSS) from the settings.
@@ -16,7 +17,9 @@ export default function ThemeSection({ settings, location }: { settings: Record<
     data.css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(data.css) } }),
     data.html && React.createElement('div', {
       className: 'theme-section theme-section--' + location,
-      dangerouslySetInnerHTML: { __html: data.html },
+      // Section HTML is stored in settings and can be written by the AI theme
+      // helper or an import — sanitize before rendering (scripts/on* stripped).
+      dangerouslySetInnerHTML: { __html: sanitizeHtml(data.html) },
     })
   );
 }

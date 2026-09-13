@@ -5,6 +5,7 @@ import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { renderShortcode, listShortcodes } from '../utils/shortcodes';
+import { stripDangerousHtml, sanitizeCssText } from '../utils/sanitize';
 
 const CMS_TYPES = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud', 'link-list'];
 
@@ -71,14 +72,16 @@ router.get('/templates', authenticate, requireCap('edit_posts'), (_req: AuthRequ
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Admin: save a new custom template
-router.post('/templates', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
+// Admin: save a new custom template. Templates are global and rendered into
+// other users' editors, so writes are admin-only and the HTML is stripped of
+// active content (an admin-authored <script> would otherwise run for authors).
+router.post('/templates', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
     const { name, html } = req.body || {};
     if (!name || !html) { res.status(400).json({ error: 'name and html required' }); return; }
-    const css = String(req.body.css || '');
+    const css = sanitizeCssText(String(req.body.css || ''));
     const templates = loadTemplates();
-    const tpl = { id: cuid(), name: String(name).slice(0, 50), html: String(html), css, createdAt: new Date().toISOString() };
+    const tpl = { id: cuid(), name: String(name).slice(0, 50), html: stripDangerousHtml(String(html)), css, createdAt: new Date().toISOString() };
     templates.push(tpl);
     saveTemplates(templates);
     res.status(201).json(tpl);
@@ -86,7 +89,7 @@ router.post('/templates', authenticate, requireCap('edit_posts'), (req: AuthRequ
 });
 
 // Admin: delete a custom template
-router.delete('/templates/:id', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
+router.delete('/templates/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
     const templates = loadTemplates().filter((t: any) => t.id !== req.params.id);
     saveTemplates(templates);
@@ -95,7 +98,7 @@ router.delete('/templates/:id', authenticate, requireCap('edit_posts'), (req: Au
 });
 
 // Admin: export custom templates as JSON download
-router.get('/templates/export', authenticate, requireCap('edit_posts'), (_req: AuthRequest, res: Response) => {
+router.get('/templates/export', authenticate, requireCap('manage_options'), (_req: AuthRequest, res: Response) => {
   try {
     const templates = loadTemplates().map(({ id, createdAt, ...rest }: any) => rest);
     res.setHeader('Content-Disposition', 'attachment; filename="mortar-templates.json"');
@@ -105,7 +108,7 @@ router.get('/templates/export', authenticate, requireCap('edit_posts'), (_req: A
 });
 
 // Admin: import custom templates from JSON (merges by name, skips duplicates)
-router.post('/templates/import', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
+router.post('/templates/import', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
     const incoming = req.body?.templates as any[];
     if (!Array.isArray(incoming) || incoming.length === 0) { res.status(400).json({ error: 'templates array required' }); return; }
@@ -114,7 +117,7 @@ router.post('/templates/import', authenticate, requireCap('edit_posts'), (req: A
     for (const t of incoming) {
       if (!t || typeof t.name !== 'string' || typeof t.html !== 'string') continue;
       if (existing.some((e: any) => e.name === t.name)) continue; // skip duplicates by name
-      existing.push({ id: cuid(), name: t.name.slice(0, 50), html: t.html, createdAt: new Date().toISOString() });
+      existing.push({ id: cuid(), name: t.name.slice(0, 50), html: stripDangerousHtml(t.html), css: sanitizeCssText(String(t.css || '')), createdAt: new Date().toISOString() });
       added++;
     }
     saveTemplates(existing);

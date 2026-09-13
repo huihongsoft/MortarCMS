@@ -40,6 +40,8 @@ const Webhooks = React.lazy(() => import('./pages/Webhooks'));
 const Forms = React.lazy(() => import('./pages/Forms'));
 const FormSubmissions = React.lazy(() => import('./pages/FormSubmissions'));
 const Subscribers = React.lazy(() => import('./pages/Subscribers'));
+const Calendar = React.lazy(() => import('./pages/Calendar'));
+const BrokenLinks = React.lazy(() => import('./pages/BrokenLinks'));
 
 
 
@@ -74,6 +76,8 @@ function AnimatedRoutes() {
       React.createElement(Route, { path: '/stats', element: React.createElement(StatsPage) }),
       React.createElement(Route, { path: '/home-editor', element: React.createElement(HomeEditor) }),
       React.createElement(Route, { path: '/posts', element: React.createElement(Posts) }),
+      React.createElement(Route, { path: '/calendar', element: React.createElement(Calendar) }),
+      React.createElement(Route, { path: '/broken-links', element: React.createElement(BrokenLinks) }),
       React.createElement(Route, { path: '/posts/new', element: React.createElement(PostEditor) }),
       React.createElement(Route, { path: '/posts/:id/edit', element: React.createElement(PostEditor) }),
       React.createElement(Route, { path: '/pages', element: React.createElement(Pages) }),

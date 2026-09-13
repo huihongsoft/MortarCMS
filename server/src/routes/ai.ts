@@ -1,8 +1,8 @@
 import { Router, Response } from 'express';
 import rateLimit from 'express-rate-limit';
-import db, { cuid } from '../utils/db';
+import db, { cuid, withTransaction } from '../utils/db';
 import { uniqueSlug } from '../utils/slug';
-import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
+import { authenticate, authorize, requireCap, userCan, AuthRequest } from '../middleware/auth';
 import {
   AIProvider, PROVIDER_PRESETS, getProviders, saveProviders, getDefaultProvider,
   setDefaultProvider, chatComplete, pushAssistantWithTools, pushToolResults, testProvider,
@@ -583,8 +583,9 @@ function scheduleShouldRun(s: AiSchedule, now: Date): boolean {
   return true;
 }
 
-// Scheduler tick: check every minute
-setInterval(() => {
+// Scheduler tick: check every minute. unref'd so it never keeps the process
+// alive on its own (the HTTP server does that); shutdown stops it via exit.
+const aiScheduleTimer = setInterval(() => {
   try {
     const now = new Date();
     for (const s of getSchedules()) {
@@ -598,6 +599,7 @@ setInterval(() => {
     }
   } catch { /* scheduler must never crash */ }
 }, 60000);
+aiScheduleTimer.unref?.();
 
 router.get('/schedules', authenticate, (req: AuthRequest, res: Response) => {
   try {
@@ -608,6 +610,7 @@ router.get('/schedules', authenticate, (req: AuthRequest, res: Response) => {
 
 router.post('/schedules', authenticate, (req: AuthRequest, res: Response) => {
   try {
+    if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: 'Insufficient permissions' }); return; }
     const { name, prompt, type, intervalMinutes, time, weekday } = req.body || {};
     if (!name || !prompt || !['interval', 'daily', 'weekly'].includes(type)) { res.status(400).json({ error: 'name, prompt and type required' }); return; }
     const user = db.prepare('SELECT id, username FROM User WHERE id = ?').get(req.user!.userId) as any;
@@ -639,7 +642,9 @@ router.delete('/schedules/:id', authenticate, (req: AuthRequest, res: Response) 
 // AI review of pending comments (spam detection suggestion)
 router.post('/review-comments', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
-    if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
+    // Reviewing comments exposes their content — require the moderation
+    // capability, not just AI access.
+    if (!userCan(req.user, 'moderate_comments')) { res.status(403).json({ error: 'Insufficient permissions' }); return; }
     const provider = getDefaultProvider();
     if (!provider) { res.status(400).json({ error: '尚未配置 AI 服务商' }); return; }
     const comments = db.prepare("SELECT id, author, content FROM Comment WHERE status = 'pending' ORDER BY createdAt DESC LIMIT 10").all() as any[];
@@ -689,7 +694,13 @@ router.post('/batch-translate', authenticate, enforceUsageLimit, async (req: Aut
     const { ids, language } = req.body || {};
     if (!Array.isArray(ids) || ids.length === 0 || ids.length > 10) { res.status(400).json({ error: 'ids array (1-10) required' }); return; }
     const lang = String(language || 'English');
-    const posts = ids.map((id: string) => db.prepare("SELECT * FROM Post WHERE id = ? AND type = 'post'").get(id) as any).filter(Boolean);
+    // Only translate posts the caller may edit: authors own their posts,
+    // editors/admins may translate anyone's. Otherwise an author could read
+    // another user's draft/private content through the generated translation.
+    const canEditOthers = userCan(req.user, 'edit_others_posts');
+    const posts = ids
+      .map((id: string) => db.prepare("SELECT * FROM Post WHERE id = ? AND type = 'post'").get(id) as any)
+      .filter((p: any) => p && p.status !== 'trash' && (canEditOthers || p.authorId === req.user!.userId));
     if (posts.length === 0) { res.status(404).json({ error: '未找到文章' }); return; }
 
     const results: any[] = [];
@@ -875,10 +886,14 @@ router.post('/tasks/:id/retry', authenticate, (req: AuthRequest, res: Response) 
 router.delete('/tasks/:id', authenticate, (req: AuthRequest, res: Response) => {
   try {
     const task = getTask(req.params.id);
-    db.prepare('DELETE FROM AiNotification WHERE taskId = ?').run(req.params.id);
-    if (!task) { res.status(404).json({ error: '任务不存在' }); return; }
-    if (req.user!.role !== 'admin' && task.userId !== req.user!.userId) { res.status(403).json({ error: '无权删除该任务' }); return; }
-    db.prepare('DELETE FROM AiTask WHERE id = ?').run(req.params.id);
+    // Ownership check BEFORE any write — otherwise any logged-in user could
+    // delete another user's notifications by guessing the task id.
+    if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
+    if (req.user!.role !== 'admin' && task.userId !== req.user!.userId) { res.status(403).json({ error: 'Not allowed to delete this task' }); return; }
+    withTransaction(() => {
+      db.prepare('DELETE FROM AiNotification WHERE taskId = ?').run(req.params.id);
+      db.prepare('DELETE FROM AiTask WHERE id = ?').run(req.params.id);
+    });
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -941,6 +956,7 @@ router.get('/bindings', authenticate, (req: AuthRequest, res: Response) => {
 // Create a binding (admin picks the target user; users can bind themselves)
 router.post('/bindings', authenticate, (req: AuthRequest, res: Response) => {
   try {
+    if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: 'Insufficient permissions' }); return; }
     const { platform, userId, label, ddToken, ddAesKey, ddAppKey, ddAppSecret, ddWebhook, ddSecret } = req.body || {};
     if (!['wechat', 'dingtalk'].includes(platform)) { res.status(400).json({ error: 'platform must be wechat or dingtalk' }); return; }
     let targetUserId = userId;

@@ -765,6 +765,16 @@ register('get_site_settings', '获取站点配置（标题、描述、URL、每�
   return map;
 });
 
+// Settings the assistant is allowed to change. This is a WHITELIST on purpose:
+// a blocklist would let prompt injection reach security-sensitive keys such as
+// header_code/footer_code (stored XSS), default_role (role escalation),
+// 'installed' (uninstall) or theme_section_* (injected HTML).
+const AI_WRITABLE_SETTINGS = new Set([
+  'site_title', 'site_description', 'site_keywords', 'footer_text',
+  'homepage_type', 'homepage_page_id', 'posts_per_page', 'excerpt_length',
+  'blog_public', 'timezone', 'date_format', 'theme_name', 'theme_color', 'heading_cap',
+]);
+
 register('update_site_settings', '更新站点配置（如 site_title、site_description 等）', {
   type: 'object',
   properties: {
@@ -774,11 +784,15 @@ register('update_site_settings', '更新站点配置（如 site_title、site_des
 }, async (args) => {
   const upsert = db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
   const entries = args.settings || {};
+  const updated: string[] = [];
+  const skipped: string[] = [];
   for (const [k, v] of Object.entries(entries)) {
     if (typeof k !== 'string' || typeof v !== 'string') continue;
+    if (!AI_WRITABLE_SETTINGS.has(k)) { skipped.push(k); continue; }
     upsert.run(cuid(), k, v);
+    updated.push(k);
   }
-  return { message: '配置已更新', updated: Object.keys(entries) };
+  return { message: '配置已更新', updated, skipped };
 });
 
 // ---- Long-term memory: per-user facts the assistant can save/recall ----

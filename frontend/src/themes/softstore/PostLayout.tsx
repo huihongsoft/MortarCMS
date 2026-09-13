@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, Folder, Tag, Clock, MessageSquare, User } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
+import CommentLike from '../../components/CommentLike';
 import Toc from '../../components/Toc';
 import { cdnUrl, cdnHtml } from '../../lib/cdn';
 import { embedContent } from '../../lib/embed';
@@ -29,6 +30,7 @@ export default function SoftstorePostLayout(props: any) {
           React.createElement('p', { className: 'font-medium text-sm text-[#333]' }, c.author),
           React.createElement('p', { className: 'text-xs text-[#999]' }, new Date(c.createdAt).toLocaleDateString()))),
       React.createElement('p', { className: 'text-sm text-[#555] leading-relaxed' }, c.content),
+      React.createElement('div', { className: 'mt-2' }, React.createElement(CommentLike, { commentId: c.id, initial: c.likes })),
       (c.children || []).map((child: any) =>
         React.createElement('div', { key: child.id, className: 'ml-8 mt-3 pl-4 border-l-2 border-[#eee]' },
           React.createElement('p', { className: 'font-medium text-sm text-[#444] mb-1' }, child.author),

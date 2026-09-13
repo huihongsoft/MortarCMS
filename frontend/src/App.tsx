@@ -43,6 +43,7 @@ const Login = lazyWithRetry(() => import('./pages/Login'));
 const Install = lazyWithRetry(() => import('./pages/Install'));
 const SubmitPost = lazyWithRetry(() => import('./pages/SubmitPost'));
 const MyPosts = lazyWithRetry(() => import('./pages/MyPosts'));
+const Profile = lazyWithRetry(() => import('./pages/Profile'));
 const NewsletterConfirm = lazyWithRetry(() => import('./pages/NewsletterConfirm'));
 
 function SiteLayout({ settings }: { settings: Record<string, string> }) {
@@ -79,6 +80,7 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
           React.createElement(Route, { path: '/login', element: React.createElement(Login) }),
           React.createElement(Route, { path: '/submit-post', element: React.createElement(SubmitPost, { settings }) }),
           React.createElement(Route, { path: '/my-posts', element: React.createElement(MyPosts, { settings }) }),
+          React.createElement(Route, { path: '/profile', element: React.createElement(Profile, { settings }) }),
           React.createElement(Route, { path: '/newsletter/confirm', element: React.createElement(NewsletterConfirm, { settings, mode: 'confirm' }) }),
           React.createElement(Route, { path: '/newsletter/unsubscribe', element: React.createElement(NewsletterConfirm, { settings, mode: 'unsubscribe' }) }),
           React.createElement(Route, { path: '/share/ai/:token', element: React.createElement(ShareView, { settings }) }),
@@ -171,7 +173,10 @@ export default function App() {
       }
       const titleEl = document.getElementById('site-title');
       if (titleEl && r.data.site_title) titleEl.textContent = r.data.site_title;
-      // Header/footer custom code injection (scripts re-created so they execute)
+      // Header/footer custom code injection (scripts re-created so they execute).
+      // Deliberate trusted-admin feature (analytics/pixels), equivalent to
+      // WordPress's header/footer scripts — these settings are writable only by
+      // an admin. Do NOT feed untrusted content here.
       const injectCode = (id: string, code: string, container: HTMLElement) => {
         let el = document.getElementById(id);
         if (!el) { el = document.createElement('div'); el.id = id; container.appendChild(el); }

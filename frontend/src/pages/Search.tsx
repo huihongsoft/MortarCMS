@@ -19,6 +19,8 @@ export default function SearchPage({ settings }: { settings: Record<string, stri
       .then(r => setPosts(r.data.posts || []))
       .catch(() => setError(true))
       .finally(() => setLoading(false));
+    // Feed the admin hot-search report (best-effort, never blocks the page)
+    api.post('/posts/search-log', { q: query }).catch(() => {});
   }, [query]);
 
   useSEO({ siteTitle: settings.site_title, title: query ? t('search') + ': ' + query : t('search'), url: window.location.origin + '/search?q=' + encodeURIComponent(query) });

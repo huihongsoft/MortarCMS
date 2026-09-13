@@ -186,13 +186,56 @@ const TEMPLATES: MailTemplate[] = [
   },
 ];
 
-export function listTemplates(): { name: string; subject: string; desc: string; previewHtml: string }[] {
-  return TEMPLATES.map(tp => ({
-    name: tp.name,
-    subject: tp.subject,
-    desc: tp.desc,
-    previewHtml: tp.render(sampleVars(tp.name)),
-  }));
+export function listTemplates(): { name: string; subject: string; desc: string; previewHtml: string; body: string; customized: boolean }[] {
+  return TEMPLATES.map(tp => {
+    const ov = getTemplateOverride(tp.name);
+    // The preview reflects the customized version when one exists, so the
+    // admin panel never shows a stale built-in template next to the edited one
+    const previewHtml = (() => {
+      if (ov) return applyVars(ov.body, sampleVars(tp.name));
+      return tp.render(sampleVars(tp.name));
+    })();
+    return {
+      name: tp.name,
+      subject: ov ? ov.subject : tp.subject,
+      desc: tp.desc,
+      previewHtml,
+      // Built-in body with {{vars}} placeholders intact — the editor's
+      // starting point when no override exists yet
+      body: ov ? ov.body : tp.render({}),
+      customized: !!ov,
+    };
+  });
+}
+
+function applyVars(template: string, vars: Record<string, string>): string {
+  let out = template;
+  for (const [k, val] of Object.entries(vars)) out = out.split('{{' + k + '}}').join(val);
+  return out;
+}
+
+// Customized template override (Setting mail_template_<name> = {subject, body}).
+// Cached per template name for 5s: the setting only changes through the admin
+// panel (which calls invalidateTemplateCache), so per-email lookups —
+// newsletter digests render this once per subscriber — never re-query the DB.
+// The cache is keyed by name (listTemplates iterates every template in one
+// request; a single global slot would shadow later names with the first hit).
+const overrideCache = new Map<string, { value: { subject: string; body: string } | null; at: number }>();
+export function invalidateTemplateCache(): void { overrideCache.clear(); }
+export function getTemplateOverride(name: string): { subject: string; body: string } | null {
+  const now = Date.now();
+  const hit = overrideCache.get(name);
+  if (hit && now - hit.at < 5000) return hit.value;
+  let ov: { subject: string; body: string } | null = null;
+  try {
+    const row = db.prepare('SELECT value FROM Setting WHERE key = ?').get('mail_template_' + name) as any;
+    if (row?.value) {
+      const parsed = JSON.parse(row.value);
+      if (typeof parsed?.subject === 'string' && typeof parsed?.body === 'string') ov = { subject: parsed.subject, body: parsed.body };
+    }
+  } catch {}
+  overrideCache.set(name, { value: ov, at: now });
+  return ov;
 }
 
 function sampleVars(name: string): Record<string, string> {
@@ -206,13 +249,16 @@ export function renderTemplate(name: string, vars: Record<string, string>): { su
   const tp = TEMPLATES.find(x => x.name === name);
   if (!tp) return null;
   const v = { ...sampleVars(name), ...vars };
+  // Admin-customized templates win over the built-in ones (the override body
+  // is the full email HTML, variables still get substituted below)
   let subject = tp.subject;
   let html = tp.render(v);
-  for (const [k, val] of Object.entries(v)) {
-    subject = subject.split('{{' + k + '}}').join(val);
-    html = html.split('{{' + k + '}}').join(val);
+  const ov = getTemplateOverride(name);
+  if (ov) {
+    subject = ov.subject;
+    html = ov.body;
   }
-  return { subject, html };
+  return { subject: applyVars(subject, v), html: applyVars(html, v) };
 }
 
 export async function sendEmail(to: string, subject: string, html: string): Promise<{ ok: boolean; error?: string }> {

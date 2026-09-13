@@ -44,7 +44,7 @@ docs/        文档
    cd frontend && npx tsc -b && npx vite build
    ```
 
-2. **以 SQLite（默认）验证** — 所有改动必须保证默认路径可用。若改动了数据层，有条件时请用 MySQL/PostgreSQL 连接验证（`DATABASE_URL=...`）。
+2. **以 SQLite（默认）验证** — 所有改动必须保证默认路径可用。若改动了数据层，有条件时请用 MySQL/PostgreSQL 连接验证（`DATABASE_URL=...`）；这两个驱动属于实验性，不是受支持的生产目标。
 
 3. **保持界面中英双语** — 新增界面文案必须走 `t('key', getLang())` / `t('key', settings)`，且 key 必须存在于 `admin/src/lib/i18n.ts` 或 `frontend/src/lib/i18n.ts` 字典中（英文为 key，中文为值）。
 

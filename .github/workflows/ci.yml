@@ -28,8 +28,8 @@ jobs:
       - name: Typecheck server
         run: cd server && npx tsc --noEmit
 
-      - name: Run server tests
-        run: cd server && npm test
+      - name: Run server tests with coverage
+        run: cd server && npm run test:coverage
 
       - name: Build admin
         run: cd admin && npx tsc -b && npx vite build
@@ -43,6 +43,19 @@ jobs:
       - name: Install script syntax check
         run: bash -n install.sh
 
+      # Surface known-vulnerable dependencies without blocking the build on
+      # upstream advisories we haven't triaged yet. Tighten to a hard gate once
+      # the baseline is clean.
+      - name: Audit dependencies (non-blocking)
+        continue-on-error: true
+        run: |
+          # `|| true` on each line: the shell runs with -e, so a non-zero exit
+          # from the first audit would abort the step before the others run.
+          npm audit --audit-level=high || true
+          (cd server && npm audit --audit-level=high) || true
+          (cd admin && npm audit --audit-level=high) || true
+          (cd frontend && npm audit --audit-level=high) || true
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -51,4 +64,12 @@ jobs:
             server/dist
             admin/dist
             frontend/dist
+          retention-days: 7
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: server/coverage
           retention-days: 7

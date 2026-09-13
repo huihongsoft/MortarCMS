@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import db, { cuid } from './db';
+import db, { cuid, withTransaction } from './db';
 import { slugify } from './slug';
 import { purgeAllCaches } from './cache';
 import { doAction } from './hooks';
@@ -233,9 +233,12 @@ export function importDemoData(): { posts: number; categories: number; tags: num
 // user accounts, roles, system settings and site structure are preserved.
 export function resetSite(): Record<string, number> {
   const stats: Record<string, number> = {};
-  for (const t of CONTENT_TABLES) stats[t] = clearTable(t);
-  // Drop settings written by the demo data
-  for (const key of DEMO_SETTING_KEYS) db.prepare('DELETE FROM Setting WHERE key = ?').run(key);
+  // Content wipe + demo-setting cleanup are one unit; files/caches follow after.
+  withTransaction(() => {
+    for (const t of CONTENT_TABLES) stats[t] = clearTable(t);
+    // Drop settings written by the demo data
+    for (const key of DEMO_SETTING_KEYS) db.prepare('DELETE FROM Setting WHERE key = ?').run(key);
+  });
   // Clear uploaded media files (keep the directory + .gitkeep). The thumbs/
   // dir holds generated thumbnail caches keyed by media id — orphaned once
   // the Media table is emptied, so remove it too. lstatSync (not statSync) so
@@ -259,5 +262,8 @@ export function resetSite(): Record<string, number> {
 }
 
 function clearContentTables(): void {
-  for (const t of CONTENT_TABLES) clearTable(t);
+  // All-or-nothing: a wipe that stops half-way would leave a broken site.
+  withTransaction(() => {
+    for (const t of CONTENT_TABLES) clearTable(t);
+  });
 }

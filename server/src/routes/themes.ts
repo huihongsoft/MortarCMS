@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
-import db, { cuid } from '../utils/db';
+import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { purgeAllCaches } from '../utils/cache';
@@ -98,7 +98,9 @@ router.put('/:name/settings', authenticate, authorize('admin'), (req: AuthReques
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
     const entries = req.body as Record<string, string>;
     const upsert = db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
-    for (const [k, v] of Object.entries(entries)) upsert.run(cuid(), 'theme_' + t.name + '_' + k, String(v));
+    withTransaction(() => {
+      for (const [k, v] of Object.entries(entries)) upsert.run(cuid(), 'theme_' + t.name + '_' + k, String(v));
+    });
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -299,19 +301,21 @@ export function createThemeBackup(theme: string, name: string, note?: string, au
   const themeJson = fs.existsSync(themeJsonPath) ? fs.readFileSync(themeJsonPath, 'utf8') : null;
   const id = 'bk_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
   const entry = { id, theme: t.name, name: String(name || '').slice(0, 80), note: String(note || '').slice(0, 200), auto: !!auto, createdAt: new Date().toISOString() };
-  db.prepare('INSERT OR REPLACE INTO Setting (id, key, value) VALUES (?, ?, ?)').run('theme_backup_' + id, 'theme_backup_' + id, JSON.stringify({ ...entry, settings: overrides, themeJson }));
-  // Trim this theme's backups to the cap, dropping the oldest ones
-  const all = getAllBackups();
-  const mine = themeBackupList(t.name);
-  const others = all.filter((b: any) => b.theme !== t.name);
-  const excess = mine.length + 1 - MAX_BACKUPS_PER_THEME;
-  if (excess > 0) {
-    const drop = mine.slice(0, excess);
-    for (const d of drop) db.prepare('DELETE FROM Setting WHERE key = ?').run('theme_backup_' + d.id);
-    persistBackups([...others, ...mine.slice(excess), entry]);
-  } else {
-    persistBackups([...others, ...mine, entry]);
-  }
+  withTransaction(() => {
+    db.prepare('INSERT OR REPLACE INTO Setting (id, key, value) VALUES (?, ?, ?)').run('theme_backup_' + id, 'theme_backup_' + id, JSON.stringify({ ...entry, settings: overrides, themeJson }));
+    // Trim this theme's backups to the cap, dropping the oldest ones
+    const all = getAllBackups();
+    const mine = themeBackupList(t.name);
+    const others = all.filter((b: any) => b.theme !== t.name);
+    const excess = mine.length + 1 - MAX_BACKUPS_PER_THEME;
+    if (excess > 0) {
+      const drop = mine.slice(0, excess);
+      for (const d of drop) db.prepare('DELETE FROM Setting WHERE key = ?').run('theme_backup_' + d.id);
+      persistBackups([...others, ...mine.slice(excess), entry]);
+    } else {
+      persistBackups([...others, ...mine, entry]);
+    }
+  });
   return { id };
 }
 

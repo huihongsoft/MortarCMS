@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
-import db from '../utils/db';
+import db, { withTransaction } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { passwordOk } from './auth';
 
@@ -50,7 +50,21 @@ router.delete('/:id', authenticate, authorize('admin'), (req: AuthRequest, res: 
       res.status(400).json({ error: '该用户仍有 ' + posts + ' 篇文章，请先转移或删除其内容' });
       return;
     }
-    db.prepare('DELETE FROM User WHERE id = ?').run(req.params.id);
+    // User-scoped tables without a DB-level FK (app passwords, AI state, audit
+    // rows) must be cleared explicitly or they are left orphaned. All of it in
+    // one transaction so a partial delete can't strand credentials.
+    withTransaction(() => {
+      db.prepare('DELETE FROM AppPassword WHERE userId = ?').run(req.params.id);
+      db.prepare('DELETE FROM AiMemory WHERE userId = ?').run(req.params.id);
+      db.prepare('DELETE FROM AiUsage WHERE userId = ?').run(req.params.id);
+      db.prepare('DELETE FROM AiNotification WHERE userId = ?').run(req.params.id);
+      db.prepare('DELETE FROM AiTask WHERE userId = ?').run(req.params.id);
+      db.prepare('DELETE FROM AiSession WHERE userId = ?').run(req.params.id);
+      db.prepare('DELETE FROM AiAudit WHERE userId = ?').run(req.params.id);
+      db.prepare('UPDATE FormSubmission SET userId = NULL WHERE userId = ?').run(req.params.id);
+      db.prepare('DELETE FROM Activity WHERE userId = ?').run(req.params.id);
+      db.prepare('DELETE FROM User WHERE id = ?').run(req.params.id);
+    });
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

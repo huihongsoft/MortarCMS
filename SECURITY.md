@@ -41,6 +41,15 @@ timeline with you.
 - Use the built-in **Security Audit** page (`/admin/security`) to review your
   installation.
 
+## Deployment Scope
+
+Mortar is supported as a **single-instance deployment backed by SQLite**.
+MySQL and PostgreSQL are experimental and not recommended for production. Do
+not run multiple replicas against one SQLite file, or behind a load balancer
+without shared storage: the scheduler, on-disk uploads and the in-process
+cache all assume a single process (see README → Database). Running more than
+one instance would duplicate scheduled jobs and let uploads/caches diverge.
+
 ## Security Features Built In
 
 | Area | Protection |

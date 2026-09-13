@@ -147,9 +147,8 @@ const zh: Record<string, string> = {
   'redirecting to the admin panel': '即将跳转到管理后台...',
   'welcome! let us set up your new site — it only takes a minute.': '欢迎！只需一分钟即可完成站点搭建。',
   'choose your database': '选择数据库',
-  'zero configuration, single file. best for small to medium sites.': '零配置，单文件。适合中小型站点。',
-  'classic choice, widely hosted.': '经典选择，托管支持广泛。',
-  'modern, feature-rich relational database.': '现代化、功能丰富的关系型数据库。',
+  'zero configuration, single file. recommended for production.': '零配置，单文件。推荐用于生产环境。',
+  'experimental — not recommended for production.': '实验性——不推荐用于生产环境。',
   'host': '主机',
   'port': '端口',
   'user': '用户',
@@ -204,6 +203,24 @@ const zh: Record<string, string> = {
   'pending review': '待审核',
   'login to submit': '请先登录后投稿',
 
+  // Comment likes
+  'like': '赞',
+  'liked': '已赞',
+
+  // Profile
+  'profile': '个人中心',
+  'my profile': '我的资料',
+  'bio': '个人简介',
+  'avatar url': '头像链接',
+  'save profile': '保存资料',
+  'profile saved': '资料已保存',
+  'change password': '修改密码',
+  'current password': '当前密码',
+  'new password': '新密码',
+  'password changed': '密码已修改',
+  'my comments': '我的评论',
+  'save failed': '保存失败',
+
   // Newsletter
   'confirm subscription': '确认订阅',
   'subscription confirmed': '订阅已确认',
@@ -213,6 +230,23 @@ const zh: Record<string, string> = {
   'unsubscribed note': '您已成功退订本站 Newsletter，欢迎随时回来',
   'invalid token': '链接无效',
   'invalid token note': '链接无效或已过期，请重新订阅',
+  'author not found': '未找到该作者',
+  'blog': '博客',
+  'comment submitted for moderation': '评论已提交，等待审核',
+  'connect': '关注我们',
+  'dashboard': '控制台',
+  'decline': '拒绝',
+  'logout': '退出登录',
+  'no submissions yet': '暂无投稿',
+  'post': '文章',
+  'recent comments': '最新评论',
+  'results for': '搜索结果：',
+  'search failed': '搜索失败',
+  'sitemap': '站点地图',
+  'submit': '提交',
+  'toggle menu': '切换菜单',
+  'try again later': '请稍后再试',
+  'view monthly archive': '查看月度归档',
 };
 
 export function t(key: string, settings?: Record<string, string>): string {

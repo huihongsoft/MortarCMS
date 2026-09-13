@@ -1,5 +1,6 @@
 import { Router, Response } from 'express';
-import db from '../utils/db';
+import db, { withTransaction } from '../utils/db';
+import { resolveUploadUrl } from '../utils/paths';
 import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -24,41 +25,49 @@ function collectUserData(userId: string): any {
 // Erase every personal-data record for a user (GDPR "right to be forgotten").
 // Content they authored stays but is anonymized; media files are deleted.
 function eraseUserData(userId: string): { mediaDeleted: number } {
-  db.prepare('UPDATE Comment SET author = ?, email = ?, userId = NULL WHERE userId = ?').run('Anonymous', '', userId);
-  // Post.authorId is NOT NULL: reassign authored posts to another admin when
-  // possible; otherwise keep a fully anonymized placeholder user row.
-  const otherAdmin = db.prepare("SELECT id FROM User WHERE role = 'admin' AND id != ? ORDER BY createdAt LIMIT 1").get(userId) as any;
-  if (otherAdmin) {
-    db.prepare('UPDATE Post SET authorId = ? WHERE authorId = ?').run(otherAdmin.id, userId);
-  } else {
-    const anonId = 'deleted-' + String(userId).replace(/[^a-z0-9]/gi, '').slice(0, 12);
-    db.prepare("UPDATE User SET username = ?, email = ?, password = ?, role = 'subscriber', bio = '', avatar = '' WHERE id = ?")
-      .run(anonId, anonId + '@local.invalid', require('crypto').randomBytes(24).toString('hex'), userId);
-  }
   const media = db.prepare('SELECT id, url FROM Media WHERE userId = ?').all(userId) as any[];
+  // Every anonymization/erasure write is one unit: a failure part-way must not
+  // leave the account half-erased (some tables cleared, some not).
+  withTransaction(() => {
+    db.prepare('UPDATE Comment SET author = ?, email = ?, userId = NULL WHERE userId = ?').run('Anonymous', '', userId);
+    // Post.authorId is NOT NULL: reassign authored posts to another admin when
+    // possible; otherwise keep a fully anonymized placeholder user row.
+    const otherAdmin = db.prepare("SELECT id FROM User WHERE role = 'admin' AND id != ? ORDER BY createdAt LIMIT 1").get(userId) as any;
+    if (otherAdmin) {
+      db.prepare('UPDATE Post SET authorId = ? WHERE authorId = ?').run(otherAdmin.id, userId);
+    } else {
+      const anonId = 'deleted-' + String(userId).replace(/[^a-z0-9]/gi, '').slice(0, 12);
+      db.prepare("UPDATE User SET username = ?, email = ?, password = ?, role = 'subscriber', bio = '', avatar = '' WHERE id = ?")
+        .run(anonId, anonId + '@local.invalid', require('crypto').randomBytes(24).toString('hex'), userId);
+    }
+    for (const m of media) db.prepare('DELETE FROM Media WHERE id = ?').run(m.id);
+    db.prepare('DELETE FROM AppPassword WHERE userId = ?').run(userId);
+    // Form submissions keep their content (the site owner's record) but the
+    // account association is removed — same anonymization policy as comments.
+    db.prepare('UPDATE FormSubmission SET userId = NULL WHERE userId = ?').run(userId);
+    // Newsletter subscriptions are keyed by email — erase them when the erased
+    // user's email matches (their consent ends with the account)
+    const userEmail = db.prepare('SELECT email FROM User WHERE id = ?').get(userId) as any;
+    if (userEmail?.email) db.prepare('DELETE FROM Subscriber WHERE email = ?').run(userEmail.email);
+    db.prepare('DELETE FROM AiMemory WHERE userId = ?').run(userId);
+    db.prepare('DELETE FROM AiUsage WHERE userId = ?').run(userId);
+    db.prepare('DELETE FROM AiNotification WHERE userId = ?').run(userId);
+    db.prepare('DELETE FROM AiTask WHERE userId = ?').run(userId);
+    db.prepare('DELETE FROM AiSession WHERE userId = ?').run(userId);
+    db.prepare('DELETE FROM AiAudit WHERE userId = ?').run(userId);
+    db.prepare('DELETE FROM Activity WHERE userId = ?').run(userId);
+    // The User row is only removed when authored content was reassigned; the
+    // anonymized placeholder (no other admin case) must stay for FK integrity.
+    if (otherAdmin) db.prepare('DELETE FROM User WHERE id = ?').run(userId);
+  });
+  // Media files are removed only after the DB changes committed.
   let deleted = 0;
   for (const m of media) {
     try {
-      const filePath = require('path').join(__dirname, '../..', m.url);
-      if (require('fs').existsSync(filePath)) { require('fs').unlinkSync(filePath); deleted++; }
+      const filePath = resolveUploadUrl(m.url);
+      if (filePath && require('fs').existsSync(filePath)) { require('fs').unlinkSync(filePath); deleted++; }
     } catch {}
-    db.prepare('DELETE FROM Media WHERE id = ?').run(m.id);
   }
-  db.prepare('DELETE FROM AppPassword WHERE userId = ?').run(userId);
-  // Form submissions keep their content (the site owner's record) but the
-  // account association is removed — same anonymization policy as comments.
-  db.prepare('UPDATE FormSubmission SET userId = NULL WHERE userId = ?').run(userId);
-  // Newsletter subscriptions are keyed by email — erase them when the erased
-  // user's email matches (their consent ends with the account)
-  const userEmail = db.prepare('SELECT email FROM User WHERE id = ?').get(userId) as any;
-  if (userEmail?.email) db.prepare('DELETE FROM Subscriber WHERE email = ?').run(userEmail.email);
-  db.prepare('DELETE FROM AiMemory WHERE userId = ?').run(userId);
-  db.prepare('DELETE FROM AiUsage WHERE userId = ?').run(userId);
-  db.prepare('DELETE FROM AiNotification WHERE userId = ?').run(userId);
-  db.prepare('DELETE FROM Activity WHERE userId = ?').run(userId);
-  // The User row is only removed when authored content was reassigned; the
-  // anonymized placeholder (no other admin case) must stay for FK integrity.
-  if (otherAdmin) db.prepare('DELETE FROM User WHERE id = ?').run(userId);
   return { mediaDeleted: deleted };
 }
 

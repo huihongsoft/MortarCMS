@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "description": "A WordPress-like CMS built with TypeScript",
+  "engines": { "node": ">=20" },
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:admin\" \"npm run dev:frontend\"",
     "dev:server": "cd server && npm run dev",
@@ -21,6 +22,7 @@
     "eslint": "^10.8.1",
     "eslint-plugin-react-hooks": "^7.1.1",
     "globals": "^17.11.0",
+    "jsdom": "^30.0.1",
     "typescript-eslint": "^8.67.0"
   }
 }

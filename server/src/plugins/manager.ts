@@ -2,10 +2,12 @@ import fs from 'fs';
 import path from 'path';
 import https from 'https';
 import http from 'http';
+import dns from 'node:dns/promises';
 import { execFileSync } from 'child_process';
 import { tmpdir as osTmpDir } from 'os';
 import db from '../utils/db';
 import { assertSafeArchive } from '../utils/archive';
+import { isPrivateIp } from '../utils/ssrf';
 
 // Plugins ship as TypeScript sources (server/plugins/<name>/index.ts). Register
 // tsx's CommonJS loader so `node dist/index.js` (production build) can require
@@ -171,16 +173,29 @@ export function listMarket(): PluginMeta[] {
 
 // SSRF guard: reject URLs pointing at private / loopback / link-local hosts so
 // a malicious plugin URL cannot be used to probe the internal network or cloud
-// metadata endpoints. (Node's http.get does not follow redirects automatically,
-// and 3xx responses are rejected below, so the initial host check suffices.)
-function isPrivateHost(hostname: string): boolean {
-  const h = (hostname || '').toLowerCase().replace(/\.$/, '');
-  if (!h || h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal')) return true;
-  if (/^\d+\.\d+\.\d+\.\d+$/.test(h)) {
-    const [a, b] = h.split('.').map(Number);
-    if (a === 10 || a === 127 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) return true;
+// metadata endpoints. The hostname is resolved first — a name like
+// `evil.example` that resolves to 127.0.0.1 must be refused just like a literal
+// IP. (Node's http.get does not follow redirects, and 3xx responses are
+// rejected below, so the initial host check covers the download.)
+async function assertPublicUrl(url: string): Promise<void> {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { throw new Error('Invalid URL'); }
+  if (!['http:', 'https:'].includes(parsed.protocol)) throw new Error('Invalid URL');
+  // URL.hostname keeps the brackets for IPv6 literals ([::1]); strip them so
+  // the literal can be classified (and public IPv6 plugin URLs aren't refused).
+  const h = parsed.hostname.toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '');
+  if (!h || h === 'localhost' || h.endsWith('.local') || h.endsWith('.internal')) {
+    throw new Error('Download from private/internal addresses is not allowed');
   }
-  return false;
+  // Literal IP (v4 or v6) — classify directly, no DNS involved.
+  if (/^[0-9.]+$/.test(h) || h.includes(':')) {
+    if (isPrivateIp(h)) throw new Error('Download from private/internal addresses is not allowed');
+    return;
+  }
+  const addrs = await dns.lookup(h, { all: true }).catch(() => []);
+  if (addrs.length === 0 || addrs.some((a: any) => isPrivateIp(a.address))) {
+    throw new Error('Download from private/internal addresses is not allowed');
+  }
 }
 
 // Download a remote plugin archive (zip or tar.gz) and install it
@@ -189,9 +204,7 @@ export async function installFromUrl(url: string): Promise<{ ok: boolean; error?
   let archivePath: string | null = null;
   try {
     if (!/^https?:\/\//.test(url)) return { ok: false, error: 'Invalid URL' };
-    let parsed: URL;
-    try { parsed = new URL(url); } catch { return { ok: false, error: 'Invalid URL' }; }
-    if (isPrivateHost(parsed.hostname)) return { ok: false, error: 'Download from private/internal addresses is not allowed' };
+    try { await assertPublicUrl(url); } catch (e: any) { return { ok: false, error: e.message }; }
     fs.mkdirSync(tmpDir, { recursive: true });
     const isGz = /\.(tar\.gz|tgz)$/i.test(url);
     const ext = isGz ? 'tar.gz' : 'zip';

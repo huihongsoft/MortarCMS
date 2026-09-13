@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import DOMPurify from 'dompurify';
 import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson, Trash2, Edit, HardDrive } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Select from '../components/Select';
@@ -21,6 +22,23 @@ export default function Settings() {
   const [cacheTtl, setCacheTtl] = useState(60);
   const [mailTemplates, setMailTemplates] = useState<any[]>([]);
   const [previewTpl, setPreviewTpl] = useState('');
+  const [tplEdit, setTplEdit] = useState<{ name: string; subject: string; body: string } | null>(null);
+
+  // Refresh template list + settings after template edits/resets
+  const refreshTemplates = () => {
+    api.get('/mailer/templates').then(r => setMailTemplates(r.data?.templates || [])).catch(() => {});
+    api.get('/settings').then(r => setSettings(r.data)).catch(() => {});
+  };
+
+  const saveTpl = async () => {
+    if (!tplEdit) return;
+    try {
+      await api.put('/settings', { ['mail_template_' + tplEdit.name]: JSON.stringify({ subject: tplEdit.subject, body: tplEdit.body }) });
+      alert(t('template saved', getLang()));
+      setTplEdit(null);
+      refreshTemplates();
+    } catch (e: any) { alert(e.response?.data?.error || t('save failed', getLang())); }
+  };
   const [tasks, setTasks] = useState<any[]>([]);
   const [dbStatus, setDbStatus] = useState<any>(null);
   const [dbCheck, setDbCheck] = useState<any>(null);
@@ -328,7 +346,22 @@ export default function Settings() {
             React.createElement('div', { key: tp.name, className: 'border border-gray-100 dark:border-gray-700 rounded-lg overflow-hidden' },
               React.createElement('div', { className: 'flex items-center gap-3 px-4 py-2.5 bg-gray-50 dark:bg-gray-800 flex-wrap' },
                 React.createElement('code', { className: 'text-xs font-semibold text-gray-800 dark:text-gray-100' }, tp.name),
+                tp.customized && React.createElement('span', { className: 'text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300' }, t('customized', getLang())),
                 React.createElement('span', { className: 'text-xs text-gray-500 flex-1 min-w-0 truncate' }, tp.desc),
+                React.createElement('button', { onClick: () => {
+                  // Load the override when one exists; otherwise start from the
+                  // built-in subject/body so saving never stores an empty body
+                  const raw = settings['mail_template_' + tp.name];
+                  let subject = tp.subject, body = tp.body || '';
+                  if (raw) {
+                    try { const ov = JSON.parse(raw); subject = ov.subject; body = ov.body; } catch {}
+                  }
+                  setTplEdit({ name: tp.name, subject, body });
+                }, className: 'text-xs text-primary-600 hover:text-primary-700' }, t('edit template', getLang())),
+                tp.customized && React.createElement('button', { onClick: () => {
+                  if (!window.confirm(t('reset template confirm', getLang()))) return;
+                  api.delete('/mailer/templates/' + tp.name).then(refreshTemplates).catch((e: any) => alert(e.response?.data?.error || t('failed', getLang())));
+                }, className: 'text-xs text-red-500 hover:text-red-600' }, t('reset template', getLang())),
                 React.createElement('button', { onClick: () => setPreviewTpl(previewTpl === tp.name ? '' : tp.name), className: 'text-xs text-primary-600 hover:text-primary-700' }, t('preview', getLang())),
                 React.createElement('button', { onClick: () => {
                   const to = prompt(t('recipient email', getLang()));
@@ -338,12 +371,27 @@ export default function Settings() {
               ),
               previewTpl === tp.name && React.createElement('div', { className: 'p-4 bg-white dark:bg-gray-900' },
                 React.createElement('p', { className: 'text-[10px] uppercase text-gray-400 mb-2' }, tp.subject),
-                React.createElement('div', { className: 'border border-gray-100 dark:border-gray-700 rounded-lg overflow-hidden', dangerouslySetInnerHTML: { __html: tp.previewHtml } })
+                React.createElement('div', { className: 'border border-gray-100 dark:border-gray-700 rounded-lg overflow-hidden', dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(String(tp.previewHtml || ''), { ADD_TAGS: ['style'] }) } })
               )
             )
           )
         )
-      )
+      ),
+      // Template editor modal
+      tplEdit && React.createElement('div', { className: 'fixed inset-0 z-[60] bg-black/40 flex items-center justify-center p-4', onClick: (e: React.MouseEvent) => { if (e.target === e.currentTarget) setTplEdit(null); } },
+        React.createElement('div', { className: 'card w-full max-w-2xl p-6 max-h-[90vh] overflow-y-auto' },
+          React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 dark:text-gray-100 mb-1' }, t('edit template', getLang()) + ' — ' + tplEdit.name),
+          React.createElement('p', { className: 'text-xs text-gray-500 dark:text-gray-400 mb-4' }, t('template variables hint', getLang())),
+          React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('subject', getLang())),
+          React.createElement('input', { value: tplEdit.subject, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setTplEdit({ ...tplEdit, subject: e.target.value }), className: 'input-field mb-3' }),
+          React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('email body', getLang())),
+          React.createElement('textarea', { value: tplEdit.body, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setTplEdit({ ...tplEdit, body: e.target.value }), rows: 12, className: 'input-field font-mono text-xs mb-4' }),
+          React.createElement('div', { className: 'flex justify-end gap-2' },
+            React.createElement('button', { onClick: () => setTplEdit(null), className: 'btn-secondary text-sm' }, t('cancel', getLang())),
+            React.createElement('button', { onClick: saveTpl, className: 'btn-primary text-sm' }, t('save', getLang())),
+          ),
+        )
+      ),
     ),
     tab === 'storage' && React.createElement('div', { className: 'space-y-4' },
       React.createElement('div', { className: 'card p-6' },

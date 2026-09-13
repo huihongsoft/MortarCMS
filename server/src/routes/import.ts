@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
 import fs from 'fs';
-import db, { cuid } from '../utils/db';
+import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { slugify, uniqueSlug } from '../utils/slug';
 import { parseFrontmatter, mdToHtml } from '../utils/markdown';
@@ -19,9 +19,13 @@ router.post('/wxr', authenticate, requireCap('manage_options'), upload.single('f
   try {
     if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return; }
     tmpPath = req.file.path;
+    // Remove the uploaded temp file on every exit path (success, early reject,
+    // or error) — the early returns used to leak it.
+    const cleanupTmp = () => { if (tmpPath) { try { fs.unlinkSync(tmpPath); } catch {} } };
     const xml = fs.readFileSync(tmpPath, 'utf8');
     if (!xml.includes('<channel>') || !xml.includes('<wp:post_type>')) {
       res.status(400).json({ error: 'Not a valid WordPress WXR file' });
+      cleanupTmp();
       return;
     }
 
@@ -60,7 +64,7 @@ router.post('/wxr', authenticate, requireCap('manage_options'), upload.single('f
       });
     }
 
-    if (items.length === 0) { res.status(400).json({ error: 'No items found in WXR file' }); return; }
+    if (items.length === 0) { res.status(400).json({ error: 'No items found in WXR file' }); cleanupTmp(); return; }
 
     const now = new Date().toISOString();
     const allSlugs = (db.prepare('SELECT slug FROM Post WHERE type = ?').all('post') as any[]).map((s: any) => s.slug);
@@ -68,6 +72,9 @@ router.post('/wxr', authenticate, requireCap('manage_options'), upload.single('f
 
     const stats = { posts: 0, pages: 0, attachments: 0, categories: 0, tags: 0, comments: 0, skipped: 0 };
 
+    // Each item is its own transaction: atomic per post (post + categories +
+    // tags) without holding the SQLite write lock for the whole file, which
+    // would block every other request for the duration of a large import.
     for (const item of items) {
       if (item.postType === 'attachment') { stats.attachments++; continue; }
       if (item.postType !== 'post' && item.postType !== 'page') { stats.skipped++; continue; }
@@ -90,35 +97,37 @@ router.post('/wxr', authenticate, requireCap('manage_options'), upload.single('f
       // rendered as HTML (defense in depth with the frontend's DOMPurify pass)
       const content = sanitizeHtml(item.content);
       const excerpt = sanitizeHtml(item.excerpt);
-      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, createdAt, updatedAt, publishedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
-        id, item.title, slug, content, excerpt, item.status === 'publish' ? 'published' : 'draft', type, authorId, now, now, item.status === 'publish' ? now : null
-      );
+      withTransaction(() => {
+        db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, createdAt, updatedAt, publishedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+          id, item.title, slug, content, excerpt, item.status === 'publish' ? 'published' : 'draft', type, authorId, now, now, item.status === 'publish' ? now : null
+        );
 
-      // Categories
-      for (const catName of item.categories) {
-        const catSlug = slugify(catName);
-        let cat: any = db.prepare('SELECT id FROM Category WHERE slug = ?').get(catSlug);
-        if (!cat) {
-          const cid = cuid();
-          db.prepare('INSERT INTO Category (id, name, slug) VALUES (?, ?, ?)').run(cid, catName, catSlug);
-          cat = { id: cid };
-          stats.categories++;
+        // Categories
+        for (const catName of item.categories) {
+          const catSlug = slugify(catName);
+          let cat: any = db.prepare('SELECT id FROM Category WHERE slug = ?').get(catSlug);
+          if (!cat) {
+            const cid = cuid();
+            db.prepare('INSERT INTO Category (id, name, slug) VALUES (?, ?, ?)').run(cid, catName, catSlug);
+            cat = { id: cid };
+            stats.categories++;
+          }
+          db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, cat.id);
         }
-        db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, cat.id);
-      }
 
-      // Tags
-      for (const tagName of item.tags) {
-        const tagSlug = slugify(tagName);
-        let tag: any = db.prepare('SELECT id FROM Tag WHERE slug = ?').get(tagSlug);
-        if (!tag) {
-          const tid = cuid();
-          db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tid, tagName, tagSlug);
-          tag = { id: tid };
-          stats.tags++;
+        // Tags
+        for (const tagName of item.tags) {
+          const tagSlug = slugify(tagName);
+          let tag: any = db.prepare('SELECT id FROM Tag WHERE slug = ?').get(tagSlug);
+          if (!tag) {
+            const tid = cuid();
+            db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tid, tagName, tagSlug);
+            tag = { id: tid };
+            stats.tags++;
+          }
+          db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tag.id);
         }
-        db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tag.id);
-      }
+      });
 
       if (type === 'post') stats.posts++; else stats.pages++;
     }
@@ -142,9 +151,11 @@ router.post('/wxr', authenticate, requireCap('manage_options'), upload.single('f
         const r = new RegExp('<' + tag + '>([\\s\\S]*?)</' + tag + '>').exec(cb);
         return r ? stripCdata(unesc(r[1])).trim() : '';
       };
-        db.prepare('INSERT INTO Comment (id, content, author, email, website, status, postId, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
-          cuid(), sanitizeHtml(grab('wp:comment_content')), grab('wp:comment_author') || 'Anonymous', grab('wp:comment_author_email'), grab('wp:comment_author_url'), grab('wp:comment_approved') === '1' ? 'approved' : 'pending', post.id, grab('wp:comment_date_gmt') || now
-        );
+        withTransaction(() => {
+          db.prepare('INSERT INTO Comment (id, content, author, email, website, status, postId, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').run(
+            cuid(), sanitizeHtml(grab('wp:comment_content')), grab('wp:comment_author') || 'Anonymous', grab('wp:comment_author_email'), grab('wp:comment_author_url'), grab('wp:comment_approved') === '1' ? 'approved' : 'pending', post.id, grab('wp:comment_date_gmt') || now
+          );
+        });
         stats.comments++;
       }
     }
@@ -175,25 +186,28 @@ router.post('/markdown', authenticate, requireCap('manage_options'), upload.arra
         const id = cuid();
         const now = new Date().toISOString();
         const publishedAt = meta.date ? new Date(String(meta.date)).toISOString() : null;
-        db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(id, title, slug, mdToHtml(body), String(meta.excerpt || body.slice(0, 200)), status, 'post', req.user!.userId, publishedAt, now, now);
-        // Tags + categories from frontmatter
-        for (const tagName of (meta.tags || []) as string[]) {
-          const ts = String(tagName).trim().slice(0, 50);
-          if (!ts) continue;
-          const existing = db.prepare('SELECT id FROM Tag WHERE slug = ?').get(slugify(ts)) as any;
-          let tagId = existing?.id as string | undefined;
-          if (!tagId) { tagId = cuid(); db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tagId, ts, slugify(ts)); }
-          db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tagId);
-        }
-        for (const catName of (meta.categories || []) as string[]) {
-          const cs = String(catName).trim().slice(0, 50);
-          if (!cs) continue;
-          const existing = db.prepare('SELECT id FROM Category WHERE slug = ?').get(slugify(cs)) as any;
-          let catId = existing?.id as string | undefined;
-          if (!catId) { catId = cuid(); db.prepare('INSERT INTO Category (id, name, slug) VALUES (?, ?, ?)').run(catId, cs, slugify(cs)); }
-          db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, catId);
-        }
+        // Each file is atomic: the post and its tags/categories land together.
+        withTransaction(() => {
+          db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(id, title, slug, mdToHtml(body), String(meta.excerpt || body.slice(0, 200)), status, 'post', req.user!.userId, publishedAt, now, now);
+          // Tags + categories from frontmatter
+          for (const tagName of (meta.tags || []) as string[]) {
+            const ts = String(tagName).trim().slice(0, 50);
+            if (!ts) continue;
+            const existing = db.prepare('SELECT id FROM Tag WHERE slug = ?').get(slugify(ts)) as any;
+            let tagId = existing?.id as string | undefined;
+            if (!tagId) { tagId = cuid(); db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tagId, ts, slugify(ts)); }
+            db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tagId);
+          }
+          for (const catName of (meta.categories || []) as string[]) {
+            const cs = String(catName).trim().slice(0, 50);
+            if (!cs) continue;
+            const existing = db.prepare('SELECT id FROM Category WHERE slug = ?').get(slugify(cs)) as any;
+            let catId = existing?.id as string | undefined;
+            if (!catId) { catId = cuid(); db.prepare('INSERT INTO Category (id, name, slug) VALUES (?, ?, ?)').run(catId, cs, slugify(cs)); }
+            db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, catId);
+          }
+        });
         imported.push({ title, slug, status });
       } catch { errors++; }
       finally { try { fs.unlinkSync(file.path); } catch {} }

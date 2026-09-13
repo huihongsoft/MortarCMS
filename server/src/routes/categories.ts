@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import db, { cuid } from '../utils/db';
+import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { slugify } from '../utils/slug';
 
@@ -53,8 +53,10 @@ router.post('/bulk-delete', authenticate, authorize('admin'), (req: AuthRequest,
   try {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids)) { res.status(400).json({ error: 'ids array required' }); return; }
-    for (const id of ids) { db.prepare('DELETE FROM Category WHERE id = ?').run(id); }
-    res.json({ success: true, count: ids.length });
+    withTransaction(() => {
+      for (const id of ids.slice(0, 1000)) { db.prepare('DELETE FROM Category WHERE id = ?').run(id); }
+    });
+    res.json({ success: true, count: Math.min(ids.length, 1000) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

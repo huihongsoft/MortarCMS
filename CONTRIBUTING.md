@@ -44,7 +44,7 @@ docs/        Documentation
    cd frontend && npx tsc -b && npx vite build
    ```
 
-2. **Test against SQLite** (default) — all changes must keep the default path green. If you touch the data layer, also verify a MySQL/PostgreSQL connection if available (`DATABASE_URL=...`).
+2. **Test against SQLite** (default) — all changes must keep the default path green. If you touch the data layer, also verify a MySQL/PostgreSQL connection if available (`DATABASE_URL=...`); those drivers are experimental and not a supported production target.
 
 3. **Keep the UI bilingual** — new UI strings must go through `t('key', getLang())` / `t('key', settings)` and the key must exist in `admin/src/lib/i18n.ts` or `frontend/src/lib/i18n.ts`.
 

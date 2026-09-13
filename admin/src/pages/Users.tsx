@@ -64,11 +64,15 @@ export default function Users() {
 
   async function disable2fa() {
     if (!confirm(t('disable 2fa?', getLang()))) return;
+    // Disabling 2FA now requires re-authentication — the account password (or
+    // a current 2FA code if the device is available).
+    const password = prompt(t('enter your password to disable 2fa', getLang()));
+    if (!password) return;
     try {
-      await api.post('/auth/2fa/disable');
+      await api.post('/auth/2fa/disable', { password });
       setTwoFa(null);
       api.get('/users').then(r => setUsers(r.data)).catch(() => {});
-    } catch (e: any) { alert(e.response?.data?.error || t('2fa setup failed', getLang())); }
+    } catch (e: any) { alert(e.response?.data?.error || t('2fa disable failed', getLang())); }
   }
 
   function copyText(v: string) {

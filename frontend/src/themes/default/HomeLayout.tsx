@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { sanitizeHtml } from '../../lib/sanitizeHtml';
 import { Calendar, User, Folder, MessageSquare } from 'lucide-react';
 import TagCloudWidget from '../../components/TagCloudWidget';
 import RecentPostsWidget from '../../components/RecentPostsWidget';
@@ -90,7 +91,7 @@ export default function HomeLayout(props: any) {
               has('rss') && React.createElement(RssWidget),
               has('html') && cfg.html?.html && React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
                 cfg.html.title && React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider' }, cfg.html.title),
-                React.createElement('div', { dangerouslySetInnerHTML: { __html: cfg.html.html } })
+                React.createElement('div', { dangerouslySetInnerHTML: { __html: sanitizeHtml(cfg.html.html) } })
               ),
             );
           })(),

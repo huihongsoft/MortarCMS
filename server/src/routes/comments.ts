@@ -1,7 +1,9 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import db, { cuid } from '../utils/db';
+import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
+import { isTokenBlacklisted } from './auth';
+import { verifyToken } from '../utils/jwt';
 import { applyFilters, doAction } from '../utils/hooks';
 import { renderTemplate, sendEmail } from '../utils/mailer';
 
@@ -32,11 +34,11 @@ router.get('/recent', (req: AuthRequest, res: Response) => {
 
 router.get('/post/:postId', (req: AuthRequest, res: Response) => {
   try {
-    const comments = db.prepare('SELECT id, content, author, website, status, postId, parentId, userId, createdAt FROM Comment WHERE postId = ? AND status = ? AND parentId IS NULL ORDER BY createdAt DESC').all(req.params.postId, 'approved') as any[];
+    const comments = db.prepare('SELECT id, content, author, website, status, postId, parentId, userId, likes, createdAt FROM Comment WHERE postId = ? AND status = ? AND parentId IS NULL ORDER BY createdAt DESC').all(req.params.postId, 'approved') as any[];
     // Batch-load children for all top-level comments (one query total)
     const children = new Map<string, any[]>();
     if (comments.length > 0) {
-      (db.prepare('SELECT id, content, author, website, status, postId, parentId, userId, createdAt FROM Comment WHERE parentId IN (' + comments.map(() => '?').join(',') + ') AND status = ? ORDER BY createdAt ASC').all(...comments.map((c: any) => c.id), 'approved') as any[])
+      (db.prepare('SELECT id, content, author, website, status, postId, parentId, userId, likes, createdAt FROM Comment WHERE parentId IN (' + comments.map(() => '?').join(',') + ') AND status = ? ORDER BY createdAt ASC').all(...comments.map((c: any) => c.id), 'approved') as any[])
         .forEach((r: any) => { if (!children.has(r.parentId)) children.set(r.parentId, []); children.get(r.parentId)!.push(r); });
     }
     comments.forEach((c: any) => { c.children = children.get(c.id) || []; });
@@ -44,8 +46,32 @@ router.get('/post/:postId', (req: AuthRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Public: like a comment (global /api rate limit guards abuse)
+router.post('/:id/like', (req: AuthRequest, res: Response) => {
+  try {
+    const r = db.prepare('UPDATE Comment SET likes = COALESCE(likes, 0) + 1 WHERE id = ?').run(req.params.id);
+    if (r.changes === 0) { res.status(404).json({ error: 'Comment not found' }); return; }
+    const likes = (db.prepare('SELECT likes FROM Comment WHERE id = ?').get(req.params.id) as any)?.likes || 0;
+    res.json({ success: true, likes });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 router.post('/', (req: AuthRequest, res: Response) => {
   try {
+    // Optional auth: a Bearer token links the comment to the account (for the
+    // profile page's "my comments") without blocking anonymous commenters.
+    // Applies the same checks as authenticate (blacklist + session version)
+    // so revoked tokens can never claim an identity here.
+    try {
+      const h = req.headers.authorization || '';
+      if (h.startsWith('Bearer ') && !isTokenBlacklisted(h.slice(7))) {
+        const payload = verifyToken(h.slice(7));
+        if (payload) {
+          const user = db.prepare('SELECT tokenVersion FROM User WHERE id = ?').get(payload.userId) as any;
+          if (user && (payload.v === undefined || user.tokenVersion === payload.v)) req.user = payload;
+        }
+      }
+    } catch {}
     const data = commentSchema.parse(req.body);
     const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(data.postId) as any;
     if (!post || post.status !== 'published') { res.status(404).json({ error: 'Post not found' }); return; }
@@ -53,8 +79,23 @@ router.post('/', (req: AuthRequest, res: Response) => {
     // blacklists) by returning a non-empty error string from the filter
     const validationError = applyFilters('comment_validate', '', { ...data, ip: req.ip || '' });
     if (validationError) { res.status(400).json({ error: validationError }); return; }
+    // A reply must target a comment on the same post; otherwise parentId could
+    // be used to trigger reply notifications across unrelated threads.
+    if (data.parentId) {
+      const parent = db.prepare('SELECT postId FROM Comment WHERE id = ?').get(data.parentId) as any;
+      if (!parent || parent.postId !== data.postId) { res.status(400).json({ error: 'Invalid parent comment' }); return; }
+    }
     const id = cuid();
-    db.prepare('INSERT INTO Comment (id, content, author, email, website, postId, parentId, status, subscribe) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.content, data.author || 'Anonymous', data.email || '', data.website || '', data.postId, data.parentId || null, 'pending', data.subscribe ? 1 : 0);
+    // Logged-in commenters are linked to their account so the profile page
+    // can show "my comments"; author/email fall back to the account identity
+    const userId = (req as any).user?.userId || null;
+    let authorName = data.author?.trim() || '';
+    if (!authorName && userId) {
+      authorName = (db.prepare('SELECT username FROM User WHERE id = ?').get(userId) as any)?.username || '';
+    }
+    if (!authorName) authorName = 'Anonymous';
+    db.prepare('INSERT INTO Comment (id, content, author, email, website, postId, parentId, status, subscribe, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+      id, data.content, authorName, data.email || '', data.website || '', data.postId, data.parentId || null, 'pending', data.subscribe ? 1 : 0, userId);
     
     // Notify the parent comment author by email when a reply arrives
     if (data.parentId) {
@@ -162,16 +203,23 @@ router.post('/bulk-action', authenticate, requireCap('moderate_comments'), (req:
     // single-comment PUT; 'delete' is the only permanent removal
     const validActions = ['approved', 'pending', 'spam', 'trash', 'delete'];
     if (!validActions.includes(action)) { res.status(400).json({ error: 'Invalid action' }); return; }
-    for (const id of ids) {
-      if (action === 'delete') {
-        db.prepare('DELETE FROM Comment WHERE id = ?').run(id);
-      } else {
-        db.prepare('UPDATE Comment SET status = ? WHERE id = ?').run(action, id);
-        if (action === 'approved') doAction('comment_approved', id);
-        if (action === 'spam') doAction('comment_spam', id);
+    // Cap the batch so a single request can't hold the write lock for minutes.
+    const batch = ids.slice(0, 1000);
+    const notify: string[] = [];
+    withTransaction(() => {
+      for (const id of batch) {
+        if (action === 'delete') {
+          db.prepare('DELETE FROM Comment WHERE id = ?').run(id);
+        } else {
+          db.prepare('UPDATE Comment SET status = ? WHERE id = ?').run(action, id);
+          if (action === 'approved') notify.push(id);
+        }
       }
-    }
-    res.json({ success: true, count: ids.length });
+    });
+    // Hooks fire after the batch is committed.
+    for (const id of notify) doAction('comment_approved', id);
+    if (action === 'spam') for (const id of batch) doAction('comment_spam', id);
+    res.json({ success: true, count: batch.length });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

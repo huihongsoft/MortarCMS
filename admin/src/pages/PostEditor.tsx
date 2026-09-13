@@ -31,6 +31,32 @@ export default function PostEditor() {
   const [visualMode, setVisualMode] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
+  const [lastSavedAt, setLastSavedAt] = useState('');
+  // Baseline snapshot for autosave dirty-detection (title/content/excerpt)
+  const snapshotRef = useRef('');
+
+  // Autosave (WordPress-style): 30s after the last keystroke, silently save
+  // drafts that have changed. Published/scheduled posts are never autosaved —
+  // a background save must not touch the live state. saveRef always points at
+  // the latest handleSave so the interval never saves with stale state (e.g.
+  // an edited SEO title would otherwise be overwritten by the old one).
+  const saveRef = useRef(handleSave);
+  useEffect(() => { saveRef.current = handleSave; });
+  useEffect(() => {
+    snapshotRef.current = title + '\u0000' + content + '\u0000' + excerpt;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  useEffect(() => {
+    const t = setInterval(() => {
+      const cur = title + '\u0000' + content + '\u0000' + excerpt;
+      if (cur === snapshotRef.current || savingRef.current) return;
+      const canAutosave = !id || status === 'draft' || status === 'pending';
+      if (!canAutosave) return;
+      saveRef.current('draft', true, true);
+    }, 30000);
+    return () => clearInterval(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, content, excerpt, id, status]);
   const [visualCss, setVisualCss] = useState('');
   const [aiOpen, setAiOpen] = useState(false);
   const [aiStyle, setAiStyle] = useState('formal');
@@ -46,6 +72,10 @@ export default function PostEditor() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [templateName, setTemplateName] = useState('');
   const [saving, setSaving] = useState(false);
+  // savingRef mirrors the saving flag so the autosave interval never races an
+  // in-flight publish (the interval closure's saving would be stale)
+  const savingRef = useRef(false);
+  useEffect(() => { savingRef.current = saving; }, [saving]);
   const [featured, setFeatured] = useState('');
   const [mediaItems, setMediaItems] = useState<any[]>([]);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
@@ -59,39 +89,19 @@ export default function PostEditor() {
   // editor) reuse the same post instead of creating duplicates
   const createdIdRef = useRef<string | null>(null);
 
-
-  // Autosave every 30 seconds (stays in the editor, never navigates away)
-  useEffect(() => {
-    if (!title) return;
-    const timer = setInterval(async () => {
-      try {
-        const payload: any = { title, content, excerpt, status: 'draft', siteId: siteId || null, allowComments };
-        payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc, _seo_noindex: seoNoindex ? '1' : '', _seo_canonical: seoCanonical, _seo_og_image: seoOgImage };
-      // Custom fields (user-defined key/value pairs) ride along in meta
-      for (const mf of metaFields) { if (mf.key.trim()) payload.meta[mf.key.trim()] = mf.value; }
-        const postId = id || createdIdRef.current;
-        if (postId) await api.put('/posts/' + postId, payload);
-        else {
-          const r = await api.post('/posts', { ...payload, categoryIds, tagNames, featured: featured || undefined });
-          if (r.data?.id) createdIdRef.current = r.data.id;
-        }
-      } catch {}
-    }, 30000);
-    return () => clearInterval(timer);
-  }, [title, content, excerpt, categoryIds, tagNames, featured, siteId, id, visualCss, metaFields]);
-
-  
-  // Keyboard shortcut: Ctrl+S to save draft
+  // Keyboard shortcut: Ctrl+S to save draft. Route through saveRef so the
+  // handler always sees the latest state (a deps-array closure would go stale
+  // and overwrite newer edits — e.g. SEO fields — with old values).
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
-        handleSave('draft');
+        saveRef.current('draft');
       }
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [title, content, excerpt, status, categoryIds, tagNames, featured, slug, format, siteId, publishDate, authorId]);
+  }, []);
 
   useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); api.get('/users').then(r => setUsers(r.data)).catch(() => {});
     api.get('/categories').then(r => setCategories(r.data)); api.get('/media').then(r => setMediaItems(r.data.media || []));
@@ -100,11 +110,15 @@ export default function PostEditor() {
       // Custom fields: load user-defined keys (system keys with _ prefixes are managed by their own panels)
       const systemKeys = ['_visual_css', '_seo_title', '_seo_desc', '_seo_noindex', '_seo_canonical', '_seo_og_image'];
       if (p.meta) setMetaFields(Object.entries(p.meta).filter(([k]) => !systemKeys.includes(k) && k.trim()).map(([key, value]) => ({ key, value: String(value) })));
+      // Baseline the autosave snapshot AFTER the async load, otherwise the
+      // initial empty state looks "changed" and triggers a spurious save
+      snapshotRef.current = p.title + '\u0000' + (p.content || '') + '\u0000' + (p.excerpt || '');
     } }); } }, [id]);
 
   // stay=false (publish): navigate to the post list; stay=true (draft from the
-  // builder): keep editing in place, like WordPress
-  async function handleSave(s: string, stay = false) {
+  // builder): keep editing in place, like WordPress. silent=true skips the
+  // toast (used by autosave so background saves never interrupt the user).
+  async function handleSave(s: string, stay = false, silent = false) {
     setSaving(true);
     setSaveState('saving');
     try {
@@ -115,7 +129,12 @@ export default function PostEditor() {
       // carry one); an empty date means "publish now" like WordPress.
       // pending is a review state (managed via the review endpoint): editing
       // a pending post and hitting Publish means "approve" — publish it.
-      const finalStatus = s === 'draft' ? 'draft' : (status === 'draft' || status === 'pending' ? 'published' : status);
+      // Autosave must never change the workflow state: a post awaiting review
+      // (pending) that is autosaved stays pending instead of silently dropping
+      // back to draft and leaving the review queue.
+      const finalStatus = silent
+        ? (status || 'draft')
+        : (s === 'draft' ? 'draft' : (status === 'draft' || status === 'pending' ? 'published' : status));
       const payload: any = { title, slug: slug || undefined, content, excerpt, status: finalStatus, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: finalStatus !== 'draft' && schedDate ? new Date(schedDate).toISOString() : undefined, authorId: authorId || undefined, siteId: siteId || null, allowComments, password };
       payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc, _seo_noindex: seoNoindex ? '1' : '', _seo_canonical: seoCanonical, _seo_og_image: seoOgImage };
       // Custom fields (user-defined key/value pairs) ride along in meta
@@ -127,11 +146,19 @@ export default function PostEditor() {
         if (r.data?.id) createdIdRef.current = r.data.id;
       }
       setSaveState('saved');
-      toast.toast(postId ? t('post updated', getLang()) : t('post created', getLang()));
+      setLastSavedAt(new Date().toLocaleTimeString());
+      // Sync the status so autosave stops for published/scheduled posts and
+      // the interval can never race a publish back into draft
+      if (status !== finalStatus) setStatus(finalStatus);
+      // Refresh the baseline so autosave never re-saves the same state
+      snapshotRef.current = title + '\u0000' + content + '\u0000' + excerpt;
+      if (!silent) toast.toast(postId ? t('post updated', getLang()) : t('post created', getLang()));
       if (!stay) navigate('/posts');
     } catch (e: any) {
       setSaveState('dirty');
-      toast.toast(describeSaveError(e, getLang()), 'error');
+      // Background autosave failures stay quiet (the dirty indicator shows it);
+      // only user-initiated saves raise a toast.
+      if (!silent) toast.toast(describeSaveError(e, getLang()), 'error');
     } finally { setSaving(false); }
   }
 
@@ -213,7 +240,7 @@ export default function PostEditor() {
       aiOpen && React.createElement('div', null,
         React.createElement('div', { className: 'flex flex-wrap gap-1.5 mb-3' },
           React.createElement(Select, { value: aiStyle, onChange: (v: string) => setAiStyle(v), className: 'input-field w-28 text-xs' },
-            [['formal', '正式'], ['casual', '口语化'], ['marketing', '营销'], ['concise', '简洁']].map(([v, l]) => React.createElement('option', { key: v, value: v }, l))),
+            [['formal', 'formal'], ['casual', 'casual'], ['marketing', 'marketing'], ['concise', 'concise']].map(([v, l]) => React.createElement('option', { key: v, value: v }, t(l, getLang())))),
           React.createElement(Select, { value: aiLang, onChange: (v: string) => setAiLang(v), className: 'input-field w-28 text-xs' },
             ['简体中文', 'English', '日本語', '한국어', 'Français', 'Deutsch', 'Español'].map(l => React.createElement('option', { key: l, value: l }, l))),
           AI_ACTIONS.map(a => React.createElement('button', {
@@ -429,6 +456,7 @@ export default function PostEditor() {
         React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, id ? t('edit post', getLang()) : t('new post', getLang()))
       ),
       React.createElement('div', { className: 'flex items-center gap-2 flex-wrap justify-end' },
+        lastSavedAt && React.createElement('span', { className: 'text-xs text-gray-400' }, t('saved at', getLang()) + ' ' + lastSavedAt),
         React.createElement('button', { onClick: () => handleSave('draft'), disabled: saving || !title, className: 'btn-secondary' }, React.createElement(Save, { size: 16 }), t('save draft', getLang())),
         React.createElement('button', { onClick: () => handleSave('published'), disabled: saving || !title, className: 'btn-primary' }, t('publish', getLang()))
       )

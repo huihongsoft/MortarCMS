@@ -22,8 +22,10 @@ services:
       PORT: "3001"
       # Uncomment when running behind a reverse proxy:
       # TRUST_PROXY: "1"
-      # SQLite is the default (zero config). For MySQL/PostgreSQL uncomment
-      # one of these and the matching service below:
+      # SQLite is the supported production database (zero config).
+      # MySQL/PostgreSQL are EXPERIMENTAL and not recommended for production:
+      # their drivers run over a single-connection worker thread. To evaluate
+      # them, uncomment one of these and the matching service below:
       # DATABASE_URL: mysql://mortar:secret@mysql:3306/mortar
       # DATABASE_URL: postgres://mortar:secret@postgres:5432/mortar
     volumes:

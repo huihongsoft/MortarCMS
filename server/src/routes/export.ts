@@ -1,9 +1,36 @@
 import { Router, Response } from 'express';
-import db from '../utils/db';
+import crypto from 'crypto';
+import bcrypt from 'bcryptjs';
+import db, { withTransaction } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { sanitizeHtml } from '../utils/sanitize';
 
 const router = Router();
+
+// Imported rows come from a file that may have been edited after export, so
+// constrain the fields that carry privilege: only known role slugs are
+// accepted, and a password is only honored if it is already a bcrypt hash.
+// A plaintext/absent password becomes a random unusable hash instead of a
+// usable credential an attacker could have chosen.
+const IMPORT_ROLES = new Set(['admin', 'editor', 'author', 'contributor', 'subscriber']);
+// Placeholder password for imported users without a usable hash. One hash is
+// reused for all of them: its plaintext is random and never revealed, so
+// running bcrypt (cost 12) per row would block the event loop for seconds on a
+// large import with no security gain.
+let importPlaceholderHash: string | null = null;
+function safeImportedPassword(value: unknown): string {
+  if (typeof value === 'string' && /^\$2[aby]?\$/.test(value)) return value;
+  if (!importPlaceholderHash) importPlaceholderHash = bcrypt.hashSync(crypto.randomBytes(24).toString('hex'), 12);
+  return importPlaceholderHash;
+}
+// Media URLs must be site-relative uploads or absolute http(s); anything else
+// (javascript:, data:, ../ traversal) is dropped.
+function safeMediaUrl(value: unknown): string | null {
+  const s = String(value || '');
+  if (s.startsWith('/uploads/')) return s;
+  if (/^https?:\/\//i.test(s)) return s;
+  return null;
+}
 
 router.get('/export', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
@@ -56,8 +83,16 @@ router.post('/import', authenticate, authorize('admin'), (req: AuthRequest, res:
     let count = 0;
     const cuid_import = () => Date.now().toString(36) + Math.random().toString(36).substr(2, 6);
 
+    // Whole import in one transaction. Rows are still individually best-effort
+    // (per-row try/catch skips a bad row), but an *unexpected* error aborts the
+    // whole batch instead of leaving a partially-restored site.
+    withTransaction(() => {
     if (data.users) for (const u of data.users) {
-      try { db.prepare('INSERT OR IGNORE INTO User (id, username, email, password, role, bio) VALUES (?,?,?,?,?,?)').run(u.id||cuid_import(), u.username, u.email, u.password||'', u.role||'author', u.bio||''); count++; } catch {}
+      try {
+        const role = IMPORT_ROLES.has(String(u.role)) ? String(u.role) : 'author';
+        db.prepare('INSERT OR IGNORE INTO User (id, username, email, password, role, bio) VALUES (?,?,?,?,?,?)').run(u.id||cuid_import(), u.username, u.email, safeImportedPassword(u.password), role, u.bio||'');
+        count++;
+      } catch {}
     }
     if (data.categories) for (const c of data.categories) {
       try { db.prepare('INSERT OR IGNORE INTO Category (id, name, slug, description, parentId) VALUES (?,?,?,?,?)').run(c.id||cuid_import(), c.name, c.slug, c.description||'', c.parentId||null); count++; } catch {}
@@ -80,7 +115,10 @@ router.post('/import', authenticate, authorize('admin'), (req: AuthRequest, res:
     }
     if (data.media) for (const md of data.media) {
       try {
-        db.prepare('INSERT OR IGNORE INTO Media (id, filename, original, mimeType, size, url, thumbnail, title, alt, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)').run(md.id||cuid_import(), md.filename, md.original, md.mimeType, md.size||0, md.url, md.thumbnail||null, md.title||'', md.alt||'', md.createdAt||new Date().toISOString());
+        const url = safeMediaUrl(md.url);
+        if (!url) continue; // drop rows with a non-site URL rather than store junk
+        const thumb = md.thumbnail ? safeMediaUrl(md.thumbnail) : null;
+        db.prepare('INSERT OR IGNORE INTO Media (id, filename, original, mimeType, size, url, thumbnail, title, alt, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)').run(md.id||cuid_import(), md.filename, md.original, md.mimeType, md.size||0, url, thumb, md.title||'', md.alt||'', md.createdAt||new Date().toISOString());
         count++;
       } catch {}
     }
@@ -102,6 +140,7 @@ router.post('/import', authenticate, authorize('admin'), (req: AuthRequest, res:
       db.prepare('INSERT OR IGNORE INTO FriendLink (id, name, url, avatar, description, createdAt) VALUES (?,?,?,?,?,?)').run(fl.id||cuid_import(), fl.name, fl.url, fl.avatar||'', fl.description||'', fl.createdAt||new Date().toISOString());
       count++;
     }
+    });
     res.json({ success: true, imported: count });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

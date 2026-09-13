@@ -170,9 +170,9 @@ export default function Media() {
     if (aiAnalyzing) return;
     setAiAnalyzing(m.id);
     try {
-      const r = await api.post('/ai/vision', { url: m.url, question: '请描述这张图片的内容、风格和适用场景' });
-      setAiAnalysis({ ...aiAnalysis, [m.id]: r.data.analysis || r.data.error || '分析失败' });
-    } catch (e: any) { setAiAnalysis({ ...aiAnalysis, [m.id]: e.response?.data?.error || '分析失败' }); }
+      const r = await api.post('/ai/vision', { url: m.url, question: t('describe the image content, style and suitable use cases', getLang()) });
+      setAiAnalysis({ ...aiAnalysis, [m.id]: r.data.analysis || r.data.error || t('analysis failed', getLang()) });
+    } catch (e: any) { setAiAnalysis({ ...aiAnalysis, [m.id]: e.response?.data?.error || t('analysis failed', getLang()) }); }
     finally { setAiAnalyzing(null); }
   }
 
@@ -184,8 +184,8 @@ export default function Media() {
       if (r.data.url) {
         setGenPrompt('');
         const rr = await api.get('/media'); setMedia(rr.data.media);
-      } else alert(r.data.error || '生成失败');
-    } catch (e: any) { alert(e.response?.data?.error || '生成失败'); }
+      } else alert(r.data.error || t('generation failed', getLang()));
+    } catch (e: any) { alert(e.response?.data?.error || t('generation failed', getLang())); }
     finally { setGenLoading(false); }
   }
   function closePreview() { setPreview(null); }
@@ -263,7 +263,7 @@ export default function Media() {
           aiAnalysis[m.id] && React.createElement('div', { className: 'p-2 text-[10px] text-gray-500 bg-purple-50 dark:bg-purple-500/10 max-h-16 overflow-y-auto', onClick: (e: React.MouseEvent) => e.stopPropagation() }, aiAnalysis[m.id]),
           React.createElement('div', { className: 'p-2' },
             React.createElement('p', { className: 'text-xs text-gray-600 truncate' }, m.original),
-            React.createElement('p', { className: 'text-xs text-gray-400' }, formatSize(m.size)),
+            React.createElement('p', { className: 'text-xs text-gray-400' }, formatSize(m.size) + (m.downloads ? ' · ' + m.downloads + ' ' + t('downloads', getLang()) : '')),
             React.createElement('div', { className: 'flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity' },
               React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); navigator.clipboard.writeText(fullMediaUrl(m.url)); }, className: 'p-1 text-gray-400 hover:text-primary-600' }, React.createElement(Copy, { size: 14 })),
               React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); del(m.id); }, className: 'p-1 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 }))

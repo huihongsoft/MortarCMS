@@ -299,7 +299,7 @@ export default function MenuEditor() {
                 c.name + (c.pageId ? ' · ' + t('landing page', getLang()) + ': ' + (pages.find((p: any) => p.id === c.pageId)?.title || '?') : ''))
               )
             ),
-            editForm.type === 'custom' && React.createElement('input', { value: editForm.url, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, url: e.target.value }), placeholder: 'URL (/page/xxx 或 https://...)', className: 'input-field' }),
+            editForm.type === 'custom' && React.createElement('input', { value: editForm.url, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditForm({ ...editForm, url: e.target.value }), placeholder: 'URL (/page/xxx ' + t('or', getLang()) + ' https://...)', className: 'input-field' }),
             items.length > 1 && React.createElement(Select, { value: editForm.parentId, onChange: (v: string) => setEditForm({ ...editForm, parentId: v }), className: 'input-field' },
               React.createElement('option', { value: '' }, t('top level', getLang())),
               items.filter((it: any, i: number) => i !== editingIdx).map((it: any) => React.createElement('option', { key: it.id, value: it.id }, it.label))),

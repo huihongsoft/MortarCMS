@@ -15,6 +15,7 @@ export default function Stats() {
   const [range, setRange] = useState('14d');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [hotTerms, setHotTerms] = useState<any[]>([]);
 
   useEffect(() => {
     // Cancel guard: switching ranges quickly must not let a slow earlier
@@ -26,6 +27,9 @@ export default function Stats() {
       .catch(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
   }, [range]);
+
+  // Hot search terms (independent of the date range picker)
+  useEffect(() => { api.get('/posts/search-stats').then(r => setHotTerms(r.data.terms || [])).catch(() => {}); }, []);
 
   const rangeLabel = t(RANGE_KEYS[range] || 'last 14 days', getLang());
   // Year view aggregates by month, the other ranges by day
@@ -117,6 +121,21 @@ export default function Stats() {
               React.createElement('span', { className: 'text-xs text-gray-400 w-4' }, i + 1),
               React.createElement('span', { className: 'flex-1 text-sm text-gray-700 truncate' }, p.title),
               React.createElement('span', { className: 'text-xs text-gray-400' }, p.views + ' ' + t('views', getLang()))
+            )
+          ))
+    ),
+
+    // Hot search terms
+    React.createElement('div', { className: 'card p-5' },
+      React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-1' }, t('hot searches', getLang())),
+      React.createElement('p', { className: 'text-xs text-gray-400 mb-3' }, t('hot searches note', getLang())),
+      hotTerms.length === 0
+        ? React.createElement('p', { className: 'text-sm text-gray-400' }, t('no search data yet', getLang()))
+        : React.createElement('div', { className: 'space-y-2' }, hotTerms.map((s: any, i: number) =>
+            React.createElement('div', { key: s.query, className: 'flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50' },
+              React.createElement('span', { className: 'text-xs text-gray-400 w-4' }, i + 1),
+              React.createElement('span', { className: 'flex-1 text-sm text-gray-700 truncate' }, s.query),
+              React.createElement('span', { className: 'text-xs text-gray-400' }, s.cnt + ' ' + t('searches', getLang()))
             )
           ))
     ),

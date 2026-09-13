@@ -15,7 +15,9 @@ async function init(conn) {
     const bare = await mysql.createConnection(base);
     await bare.query('CREATE DATABASE IF NOT EXISTS `' + conn.database + '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
     await bare.end();
-    client = await mysql.createPool({ ...base, database: conn.database, waitForConnections: true, connectionLimit: 1 });
+    // multipleStatements: initDB sends the whole schema as one db.exec with
+    // several statements, which MySQL otherwise rejects.
+    client = await mysql.createPool({ ...base, database: conn.database, waitForConnections: true, connectionLimit: 1, multipleStatements: true });
     await client.query('SET time_zone = "+00:00"');
   } else {
     const { Pool } = require('pg');

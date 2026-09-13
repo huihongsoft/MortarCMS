@@ -200,7 +200,7 @@ addShortcode('form', (attrs, _content) => {
   if (!slug) return '';
   const form = db.prepare('SELECT * FROM Form WHERE slug = ? AND enabled = 1').get(slug) as any;
   if (!form) return '';
-  let fields: any[] = [];
+  let fields: any[];
   try { fields = JSON.parse(form.fields || '[]'); } catch { return ''; }
   if (!Array.isArray(fields) || fields.length === 0) return '';
   const lang = siteLang();
@@ -237,6 +237,19 @@ addShortcode('form', (attrs, _content) => {
     '<script>(function(){var f=document.querySelector(".cms-form[data-form=\\"' + esc(slug) + '\\"] form");if(!f)return;f.addEventListener("submit",function(e){e.preventDefault();var b=f.querySelector("button[type=submit]");var o=b?b.textContent:"";if(b)b.textContent="' + sendingLabel + '";fetch("/api/forms/' + esc(slug) + '/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(f)))}).then(function(r){return r.json()}).then(function(d){if(b)b.textContent=o;var w=f.parentNode;if(d&&d.success){w.innerHTML="<p style=\\"padding:14px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;color:#166534;font-size:14px;\\">"+ (d.message||' + JSON.stringify(msg) + ') + "</p>";}else{alert((d&&d.error)||"Request failed");}}).catch(function(){if(b)b.textContent=o;alert("Request failed");});});})();</script>' +
     '</div>';
 }, 'Render a form builder form (id=slug)');
+
+// [download id="media-id" label="..."] — download button for a media file.
+// Clicks go through /api/media/:id/download which counts the download and
+// redirects to the file (works for local and object-storage media alike).
+addShortcode('download', (attrs) => {
+  const id = String(attrs.id || '').trim();
+  const label = String(attrs.label || '').trim();
+  if (!id) return '';
+  const m = db.prepare('SELECT id, original, filename, url FROM Media WHERE id = ?').get(id) as any;
+  if (!m) return '';
+  const name = esc(label || m.original || m.filename || 'Download');
+  return '<a href="/api/media/' + esc(id) + '/download" class="cms-download" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-size:14px;">' + name + '</a>';
+}, 'Download button for a media file (id=media-id, label=optional)');
 
 // [newsletter] — subscribe form for the newsletter digest. Submits via fetch
 // to /api/newsletter/subscribe; the inline script shows the server reply

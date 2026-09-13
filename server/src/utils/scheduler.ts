@@ -3,7 +3,7 @@
 // Enabled state persists in the Setting table; run stats live in memory.
 import fs from 'fs';
 import path from 'path';
-import db from './db';
+import db, { cuid } from './db';
 import { doAction } from './hooks';
 import { purgeContentCaches } from './cache';
 
@@ -89,8 +89,11 @@ export function setTaskEnabled(id: string, enabled: boolean): void {
   } catch {}
 }
 
+let schedulerTimer: NodeJS.Timeout | null = null;
+
 export function startScheduler(tickMs = 30000): void {
-  setInterval(async () => {
+  if (schedulerTimer) return;
+  schedulerTimer = setInterval(async () => {
     const now = Date.now();
     for (const { def, state } of tasks.values()) {
       if (!state.enabled || state.running) continue;
@@ -99,6 +102,13 @@ export function startScheduler(tickMs = 30000): void {
       runTaskNow(def.id).catch(() => {});
     }
   }, tickMs);
+  // Don't keep the event loop alive just for the scheduler (clean shutdown).
+  schedulerTimer.unref?.();
+}
+
+// Stop the scheduler tick (used during graceful shutdown).
+export function stopScheduler(): void {
+  if (schedulerTimer) { clearInterval(schedulerTimer); schedulerTimer = null; }
 }
 
 // ---- Built-in tasks ----
@@ -209,9 +219,9 @@ export function registerBuiltinTasks(): void {
   registerTask({
     id: 'backup_database',
     name: 'Backup database',
-    desc: 'Copies the database to the backups folder; keeps only the newest backups (retention setting)',
+    desc: 'Copies the database to the backups folder (mirrors it to object storage when configured); keeps only the newest backups (retention setting)',
     intervalMs: 86_400_000,
-    fn: () => {
+    fn: async () => {
       const dataDir = path.join(__dirname, '..', '..', 'data');
       const backupDir = path.join(__dirname, '..', '..', 'backups');
       fs.mkdirSync(backupDir, { recursive: true });
@@ -229,6 +239,21 @@ export function registerBuiltinTasks(): void {
       while (files.length > retention) {
         try { fs.unlinkSync(path.join(backupDir, files.shift() as string)); } catch {}
       }
+      // Object storage: mirror the backup remotely and trim old copies to the
+      // same retention (best-effort — a remote failure never fails the task)
+      try {
+        const { getStorageConfig, storeFile, listRemoteFiles, deleteRemoteFile } = await import('./storage');
+        const cfg = getStorageConfig();
+        if (cfg.provider === 's3') {
+          await storeFile('backups/' + path.basename(backupFile), fs.readFileSync(backupFile), 'application/octet-stream');
+          const keys = (await listRemoteFiles('backups/')).sort();
+          while (keys.length > retention) {
+            const old = keys.shift() as string;
+            try { await deleteRemoteFile(old); } catch {}
+          }
+          console.log('[Task] Backup mirrored to object storage (retention ' + retention + ')');
+        }
+      } catch (e: any) { console.log('[Task] Backup mirror to object storage failed: ' + e.message); }
       try {
         db.prepare("INSERT INTO Setting (id, key, value) VALUES ('db_last_backup', 'db_last_backup', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date().toISOString());
       } catch {}
@@ -360,6 +385,79 @@ export function registerBuiltinTasks(): void {
           } catch (e: any) { console.log('[Task] media migrate failed for ' + m.id + ': ' + e.message); }
         }
         if (migrated > 0) console.log('[Task] Migrated ' + migrated + ' media item(s) to object storage');
+      } catch {}
+    },
+  });
+
+  registerTask({
+    id: 'scan_broken_links',
+    name: 'Scan broken links',
+    desc: 'Checks outbound links in published posts/pages for 404s (SSRF-guarded, max 50 URLs per run)',
+    intervalMs: 86_400_000,
+    fn: async () => {
+      try {
+        const { fetchUrlGuarded } = await import('./ssrf');
+        const posts = db.prepare("SELECT id, title, content FROM Post WHERE status = 'published' AND type IN ('post','page') ORDER BY updatedAt DESC LIMIT 100").all() as any[];
+        // Own-domain links never count as broken (site_url host is skipped)
+        let ownHost = '';
+        try { ownHost = new URL((db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || '').host; } catch {}
+        const hrefRe = /<a[^>]+href="(https?:\/\/[^"]+)"/gi;
+        const toCheck: { postId: string; postTitle: string; url: string; anchor: string }[] = [];
+        const seen = new Set<string>();
+        const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
+        for (const p of posts) {
+          const content = String(p.content || '');
+          hrefRe.lastIndex = 0;
+          let mm: RegExpExecArray | null;
+          while ((mm = hrefRe.exec(content)) !== null) {
+            if (toCheck.length >= 50) break;
+            const url = mm[1];
+            if (seen.has(url)) continue;
+            seen.add(url);
+            if (ownHost) {
+              try { if (new URL(url).host === ownHost) continue; } catch { continue; }
+            }
+            const recent = db.prepare('SELECT 1 FROM BrokenLink WHERE url = ? AND checkedAt > ? LIMIT 1').get(url, sevenDaysAgo);
+            if (recent) continue;
+            const anchor = (mm[0].match(/>([^<]{0,60})</)?.[1] || '').trim();
+            toCheck.push({ postId: p.id, postTitle: p.title, url, anchor: anchor.slice(0, 100) });
+          }
+          if (toCheck.length >= 50) break;
+        }
+        if (toCheck.length === 0) return;
+        let checked = 0;
+        for (const c of toCheck) {
+          const now = new Date().toISOString();
+          let status = 0;
+          try {
+            const res = await fetchUrlGuarded(c.url, { timeoutMs: 5000 });
+            status = res ? res.status : 0;
+          } catch {}
+          const st = status === 0 ? 'error' : (status >= 200 && status < 400 ? 'ok' : 'broken');
+          try {
+            // Replace the previous entry for this URL so a fixed link leaves
+            // the report instead of piling up stale 'broken' rows forever
+            db.prepare('DELETE FROM BrokenLink WHERE url = ?').run(c.url);
+            db.prepare('INSERT INTO BrokenLink (id, postId, postTitle, url, anchor, status, statusCode, checkedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+              .run(cuid(), c.postId, c.postTitle, c.url, c.anchor, st, status === 0 ? null : status, now);
+            checked++;
+          } catch {}
+        }
+        if (checked > 0) console.log('[Task] Checked ' + checked + ' outbound link(s)');
+      } catch {}
+    },
+  });
+
+  registerTask({
+    id: 'prune_search_log',
+    name: 'Prune search log',
+    desc: 'Deletes search-log entries older than 30 days (the hot-searches report only needs the last month)',
+    intervalMs: 86_400_000,
+    fn: () => {
+      try {
+        const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
+        const r = db.prepare('DELETE FROM SearchLog WHERE createdAt < ?').run(cutoff);
+        if (r.changes > 0) console.log('[Task] Pruned ' + r.changes + ' old search-log entries');
       } catch {}
     },
   });

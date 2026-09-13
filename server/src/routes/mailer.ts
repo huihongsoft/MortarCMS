@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
+import db from '../utils/db';
 import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
-import { listTemplates, renderTemplate, sendEmail, getMailSettings } from '../utils/mailer';
+import { listTemplates, renderTemplate, sendEmail, getMailSettings, invalidateTemplateCache } from '../utils/mailer';
 
 const router = Router();
 
@@ -21,6 +22,15 @@ router.post('/mailer/test', authenticate, authorize('admin'), async (req: AuthRe
     const result = await sendEmail(to, tpl.subject, tpl.html);
     if (!result.ok) { res.status(502).json({ error: result.error }); return; }
     res.json({ success: true, to });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: reset a template back to its built-in version (drops the override)
+router.delete('/mailer/templates/:name', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+  try {
+    db.prepare("DELETE FROM Setting WHERE key = 'mail_template_' || ?").run(req.params.name);
+    invalidateTemplateCache();
+    res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

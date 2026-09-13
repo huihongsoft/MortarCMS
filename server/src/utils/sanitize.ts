@@ -26,6 +26,37 @@ function isUnsafeUrl(value: string): boolean {
   return /^(javascript|vbscript|data|file):/.test(v);
 }
 
+// Removes active content (scripts, frames, form controls, event handlers and
+// dangerous URL schemes) while preserving the rest of the markup — classes,
+// styles and custom structure included. Use where a strict tag whitelist would
+// break legitimate layout (e.g. custom block templates).
+export function stripDangerousHtml(input: string): string {
+  if (!input) return '';
+  let html = String(input);
+  html = html.replace(/<(script|style|iframe|object|embed|form|input|textarea|button|select|svg|math|link|meta|base)[\s\S]*?<\/\1>/gi, '');
+  html = html.replace(/<\/?(script|iframe|object|embed|form|input|textarea|button|select|svg|math|link|meta|base)[^>]*>/gi, '');
+  html = html.replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '');
+  html = html.replace(/(href|src|xlink:href)\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, (full, attr: string, val: string) => {
+    const raw = val.replace(/^(["'])|(["'])$/g, '');
+    return isUnsafeUrl(raw) ? attr + '=""' : full;
+  });
+  return html;
+}
+
+// CSS guard for styles that end up in a <style> tag. Blocks @import, legacy
+// script vectors and script-capable URL schemes; allows data:image raster URLs
+// (commonly used by the visual editor).
+export function sanitizeCssText(input: string): string {
+  return String(input || '')
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/@import[^;]+;?/gi, '')
+    .replace(/expression\s*\([^)]*\)/gi, '')
+    .replace(/(?:behavior|-moz-binding)\s*:[^;}]+;?/gi, '')
+    .replace(/url\(\s*['"]?\s*(?:j\s*a\s*v\s*a\s*s\s*c\s*r\s*i\s*p\s*t|v\s*b\s*s\s*c\s*r\s*i\s*p\s*t|file)\s*:/gi, 'url(')
+    .replace(/url\(\s*['"]?\s*data\s*:\s*text\/html/gi, 'url(')
+    .replace(/url\(\s*['"]?\s*data\s*:\s*image\/svg/gi, 'url(');
+}
+
 export function sanitizeHtml(input: string): string {
   if (!input) return '';
   let html = String(input);

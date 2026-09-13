@@ -5,6 +5,7 @@ import Breadcrumbs from '../../components/Breadcrumbs';
 import RelatedPosts from '../../components/RelatedPosts';
 import SocialShare from '../../components/SocialShare';
 import Toc from '../../components/Toc';
+import CommentLike from '../../components/CommentLike';
 import { cdnUrl, cdnHtml } from '../../lib/cdn';
 import { sanitizeCss } from '../../lib/safeCss';
 import { embedContent } from '../../lib/embed';
@@ -49,6 +50,7 @@ export default function PostLayout(props: any) {
           React.createElement('p', { className: 'font-medium text-sm text-gray-900' }, c.author),
           React.createElement('p', { className: 'text-xs text-gray-500' }, new Date(c.createdAt).toLocaleDateString()))),
       React.createElement('p', { className: 'text-sm text-gray-700 leading-relaxed' }, c.content),
+      React.createElement('div', { className: 'mt-2' }, React.createElement(CommentLike, { commentId: c.id, initial: c.likes })),
       (c.children || []).map((child: any) => (
         React.createElement('div', { key: child.id, className: 'ml-8 mt-3 pl-4 border-l-2 border-gray-100' },
           React.createElement('div', { className: 'flex items-center gap-2 mb-1' },

@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import db, { cuid } from '../utils/db';
+import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 
@@ -85,8 +85,11 @@ router.post('/:id/primary', authenticate, authorize('admin'), (req: AuthRequest,
   try {
     const existing = db.prepare('SELECT id FROM Site WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Site not found' }); return; }
-    db.prepare('UPDATE Site SET isPrimary = 0').run();
-    db.prepare('UPDATE Site SET isPrimary = 1 WHERE id = ?').run(req.params.id);
+    // Clear-then-set must be atomic: a crash between them would leave no primary site.
+    withTransaction(() => {
+      db.prepare('UPDATE Site SET isPrimary = 0').run();
+      db.prepare('UPDATE Site SET isPrimary = 1 WHERE id = ?').run(req.params.id);
+    });
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -110,7 +113,10 @@ router.put('/:id/settings', authenticate, authorize('admin'), (req: SiteRequest,
     if (!existing) { res.status(404).json({ error: 'Site not found' }); return; }
     const entries = req.body as Record<string, string>;
     const upsert = db.prepare('INSERT INTO SiteSetting (siteId, key, value) VALUES (?, ?, ?) ON CONFLICT(siteId, key) DO UPDATE SET value = excluded.value');
-    for (const [key, value] of Object.entries(entries)) upsert.run(req.params.id, key, String(value));
+    // A settings save is all-or-nothing — a partial override set is worse than none.
+    withTransaction(() => {
+      for (const [key, value] of Object.entries(entries)) upsert.run(req.params.id, key, String(value));
+    });
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -169,18 +175,22 @@ router.post('/:id/duplicate', authenticate, authorize('admin'), (req: AuthReques
     const name = (req.body?.name || src.name) + ' (copy)';
     const slug = (req.body?.slug || src.slug) + suffix;
     const domain = (req.body?.domain || src.domain) + suffix;
-    db.prepare('INSERT INTO Site (id, name, slug, domain, description, active, isPrimary) VALUES (?, ?, ?, ?, ?, ?, 0)').run(
-      id, name, slug, domain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase(), src.description || '', src.active || 0
-    );
-    // Copy settings overrides
-    const upsert = db.prepare('INSERT INTO SiteSetting (siteId, key, value) VALUES (?, ?, ?)');
-    for (const row of db.prepare('SELECT key, value FROM SiteSetting WHERE siteId = ?').all(src.id) as any[]) {
-      upsert.run(id, row.key, row.value);
-    }
-    // Copy menus (new ids so locations don't collide)
-    for (const m of db.prepare('SELECT * FROM Menu WHERE siteId = ?').all(src.id) as any[]) {
-      db.prepare('INSERT INTO Menu (id, name, location, items, siteId) VALUES (?, ?, ?, ?, ?)').run(cuid(), m.name, m.location, m.items, id);
-    }
+    // Site row + copied settings + copied menus are one unit; a half-duplicated
+    // site would be missing its configuration.
+    withTransaction(() => {
+      db.prepare('INSERT INTO Site (id, name, slug, domain, description, active, isPrimary) VALUES (?, ?, ?, ?, ?, ?, 0)').run(
+        id, name, slug, domain.replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase(), src.description || '', src.active || 0
+      );
+      // Copy settings overrides
+      const upsert = db.prepare('INSERT INTO SiteSetting (siteId, key, value) VALUES (?, ?, ?)');
+      for (const row of db.prepare('SELECT key, value FROM SiteSetting WHERE siteId = ?').all(src.id) as any[]) {
+        upsert.run(id, row.key, row.value);
+      }
+      // Copy menus (new ids so locations don't collide)
+      for (const m of db.prepare('SELECT * FROM Menu WHERE siteId = ?').all(src.id) as any[]) {
+        db.prepare('INSERT INTO Menu (id, name, location, items, siteId) VALUES (?, ?, ?, ?, ?)').run(cuid(), m.name, m.location, m.items, id);
+      }
+    });
     res.status(201).json(db.prepare('SELECT * FROM Site WHERE id = ?').get(id));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

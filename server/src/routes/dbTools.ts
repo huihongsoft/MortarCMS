@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
-import db, { listSlowQueries } from '../utils/db';
+import db, { listSlowQueries, DB_PATH, closeDb } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { assertSafeArchive } from '../utils/archive';
@@ -13,7 +13,7 @@ const router = Router();
 // Admin: database status (driver, size, per-table rows, indexes, last maintenance)
 router.get('/status', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
-    const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").all() as any[]).map((t: any) => {
+    const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != '_SchemaMigration' ORDER BY name").all() as any[]).map((t: any) => {
       const cnt = (db.prepare('SELECT COUNT(*) as cnt FROM "' + t.name + '"').get() as any)?.cnt || 0;
       const idx = (db.prepare("SELECT COUNT(*) as c FROM sqlite_master WHERE type='index' AND tbl_name = ?").get(t.name) as any)?.c || 0;
       return { name: t.name, rows: cnt, indexes: idx };
@@ -21,8 +21,7 @@ router.get('/status', authenticate, authorize('admin'), (_req: AuthRequest, res:
     let size = 0; let journal = 'n/a'; let pageCount = 0; let pageSize = 0; let walSize = 0;
     try {
       if (db.raw) {
-        const dataDir = path.join(__dirname, '../..', 'data');
-        const dbFile = path.join(dataDir, 'mortar.db');
+        const dbFile = DB_PATH;
         if (fs.existsSync(dbFile)) size = fs.statSync(dbFile).size;
         const walFile = dbFile + '-wal';
         if (fs.existsSync(walFile)) walSize = fs.statSync(walFile).size;
@@ -128,32 +127,41 @@ router.delete('/backups/:name', authenticate, authorize('admin'), (req: AuthRequ
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Admin: download database backup
+// Admin: download database backup (SQLite only — the file is the database)
 router.get('/backup', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+  let backupPath = '';
   try {
+    if (db.driver !== 'sqlite') { res.status(400).json({ error: 'Database backup is only available for SQLite' }); return; }
     // Flush the WAL first so the copied file contains the latest transactions
     db.pragma('wal_checkpoint(TRUNCATE)');
-    const dbPath = require('path').join(__dirname, '../../data/mortar.db');
-    const backupPath = '/tmp/mortar-backup.db';
-    require('fs').copyFileSync(dbPath, backupPath);
+    // Unique temp name (concurrent downloads must not clash) and removed after
+    // the response — the file contains password hashes and secrets.
+    backupPath = path.join(require('os').tmpdir(), 'mortar-backup-' + process.pid + '-' + Date.now() + '.db');
+    fs.copyFileSync(DB_PATH, backupPath);
     try { db.prepare("INSERT INTO Setting (id, key, value) VALUES ('db_last_backup', 'db_last_backup', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date().toISOString()); } catch {}
-    res.download(backupPath, 'mortar-backup-' + new Date().toISOString().slice(0,10) + '.db');
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+    res.download(backupPath, 'mortar-backup-' + new Date().toISOString().slice(0,10) + '.db', () => { try { fs.unlinkSync(backupPath); } catch {} });
+  } catch (err: any) {
+    if (backupPath) { try { fs.unlinkSync(backupPath); } catch {} }
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Admin: download a full backup (database + uploads) as a zip
 router.get('/backup-full', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
-    const tmpZip = path.join(require('os').tmpdir(), 'mortar-backup-' + Date.now() + '.zip');
+    if (db.driver !== 'sqlite') { res.status(400).json({ error: 'Database backup is only available for SQLite' }); return; }
+    const tmpZip = path.join(require('os').tmpdir(), 'mortar-backup-' + process.pid + '-' + Date.now() + '.zip');
     db.pragma('wal_checkpoint(TRUNCATE)');
-    const files = ['data/mortar.db'];
+    const files = [DB_PATH];
     if (fs.existsSync(uploadsDir)) {
       for (const f of fs.readdirSync(uploadsDir)) {
         if (f === 'thumbs' || f === 'import-tmp') continue;
-        files.push('uploads/' + f);
+        files.push(path.join(uploadsDir, f));
       }
     }
-    execFileSync('zip', ['-q', '-j', tmpZip, ...files.map(f => path.join(__dirname, '../..', f))]);
+    // -j flattens: the archive holds mortar.db + uploaded files at the root,
+    // matching what restore-full expects.
+    execFileSync('zip', ['-q', '-j', tmpZip, ...files]);
     res.setHeader('Content-Disposition', 'attachment; filename="mortar-backup-' + new Date().toISOString().slice(0, 10) + '.zip"');
     res.type('application/zip');
     res.sendFile(tmpZip, () => { try { fs.unlinkSync(tmpZip); } catch {} });
@@ -193,11 +201,12 @@ router.post('/restore-full', authenticate, authorize('admin'), upload.single('fi
       res.status(400).json({ error: 'Invalid backup: unsafe file entries' });
       return;
     }
+    if (db.driver !== 'sqlite') { res.status(400).json({ error: 'Restore is only available for SQLite' }); return; }
     const dbFile = path.join(tmpDir, 'mortar.db');
     if (!fs.existsSync(dbFile)) { res.status(400).json({ error: 'Invalid backup: mortar.db not found' }); return; }
-    const dataDir = path.join(__dirname, '../..', 'data');
-    const liveDb = path.join(dataDir, 'mortar.db');
-    db.pragma('wal_checkpoint(TRUNCATE)');
+    const liveDb = DB_PATH;
+    const dataDir = path.dirname(DB_PATH);
+    // Uploads first (harmless), then swap the database.
     for (const f of fs.readdirSync(tmpDir)) {
       if (f === 'mortar.db' || f === 'mortar.db-wal' || f === 'mortar.db-shm') continue;
       const dest = path.join(uploadsDir, f);
@@ -206,10 +215,16 @@ router.post('/restore-full', authenticate, authorize('admin'), upload.single('fi
     }
     const backupName = 'mortar.db.bak-' + Date.now();
     fs.copyFileSync(liveDb, path.join(dataDir, backupName));
+    // Overwriting the file under an open SQLite handle corrupts state: close
+    // the connection, drop the stale WAL/SHM sidecars, copy, then exit so the
+    // supervisor restarts against the restored file.
+    try { closeDb(); } catch {}
+    for (const sidecar of [liveDb + '-wal', liveDb + '-shm']) { try { fs.unlinkSync(sidecar); } catch {} }
     fs.copyFileSync(dbFile, liveDb);
     fs.rmSync(tmpDir, { recursive: true, force: true });
     try { fs.unlinkSync(req.file.path); } catch {}
-    res.json({ success: true, message: 'Backup restored. Restart required.', backup: backupName });
+    res.json({ success: true, message: 'Backup restored. The server will restart now.', backup: backupName });
+    setTimeout(() => process.exit(0), 300);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

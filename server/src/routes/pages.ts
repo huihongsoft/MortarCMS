@@ -2,11 +2,12 @@ import { Router, Response } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
-import db, { cuid } from '../utils/db';
+import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { uniqueSlug } from '../utils/slug';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
+import { sanitizeCssText } from '../utils/sanitize';
 
 const router = Router();
 // Protected-page password guessing is brute-forced per IP
@@ -14,12 +15,9 @@ const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeader
 
 // Visual-editor CSS is rendered into a <style> tag on the public site — strip
 // dangerous primitives at write time (mirrors the guard in routes/posts.ts).
+// Delegates to the shared CSS guard (kept in sync with the render-time one).
 function sanitizeVisualCss(css: string): string {
-  return String(css || '')
-    .replace(/@import[^;]+;?/gi, '')
-    .replace(/expression\([^)]*\)/gi, '')
-    .replace(/behavior\s*:[^;}]+;?/gi, '')
-    .replace(/url\(\s*(javascript|data):/gi, 'url(');
+  return sanitizeCssText(css);
 }
 const pageSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'password', 'trash']).optional(), password: z.string().optional(), featured: z.string().optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), meta: z.record(z.string(), z.string()).optional() });
 
@@ -151,12 +149,14 @@ router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, 
     const slug = uniqueSlug(data.title, allSlugs);
     const id = cuid();
     const { status: storeStatus, password: storePassword } = normalizePage(data);
-    db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, featured, status, password, type, authorId, parentId, menuOrder, publishedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', data.featured || null, storeStatus, storePassword, 'page', req.user!.userId, data.parentId || null, data.menuOrder || 0, storeStatus === 'published' ? new Date().toISOString() : null);
-    if (data.meta) {
-      for (const [key, value] of Object.entries(data.meta)) {
-        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
+    withTransaction(() => {
+      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, featured, status, password, type, authorId, parentId, menuOrder, publishedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', data.featured || null, storeStatus, storePassword, 'page', req.user!.userId, data.parentId || null, data.menuOrder || 0, storeStatus === 'published' ? new Date().toISOString() : null);
+      if (data.meta) {
+        for (const [key, value] of Object.entries(data.meta)) {
+          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
+        }
       }
-    }
+    });
     const page = db.prepare('SELECT * FROM Post WHERE id = ?').get(id) as any;
     res.status(201).json(page);
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
@@ -180,22 +180,24 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest
     }
     if (data.parentId !== undefined) { sets.push('parentId = ?'); vals.push(data.parentId); }
     if (data.menuOrder !== undefined) { sets.push('menuOrder = ?'); vals.push(data.menuOrder); }
-    if (data.meta) {
-      db.prepare('DELETE FROM PostMeta WHERE postId = ?').run(req.params.id);
-      for (const [key, value] of Object.entries(data.meta)) {
-        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
+    withTransaction(() => {
+      if (data.meta) {
+        db.prepare('DELETE FROM PostMeta WHERE postId = ?').run(req.params.id);
+        for (const [key, value] of Object.entries(data.meta)) {
+          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
+        }
       }
-    }
-    if (sets.length > 0) {
-      // Save a snapshot of the previous state as a revision (history system)
-      const prevTitle = data.title !== undefined ? existing.title : existing.title;
-      const prevContent = data.content !== undefined ? existing.content : existing.content;
-      if ((data.title !== undefined && data.title !== existing.title) || (data.content !== undefined && data.content !== existing.content)) {
-        db.prepare('INSERT INTO Revision (id, postId, title, content, excerpt, createdAt) VALUES (?, ?, ?, ?, ?, ?)').run(
-          cuid(), req.params.id, prevTitle, prevContent || '', existing.excerpt || '', new Date().toISOString());
+      if (sets.length > 0) {
+        // Save a snapshot of the previous state as a revision (history system)
+        const prevTitle = data.title !== undefined ? existing.title : existing.title;
+        const prevContent = data.content !== undefined ? existing.content : existing.content;
+        if ((data.title !== undefined && data.title !== existing.title) || (data.content !== undefined && data.content !== existing.content)) {
+          db.prepare('INSERT INTO Revision (id, postId, title, content, excerpt, createdAt) VALUES (?, ?, ?, ?, ?, ?)').run(
+            cuid(), req.params.id, prevTitle, prevContent || '', existing.excerpt || '', new Date().toISOString());
+        }
+        sets.push('updatedAt = ?'); vals.push(new Date().toISOString()); vals.push(req.params.id); db.prepare('UPDATE Post SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
       }
-      sets.push('updatedAt = ?'); vals.push(new Date().toISOString()); vals.push(req.params.id); db.prepare('UPDATE Post SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
-    }
+    });
     const page = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     res.json(page);
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
@@ -215,19 +217,23 @@ router.put('/:id/revisions/:revId/restore', authenticate, authorize('admin', 'ed
     const existing = db.prepare('SELECT * FROM Post WHERE id = ? AND type = ?').get(req.params.id, 'page') as any;
     const rev = db.prepare('SELECT * FROM Revision WHERE id = ? AND postId = ?').get(req.params.revId, req.params.id) as any;
     if (!existing || !rev) { res.status(404).json({ error: 'Not found' }); return; }
-    db.prepare('INSERT INTO Revision (id, postId, title, content, excerpt, createdAt) VALUES (?, ?, ?, ?, ?, ?)').run(
-      cuid(), req.params.id, existing.title, existing.content || '', existing.excerpt || '', new Date().toISOString());
-    db.prepare('UPDATE Post SET title = ?, content = ?, excerpt = ?, updatedAt = ? WHERE id = ?').run(rev.title, rev.content || '', rev.excerpt || '', new Date().toISOString(), req.params.id);
+    withTransaction(() => {
+      db.prepare('INSERT INTO Revision (id, postId, title, content, excerpt, createdAt) VALUES (?, ?, ?, ?, ?, ?)').run(
+        cuid(), req.params.id, existing.title, existing.content || '', existing.excerpt || '', new Date().toISOString());
+      db.prepare('UPDATE Post SET title = ?, content = ?, excerpt = ?, updatedAt = ? WHERE id = ?').run(rev.title, rev.content || '', rev.excerpt || '', new Date().toISOString(), req.params.id);
+    });
     res.json({ success: true, restored: rev });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 router.delete('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
   try {
-    db.prepare('DELETE FROM Post WHERE id = ? AND type = ?').run(req.params.id, 'page');
-    // Categories may point at this page as their landing page — clear the
-    // dangling reference so menu jumps don't 404
-    db.prepare('UPDATE LinkCategory SET pageId = NULL WHERE pageId = ?').run(req.params.id);
+    withTransaction(() => {
+      db.prepare('DELETE FROM Post WHERE id = ? AND type = ?').run(req.params.id, 'page');
+      // Categories may point at this page as their landing page — clear the
+      // dangling reference so menu jumps don't 404
+      db.prepare('UPDATE LinkCategory SET pageId = NULL WHERE pageId = ?').run(req.params.id);
+    });
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

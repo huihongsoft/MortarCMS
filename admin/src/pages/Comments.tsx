@@ -38,7 +38,7 @@ export default function Comments() {
     try {
       const r = await api.post('/ai/review-comments');
       setAiReview(r.data.verdicts || []);
-    } catch (e: any) { alert(e.response?.data?.error || 'AI 审核失败'); }
+    } catch (e: any) { alert(e.response?.data?.error || t('ai review failed', getLang())); }
     finally { setAiReviewing(false); }
   }
 

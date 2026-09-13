@@ -1,9 +1,13 @@
 import express from 'express';
 import rateLimit from 'express-rate-limit';
 import cors from 'cors';
+import pinoHttp from 'pino-http';
+import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
-import db, { initDB } from './utils/db';
+import { config, assertValidConfig } from './utils/config';
+import db, { initDB, closeDb } from './utils/db';
+import { logger } from './utils/logger';
 import { flushViews } from './utils/views';
 import { verifyToken } from './utils/jwt';
 import { appPasswordAuth } from './middleware/auth';
@@ -31,7 +35,7 @@ import hooksRoutes from './routes/hooks';
 import cacheAdminRoutes from './routes/cacheAdmin';
 import mailerRoutes from './routes/mailer';
 import tasksRoutes from './routes/tasks';
-import { registerBuiltinTasks, startScheduler, runTaskNow } from './utils/scheduler';
+import { registerBuiltinTasks, startScheduler, stopScheduler, runTaskNow } from './utils/scheduler';
 import { cacheGet, cacheSet, cacheConfigure, purgeContentCaches, purgeAllCaches } from './utils/cache';
 import importRoutes from './routes/import';
 import pluginsRoutes from './routes/plugins';
@@ -48,15 +52,19 @@ import rolesRoutes from './routes/roles';
 import webhookRoutes from './routes/webhooks';
 import formRoutes from './routes/forms';
 import newsletterRoutes from './routes/newsletter';
+import brokenLinkRoutes from './routes/brokenLinks';
 import { initWebhooks } from './utils/webhooks';
 import { loadActivePlugins } from './plugins/manager';
 import { resolveSite } from './middleware/site';
+
+// Validate configuration before touching the database or listening.
+try { assertValidConfig(); } catch { process.exit(1); }
 
 initDB();
 loadActivePlugins().catch(e => console.log('[Plugins] init error: ' + e.message));
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = config.port;
 
 // CORS: same-origin requests are always allowed (the admin/frontend apps talk
 // to the API through the same origin or a dev proxy). Cross-origin requests are
@@ -64,7 +72,7 @@ const PORT = process.env.PORT || 3001;
 // (comma-separated) or the site_url setting (read with a short cache).
 const siteUrlCache: { at: number; url: string } = { at: 0, url: '' };
 function configuredOrigins(): string[] {
-  const env = (process.env.CORS_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+  const env = [...config.corsOrigins];
   if (Date.now() - siteUrlCache.at > 10000) {
     siteUrlCache.at = Date.now();
     try { siteUrlCache.url = ((db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || '').replace(/\/$/, ''); } catch { /* DB not ready */ }
@@ -81,7 +89,7 @@ app.use(cors({
 }));
 // Trust the X-Forwarded-For header only when explicitly enabled (e.g. running
 // behind nginx). req.ip is then reliable for rate limits / visit tracking.
-app.set('trust proxy', process.env.TRUST_PROXY === '1');
+app.set('trust proxy', config.trustProxy);
 // Security headers
 app.use((_req: any, res: any, next: any) => {
   res.setHeader('X-Frame-Options', 'DENY');
@@ -94,6 +102,29 @@ app.use((_req: any, res: any, next: any) => {
   }
   next();
 });
+
+// Request logging with a correlation id (honours an inbound X-Request-Id so a
+// reverse proxy / client can tie logs together; echoes it back on the response).
+app.use(pinoHttp({
+  logger,
+  genReqId: (req: any, res: any) => {
+    const existing = req.headers['x-request-id'];
+    const id = (Array.isArray(existing) ? existing[0] : existing) || crypto.randomUUID();
+    res.setHeader('X-Request-Id', id);
+    return id;
+  },
+  autoLogging: { ignore: (req: any) => req.url === '/api/health' },
+  customLogLevel: (_req: any, res: any, err: any) =>
+    (err || res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info'),
+  // Mask sensitive query values (tokens sometimes travel in links) while
+  // keeping enough of the request line to be useful.
+  serializers: {
+    req(req: any) {
+      const url = String(req.url || '').replace(/([?&](?:token|secret|key|password|code)=)[^&]*/gi, '$1[redacted]');
+      return { id: req.id, method: req.method, url, remoteAddress: req.remoteAddress, remotePort: req.remotePort };
+    },
+  },
+}));
 
 // Global API abuse floor: generous per-IP cap so a single client cannot
 // hammer public endpoints (feed, sitemap, search...). Specific endpoints
@@ -302,9 +333,11 @@ app.use('/api', (req: any, res: any, next: any) => {
   res.json = (body: any) => {
     const status = res.statusCode;
     const r = origJson(body);
-    // Click counters (e.g. POST /api/links/:id/click) don't change content —
-    // purging the whole content cache on every click would thrash it.
-    if (status < 400 && !req.originalUrl.includes('/click')) {
+    // Click counters (e.g. POST /api/links/:id/click), search logging and
+    // comment likes don't change content — purging the whole cache on every
+    // one would thrash it. Trade-off: like counts shown in the SSR comment
+    // list may lag by the cache TTL; the frontend updates them optimistically.
+    if (status < 400 && !req.originalUrl.includes('/click') && !req.originalUrl.includes('/search-log') && !req.originalUrl.includes('/like')) {
       // Imports, settings and site changes can affect every page
       if (req.originalUrl.startsWith('/api/settings') || req.originalUrl.startsWith('/api/sites') ||
           req.originalUrl.startsWith('/api/themes') || req.originalUrl.startsWith('/api/export/import') ||
@@ -356,6 +389,7 @@ app.use('/api/roles', rolesRoutes);
 app.use('/api', webhookRoutes);
 app.use('/api', formRoutes);
 app.use('/api', newsletterRoutes);
+app.use('/api', brokenLinkRoutes);
 app.use('/api', sitemapRoutes);
 app.use('/api/feed', cacheControl('600'), feedRoutes);
 app.use('/api/sitemap.xml', cacheControl('600'));
@@ -439,6 +473,11 @@ app.get('/api/schema', (_req, res) => {
     { method: 'POST', path: '/api/system/cache/purge', auth: 'admin', desc: 'Purge all cached responses' },
     { method: 'GET', path: '/api/editor/shortcodes', auth: 'editor+', desc: 'Registered shortcodes with descriptions' },
     { method: 'GET', path: '/api/editor/forms', auth: 'editor+', desc: 'Enabled forms for the [form] shortcode inserter' },
+    { method: 'POST', path: '/api/posts/search-log', auth: 'public', desc: 'Log a search term (anonymous, feeds the hot-searches report)', body: { q: 'term' } },
+    { method: 'GET', path: '/api/posts/search-stats', auth: 'admin', desc: 'Top 20 search terms over the last 30 days' },
+    { method: 'GET', path: '/api/media/:id/download', auth: 'public', desc: 'Count a download and redirect to the media file' },
+    { method: 'GET', path: '/api/admin/broken-links', auth: 'admin', desc: 'Broken-link report (status filter + pagination)' },
+    { method: 'DELETE', path: '/api/admin/broken-links/:id', auth: 'admin', desc: 'Remove one link report entry' },
     { method: 'GET', path: '/api/sites', auth: 'admin', desc: 'Sites with per-site content stats' },
     { method: 'POST', path: '/api/sites/:id/duplicate', auth: 'admin', desc: 'Duplicate a site with settings and menus' },
     { method: 'GET', path: '/api/admin/webhooks', auth: 'admin', desc: 'List webhooks (secret never returned)' },
@@ -535,8 +574,8 @@ try {
 initWebhooks();
 
 // Unified error handler: any uncaught error -> 500 { error } (details only in dev)
-app.use((err: any, _req: any, res: any, _next: any) => {
-  console.error('[Error]', err.message);
+app.use((err: any, req: any, res: any, _next: any) => {
+  (req.log || logger).error({ err }, 'unhandled request error');
   const isProd = process.env.NODE_ENV === 'production';
   // Client errors keep their status (multer rejects oversized files with
   // LIMIT_FILE_SIZE — that is a 413, not a 500)
@@ -544,17 +583,50 @@ app.use((err: any, _req: any, res: any, _next: any) => {
   res.status(status).json({ error: isProd && status >= 500 ? 'Internal server error' : (err.message || 'Internal server error') });
 });
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log('Mortar server at http://localhost:' + PORT);
   console.log('  Admin:    http://localhost:' + PORT + '/admin');
   console.log('  Frontend: http://localhost:' + PORT);
   doAction('init'); // Fired once everything is up; plugins listen to bootstrap
 });
 
-// Best-effort flush of in-memory view counts on shutdown
-for (const sig of ['SIGTERM', 'SIGINT'] as const) {
-  process.on(sig, () => {
-    try { flushViews(); } catch {}
-    process.exit(0);
+// Graceful shutdown: stop accepting connections, stop the scheduler, persist
+// in-memory state, close the database, then exit. A hard timeout guarantees the
+// process dies even if a connection hangs.
+let shuttingDown = false;
+function shutdown(code: number, reason: string): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log('[Server] Shutting down (' + reason + ')...');
+  // NOT unref'd: if a connection hangs we must still exit after the timeout.
+  const force = setTimeout(() => {
+    logger.error('[Server] Shutdown timed out — forcing exit.');
+    process.exit(code || 1);
+  }, 10000);
+  try { stopScheduler(); } catch (e: any) { logger.warn({ err: e }, 'stopScheduler failed'); }
+  try { flushViews(); } catch (e: any) { logger.warn({ err: e }, 'flushViews failed'); }
+  server.close(() => {
+    try { closeDb(); } catch (e: any) { logger.warn({ err: e }, 'closeDb failed'); }
+    clearTimeout(force);
+    console.log('[Server] Shutdown complete.');
+    process.exit(code);
   });
+  // Drop keep-alive/ idle sockets so close() can complete promptly.
+  try { (server as any).closeIdleConnections?.(); } catch {}
 }
+
+for (const sig of ['SIGTERM', 'SIGINT'] as const) {
+  process.on(sig, () => shutdown(0, sig));
+}
+
+// Last-resort handlers: without these, Node kills the process with no context.
+// Log, then shut down cleanly and exit non-zero so a supervisor (systemd /
+// docker restart policy) brings the service back.
+process.on('unhandledRejection', (reason: any) => {
+  console.error('[Server] Unhandled promise rejection:', reason instanceof Error ? (reason.stack || reason.message) : reason);
+  shutdown(1, 'unhandledRejection');
+});
+process.on('uncaughtException', (err: any) => {
+  console.error('[Server] Uncaught exception:', err?.stack || err?.message || err);
+  shutdown(1, 'uncaughtException');
+});

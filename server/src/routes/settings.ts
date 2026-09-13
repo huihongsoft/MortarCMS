@@ -1,8 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import db, { cuid } from '../utils/db';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
-import { verifyToken } from '../utils/jwt';
+import { authenticate, authorize, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { activeThemeName, readTheme, themeOverrides } from './themes';
 
@@ -26,17 +25,10 @@ const putSchema = z.record(z.string().min(1).max(100), z.union([z.string().max(1
 
 router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
-    // Who is asking? App-password auth already populated req.user; parse a
-    // Bearer token as well, so authenticated admins get the full view while
-    // anonymous visitors only see non-sensitive keys.
-    let role = req.user?.role || '';
-    if (!role) {
-      const header = req.headers.authorization || '';
-      if (header.startsWith('Bearer ')) {
-        const payload = verifyToken(header.slice(7));
-        role = payload?.role || '';
-      }
-    }
+    // Who is asking? resolveOptionalUser applies the same checks as the auth
+    // middleware (blacklist, session version), so a revoked admin token cannot
+    // unlock the admin view.
+    const role = resolveOptionalUser(req)?.role || '';
     const isAdmin = role === 'admin';
     const hidden = (key: string) => CRED_PREFIXES.some(p => key.startsWith(p)) || CRED_KEYS.has(key)
       || (!isAdmin && (ADMIN_PREFIXES.some(p => key.startsWith(p)) || ADMIN_KEYS.has(key)));
@@ -92,6 +84,11 @@ router.put('/', authenticate, authorize('admin'), (req: AuthRequest, res: Respon
     if (bad) { res.status(400).json({ error: 'Setting key is not writable via this endpoint: ' + bad }); return; }
     const upsert = db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
     for (const [key, value] of Object.entries(entries)) upsert.run(cuid(), key, String(value));
+    // Template overrides may have changed — drop the cached render inputs
+    if (Object.keys(entries).some(k => k.startsWith('mail_template_'))) {
+      const { invalidateTemplateCache } = require('../utils/mailer');
+      invalidateTemplateCache();
+    }
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

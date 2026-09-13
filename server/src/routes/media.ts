@@ -7,7 +7,7 @@ import db, { cuid } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { doAction } from '../utils/hooks';
 import { upload } from '../middleware/upload';
-import { uploadPath } from '../utils/paths';
+import { uploadPath, resolveUploadUrl } from '../utils/paths';
 import { getStorageConfig, storeFile, deleteRemoteFile, keyFromUrl } from '../utils/storage';
 
 const router = Router();
@@ -116,7 +116,7 @@ function sanitizeSvg(content: string): string {
 router.post('/upload', authenticate, authorize('admin', 'editor', 'author'), upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return; }
-    const srcPath = path.join(__dirname, '../..', 'uploads', req.file.filename);
+    const srcPath = uploadPath(req.file.filename);
     // Content validation for non-image types (images are validated via sharp below)
     if (!(req.file.mimetype || '').startsWith('image/')) {
       const head = fs.readFileSync(srcPath).subarray(0, 16);
@@ -142,7 +142,7 @@ router.post('/upload', authenticate, authorize('admin', 'editor', 'author'), upl
     // Generate a 300px thumbnail for images (for the media grid / pickers)
     let thumbnail: string | null = null;
     if (isImage) {
-      const srcPath = path.join(__dirname, '../..', 'uploads', req.file.filename);
+      const srcPath = uploadPath(req.file.filename);
       let meta;
       try {
         meta = await sharp(srcPath).metadata();
@@ -211,6 +211,17 @@ router.post('/upload', authenticate, authorize('admin', 'editor', 'author'), upl
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Public: download counter + redirect (used by the [download] shortcode).
+// Works for local and object-storage media alike (Media.url is the target).
+router.get('/:id/download', (req: AuthRequest, res: Response) => {
+  try {
+    const media = db.prepare('SELECT url FROM Media WHERE id = ?').get(req.params.id) as any;
+    if (!media) { res.status(404).json({ error: 'Media not found' }); return; }
+    db.prepare('UPDATE Media SET downloads = COALESCE(downloads, 0) + 1 WHERE id = ?').run(req.params.id);
+    res.redirect(media.url);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // Public: single media item detail (for attachment pages / preview)
 router.get('/:id', (req: AuthRequest, res: Response) => {
   try {
@@ -237,7 +248,7 @@ router.get('/:id/img', imageVariantLimiter, async (req: AuthRequest, res: Respon
     const w = Math.min(wRaw, 2560);
     const fmt = (req.query.fmt as string || 'jpeg').toLowerCase();
     if (!['jpeg', 'webp', 'avif'].includes(fmt)) { res.status(400).json({ error: 'fmt must be jpeg, webp or avif' }); return; }
-    const srcPath = path.join(__dirname, '../..', 'uploads', media.filename);
+    const srcPath = uploadPath(media.filename);
     if (!fs.existsSync(srcPath)) { res.status(404).json({ error: 'File missing' }); return; }
     const thumbsDir = uploadPath('thumbs');
     if (!fs.existsSync(thumbsDir)) fs.mkdirSync(thumbsDir, { recursive: true });
@@ -304,10 +315,12 @@ function removeMediaFiles(media: any): void {
     }
     return;
   }
-  const filePath = path.join(__dirname, '../..', media.url);
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  // Only delete inside the uploads directory; a tampered Media.url must not
+  // let this escape into arbitrary paths.
+  const filePath = resolveUploadUrl(media.url);
+  if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
   try {
-    const thumbsDir = path.join(__dirname, '../..', 'uploads', 'thumbs');
+    const thumbsDir = uploadPath('thumbs');
     if (fs.existsSync(thumbsDir)) {
       for (const f of fs.readdirSync(thumbsDir)) {
         if (f.startsWith(media.id)) fs.unlinkSync(path.join(thumbsDir, f));

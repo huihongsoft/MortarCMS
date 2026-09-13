@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3, Webhook, ClipboardList, Mail } from 'lucide-react';
+import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3, Webhook, ClipboardList, Mail, CalendarDays } from 'lucide-react';
 import CommentBadge from './CommentBadge';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -17,6 +17,8 @@ const groups: { title: string; items: { to: string; icon: any; label: string; ro
     title: t('content', getLang()),
     items: [
       { to: '/posts', icon: FileText, label: t('posts', getLang()) },
+      { to: '/calendar', icon: CalendarDays, label: t('calendar', getLang()) },
+      { to: '/broken-links', icon: Link2, label: t('broken links', getLang()) },
       { to: '/pages', icon: Files, label: t('pages', getLang()) },
       { to: '/media', icon: Image, label: t('media', getLang()) },
       { to: '/comments', icon: MessageSquare, label: t('comments', getLang()) },

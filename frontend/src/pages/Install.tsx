@@ -41,9 +41,9 @@ export default function Install() {
   }
 
   const dbOptions = [
-    { key: 'sqlite', name: 'SQLite', desc: t('zero configuration, single file. best for small to medium sites.'), icon: HardDrive },
-    { key: 'mysql', name: 'MySQL / MariaDB', desc: t('classic choice, widely hosted.'), icon: Database },
-    { key: 'postgres', name: 'PostgreSQL', desc: t('modern, feature-rich relational database.'), icon: Server },
+    { key: 'sqlite', name: 'SQLite', desc: t('zero configuration, single file. recommended for production.'), icon: HardDrive },
+    { key: 'mysql', name: 'MySQL / MariaDB', desc: t('experimental — not recommended for production.'), icon: Database },
+    { key: 'postgres', name: 'PostgreSQL', desc: t('experimental — not recommended for production.'), icon: Server },
   ];
 
   if (done) return React.createElement('div', { className: 'min-h-screen flex items-center justify-center bg-gray-50' },

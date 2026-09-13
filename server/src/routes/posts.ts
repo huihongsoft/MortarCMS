@@ -2,13 +2,14 @@ import { Router, Response } from 'express';
 import crypto from 'crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
-import db, { cuid } from '../utils/db';
+import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
 import { verifyToken } from '../utils/jwt';
 import { SiteRequest } from '../middleware/site';
 import { slugify, uniqueSlug } from '../utils/slug';
 import { applyFilters, doAction } from '../utils/hooks';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
+import { sanitizeCssText } from '../utils/sanitize';
 import { trackView } from '../utils/views';
 
 const router = Router();
@@ -37,12 +38,10 @@ const MEMBERS_ONLY_EXCLUDE = " AND NOT EXISTS (SELECT 1 FROM PostMeta pm WHERE p
 // dangerous primitives are stripped at write time (defense in depth with the
 // frontend render guard). @import can pull external resources, expression() is
 // an XSS vector in old engines, behavior: is an IE active-content vector.
+// Delegates to the shared CSS guard so the server-side rules stay in sync
+// with the render-time sanitizer (comments, quoted/whitespace schemes, svg).
 function sanitizeVisualCss(css: string): string {
-  return String(css || '')
-    .replace(/@import[^;]+;?/gi, '')
-    .replace(/expression\([^)]*\)/gi, '')
-    .replace(/behavior\s*:[^;}]+;?/gi, '')
-    .replace(/url\(\s*(javascript|data):/gi, 'url(');
+  return sanitizeCssText(css);
 }
 const postSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), authorId: z.string().optional(), publishedAt: z.string().optional(), meta: z.record(z.string(), z.string()).optional() });
 
@@ -163,6 +162,26 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
 });
 
 // Search suggestions for the search widget autocomplete (lightweight, no content)
+// Search logging: anonymous visitors' search terms feed the admin hot-search
+// report. No visitor identity is stored, only the query text.
+router.post('/search-log', (req: AuthRequest, res: Response) => {
+  try {
+    const q = String(req.body?.q || '').trim().slice(0, 100);
+    if (q) db.prepare('INSERT INTO SearchLog (id, query, createdAt) VALUES (?, ?, ?)').run(cuid(), q.toLowerCase(), new Date().toISOString());
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: hot search terms (top 20 over the last 30 days)
+router.get('/search-stats', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+  try {
+    const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const rows = db.prepare("SELECT query, COUNT(*) as cnt FROM SearchLog WHERE createdAt >= ? GROUP BY query ORDER BY cnt DESC LIMIT 20").all(since) as any[];
+    const total = (db.prepare("SELECT COUNT(*) as c FROM SearchLog WHERE createdAt >= ?").get(since) as any).c || 0;
+    res.json({ terms: rows, total });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/suggest', (req: AuthRequest, res: Response) => {
   try {
     const q = String(req.query.q || '').trim().slice(0, 60);
@@ -336,20 +355,24 @@ router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contribut
     // A supplied publish date drives scheduled publishing; otherwise publish now.
     const authorId = data.authorId && ['admin', 'editor'].includes(req.user!.role) ? data.authorId : req.user!.userId;
     const publishedAt = data.publishedAt || (status === 'published' ? now : null);
-    db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', status, data.featured || null, data.password || '', authorId, data.parentId || null, data.menuOrder || 0, publishedAt, data.siteId || null);
-    if (data.categoryIds) for (const cid of data.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, cid);
-    if (data.tagIds) for (const tid of data.tagIds) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tid);
-    if (data.tagNames) for (const name of data.tagNames) {
-      const tagSlug = slugify(name);
-      let tag: any = db.prepare('SELECT id FROM Tag WHERE slug = ?').get(tagSlug);
-      if (!tag) { const tid = cuid(); db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tid, name, tagSlug); tag = { id: tid }; }
-      db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tag.id);
-    }
-    if (data.meta) {
-      for (const [key, value] of Object.entries(data.meta)) {
-        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
+    // The post row and its category/tag/meta rows must land together — a
+    // half-written post would show up with missing relations.
+    withTransaction(() => {
+      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', status, data.featured || null, data.password || '', authorId, data.parentId || null, data.menuOrder || 0, publishedAt, data.siteId || null);
+      if (data.categoryIds) for (const cid of data.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, cid);
+      if (data.tagIds) for (const tid of data.tagIds) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tid);
+      if (data.tagNames) for (const name of data.tagNames) {
+        const tagSlug = slugify(name);
+        let tag: any = db.prepare('SELECT id FROM Tag WHERE slug = ?').get(tagSlug);
+        if (!tag) { const tid = cuid(); db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tid, name, tagSlug); tag = { id: tid }; }
+        db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tag.id);
       }
-    }
+      if (data.meta) {
+        for (const [key, value] of Object.entries(data.meta)) {
+          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
+        }
+      }
+    });
     const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(id) as any;
     doAction('post_created', id, status);
     if (status === 'published') doAction('post_published', id);
@@ -385,24 +408,29 @@ router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contrib
     if (data.siteId !== undefined) { sets.push('siteId = ?'); vals.push(data.siteId || null); }
     if (data.authorId !== undefined && ['admin', 'editor'].includes(req.user!.role)) { sets.push('authorId = ?'); vals.push(data.authorId); }
     if (data.publishedAt !== undefined) { sets.push('publishedAt = ?'); vals.push(data.publishedAt); }
-    if (data.categoryIds) { db.prepare('DELETE FROM PostCategory WHERE postId = ?').run(req.params.id); for (const cid of data.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(req.params.id, cid); }
-    if (data.tagIds) { db.prepare('DELETE FROM PostTag WHERE postId = ?').run(req.params.id); for (const tid of data.tagIds) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(req.params.id, tid); }
-    if (data.meta) {
-      db.prepare('DELETE FROM PostMeta WHERE postId = ?').run(req.params.id);
-      for (const [key, value] of Object.entries(data.meta)) {
-        db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
+    // Relation rewrites (delete-then-insert), the pre-save revision and the
+    // Post row itself are one unit: a failure mid-way must not leave a post
+    // without categories/tags/meta or strand a revision.
+    withTransaction(() => {
+      if (data.categoryIds) { db.prepare('DELETE FROM PostCategory WHERE postId = ?').run(req.params.id); for (const cid of data.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(req.params.id, cid); }
+      if (data.tagIds) { db.prepare('DELETE FROM PostTag WHERE postId = ?').run(req.params.id); for (const tid of data.tagIds) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(req.params.id, tid); }
+      if (data.meta) {
+        db.prepare('DELETE FROM PostMeta WHERE postId = ?').run(req.params.id);
+        for (const [key, value] of Object.entries(data.meta)) {
+          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
+        }
       }
-    }
-    if (sets.length > 0) {
-      const changed = (data.title !== undefined && data.title !== existing.title) || (data.content !== undefined && (data.content || '') !== (existing.content || '')) || (data.excerpt !== undefined && data.excerpt !== (existing.excerpt || ''));
-      if (changed) {
-        // Keep a revision of the state before this save
-        db.prepare('INSERT INTO Revision (id, postId, title, content, excerpt, createdAt) VALUES (?, ?, ?, ?, ?, ?)').run(
-          cuid(), existing.id, existing.title, existing.content || '', existing.excerpt || '', new Date().toISOString()
-        );
+      if (sets.length > 0) {
+        const changed = (data.title !== undefined && data.title !== existing.title) || (data.content !== undefined && (data.content || '') !== (existing.content || '')) || (data.excerpt !== undefined && data.excerpt !== (existing.excerpt || ''));
+        if (changed) {
+          // Keep a revision of the state before this save
+          db.prepare('INSERT INTO Revision (id, postId, title, content, excerpt, createdAt) VALUES (?, ?, ?, ?, ?, ?)').run(
+            cuid(), existing.id, existing.title, existing.content || '', existing.excerpt || '', new Date().toISOString()
+          );
+        }
+        sets.push('updatedAt = ?'); vals.push(new Date().toISOString()); vals.push(req.params.id); db.prepare('UPDATE Post SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
       }
-      sets.push('updatedAt = ?'); vals.push(new Date().toISOString()); vals.push(req.params.id); db.prepare('UPDATE Post SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
-    }
+    });
     const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     doAction('post_updated', req.params.id);
     if (data.status === 'published' && existing.status !== 'published') doAction('post_published', req.params.id);
@@ -545,8 +573,14 @@ router.get('/:id/related', (req: AuthRequest, res: Response) => {
 // Admin: lock post for editing
 router.post('/:id/lock', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
   try {
-    const existing = db.prepare('SELECT id, lockedAt, lockedBy FROM Post WHERE id = ?').get(req.params.id) as any;
+    const existing = db.prepare('SELECT id, lockedAt, lockedBy, authorId FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
+    // An author may only lock their own post; otherwise anyone could block
+    // another author's editing for 5 minutes.
+    if (req.user!.role === 'author' && existing.authorId !== req.user!.userId) {
+      res.status(403).json({ error: 'Cannot lock another user\'s post' });
+      return;
+    }
     const now = new Date().toISOString();
     if (existing.lockedAt) {
       const lockTime = new Date(existing.lockedAt).getTime();
@@ -576,15 +610,17 @@ router.post('/:id/clone', authenticate, authorize('admin', 'editor', 'author'), 
     if (req.user!.role === 'author' && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot clone another author\'s post' }); return; }
     const id = cuid();
     const now = new Date().toISOString();
-    db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, featured, password, format, authorId, parentId, menuOrder, sticky) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
-      id, existing.title + ' (Copy)', existing.slug + '-copy', existing.content, existing.excerpt, 'draft', existing.type, existing.featured, '', existing.format || 'standard', req.user!.userId, null, existing.menuOrder, 0
-    );
-    // Copy categories
-    const cats = db.prepare('SELECT categoryId FROM PostCategory WHERE postId = ?').all(req.params.id) as any[];
-    for (const c of cats) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, c.categoryId);
-    // Copy tags
-    const tags = db.prepare('SELECT tagId FROM PostTag WHERE postId = ?').all(req.params.id) as any[];
-    for (const t of tags) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, t.tagId);
+    withTransaction(() => {
+      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, featured, password, format, authorId, parentId, menuOrder, sticky) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        id, existing.title + ' (Copy)', existing.slug + '-copy', existing.content, existing.excerpt, 'draft', existing.type, existing.featured, '', existing.format || 'standard', req.user!.userId, null, existing.menuOrder, 0
+      );
+      // Copy categories
+      const cats = db.prepare('SELECT categoryId FROM PostCategory WHERE postId = ?').all(req.params.id) as any[];
+      for (const c of cats) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, c.categoryId);
+      // Copy tags
+      const tags = db.prepare('SELECT tagId FROM PostTag WHERE postId = ?').all(req.params.id) as any[];
+      for (const t of tags) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, t.tagId);
+    });
     res.status(201).json(db.prepare('SELECT * FROM Post WHERE id = ?').get(id));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -604,11 +640,13 @@ router.post('/frontend/submit-post', authenticate, requireCap('submit_posts'), (
     const id = cuid();
     const allSlugs = (db.prepare("SELECT slug FROM Post WHERE type = 'post'").all() as any[]).map((s: any) => s.slug);
     const slug = uniqueSlug(title, allSlugs);
-    db.prepare("INSERT INTO Post (id, title, slug, content, excerpt, status, featured, authorId, siteId) VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?, ?)")
-      .run(id, title, slug, content, excerpt, req.user!.userId, (req as any).siteId || null);
-    if (Array.isArray(req.body?.categoryIds)) {
-      for (const cid of req.body.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, cid);
-    }
+    withTransaction(() => {
+      db.prepare("INSERT INTO Post (id, title, slug, content, excerpt, status, featured, authorId, siteId) VALUES (?, ?, ?, ?, ?, 'pending', NULL, ?, ?)")
+        .run(id, title, slug, content, excerpt, req.user!.userId, (req as any).siteId || null);
+      if (Array.isArray(req.body?.categoryIds)) {
+        for (const cid of req.body.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, cid);
+      }
+    });
     try { doAction('post_submitted', id); } catch {}
     res.status(201).json({ id, slug });
   } catch (err: any) { res.status(500).json({ error: err.message }); }

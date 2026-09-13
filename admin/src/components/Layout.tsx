@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import StatusBar from './StatusBar';
 import { Outlet, useLocation } from 'react-router-dom';
-import { Globe, Moon, Sun, ExternalLink, LogOut, ChevronDown, Bot, Menu, X } from 'lucide-react';
+import { Globe, Moon, Sun, ExternalLink, LogOut, ChevronDown, Bot, Menu, X, Bell } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAuth } from '../lib/auth';
@@ -13,6 +13,8 @@ const routeTitles: [string, string][] = [
   ['/stats', 'visit stats'],
   ['/home-editor', 'custom homepage'],
   ['/posts', 'posts'],
+  ['/calendar', 'calendar'],
+  ['/broken-links', 'broken links'],
   ['/pages', 'pages'],
   ['/menus', 'menus'],
   ['/widgets', 'widgets'],
@@ -61,8 +63,34 @@ export default function Layout() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [primary, setPrimary] = useState('');
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [notifs, setNotifs] = useState<any[]>([]);
+  const [unread, setUnread] = useState(0);
   const menuRef = useRef<HTMLDivElement>(null);
+  const notifRef = useRef<HTMLDivElement>(null);
   const mainRef = useRef<HTMLElement>(null);
+
+  // Notification bell: poll unread count + refresh the list when opened.
+  // The last payload is kept in a ref so identical polls don't setState (a new
+  // array reference every 30s would otherwise re-render the whole admin shell).
+  const notifsRef = useRef<any[] | null>(null);
+  const loadNotifs = () => {
+    api.get('/ai/notifications').then(r => {
+      const list = r.data.notifications || [];
+      const un = r.data.unread || 0;
+      const prev = notifsRef.current;
+      if (prev === null || prev.length !== list.length || un !== prev.length || list.some((n: any, i: number) => n.id !== prev[i]?.id || n.read !== prev[i]?.read)) {
+        notifsRef.current = list;
+        setNotifs(list);
+        setUnread(un);
+      }
+    }).catch(() => {});
+  };
+  useEffect(() => {
+    loadNotifs();
+    const t = setInterval(loadNotifs, 30000);
+    return () => clearInterval(t);
+  }, []);
 
   // Close the mobile drawer when navigating to another route
   useEffect(() => { setSidebarOpen(false); }, [location.pathname]);
@@ -91,10 +119,11 @@ export default function Layout() {
     return () => window.removeEventListener('mortar-settings-saved', applyPrimary);
   }, []);
 
-  // Close user menu on outside click
+  // Close user menu + notification panel on outside click
   useEffect(() => {
     const onDoc = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) setUserMenuOpen(false);
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) setNotifOpen(false);
     };
     document.addEventListener('mousedown', onDoc);
     return () => document.removeEventListener('mousedown', onDoc);
@@ -136,6 +165,38 @@ export default function Layout() {
         React.createElement('div', { className: 'flex items-center gap-1' },
           React.createElement('a', { href: '/', target: '_blank', title: t('view site', getLang()), className: 'p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors' }, React.createElement(ExternalLink, { size: 16 })),
           React.createElement('button', { onClick: () => setLang(getLang() === 'zh' ? 'en' : 'zh'), title: t('language', getLang()), className: 'p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors flex items-center gap-1' }, React.createElement(Globe, { size: 16 }), React.createElement('span', { className: 'text-xs' }, getLang() === 'zh' ? 'EN' : '中')),
+          // Notification bell
+          React.createElement('div', { ref: notifRef, className: 'relative' },
+            React.createElement('button', {
+              onClick: () => { loadNotifs(); setNotifOpen(!notifOpen); },
+              title: t('notifications', getLang()),
+              className: 'relative p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors',
+            },
+              React.createElement(Bell, { size: 16 }),
+              unread > 0 && React.createElement('span', { className: 'absolute top-1 right-1 min-w-4 h-4 px-0.5 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center' }, unread > 99 ? '99+' : unread)),
+            notifOpen && React.createElement('div', { className: 'absolute right-0 top-full mt-1 w-80 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-50 overflow-hidden' },
+              React.createElement('div', { className: 'px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between' },
+                React.createElement('p', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100' }, t('notifications', getLang())),
+                React.createElement('button', {
+                  onClick: () => { api.post('/ai/notifications/read-all').then(loadNotifs); },
+                  className: 'text-xs text-primary-600 hover:text-primary-700',
+                }, t('mark all read', getLang())),
+              React.createElement('div', { className: 'max-h-80 overflow-y-auto' },
+                notifs.length === 0
+                  ? React.createElement('p', { className: 'p-4 text-sm text-gray-400 text-center' }, t('no notifications', getLang()))
+                  : notifs.map((n: any) =>
+                      React.createElement('button', {
+                        key: n.id,
+                        onClick: () => { if (!n.read) api.post('/ai/notifications/' + n.id + '/read').then(loadNotifs); },
+                        className: 'w-full text-left px-3 py-2.5 border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/50 flex gap-2',
+                      },
+                        React.createElement('span', { className: 'mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ' + (n.read ? 'bg-gray-200 dark:bg-gray-600' : 'bg-primary-500') }),
+                        React.createElement('div', { className: 'min-w-0' },
+                          React.createElement('p', { className: 'text-xs text-gray-700 dark:text-gray-200 break-words' }, n.message),
+                          React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, new Date(n.createdAt).toLocaleString())))))
+              )
+            )
+          ),
           React.createElement('button', { onClick: toggleDark, title: t('dark mode', getLang()), className: 'p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors' },
             isDark() ? React.createElement(Sun, { size: 16 }) : React.createElement(Moon, { size: 16 })),
           // User menu
@@ -161,7 +222,7 @@ export default function Layout() {
       // Floating AI assistant shortcut (Ctrl+K)
       !location.pathname.startsWith('/ai') && React.createElement('button', {
         onClick: () => navigate('/ai'),
-        title: 'AI 助理 (Ctrl+K)',
+        title: t('ai assistant', getLang()) + ' (Ctrl+K)',
         className: 'fixed bottom-14 right-6 z-40 w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 hover:scale-105 transition-transform',
       }, React.createElement(Bot, { size: 22 })),
     ),

@@ -15,7 +15,8 @@ Options:
 
 ```bash
 bash install.sh --port 8080 --dir /opt/mortar --no-service
-export DATABASE_URL=mysql://user:pass@host:3306/mortar   # instead of SQLite
+# SQLite is the supported production database. MySQL/PostgreSQL are
+# experimental — see below before setting DATABASE_URL.
 ```
 
 Service management:
@@ -47,9 +48,16 @@ open http://localhost:3001/install
   # put the output into docker-compose.yml → environment → JWT_SECRET
   ```
 
-**With MySQL or PostgreSQL** — uncomment the matching service in
-`docker-compose.yml` and set `DATABASE_URL` accordingly
-(e.g. `mysql://mortar:secret@mysql:3306/mortar`).
+**With MySQL or PostgreSQL (experimental).** These drivers are **not
+recommended for production**: they run over a single-connection worker thread
+that can block the request loop, and are far less tested than SQLite. For local
+evaluation, uncomment the matching service in `docker-compose.yml` and set
+`DATABASE_URL` accordingly (e.g. `mysql://mortar:secret@mysql:3306/mortar`).
+
+**Single-instance only.** SQLite, on-disk uploads and the in-process
+cache/scheduler assume one process. Do not run multiple replicas against one
+SQLite file or behind a load balancer without shared storage — scheduled tasks
+would run on every replica and uploads/caches would diverge.
 
 **Behind a reverse proxy:** set `TRUST_PROXY: "1"` and terminate TLS at the
 proxy, forwarding `X-Forwarded-Proto` (see the Nginx example below).
@@ -97,7 +105,9 @@ cd server && npm run build && cd ..
 Create `server/.env` (see `server/.env.example`):
 
 ```bash
-# Database (default: SQLite at server/data/mortar.db)
+# Database: SQLite at server/data/mortar.db (supported production default;
+# MORTAR_DB_PATH overrides the location). MySQL/PostgreSQL are experimental —
+# not recommended for production.
 # DATABASE_URL=mysql://user:password@localhost:3306/mortar
 # DATABASE_URL=postgres://user:password@localhost:5432/mortar
 
@@ -118,6 +128,11 @@ JWT_SECRET=<long-random-string>
 # Extra cross-origin origins allowed to call the API (comma-separated);
 # same-origin and site_url are always allowed
 # CORS_ORIGINS=https://app.example.com
+
+# Log verbosity: trace|debug|info|warn|error|fatal (default: info in
+# production, debug otherwise). Logs are JSON in production, with a
+# per-request id echoed as X-Request-Id.
+# LOG_LEVEL=info
 ```
 
 ## Running the server

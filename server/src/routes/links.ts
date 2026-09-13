@@ -1,8 +1,7 @@
 import { Router, Response } from 'express';
-import db, { cuid } from '../utils/db';
-import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import db, { cuid, withTransaction } from '../utils/db';
+import { authenticate, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
-import { verifyToken } from '../utils/jwt';
 import { slugify } from '../utils/slug';
 
 const router = Router();
@@ -62,10 +61,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
 // A valid Bearer token means an admin request (management view shows all
 // sites' links); anything else is a public visitor filtered by site.
 function isAdminReq(req: AuthRequest): boolean {
-  if (req.user) return true;
-  const header = req.headers.authorization || '';
-  if (!header.startsWith('Bearer ')) return false;
-  return !!verifyToken(header.slice(7));
+  return !!resolveOptionalUser(req);
 }
 
 // Admin: create link
@@ -74,11 +70,13 @@ router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, 
     const { name, url, description, avatar, icon, categoryId, menuOrder, active } = req.body || {};
     if (!name || !url) { res.status(400).json({ error: 'name and url required' }); return; }
     const id = cuid();
-    db.prepare('INSERT INTO Link (id, name, url, description, avatar, icon, categoryId, menuOrder, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, name, url, description || '', avatar || '', icon || '', categoryId || null, menuOrder || 0, active === false ? 0 : 1);
-    // Link-post associations
     const postIds = Array.isArray(req.body?.postIds) ? req.body.postIds : [];
-    for (const pid of postIds) db.prepare('INSERT OR IGNORE INTO LinkPost (linkId, postId) VALUES (?, ?)').run(id, pid);
+    withTransaction(() => {
+      db.prepare('INSERT INTO Link (id, name, url, description, avatar, icon, categoryId, menuOrder, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+        .run(id, name, url, description || '', avatar || '', icon || '', categoryId || null, menuOrder || 0, active === false ? 0 : 1);
+      // Link-post associations
+      for (const pid of postIds) db.prepare('INSERT OR IGNORE INTO LinkPost (linkId, postId) VALUES (?, ?)').run(id, pid);
+    });
     res.status(201).json(enrichLinks([db.prepare('SELECT * FROM Link WHERE id = ?').get(id)])[0]);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -96,12 +94,14 @@ router.put('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest
     if (categoryId !== undefined) { sets.push('categoryId = ?'); vals.push(categoryId || null); }
     if (menuOrder !== undefined) { sets.push('menuOrder = ?'); vals.push(menuOrder || 0); }
     if (active !== undefined) { sets.push('active = ?'); vals.push(active === false ? 0 : 1); }
-    if (sets.length > 0) { vals.push(req.params.id); db.prepare('UPDATE Link SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
-    // Link-post associations (full replace)
-    if (Array.isArray(req.body?.postIds)) {
-      db.prepare('DELETE FROM LinkPost WHERE linkId = ?').run(req.params.id);
-      for (const pid of req.body.postIds) db.prepare('INSERT OR IGNORE INTO LinkPost (linkId, postId) VALUES (?, ?)').run(req.params.id, pid);
-    }
+    withTransaction(() => {
+      if (sets.length > 0) { vals.push(req.params.id); db.prepare('UPDATE Link SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
+      // Link-post associations (full replace)
+      if (Array.isArray(req.body?.postIds)) {
+        db.prepare('DELETE FROM LinkPost WHERE linkId = ?').run(req.params.id);
+        for (const pid of req.body.postIds) db.prepare('INSERT OR IGNORE INTO LinkPost (linkId, postId) VALUES (?, ?)').run(req.params.id, pid);
+      }
+    });
     res.json(enrichLinks([db.prepare('SELECT * FROM Link WHERE id = ?').get(req.params.id)])[0]);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -209,8 +209,10 @@ router.put('/categories/:id', authenticate, requireCap('manage_options'), (req: 
 router.delete('/categories/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT slug FROM LinkCategory WHERE id = ?').get(req.params.id) as any;
-    db.prepare('UPDATE Link SET categoryId = NULL WHERE categoryId = ?').run(req.params.id);
-    db.prepare('DELETE FROM LinkCategory WHERE id = ?').run(req.params.id);
+    withTransaction(() => {
+      db.prepare('UPDATE Link SET categoryId = NULL WHERE categoryId = ?').run(req.params.id);
+      db.prepare('DELETE FROM LinkCategory WHERE id = ?').run(req.params.id);
+    });
     if (existing?.slug) syncMenuCategoryUrls(existing.slug, '/links');
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }

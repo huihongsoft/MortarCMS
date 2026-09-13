@@ -84,7 +84,7 @@ export default function AISettings() {
     try {
       const r = await api.post('/ai/compare', { prompt: cmpPrompt, providerAId: cmpA, providerBId: cmpB });
       setCmpResult(r.data);
-    } catch (e: any) { alert(e.response?.data?.error || '对比失败'); }
+    } catch (e: any) { alert(e.response?.data?.error || t('compare failed', getLang())); }
     finally { setCmpLoading(false); }
   }
 
@@ -137,7 +137,7 @@ export default function AISettings() {
           React.createElement('div', { className: 'flex items-center justify-between mb-3' },
             React.createElement('div', { className: 'flex items-center gap-2' },
               React.createElement('span', { className: 'font-medium text-gray-900 text-sm' }, p.name),
-              React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500' }, p.type === 'anthropic' ? 'Anthropic' : 'OpenAI 兼容'),
+              React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500' }, p.type === 'anthropic' ? 'Anthropic' : t('openai compatible', getLang())),
               p.id === defaultProvider && React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-primary-50 text-primary-600' }, t('default', getLang())),
             ),
             React.createElement('div', { className: 'flex items-center gap-2' },
@@ -153,7 +153,7 @@ export default function AISettings() {
           React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-3' },
             React.createElement('div', null,
               React.createElement('label', { className: 'block text-xs text-gray-500 mb-1 flex items-center gap-1' }, React.createElement(KeyRound, { size: 10 }), t('api key', getLang())),
-              React.createElement('input', { type: 'password', value: p.hasKey && !p.apiKey ? '' : p.apiKey, placeholder: p.hasKey ? '•••••••• (已保存)' : 'sk-...', onChange: e => updateProvider(p.id, { apiKey: e.target.value }), className: 'input-field text-xs' })),
+              React.createElement('input', { type: 'password', value: p.hasKey && !p.apiKey ? '' : p.apiKey, placeholder: p.hasKey ? '•••••••• ' + t('(saved)', getLang()) : 'sk-...', onChange: e => updateProvider(p.id, { apiKey: e.target.value }), className: 'input-field text-xs' })),
             React.createElement('div', null,
               React.createElement('label', { className: 'block text-xs text-gray-500 mb-1 flex items-center gap-1' }, React.createElement(Server, { size: 10 }), t('base url', getLang())),
               React.createElement('input', { value: p.baseUrl, onChange: e => updateProvider(p.id, { baseUrl: e.target.value }), className: 'input-field text-xs' })),

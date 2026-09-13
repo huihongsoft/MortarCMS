@@ -131,7 +131,7 @@ function renderMd(text: string): React.ReactNode[] {
       nodes.push(React.createElement('div', { key: key++, className: 'relative group my-2' },
         React.createElement('button', {
           onClick: () => { navigator.clipboard.writeText(code).catch(() => {}); },
-          title: '复制',
+          title: t('copy', getLang()),
           className: 'absolute top-1.5 right-1.5 p-1 rounded bg-gray-700 text-gray-300 opacity-0 group-hover:opacity-100 hover:bg-gray-600 transition-opacity',
         }, React.createElement(Copy, { size: 12 })),
         React.createElement('pre', { className: 'bg-gray-900 text-gray-100 text-xs rounded-lg p-3 overflow-x-auto' },
@@ -749,7 +749,7 @@ export default function AIChat() {
       });
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
-        throw new Error(d.error || '请求失败 (' + res.status + ')');
+        throw new Error(d.error || t('request failed', getLang()) + ' (' + res.status + ')');
       }
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
@@ -779,7 +779,7 @@ export default function AIChat() {
             } else if (j.type === 'done') {
               full = j.content || full;
             } else if (j.type === 'error') {
-              throw new Error(j.error || 'AI 错误');
+              throw new Error(j.error || t('ai error', getLang()));
             }
           } catch {}
         }
@@ -820,7 +820,7 @@ export default function AIChat() {
         body: JSON.stringify({ message: msg, temperature, maxTokens, includeContext }),
         signal: controller.signal,
       });
-      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || '请求失败'); }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || t('request failed', getLang())); }
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buf = ''; let full = ''; let lastTools: string[] = [];
@@ -839,7 +839,7 @@ export default function AIChat() {
             else if (j.type === 'tools') { lastTools = j.tools || []; updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults }] })); }
             else if (j.type === 'tool_result') { lastToolResults = [...lastToolResults, { name: String(j.name || 'tool'), output: String(j.output || '') }]; }
             else if (j.type === 'done') { full = j.content || full; }
-            else if (j.type === 'error') throw new Error(j.error || 'AI 错误');
+            else if (j.type === 'error') throw new Error(j.error || t('ai error', getLang()));
           } catch {}
         }
       }

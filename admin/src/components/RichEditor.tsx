@@ -427,7 +427,7 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
     mode === 'markdown' && React.createElement('div', { className: 'border-t border-gray-200' },
       // Markdown quick toolbar — inserts syntax at the cursor / wraps the selection
       React.createElement('div', { className: 'flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-200 flex-wrap' },
-        [['#', t('markdown heading', getLang()), '## ', '', '标题'],
+        [['#', t('markdown heading', getLang()), '## ', '', t('heading', getLang())],
          ['B', t('bold', getLang()), '**', '**', t('bold text', getLang())],
          ['I', t('italic', getLang()), '*', '*', t('italic text', getLang())],
          ['•', t('list', getLang()), '- ', '', ''],

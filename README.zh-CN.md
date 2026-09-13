@@ -12,7 +12,7 @@
     <img src="https://img.shields.io/badge/TypeScript-5.x-3178c6.svg" alt="TypeScript" />
     <img src="https://img.shields.io/badge/Express-4.x-259dff.svg" alt="Express" />
     <img src="https://img.shields.io/badge/React-18-61dafb.svg" alt="React" />
-    <img src="https://img.shields.io/badge/SQLite%20%7C%20MySQL%20%7C%20PostgreSQL-supported-brightgreen.svg" alt="Databases" />
+    <img src="https://img.shields.io/badge/SQLite-supported-brightgreen.svg" alt="Databases" />
   </p>
   <p align="center"><a href="README.md">English</a> | <strong>简体中文</strong></p>
 </p>
@@ -31,7 +31,7 @@ curl -fsSL https://raw.githubusercontent.com/huihongsoft/MortarCMS/main/install.
 
 安装后访问 `http://localhost:3001/install` 完成向导，再到 **AI 设置** 配置模型服务商即可使用 AI 助理。
 
-> 支持 Linux / macOS；数据库默认 SQLite，也可通过 `DATABASE_URL` 使用 MySQL / PostgreSQL。
+> 支持 Linux / macOS；数据库以 **SQLite** 为受支持并推荐的方案。也可通过 `DATABASE_URL` 连接 MySQL / PostgreSQL，但属于**实验性**——详见[数据库](#-数据库)。
 > 管理命令：`./mortarctl.sh {start|stop|restart|status|logs}`（由安装脚本生成）
 
 ## 📸 界面预览
@@ -178,7 +178,8 @@ npm run dev            # 开发模式：server (3001) + admin (3002) + frontend 
 
 首次访问 `http://localhost:3001/install`：
 
-1. 选择数据库 — **SQLite**（默认，零配置）/ **MySQL/MariaDB** / **PostgreSQL**
+1. 选择数据库 — **SQLite**（默认，零配置）。MySQL/MariaDB 与 PostgreSQL 也可选，
+   但属于**实验性**（见下文）。
 2. 填写站点标题与管理员账号
 3. 可选勾选**"导入示例数据"** — 8 篇软件文章、分类、标签、评论、菜单、友情链接与软件库主题演示
 4. 完成 — 在 `/admin` 登录
@@ -189,11 +190,21 @@ npm run dev            # 开发模式：server (3001) + admin (3002) + frontend 
 
 ## 🗄️ 数据库
 
-| 引擎 | 支持 | 说明 |
+Mortar 的设计与支持场景是**基于 SQLite 的单实例部署**。适配层也接受通过
+`DATABASE_URL` 连接 MySQL/PostgreSQL，但这些驱动属于**实验性、不推荐用于生产**：
+它们通过单连接 worker 线程运行，慢查询可能阻塞请求循环，且测试覆盖远不及
+SQLite。仅建议用于本地评估。
+
+| 引擎 | 状态 | 说明 |
 |------|------|------|
-| SQLite | ✅ 默认 | 单文件 `server/data/mortar.db` |
-| MySQL / MariaDB | ✅ | 自动建库（utf8mb4），内置方言翻译层 |
-| PostgreSQL | ✅ | 完整方言支持 |
+| SQLite | ✅ 受支持（推荐） | 单文件 `server/data/mortar.db`；已启用 WAL、`busy_timeout` 与外键约束 |
+| MySQL / MariaDB | ⚠️ 实验性 | 不推荐生产使用；自动建库（utf8mb4） |
+| PostgreSQL | ⚠️ 实验性 | 不推荐生产使用 |
+
+**扩展性说明。** SQLite、本地磁盘上传与进程内缓存/调度器意味着 Mortar 以
+**单实例**运行。多个副本共用同一 SQLite 文件，或在无共享存储的情况下置于负载
+均衡之后，均**不受支持**——定时任务会在每个副本重复执行，上传文件与缓存也会
+各自不一致。
 
 通过 `DATABASE_URL` 环境变量或安装向导配置。详见 [docs/deployment.md](docs/deployment.md)。
 

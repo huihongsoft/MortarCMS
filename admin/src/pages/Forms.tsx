@@ -160,19 +160,19 @@ export default function Forms() {
                 React.createElement('input', {
                   value: fld.label,
                   onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditing({ ...editing, fields: editing.fields.map((x, j) => j === i ? { ...x, label: e.target.value } : x) }),
-                  placeholder: t('field label', getLang()),
+                  placeholder: t('field label hint', getLang()),
                   className: 'input-field flex-1',
                 }),
                 React.createElement('input', {
                   value: fld.name,
                   onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditing({ ...editing, fields: editing.fields.map((x, j) => j === i ? { ...x, name: e.target.value } : x) }),
-                  placeholder: t('field name', getLang()),
+                  placeholder: t('field name hint', getLang()),
                   className: 'input-field flex-1',
                 }),
                 React.createElement('select', {
                   value: fld.type,
                   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setEditing({ ...editing, fields: editing.fields.map((x, j) => j === i ? { ...x, type: e.target.value } : x) }),
-                  className: 'input-field w-32',
+                  className: 'input-field flex-1',
                 }, FIELD_TYPES.map(tp => React.createElement('option', { key: tp, value: tp }, tp))),
                 React.createElement('label', { className: 'flex items-center gap-1.5 text-xs text-gray-600 dark:text-gray-300 whitespace-nowrap' },
                   React.createElement('input', {

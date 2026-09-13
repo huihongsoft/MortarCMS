@@ -9,7 +9,7 @@
 //   storage_secret    = secret access key
 //   storage_public_url= public URL prefix (bucket URL or CDN; optional — falls
 //                       back to the provider's own endpoint/bucket URL)
-import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand, HeadObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3';
 import fs from 'fs';
 import path from 'path';
 import db from './db';
@@ -103,6 +103,22 @@ export async function testStorageConnection(): Promise<{ ok: boolean; error?: st
     if (e?.name === 'NotFound') return { ok: true };
     return { ok: false, error: e?.message || String(e) };
   }
+}
+
+// List remote object keys under a prefix (used for backup retention cleanup)
+export async function listRemoteFiles(prefix: string): Promise<string[]> {
+  const cfg = getStorageConfig();
+  if (cfg.provider !== 's3' || !cfg.bucket) return [];
+  const out: string[] = [];
+  try {
+    let token: string | undefined;
+    do {
+      const r = await s3Client(cfg).send(new ListObjectsV2Command({ Bucket: cfg.bucket, Prefix: prefix, ContinuationToken: token }));
+      for (const o of r.Contents || []) if (o.Key) out.push(o.Key);
+      token = r.IsTruncated ? r.NextContinuationToken : undefined;
+    } while (token);
+  } catch (e: any) { console.log('[Storage] list failed for ' + prefix + ': ' + e.message); }
+  return out;
 }
 
 // Extract the object key from a stored URL (for delete/migration)

@@ -2288,9 +2288,20 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       const img = featuredWrap.querySelector('img') as HTMLElement;
       const btn = featuredWrap.querySelector('.ve-guten-featured-btn') as HTMLElement;
       if (pageSettings.featuredImage && !img) {
-        featuredWrap.innerHTML = `<img src="${pageSettings.featuredImage}" alt="Featured" class="ve-guten-featured-img" data-action="featured-remove" />`;
+        // Build nodes programmatically: interpolating the URL into innerHTML
+        // let a quote in the URL break out into arbitrary attributes.
+        const el = document.createElement('img');
+        el.setAttribute('src', pageSettings.featuredImage);
+        el.setAttribute('alt', 'Featured');
+        el.className = 've-guten-featured-img';
+        el.setAttribute('data-action', 'featured-remove');
+        featuredWrap.replaceChildren(el);
       } else if (!pageSettings.featuredImage && img) {
-        featuredWrap.innerHTML = `<button class="ve-guten-featured-btn" data-action="featured-pick">${t('set featured image', getLang())}</button>`;
+        const el = document.createElement('button');
+        el.className = 've-guten-featured-btn';
+        el.setAttribute('data-action', 'featured-pick');
+        el.textContent = t('set featured image', getLang());
+        featuredWrap.replaceChildren(el);
       } else if (img && pageSettings.featuredImage) {
         img.setAttribute('src', pageSettings.featuredImage);
       }

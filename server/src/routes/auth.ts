@@ -75,8 +75,18 @@ router.post('/register', async (req: AuthRequest, res: Response) => {
     try {
       const header = req.headers.authorization || '';
       if (header.startsWith('Bearer ')) {
-        const payload = verifyToken(header.slice(7));
-        if (payload?.role === 'admin') isAdminCreate = true;
+        const raw = header.slice(7);
+        // A logged-out (blacklisted) token must not regain admin powers here.
+        if (!tokenBlacklist.has(raw)) {
+          const payload = verifyToken(raw);
+          // Never trust the role claim alone: re-check the CURRENT user row so
+          // a demoted/deleted admin's token cannot create admins, and require a
+          // live session version. Partial (2FA-challenge) tokens are rejected.
+          if (payload?.role === 'admin' && !payload.type && typeof payload.v === 'number') {
+            const current = db.prepare('SELECT role, tokenVersion FROM User WHERE id = ?').get(payload.userId) as any;
+            if (current && current.role === 'admin' && current.tokenVersion === payload.v) isAdminCreate = true;
+          }
+        }
       }
     } catch {}
     if (!isAdminCreate) {
@@ -172,6 +182,44 @@ router.get('/me', authenticate, (req: AuthRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Self-service profile update (WordPress profile.php equivalent): bio + avatar
+router.put('/me', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const user = db.prepare('SELECT id FROM User WHERE id = ?').get(req.user!.userId) as any;
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+    const bio = String(req.body?.bio ?? '').trim().slice(0, 500);
+    const avatar = String(req.body?.avatar ?? '').trim().slice(0, 500);
+    db.prepare('UPDATE User SET bio = ?, avatar = ?, updatedAt = ? WHERE id = ?').run(bio, avatar, new Date().toISOString(), req.user!.userId);
+    res.json({ success: true, bio, avatar });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Self-service password change: old password must verify, then bcrypt the new one
+router.put('/me/password', authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const oldPassword = String(req.body?.oldPassword ?? '');
+    const newPassword = String(req.body?.newPassword ?? '');
+    if (!passwordOk(newPassword)) {
+      res.status(400).json({ error: 'Password must be at least 8 characters with letters and numbers' }); return;
+    }
+    const user = db.prepare('SELECT password FROM User WHERE id = ?').get(req.user!.userId) as any;
+    if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+    const ok = await bcrypt.compare(oldPassword, user.password);
+    if (!ok) { res.status(401).json({ error: 'Current password is incorrect' }); return; }
+    const hash = await bcrypt.hash(newPassword, 12);
+    db.prepare('UPDATE User SET password = ?, updatedAt = ? WHERE id = ?').run(hash, new Date().toISOString(), req.user!.userId);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// The user's own approved comments with their post titles
+router.get('/me/comments', authenticate, (req: AuthRequest, res: Response) => {
+  try {
+    const comments = db.prepare("SELECT c.id, c.content, c.createdAt, p.title as postTitle, p.slug as postSlug FROM Comment c LEFT JOIN Post p ON p.id = c.postId WHERE c.userId = ? AND c.status = 'approved' ORDER BY c.createdAt DESC LIMIT 100").all(req.user!.userId) as any[];
+    res.json({ comments });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // 2FA: setup (get secret + QR URL)
 router.post('/2fa/setup', authenticate, (req: AuthRequest, res: Response) => {
   try {
@@ -199,9 +247,21 @@ router.post('/2fa/enable', authenticate, (req: AuthRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// 2FA: disable
-router.post('/2fa/disable', authenticate, (req: AuthRequest, res: Response) => {
+// 2FA: disable — requires re-authentication (current password or a valid TOTP
+// code). Without this, a hijacked session could silently strip 2FA and lock
+// the legitimate owner out of their own hardening.
+router.post('/2fa/disable', authenticate, async (req: AuthRequest, res: Response) => {
   try {
+    const { password, code } = req.body || {};
+    if (!password && !code) { res.status(400).json({ error: 'Password or 2FA code required' }); return; }
+    const user = db.prepare('SELECT password, two_factor_secret FROM User WHERE id = ?').get(req.user!.userId) as any;
+    let ok = false;
+    if (password && user?.password && await bcrypt.compare(String(password), user.password)) ok = true;
+    if (!ok && code && user?.two_factor_secret) {
+      const { verifyTOTP } = require('../utils/totp');
+      ok = verifyTOTP(user.two_factor_secret, String(code));
+    }
+    if (!ok) { res.status(400).json({ error: 'Invalid password or code' }); return; }
     db.prepare("UPDATE User SET two_factor_enabled = 0, two_factor_secret = '' WHERE id = ?").run(req.user!.userId);
     res.json({ success: true, message: '2FA disabled' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -240,7 +300,10 @@ router.post('/reset-password', async (req: AuthRequest, res: Response) => {
     const { token, password } = req.body;
     if (!token || !password) { res.status(400).json({ error: 'Token and password required' }); return; }
     if (!passwordOk(password)) { res.status(400).json({ error: 'Password must be at least 8 characters with letters and numbers' }); return; }
-    const user = db.prepare('SELECT id FROM User WHERE reset_token = ? AND reset_expires > datetime(?)').get(token, new Date().toISOString()) as any;
+    // Normalize both sides: reset_expires is stored as an ISO-8601 string
+    // ('T'/'Z'), which compares incorrectly against datetime()'s
+    // 'YYYY-MM-DD HH:MM:SS' form — a 30-minute token stayed valid all day.
+    const user = db.prepare('SELECT id FROM User WHERE reset_token = ? AND datetime(reset_expires) > datetime(?)').get(token, new Date().toISOString()) as any;
     if (!user) { res.status(400).json({ error: 'Invalid or expired token' }); return; }
     const hashed = await bcrypt.hash(password, 12);
     db.prepare("UPDATE User SET password = ?, reset_token = '', reset_expires = '' WHERE id = ?").run(hashed, user.id);

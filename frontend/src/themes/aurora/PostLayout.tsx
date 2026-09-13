@@ -2,6 +2,7 @@ import React, { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, User, Clock, MessageSquare, Folder, Tag as TagIcon  } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
+import CommentLike from '../../components/CommentLike';
 import RelatedPosts from '../../components/RelatedPosts';
 import SocialShare from '../../components/SocialShare';
 import Toc from '../../components/Toc';
@@ -33,6 +34,7 @@ export default function PostLayout(props: any) {
           React.createElement('p', { className: 'text-xs text-gray-500' }, new Date(c.createdAt).toLocaleDateString())),
       ),
       React.createElement('p', { className: 'text-sm text-gray-600 leading-relaxed' }, c.content),
+      React.createElement('div', { className: 'mt-2' }, React.createElement(CommentLike, { commentId: c.id, initial: c.likes })),
       c.children && c.children.map((child: any) => (
         React.createElement('div', { key: child.id, className: 'ml-10 mt-4 p-4 rounded-xl bg-gray-50/70' },
           React.createElement('p', { className: 'font-medium text-sm text-gray-900 mb-1' }, child.author),
