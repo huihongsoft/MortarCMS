@@ -99,7 +99,9 @@ router.post('/register', async (req: AuthRequest, res: Response) => {
     const id = cuid();
     const role = isAdminCreate
       ? (data.role || 'author')
-      : ((db.prepare("SELECT value FROM Setting WHERE key = 'default_role'").get() as any)?.value || 'author');
+      // Public sign-ups get the site's default role; subscribers by default
+      // (least privilege) until an admin chooses otherwise in Settings.
+      : ((db.prepare("SELECT value FROM Setting WHERE key = 'default_role'").get() as any)?.value || 'subscriber');
     const safeRole = ['admin', 'editor', 'author', 'contributor', 'subscriber'].includes(role) ? role : 'author';
     db.prepare('INSERT INTO User (id, username, email, password, role) VALUES (?, ?, ?, ?, ?)').run(id, data.username, data.email, password, safeRole);
     // Include the session version (v: 0) so "log out everywhere" also revokes

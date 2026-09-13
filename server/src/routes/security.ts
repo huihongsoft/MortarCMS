@@ -67,8 +67,12 @@ router.get('/audit', authenticate, requireCap('manage_options'), (req: AuthReque
     checks.push({ id: 'env_permissions', label: 'Configuration file permissions', status: envExposed ? 'warn' : 'ok', detail: envExposed ? 'server/.env is world-readable.' : 'server/.env is not world-readable.', advice: envExposed ? 'chmod 600 server/.env' : 'Keep .env out of version control (already in .gitignore).' });
 
     // 8. Public registration
-    const regOpen = true; // registration endpoint is open by design
-    checks.push({ id: 'public_register', label: 'Public registration', status: 'info', detail: 'Registration is open to visitors (default role: author).', advice: 'For closed communities, disable registration or set a stricter default role.' });
+    const regOpen = ((db.prepare("SELECT value FROM Setting WHERE key = 'users_can_register'").get() as any)?.value ?? '1') !== '0';
+    if (regOpen) {
+      checks.push({ id: 'public_register', label: 'Public registration', status: 'info', detail: 'Registration is open to visitors — new accounts get the default role.', advice: 'For closed communities, disable registration or pick a stricter default role in Settings.' });
+    } else {
+      checks.push({ id: 'public_register', label: 'Public registration', status: 'ok', detail: 'Public registration is disabled.', advice: 'Admins can still create accounts from Users.' });
+    }
 
     // 9. Maintenance mode
     const mm = db.prepare("SELECT value FROM Setting WHERE key = 'maintenance_mode'").get() as any;

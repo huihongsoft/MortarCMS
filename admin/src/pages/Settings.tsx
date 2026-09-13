@@ -227,7 +227,7 @@ export default function Settings() {
         field('permalink_structure', t('permalink structure (/post/%slug%)', getLang())),
         React.createElement('div', null,
           React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('default user role', getLang())),
-          React.createElement(Select, { value: settings.default_role || 'author', onChange: (v: string) => setSettings({ ...settings, default_role: v }), className: 'input-field' },
+          React.createElement(Select, { value: settings.default_role || 'subscriber', onChange: (v: string) => setSettings({ ...settings, default_role: v }), className: 'input-field' },
             React.createElement('option', { value: '' }, t('no role', getLang())),
             roles.map(r => React.createElement('option', { key: r.slug, value: r.slug }, r.name)))),
       )

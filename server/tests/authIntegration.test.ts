@@ -204,6 +204,15 @@ describe('app passwords', () => {
   });
 });
 
+describe('public registration default role', () => {
+  it('assigns the subscriber role when no default_role setting is present', async () => {
+    db.prepare("DELETE FROM Setting WHERE key = 'default_role'").run();
+    const r = await fetch(base + '/auth/register', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ username: 'publicuser', email: 'public@test.dev', password: PW }) });
+    expect(r.status).toBe(201);
+    expect((await r.json()).user.role).toBe('subscriber');
+  });
+});
+
 describe('privilege escalation guards', () => {
   it('does not let a demoted admin token create an admin account', async () => {
     const demoted = signToken({ userId: 'u-adm2', role: 'admin', v: 0 });

@@ -110,6 +110,8 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       upsert.run(cuid(), 'site_title', siteTitle);
       upsert.run(cuid(), 'site_description', siteDescription || '');
       upsert.run(cuid(), 'admin_email', adminEmail);
+      // Least privilege for public sign-ups by default (changeable in Settings).
+      upsert.run(cuid(), 'default_role', 'subscriber');
       upsert.run(cuid(), 'installed', '1');
       // 4. Fresh default site
       const hasSite = db.prepare('SELECT COUNT(*) as c FROM Site').get() as any;
