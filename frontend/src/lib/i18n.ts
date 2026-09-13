@@ -20,6 +20,8 @@ const zh: Record<string, string> = {
   'login failed': '登录失败',
   admin: '管理后台',
   'site title': '站点标题',
+  'site title required': '请输入站点标题',
+  'database host, user and name are required': '请填写数据库主机、用户名和数据库名',
   'search posts': '搜索文章',
   'search placeholder': '搜索文章...',
   'recent posts': '最近文章',

@@ -76,8 +76,11 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     if (!siteTitle || !adminEmail || !adminPassword) {
       res.status(400).json({ error: 'Site title, admin email and a password are required' }); return;
     }
-    if (adminPassword.length < 8 || !/[a-zA-Z]/.test(adminPassword) || !/\d/.test(adminPassword)) {
+    if (adminPassword.length < 8 || adminPassword.length > 128 || !/[a-zA-Z]/.test(adminPassword) || !/\d/.test(adminPassword)) {
       res.status(400).json({ error: 'Admin password must be at least 8 characters with letters and numbers' }); return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(adminEmail))) {
+      res.status(400).json({ error: 'Invalid admin email address' }); return;
     }
     // 1. Reconfigure the database driver per user choice (SQLite default / MySQL / PostgreSQL)
     let databaseUrl = '';

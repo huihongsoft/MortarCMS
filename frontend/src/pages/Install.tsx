@@ -17,13 +17,27 @@ export default function Install() {
   // null = not requested, 'ok' / 'failed' = import result
   const [demoResult, setDemoResult] = useState<null | 'ok' | 'failed'>(null);
 
+  // Mirror the server's validation so the wizard never submits a request that
+  // is guaranteed to come back as a bare 400.
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(site.adminEmail.trim());
+  const pwOk = site.adminPassword.length >= 8 && site.adminPassword.length <= 128
+    && /[A-Za-z]/.test(site.adminPassword) && /\d/.test(site.adminPassword);
+  const canInstall = !!site.siteTitle.trim() && emailOk && pwOk;
+
   useEffect(() => {
     // If already installed, bounce to the home page
     api.get('/install/status').then(r => { if (r.data.installed) window.location.href = '/'; }).catch(() => {});
   }, []);
 
   async function submit() {
-    setError(''); setLoading(true);
+    setError('');
+    if (!site.siteTitle.trim()) { setError(t('site title required')); return; }
+    if (!emailOk) { setError(t('enter a valid email address')); return; }
+    if (!pwOk) { setError(t('password must be at least 8 characters with letters and numbers')); return; }
+    if (dbType !== 'sqlite' && (!dbConfig.host.trim() || !dbConfig.user.trim() || !dbConfig.database.trim())) {
+      setError(t('database host, user and name are required')); return;
+    }
+    setLoading(true);
     try {
       const r = await api.post('/install', {
         dbType, dbConfig: dbType === 'sqlite' ? undefined : dbConfig,
@@ -35,7 +49,15 @@ export default function Install() {
       setDone(true);
       setTimeout(() => { window.location.href = '/admin'; }, 1500);
     } catch (e: any) {
-      setError(e.response?.data?.error || t('installation failed'));
+      const status = e.response?.status;
+      const msg = e.response?.data?.error;
+      // Already installed (e.g. a second tab / stale wizard): go to the admin
+      // instead of showing a raw error.
+      if (status === 400 && typeof msg === 'string' && /already installed/i.test(msg)) {
+        window.location.href = '/admin';
+        return;
+      }
+      setError(msg || t('installation failed'));
       setLoading(false);
     }
   }
@@ -108,8 +130,16 @@ export default function Install() {
               React.createElement('p', { className: 'text-xs font-semibold text-gray-500 mb-3 flex items-center gap-1' }, React.createElement(User, { size: 12 }), t('admin account')),
               React.createElement('div', { className: 'grid grid-cols-2 gap-3' },
                 React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('username')), React.createElement('input', { value: site.adminUsername, onChange: e => setSite({ ...site, adminUsername: e.target.value }), className: 'input-field' })),
-                React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('email') + ' *'), React.createElement('input', { type: 'email', value: site.adminEmail, onChange: e => setSite({ ...site, adminEmail: e.target.value }), className: 'input-field' })),
-                React.createElement('div', { className: 'col-span-2' }, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('password (min 8 chars)') + ' *'), React.createElement('input', { type: 'password', autoComplete: 'new-password', value: site.adminPassword, onChange: e => setSite({ ...site, adminPassword: e.target.value }), className: 'input-field' })),
+                React.createElement('div', null,
+                  React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('email') + ' *'),
+                  React.createElement('input', { type: 'email', value: site.adminEmail, onChange: e => setSite({ ...site, adminEmail: e.target.value }), className: 'input-field' }),
+                  !!site.adminEmail && !emailOk && React.createElement('p', { className: 'text-xs text-red-500 mt-1' }, t('enter a valid email address'))
+                ),
+                React.createElement('div', { className: 'col-span-2' },
+                  React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('password (min 8 chars)') + ' *'),
+                  React.createElement('input', { type: 'password', autoComplete: 'new-password', value: site.adminPassword, onChange: e => setSite({ ...site, adminPassword: e.target.value }), className: 'input-field' }),
+                  !!site.adminPassword && !pwOk && React.createElement('p', { className: 'text-xs text-red-500 mt-1' }, t('password must be at least 8 characters with letters and numbers'))
+                ),
               )
             )
           ),
@@ -122,7 +152,7 @@ export default function Install() {
           ),
           React.createElement('div', { className: 'flex gap-3 mt-6' },
             React.createElement('button', { onClick: () => setStep(1), className: 'btn-secondary flex-1 justify-center' }, React.createElement(ArrowLeft, { size: 16 }), t('back')),
-            React.createElement('button', { onClick: submit, disabled: loading || !site.siteTitle || !site.adminEmail || site.adminPassword.length < 8, className: 'btn-primary flex-1 justify-center' },
+            React.createElement('button', { onClick: submit, disabled: loading || !canInstall, className: 'btn-primary flex-1 justify-center' },
               loading ? React.createElement(Loader2, { size: 16, className: 'animate-spin' }) : React.createElement(CheckCircle2, { size: 16 }), loading ? t('installing') + '...' : t('install mortar')),
           ),
         )
