@@ -175,7 +175,7 @@ choice.
 2. **Upload code** to `/www/wwwroot/mortar`:
    ```bash
    cd /www/wwwroot
-   git clone -b 0.1.0 https://github.com/huihongsoft/MortarCMS.git mortar
+   git clone -b v0.1.2 https://github.com/huihongsoft/MortarCMS.git mortar
    ```
 3. **Install deps & build** (see *Production build* above): run the three
    build stages from the repo root.

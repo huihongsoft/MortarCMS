@@ -1,9 +1,11 @@
 {
   "name": "mortar",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "description": "A WordPress-like CMS built with TypeScript",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "concurrently \"npm run dev:server\" \"npm run dev:admin\" \"npm run dev:frontend\"",
     "dev:server": "cd server && npm run dev",

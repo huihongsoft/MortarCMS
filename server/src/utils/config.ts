@@ -5,6 +5,10 @@
 // point — NOT at module load — so importing this module (e.g. from tests or the
 // logger) never terminates the process as a side effect.
 
+// Single source of truth for the app version reported by the API/health and
+// used as the minimum-core version for plugin compatibility checks.
+export const APP_VERSION = '0.1.2';
+
 function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';
 }

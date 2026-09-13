@@ -1,9 +1,11 @@
 {
   "name": "mortar-admin",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "vite --port 3002",
     "build": "tsc -b && vite build",

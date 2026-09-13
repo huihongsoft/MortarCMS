@@ -4,6 +4,7 @@ import db, { cuid } from '../utils/db';
 import { authenticate, authorize, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { activeThemeName, readTheme, themeOverrides } from './themes';
+import { APP_VERSION } from '../utils/config';
 
 const router = Router();
 
@@ -111,7 +112,7 @@ router.get('/health', (req: AuthRequest, res: Response) => {
     const db_test = db.prepare('SELECT 1').get();
     res.json({
       status: 'healthy',
-      version: '0.1.0',
+      version: APP_VERSION,
       database: db_test ? 'connected' : 'error',
       timestamp: new Date().toISOString(),
     });
@@ -141,7 +142,7 @@ router.get('/info', authenticate, authorize('admin'), (req: AuthRequest, res: Re
         : ['default'];
     } catch {}
     res.json({
-      site: { title: cfg.site_title, url: cfg.site_url, version: '0.1.0' },
+      site: { title: cfg.site_title, url: cfg.site_url, version: APP_VERSION },
       php: { version: process.version, platform: process.platform, arch: process.arch },
       database: { tables: tables.length, posts: postCount, engine: driver === 'sqlite' ? 'SQLite' : driver === 'mysql' ? 'MySQL/MariaDB' : 'PostgreSQL', size: '—' },
       server: { uptime: Math.floor(process.uptime()), memory: Math.round(process.memoryUsage().heapUsed / 1024 / 1024) + 'MB' },

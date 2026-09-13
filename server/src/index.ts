@@ -5,7 +5,7 @@ import pinoHttp from 'pino-http';
 import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
-import { config, assertValidConfig } from './utils/config';
+import { config, assertValidConfig, APP_VERSION } from './utils/config';
 import db, { initDB, closeDb } from './utils/db';
 import { logger } from './utils/logger';
 import { flushViews } from './utils/views';
@@ -400,7 +400,7 @@ app.use('/api', cacheAdminRoutes);
 app.use('/api', mailerRoutes);
 app.use('/api', tasksRoutes);
 
-app.get('/api/health', (_req, res) => { res.json({ status: 'ok', version: '0.1.0' }); });
+app.get('/api/health', (_req, res) => { res.json({ status: 'ok', version: APP_VERSION }); });
 
 // robots.txt (honors the blog_public SEO setting)
 app.get('/robots.txt', (_req, res) => {
@@ -507,7 +507,7 @@ app.get('/api/schema', (_req, res) => {
     { method: 'GET', path: '/api/admin/subscribers/export', auth: 'admin', desc: 'Export subscribers as CSV' },
     { method: 'POST', path: '/api/admin/newsletter/send', auth: 'admin', desc: 'Send a newsletter (body: to = test send, omit = broadcast)', body: { to: 'optional@test.dev' } },
   ];
-  res.json({ name: 'Mortar CMS API', version: '0.1.0', endpoints });
+  res.json({ name: 'Mortar CMS API', version: APP_VERSION, endpoints });
 });
 
 // Widget registry: widgets the frontend can render plus the active

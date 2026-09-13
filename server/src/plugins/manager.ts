@@ -8,6 +8,7 @@ import { tmpdir as osTmpDir } from 'os';
 import db from '../utils/db';
 import { assertSafeArchive } from '../utils/archive';
 import { isPrivateIp } from '../utils/ssrf';
+import { APP_VERSION } from '../utils/config';
 
 // Plugins ship as TypeScript sources (server/plugins/<name>/index.ts). Register
 // tsx's CommonJS loader so `node dist/index.js` (production build) can require
@@ -301,7 +302,7 @@ function versionAtLeast(actual: string, required: string): boolean {
   return true;
 }
 
-export const CORE_VERSION = '0.1.0';
+export const CORE_VERSION = APP_VERSION;
 
 export async function setPluginActive(name: string, active: boolean): Promise<{ ok: boolean; error?: string }> {
   const metas = listPlugins();
