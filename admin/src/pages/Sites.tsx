@@ -145,10 +145,22 @@ export default function Sites() {
     showForm && React.createElement('div', { className: 'card p-5 mb-6' },
       React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4' }, editing ? t('edit site', getLang()) : t('new site', getLang())),
       React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3' },
-        React.createElement('input', { value: form.name, onChange: e => setForm({ ...form, name: e.target.value }), placeholder: t('site name', getLang()), className: 'input-field' }),
-        React.createElement('input', { value: form.slug, onChange: e => setForm({ ...form, slug: e.target.value }), placeholder: t('slug (unique)', getLang()), className: 'input-field' }),
-        React.createElement('input', { value: form.domain, onChange: e => setForm({ ...form, domain: e.target.value }), placeholder: t('domain (e.g. blog.example.com)', getLang()), className: 'input-field' }),
-        React.createElement('input', { value: form.description, onChange: e => setForm({ ...form, description: e.target.value }), placeholder: t('description (optional)', getLang()), className: 'input-field' }),
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1' }, t('name', getLang()) + ' *'),
+          React.createElement('input', { value: form.name, onChange: e => setForm({ ...form, name: e.target.value }), placeholder: t('site name', getLang()), className: 'input-field' })
+        ),
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1' }, t('slug', getLang()) + ' *'),
+          React.createElement('input', { value: form.slug, onChange: e => setForm({ ...form, slug: e.target.value }), placeholder: t('slug (unique)', getLang()), className: 'input-field' })
+        ),
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1' }, t('domain', getLang()) + ' *'),
+          React.createElement('input', { value: form.domain, onChange: e => setForm({ ...form, domain: e.target.value }), placeholder: t('domain (e.g. blog.example.com)', getLang()), className: 'input-field' })
+        ),
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1' }, t('description', getLang())),
+          React.createElement('input', { value: form.description, onChange: e => setForm({ ...form, description: e.target.value }), placeholder: t('description (optional)', getLang()), className: 'input-field' })
+        ),
       ),
       React.createElement('div', { className: 'flex gap-2 mt-4' },
         React.createElement('button', { onClick: save, className: 'btn-primary text-sm' }, React.createElement(Check, { size: 14 }), t('save', getLang())),
