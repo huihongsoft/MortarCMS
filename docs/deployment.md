@@ -218,7 +218,7 @@ choice.
 
 ## Deploying with 宝塔面板 (BT Panel / aaPanel)
 
-1. **Software store**: install *Node.js version manager* (Node 18+) and the
+1. **Software store**: install *Node.js version manager* (Node 20+) and the
    *Node project* plugin (or use a plain site + reverse proxy).
 2. **Upload code** to `/www/wwwroot/mortar`:
    ```bash

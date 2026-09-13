@@ -12,7 +12,7 @@
 #
 #  环境变量:
 #     MORTAR_PORT   监听端口（默认 3001）
-#     MORTAR_DIR    安装目录（默认当前目录 / 自动克隆）
+#     MORTAR_DIR    安装目录（默认当前目录 / 自动下载）
 #     DATABASE_URL  MySQL/PostgreSQL 连接串（默认 SQLite）
 # ============================================================================
 
@@ -25,24 +25,34 @@ ok()    { echo -e "${GREEN}[ ✔ ]${NC} $1"; }
 warn()  { echo -e "${YELLOW}[ ! ]${NC} $1"; }
 err()   { echo -e "${RED}[ ✘ ]${NC} $1"; exit 1; }
 
+have() { command -v "$1" >/dev/null 2>&1; }
+
 # ---------- 参数解析 ----------
 REPO_URL="https://github.com/huihongsoft/MortarCMS.git"
+REPO_TARBALL="https://codeload.github.com/huihongsoft/MortarCMS/tar.gz/refs/heads/main"
 PORT="${MORTAR_PORT:-3001}"
 INSTALL_DIR="${MORTAR_DIR:-}"
 SERVICE=1
 SERVICE_NAME="mortar"
-NODE_MIN=22
+# Match package.json "engines": { "node": ">=20" } and the docs.
+NODE_MIN=20
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --port) PORT="$2"; shift 2 ;;
-    --dir) INSTALL_DIR="$2"; shift 2 ;;
+    --port)
+      [ $# -ge 2 ] || err "--port 需要一个端口号"
+      PORT="$2"; shift 2 ;;
+    --dir)
+      [ $# -ge 2 ] || err "--dir 需要一个目录"
+      INSTALL_DIR="$2"; shift 2 ;;
     --no-service) SERVICE=0; shift ;;
+    -h|--help)
+      echo "用法: $0 [--port 8080] [--dir /opt/mortar] [--no-service]"; exit 0 ;;
     *) shift ;;
   esac
 done
 
-# ---------- 环境检测 ----------
+# ---------- 系统 / 包管理器检测 ----------
 detect_os() {
   case "$(uname -s)" in
     Linux*)  OS="linux" ;;
@@ -52,53 +62,141 @@ detect_os() {
   ARCH="$(uname -m)"
   [ "$ARCH" = "x86_64" ] && ARCH="amd64"
   [ "$ARCH" = "aarch64" ] && ARCH="arm64"
-  info "系统: $OS / $ARCH"
-}
 
-check_cmd() {
-  command -v "$1" >/dev/null 2>&1
-}
-
-check_prereq() {
-  check_cmd node || err "未检测到 Node.js。请先安装 Node.js ≥ $NODE_MIN（https://nodejs.org）"
-  NODE_VER=$(node -v | sed 's/^v//' | cut -d. -f1)
-  [ "$NODE_VER" -ge "$NODE_MIN" ] || err "Node.js 版本过低（当前 $(node -v)），需要 ≥ $NODE_MIN"
-  check_cmd npm || err "未检测到 npm。请随 Node.js 一起安装"
-  check_cmd git || err "未检测到 git。请安装 git（apt install git / brew install git）"
-  ok "Node.js $(node -v) + npm $(npm -v) + git"
-  # 主题安装需要 unzip
-  if ! check_cmd unzip; then
-    warn "未检测到 unzip（主题 zip 安装需要）"
-    if [ "$OS" = "linux" ]; then
-      if check_cmd apt-get; then sudo apt-get install -y unzip >/dev/null 2>&1 && ok "已安装 unzip"
-      elif check_cmd yum; then sudo yum install -y unzip >/dev/null 2>&1 && ok "已安装 unzip"
-      fi
-    elif [ "$OS" = "darwin" ] && check_cmd brew; then
-      brew install unzip >/dev/null 2>&1 && ok "已安装 unzip"
-    fi
+  # Package manager: drives the "how to install X" hints and best-effort installs.
+  PKG=""
+  if [ "$OS" = "darwin" ]; then
+    have brew && PKG="brew"
+  elif have apt-get; then PKG="apt"
+  elif have dnf;     then PKG="dnf"
+  elif have yum;     then PKG="yum"
+  elif have zypper;  then PKG="zypper"
+  elif have pacman;  then PKG="pacman"
+  elif have apk;     then PKG="apk"
+  fi
+  if [ -n "$PKG" ]; then
+    info "系统: ${OS} / ${ARCH}（包管理器: ${PKG}）"
+  else
+    info "系统: ${OS} / ${ARCH}"
   fi
 }
 
+pkg_hint() {
+  case "$PKG" in
+    apt)    echo "apt-get install -y $1" ;;
+    dnf)    echo "dnf install -y $1" ;;
+    yum)    echo "yum install -y $1" ;;
+    zypper) echo "zypper install -y $1" ;;
+    pacman) echo "pacman -S --noconfirm $1" ;;
+    apk)    echo "apk add $1" ;;
+    brew)   echo "brew install $1" ;;
+    *)      echo "请用系统的包管理器安装 $1（如 yum/dnf/apt-get/brew）" ;;
+  esac
+}
+
+# Run a command with root privileges (directly when already root).
+as_root() {
+  if [ "$(id -u)" -eq 0 ]; then "$@"
+  elif have sudo; then sudo "$@"
+  else err "需要 root 权限：请以 root 运行，或先安装 sudo"
+  fi
+}
+
+# Best-effort package install; never fatal (caller falls back to a warning).
+try_pkg_install() {
+  local pkg="$1"
+  [ -n "$PKG" ] || return 1
+  case "$PKG" in
+    apt)    as_root apt-get update -qq >/dev/null 2>&1 || true; as_root apt-get install -y "$pkg" >/dev/null 2>&1 ;;
+    dnf|yum) as_root "$PKG" install -y "$pkg" >/dev/null 2>&1 ;;
+    zypper) as_root zypper -n install "$pkg" >/dev/null 2>&1 ;;
+    pacman) as_root pacman -S --noconfirm "$pkg" >/dev/null 2>&1 ;;
+    apk)    as_root apk add "$pkg" >/dev/null 2>&1 ;;
+    brew)   brew install "$pkg" >/dev/null 2>&1 ;;
+    *)      return 1 ;;
+  esac
+}
+
+# ---------- 环境检测 ----------
+check_prereq() {
+  if ! have node; then
+    err "未检测到 Node.js。请安装 Node.js ≥ ${NODE_MIN}（$(pkg_hint nodejs) 或 https://nodejs.org）"
+  fi
+  NODE_VER=$(node -v | sed 's/^v//' | cut -d. -f1)
+  [ "$NODE_VER" -ge "$NODE_MIN" ] || err "Node.js 版本过低（当前 $(node -v)），需要 ≥ $NODE_MIN"
+  have npm || err "未检测到 npm。请随 Node.js 一起安装"
+
+  # git is only needed to clone the repo — the tarball fallback works without it.
+  if ! have git; then
+    warn "未检测到 git（将改用源码压缩包下载，无需 git）"
+    warn "如需 git，可执行: $(pkg_hint git)"
+  fi
+
+  # Optional helpers used later; try to install, otherwise warn.
+  for tool in tar unzip curl; do
+    if ! have "$tool"; then
+      if try_pkg_install "$tool"; then ok "已安装 $tool"
+      else warn "未检测到 ${tool}（可能影响主题安装/下载）: $(pkg_hint "$tool")"
+      fi
+    fi
+  done
+
+  ok "Node.js $(node -v) + npm $(npm -v)$(have git && echo ' + git')"
+}
+
 # ---------- 获取代码 ----------
+download_source() {
+  local dest="$1"
+  local url="${MORTAR_TARBALL_URL:-$REPO_TARBALL}"
+  info "下载源码压缩包..."
+  if have curl; then
+    curl -fsSL "$url" | tar -xz --strip-components=1 -C "$dest" || return 1
+  elif have wget; then
+    wget -qO- "$url" | tar -xz --strip-components=1 -C "$dest" || return 1
+  elif have node; then
+    # Last resort: fetch + extract without curl/wget.
+    node -e '
+      const { get } = require("https");
+      const zlib = require("zlib");
+      const tar = require("child_process").spawn("tar", ["-xz", "--strip-components=1", "-C", process.argv[1]]);
+      get(process.argv[2], res => res.pipe(zlib.createGunzip()).pipe(tar.stdin));
+      tar.on("close", c => process.exit(c || 0));
+    ' "$dest" "$url" || return 1
+  else
+    return 1
+  fi
+}
+
 prepare_source() {
   if [ -z "$INSTALL_DIR" ]; then
     if [ -f "./server/package.json" ] && [ -f "./frontend/package.json" ]; then
-      INSTALL_DIR="$(cd "$(dirname "$0")" && pwd)"
-      info "检测到仓库目录: $INSTALL_DIR（就地安装模式）"
+      INSTALL_DIR="$(pwd)"
+      info "检测到仓库目录: ${INSTALL_DIR}（就地安装模式）"
     else
       INSTALL_DIR="$(pwd)/mortar"
-      info "将克隆仓库到: $INSTALL_DIR"
+      info "将安装到: $INSTALL_DIR"
     fi
   fi
   mkdir -p "$INSTALL_DIR"
   cd "$INSTALL_DIR"
-  if [ -f "./server/package.json" ]; then
-    ok "源码已存在，跳过克隆"
-  else
-    info "克隆仓库中..."
-    git clone --depth 1 "$REPO_URL" . || err "克隆失败，请检查网络或手动 git clone $REPO_URL"
-    ok "源码获取完成"
+
+  if [ -f "./server/package.json" ] && [ -f "./frontend/package.json" ]; then
+    ok "源码已存在，跳过下载"
+    return
   fi
+  # Refuse to clone into a non-empty directory (git would fail confusingly).
+  if [ -n "$(ls -A . 2>/dev/null)" ]; then
+    err "目录非空且不是 Mortar 源码: ${INSTALL_DIR}（请换一个空目录，或用 --dir 指定）"
+  fi
+
+  if have git; then
+    info "克隆仓库中..."
+    git clone --depth 1 "$REPO_URL" . || { warn "git clone 失败，改为下载压缩包..."; download_source "$INSTALL_DIR" || err "源码下载失败，请检查网络"; }
+  else
+    download_source "$INSTALL_DIR" || err "源码下载失败，请检查网络（或安装 git 后重试）"
+  fi
+  [ -f "./server/package.json" ] || err "源码不完整：缺少 server/package.json"
+  ok "源码获取完成"
 }
 
 # ---------- 安装依赖 ----------
@@ -131,14 +229,19 @@ build_all() {
   (cd frontend && npx esbuild esm/react.js --bundle --format=esm --minify --define:process.env.NODE_ENV=\"production\" --outfile=public/esm-react.js) || err "esm-react 构建失败"
   (cd frontend && npx esbuild esm/router.js --bundle --format=esm --external:react --external:react-dom --outfile=public/esm-router.js) || err "esm-router 构建失败"
   # 主题 bundle（frontend/src/themes/<name>/index.ts 对应的主题）
+  local theme_failed=0
   for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen softstore; do
-    (cd frontend && THEME_NAME=$t npx vite build --config vite.themes.config.ts >/dev/null 2>&1)
-    cp frontend/dist/themes/$t.js server/themes/$t/theme.js 2>/dev/null || true
+    if (cd frontend && THEME_NAME=$t npx vite build --config vite.themes.config.ts >/dev/null 2>&1); then
+      cp frontend/dist/themes/$t.js server/themes/$t/theme.js 2>/dev/null || true
+    else
+      theme_failed=$((theme_failed + 1)); warn "主题 $t 构建失败（已跳过）"
+    fi
   done
+  [ "$theme_failed" -eq 0 ] || warn "$theme_failed 个主题构建失败，其余功能不受影响"
   # 服务端编译
   (cd server && npx tsc) || err "server 编译失败"
   # 前端最终打包（含 esm 产物）
-  (cd frontend && npx vite build >/dev/null 2>&1) || true
+  (cd frontend && npx vite build) || err "frontend 最终打包失败"
   ok "构建完成"
 }
 
@@ -153,7 +256,7 @@ setup_env() {
     return
   fi
   local secret
-  if command -v node >/dev/null 2>&1; then
+  if have node; then
     secret="$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")"
   else
     secret="$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n')"
@@ -176,12 +279,13 @@ setup_service() {
     echo "  cd $INSTALL_DIR/server && NODE_ENV=production node dist/index.js"
     return
   fi
+  local node_bin; node_bin="$(command -v node)"
   if [ "$OS" = "linux" ]; then
-    if ! check_cmd systemctl; then warn "未检测到 systemd，跳过服务注册"; return; fi
+    if ! have systemctl; then warn "未检测到 systemd，跳过服务注册"; return; fi
     SVC="/etc/systemd/system/${SERVICE_NAME}.service"
     if [ -f "$SVC" ]; then warn "服务已存在，将覆盖: $SERVICE_NAME"; fi
     info "创建 systemd 服务: $SERVICE_NAME"
-    sudo tee "$SVC" >/dev/null <<EOF
+    as_root tee "$SVC" >/dev/null <<EOF
 [Unit]
 Description=Mortar CMS
 After=network.target
@@ -189,7 +293,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=$INSTALL_DIR/server
-ExecStart=$(command -v node) $INSTALL_DIR/server/dist/index.js
+ExecStart=$node_bin $INSTALL_DIR/server/dist/index.js
 Restart=on-failure
 RestartSec=5
 Environment=NODE_ENV=production
@@ -199,9 +303,9 @@ EnvironmentFile=-$INSTALL_DIR/server/.env
 [Install]
 WantedBy=multi-user.target
 EOF
-    sudo systemctl daemon-reload
-    sudo systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
-    sudo systemctl restart "$SERVICE_NAME"
+    as_root systemctl daemon-reload
+    as_root systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
+    as_root systemctl restart "$SERVICE_NAME"
     ok "服务已启动（systemd）"
   elif [ "$OS" = "darwin" ]; then
     PLIST="$HOME/Library/LaunchAgents/com.mortar.cms.plist"
@@ -214,7 +318,7 @@ EOF
   <key>Label</key><string>com.mortar.cms</string>
   <key>ProgramArguments</key>
   <array>
-    <string>$(command -v node)</string>
+    <string>$node_bin</string>
     <string>$INSTALL_DIR/server/dist/index.js</string>
   </array>
   <key>WorkingDirectory</key><string>$INSTALL_DIR/server</string>
@@ -234,10 +338,22 @@ EOF
 }
 
 # ---------- 健康检查 ----------
+# Uses the public install-status endpoint: /api/health returns 503 until the
+# install wizard has run, which would look like a failure on a fresh install.
+http_ok() {
+  local url="$1"
+  if have curl; then
+    curl -fsS -o /dev/null "$url" >/dev/null 2>&1
+  else
+    # node is guaranteed to be present — avoids depending on curl.
+    node -e "fetch(process.argv[1]).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" "$url" >/dev/null 2>&1
+  fi
+}
+
 health_check() {
   info "等待服务启动..."
-  for i in $(seq 1 15); do
-    if curl -fsS "http://localhost:${PORT}/api/health" >/dev/null 2>&1; then
+  for _ in $(seq 1 20); do
+    if http_ok "http://127.0.0.1:${PORT}/api/install/status"; then
       ok "服务健康检查通过"
       return
     fi
@@ -253,12 +369,13 @@ write_ctl() {
 # Mortar 管理命令: ./mortarctl.sh {start|stop|restart|status|logs}
 CMD="\$1"
 if [ "$OS" = "linux" ] && command -v systemctl >/dev/null 2>&1; then
+  SUDO=""; [ "\$(id -u)" -eq 0 ] || SUDO="sudo"
   case "\$CMD" in
-    start) sudo systemctl start $SERVICE_NAME ;;
-    stop) sudo systemctl stop $SERVICE_NAME ;;
-    restart) sudo systemctl restart $SERVICE_NAME ;;
-    status) sudo systemctl status $SERVICE_NAME ;;
-    logs) sudo journalctl -u $SERVICE_NAME -f ;;
+    start) \$SUDO systemctl start $SERVICE_NAME ;;
+    stop) \$SUDO systemctl stop $SERVICE_NAME ;;
+    restart) \$SUDO systemctl restart $SERVICE_NAME ;;
+    status) \$SUDO systemctl status $SERVICE_NAME ;;
+    logs) \$SUDO journalctl -u $SERVICE_NAME -f ;;
     *) echo "用法: \$0 {start|stop|restart|status|logs}" ;;
   esac
 else
