@@ -429,9 +429,40 @@ run_upgrade() {
   build_all
   setup_env
   upgrade_restart
+  print_completion upgrade
+}
+
+# ---------- 完成提示 ----------
+print_completion() {
+  local mode="${1:-install}"
   echo ""
-  ok "升级完成（目录: ${INSTALL_DIR}）"
-  warn "如页面仍是旧版，请强制刷新浏览器缓存（Ctrl/Cmd+Shift+R）。"
+  if [ "$mode" = "upgrade" ]; then
+    echo "  ┌─────────────────────────────────────────────────────────┐"
+    echo "  │  ✅ 升级完成！                                          │"
+    echo "  │                                                         │"
+    echo "  │  后台管理:  http://localhost:${PORT}/admin              │"
+    echo "  │  网站首页:  http://localhost:${PORT}                    │"
+    echo "  │                                                         │"
+    echo "  │  目录:      ${INSTALL_DIR}"
+    echo "  └─────────────────────────────────────────────────────────┘"
+    echo ""
+    warn "若上面未自动重启服务，请按提示重启现有进程，升级才会生效。"
+    warn "页面仍是旧版时，请强制刷新浏览器缓存（Ctrl/Cmd+Shift+R）。"
+    return
+  fi
+  echo "  ┌─────────────────────────────────────────────────────────┐"
+  echo "  │  ✅ 安装完成！                                          │"
+  echo "  │                                                         │"
+  echo "  │  后台管理:  http://localhost:${PORT}/admin              │"
+  echo "  │  网站首页:  http://localhost:${PORT}                    │"
+  echo "  │  安装向导:  http://localhost:${PORT}/install （首次）   │"
+  echo "  │                                                         │"
+  echo "  │  管理命令:  ${INSTALL_DIR}/mortarctl.sh {start|stop|restart|status|logs}"
+  echo "  │  数据库:    SQLite（默认，零配置）                      │"
+  echo "  │             其他: export DATABASE_URL=mysql://...       │"
+  echo "  └─────────────────────────────────────────────────────────┘"
+  echo ""
+  warn "提示：首次访问 /install 完成向导后，到【AI 设置】配置模型服务商即可使用 AI 助理。"
 }
 
 # ---------- 主流程 ----------
@@ -458,21 +489,7 @@ main() {
   setup_env
   setup_service
   health_check
-
-  echo ""
-  echo "  ┌─────────────────────────────────────────────────────────┐"
-  echo "  │  ✅ 安装完成！                                          │"
-  echo "  │                                                         │"
-  echo "  │  后台管理:  http://localhost:${PORT}/admin              │"
-  echo "  │  网站首页:  http://localhost:${PORT}                    │"
-  echo "  │  安装向导:  http://localhost:${PORT}/install （首次）   │"
-  echo "  │                                                         │"
-  echo "  │  管理命令:  ${INSTALL_DIR}/mortarctl.sh {start|stop|restart|status|logs}"
-  echo "  │  数据库:    SQLite（默认，零配置）                      │"
-  echo "  │             其他: export DATABASE_URL=mysql://...       │"
-  echo "  └─────────────────────────────────────────────────────────┘"
-  echo ""
-  warn "提示：首次访问 /install 完成向导后，到【AI 设置】配置模型服务商即可使用 AI 助理。"
+  print_completion install
 }
 
 main
