@@ -10,6 +10,7 @@ import { slugify, uniqueSlug } from '../utils/slug';
 import { applyFilters, doAction } from '../utils/hooks';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 import { sanitizeCssText } from '../utils/sanitize';
+import { siteFilterClause } from '../utils/siteFilter';
 import { trackView } from '../utils/views';
 
 const router = Router();
@@ -332,14 +333,18 @@ router.get('/admin', authenticate, authorize('admin', 'editor', 'author'), (req:
     const searchLike = search ? '%' + search + '%' : '';
     const searchClause = search ? ' AND (title LIKE ? OR excerpt LIKE ? OR content LIKE ?)' : '';
     if (search) { sql += searchClause; params.push(searchLike, searchLike, searchLike); }
+    // Optional admin site filter (all / global / a specific site)
+    const sf = siteFilterClause(req.query.siteId);
+    sql += sf.clause; params.push(...sf.params);
     sql += ' ORDER BY sticky DESC, ' + sortCol + ' ' + sortDir + ' LIMIT ? OFFSET ?';
     params.push(limit, (page - 1) * limit);
     const postsData = db.prepare(sql).all(...params) as any[];
-    const cntSql = 'SELECT COUNT(*) as cnt FROM Post WHERE type = ?' + (req.user!.role === 'author' ? ' AND authorId = ?' : '') + (status ? ' AND status = ?' : '') + searchClause;
+    const cntSql = 'SELECT COUNT(*) as cnt FROM Post WHERE type = ?' + (req.user!.role === 'author' ? ' AND authorId = ?' : '') + (status ? ' AND status = ?' : '') + searchClause + sf.clause;
     const cntParams: any[] = ['post'];
     if (req.user!.role === 'author') cntParams.push(req.user!.userId);
     if (status) cntParams.push(status);
     if (search) cntParams.push(searchLike, searchLike, searchLike);
+    cntParams.push(...sf.params);
     const total = (db.prepare(cntSql).get(...cntParams) as any)?.cnt || 0;
     res.json({ posts: enrichPosts(postsData), total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }

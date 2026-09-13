@@ -2,18 +2,39 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Plus, Edit2, Trash2, FileText, Eye } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
+import Select from '../components/Select';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 
 export default function Pages() {
   const [pages, setPages] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
-  useEffect(() => { api.get('/pages').then(r => { setPages(r.data); setLoaded(true); }).catch(() => setLoaded(true)); }, []);
+  const [sites, setSites] = useState<any[]>([]);
+  const [siteFilter, setSiteFilter] = useState('all');
+  // Site column/filter only make sense once more than one site exists.
+  const multiSite = sites.length > 1;
+  const siteName = (id: string | null) => (id ? (sites.find((s: any) => s.id === id)?.name || id) : t('global (all sites)', getLang()));
+  useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); }, []);
+  useEffect(() => {
+    setLoaded(false);
+    api.get('/pages?siteId=' + encodeURIComponent(siteFilter)).then(r => { setPages(r.data); setLoaded(true); }).catch(() => setLoaded(true));
+  }, [siteFilter]);
   async function del(id: string) { if (!confirm(t('delete this page', getLang()))) return; await api.delete(`/pages/${id}`); setPages(pages.filter((p: any) => p.id !== id)); }
   return React.createElement('div', null,
-    React.createElement('div', { className: 'flex items-center justify-between mb-6' },
+    React.createElement('div', { className: 'flex items-center justify-between mb-6 gap-3' },
       React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('pages', getLang())),
-      React.createElement(Link, { to: '/pages/new', className: 'btn-primary' }, React.createElement(Plus, { size: 16 }), t('new page', getLang()))
+      React.createElement('div', { className: 'flex items-center gap-3' },
+        multiSite && React.createElement(Select, {
+          value: siteFilter,
+          onChange: (v: string) => setSiteFilter(v),
+          className: 'input-field w-40 text-sm',
+        },
+          React.createElement('option', { value: 'all' }, t('all sites', getLang())),
+          React.createElement('option', { value: 'global' }, t('global (all sites)', getLang())),
+          sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name))
+        ),
+        React.createElement(Link, { to: '/pages/new', className: 'btn-primary' }, React.createElement(Plus, { size: 16 }), t('new page', getLang()))
+      )
     ),
     !loaded ? React.createElement('p', { className: 'text-gray-500' }, t('loading...', getLang()))
     : pages.length === 0 ? React.createElement(EmptyState, {
@@ -27,6 +48,7 @@ export default function Pages() {
           React.createElement('thead', null, React.createElement('tr', { className: 'border-b border-gray-200 bg-gray-50' },
             React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('title', getLang())),
             React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('status', getLang())),
+            multiSite && React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('site', getLang())),
             React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('comments', getLang())),
             React.createElement('th', { className: 'text-left px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('order', getLang())),
             React.createElement('th', { className: 'text-right px-4 py-3 text-xs font-medium text-gray-500 uppercase' }, t('actions', getLang())),
@@ -39,6 +61,7 @@ export default function Pages() {
                 const cls = isPwd ? 'bg-purple-100 text-purple-700' : p.status === 'published' ? 'bg-green-100 text-green-700' : p.status === 'private' ? 'bg-gray-100 text-gray-600' : 'bg-yellow-100 text-yellow-700';
                 return React.createElement('span', { className: `px-2 py-1 text-xs rounded-full font-medium ${cls}` }, isPwd ? t('password protected', getLang()) : t(p.status, getLang()));
               })()),
+              multiSite && React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, siteName(p.siteId)),
               React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, p.commentCount || 0),
               React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, p.menuOrder),
               React.createElement('td', { className: 'px-4 py-3' },

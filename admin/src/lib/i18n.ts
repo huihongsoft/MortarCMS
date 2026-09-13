@@ -1305,6 +1305,7 @@ const zh: Record<string, string> = {
 'invalid 2fa code': '验证码无效，请重试',
 'enter your password to disable 2fa': '请输入账号密码以禁用两步验证',
 '2fa disable failed': '两步验证取消失败，请检查密码是否正确',
+'all sites': '全部站点',
 'search posts': '搜索文章',
 'clear': '清除',
 'no posts match your search': '没有匹配的文章，试试其他关键词',

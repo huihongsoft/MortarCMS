@@ -30,9 +30,12 @@ export default function PageEditor() {
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
   const [visualCss, setVisualCss] = useState('');
   const [saving, setSaving] = useState(false);
+  const [siteId, setSiteId] = useState('');
+  const [sites, setSites] = useState<any[]>([]);
   const createdIdRef = useRef<string | null>(null);
 
-  useEffect(() => { api.get('/pages').then(r => { const all = r.data; setParentPages(all.filter((p: any) => p.id !== id)); if (id) { const p = all.find((x: any) => x.id === id); if (p) { setTitle(p.title); setSlug(p.slug || ''); setContent(p.content); setStatus(p.status === 'published' && p.password ? 'password' : p.status); setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); setPassword(p.password || ''); if (p.featured) setFeatured(p.featured); if (p.excerpt) setExcerpt(p.excerpt); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } } }); api.get('/media').then(r => setMediaItems(r.data.media || [])).catch(() => {}); }, [id]);
+  useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); }, []);
+  useEffect(() => { api.get('/pages').then(r => { const all = r.data; setParentPages(all.filter((p: any) => p.id !== id)); if (id) { const p = all.find((x: any) => x.id === id); if (p) { setTitle(p.title); setSlug(p.slug || ''); setContent(p.content); setStatus(p.status === 'published' && p.password ? 'password' : p.status); setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); setPassword(p.password || ''); if (p.featured) setFeatured(p.featured); if (p.excerpt) setExcerpt(p.excerpt); if (p.siteId) setSiteId(p.siteId); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } } }); api.get('/media').then(r => setMediaItems(r.data.media || [])).catch(() => {}); }, [id]);
 
   // stay=false (publish): navigate to pages; stay=true (draft from the builder):
   // keep editing in place
@@ -44,7 +47,7 @@ export default function PageEditor() {
       // status (published / password-protected / private), falling back to
       // published when the select is still on draft.
       const finalStatus = s === 'draft' ? 'draft' : (status === 'draft' ? 'published' : status);
-      const payload: any = { title, content, status: finalStatus, menuOrder, parentId: parentId || null, password, featured: featured || undefined, excerpt };
+      const payload: any = { title, content, status: finalStatus, menuOrder, parentId: parentId || null, password, featured: featured || undefined, excerpt, siteId: siteId || null };
       if (visualCss) payload.meta = { _visual_css: visualCss };
       const pageId = id || createdIdRef.current;
       if (pageId) await api.put(`/pages/${pageId}`, payload);
@@ -209,6 +212,14 @@ export default function PageEditor() {
             React.createElement('option', { value: 'draft' }, t('draft', getLang())), React.createElement('option', { value: 'published' }, t('published', getLang())), React.createElement('option', { value: 'password' }, t('password protected', getLang())), React.createElement('option', { value: 'private' }, t('private', getLang()))
           ),
           status === 'password' && React.createElement('input', { type: 'password', value: password, onChange: e => setPassword(e.target.value), placeholder: t('password protect this page', getLang()), className: 'input-field mt-2' })
+        ),
+        sites.length > 1 && React.createElement('div', { className: 'card p-4' },
+          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('site', getLang())),
+          React.createElement(Select, { value: siteId, onChange: (v: string) => setSiteId(v), className: 'input-field' },
+            React.createElement('option', { value: '' }, t('global (all sites)', getLang())),
+            sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name + (st.isPrimary === 1 ? ' (primary)' : '')))
+          ),
+          React.createElement('p', { className: 'text-[10px] text-gray-400 mt-1' }, t('posts assigned to a site are only visible on that site\u2019s domain', getLang()))
         ),
         parentPages.length > 0 && React.createElement('div', { className: 'card p-4' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('parent page', getLang())),

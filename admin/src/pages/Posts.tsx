@@ -27,6 +27,12 @@ export default function Posts() {
   const [filter, setFilter] = useState(() => new URLSearchParams(window.location.search).get('status') || '');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [sites, setSites] = useState<any[]>([]);
+  const [siteFilter, setSiteFilter] = useState('all');
+  // Site column/filter only make sense once more than one site exists.
+  const multiSite = sites.length > 1;
+  useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); }, []);
+  const siteName = (id: string | null) => (id ? (sites.find((s: any) => s.id === id)?.name || id) : t('global (all sites)', getLang()));
   // Debounce the search box so we don't hit the API on every keystroke
   useEffect(() => {
     const h = setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 300);
@@ -39,13 +45,20 @@ export default function Posts() {
     window.history.replaceState(null, '', url.toString());
   }, [filter]);
 
-  useEffect(() => { api.get('/posts/admin?limit=1').then(r => setCounts(c => ({...c, all: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=published&limit=1').then(r => setCounts(c => ({...c, published: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=draft&limit=1').then(r => setCounts(c => ({...c, draft: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=pending&limit=1').then(r => setCounts(c => ({...c, pending: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=trash&limit=1').then(r => setCounts(c => ({...c, trash: r.data.total || 0}))).catch(()=>{}); }, []);
-  useEffect(() => { fetchPosts(); }, [page, filter, sortBy, sortDir, search]);
+  useEffect(() => {
+    const sf = '&siteId=' + encodeURIComponent(siteFilter);
+    api.get('/posts/admin?limit=1' + sf).then(r => setCounts(c => ({...c, all: r.data.total || 0}))).catch(()=>{});
+    api.get('/posts/admin?status=published&limit=1' + sf).then(r => setCounts(c => ({...c, published: r.data.total || 0}))).catch(()=>{});
+    api.get('/posts/admin?status=draft&limit=1' + sf).then(r => setCounts(c => ({...c, draft: r.data.total || 0}))).catch(()=>{});
+    api.get('/posts/admin?status=pending&limit=1' + sf).then(r => setCounts(c => ({...c, pending: r.data.total || 0}))).catch(()=>{});
+    api.get('/posts/admin?status=trash&limit=1' + sf).then(r => setCounts(c => ({...c, trash: r.data.total || 0}))).catch(()=>{});
+  }, [siteFilter]);
+  useEffect(() => { fetchPosts(); }, [page, filter, sortBy, sortDir, search, siteFilter]);
 
   async function fetchPosts() {
     setLoading(true);
     try {
-      const q = `/posts/admin?page=${page}&limit=15&status=${filter}&sortBy=${sortBy}&sortDir=${sortDir}${search ? '&search=' + encodeURIComponent(search) : ''}`;
+      const q = `/posts/admin?page=${page}&limit=15&status=${filter}&sortBy=${sortBy}&sortDir=${sortDir}${search ? '&search=' + encodeURIComponent(search) : ''}&siteId=${encodeURIComponent(siteFilter)}`;
       const r = await api.get(q); setPosts(r.data.posts); setTotal(r.data.total);
     } catch {} finally { setLoading(false); }
   }
@@ -182,6 +195,16 @@ export default function Posts() {
   
       React.createElement('button', { key: s, onClick: () => { setFilter(s === 'all' ? '' : s); setPage(1); }, className: `px-3 py-1.5 text-sm rounded-lg whitespace-nowrap ${(s === 'all' && !filter) || filter === s ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}` }, t(s, getLang()))
       ),
+      // Site filter (only when more than one site exists)
+      multiSite && React.createElement(Select, {
+        value: siteFilter,
+        onChange: (v: string) => { setSiteFilter(v); setPage(1); },
+        className: 'input-field w-40 text-sm',
+      },
+        React.createElement('option', { value: 'all' }, t('all sites', getLang())),
+        React.createElement('option', { value: 'global' }, t('global (all sites)', getLang())),
+        sites.map((st: any) => React.createElement('option', { key: st.id, value: st.id }, st.name))
+      ),
       // Search box (fuzzy match on title/excerpt/content), pinned to the right
       React.createElement('div', { className: 'ml-auto relative' },
         React.createElement(Search, { size: 15, className: 'absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none' }),
@@ -213,6 +236,7 @@ export default function Posts() {
             React.createElement('th', { className: 'text-left px-5 py-4 text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700', onClick: () => { setSortBy('title'); setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); } }, t('title', getLang()) + (sortBy === 'title' ? (sortDir === 'asc' ? ' \u2191' : ' \u2193') : '')),
             React.createElement('th', { className: 'text-left px-5 py-4 text-xs font-medium text-gray-500 uppercase' }, t('author', getLang())),
             React.createElement('th', { className: 'text-left px-5 py-4 text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700', onClick: () => { setSortBy('status'); setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); } }, t('status', getLang()) + (sortBy === 'status' ? (sortDir === 'asc' ? ' \u2191' : ' \u2193') : '')),
+            multiSite && React.createElement('th', { className: 'text-left px-5 py-4 text-xs font-medium text-gray-500 uppercase' }, t('site', getLang())),
             React.createElement('th', { className: 'text-left px-5 py-4 text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700', onClick: () => { setSortBy('views'); setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); } }, t('views', getLang()) + (sortBy === 'views' ? (sortDir === 'asc' ? ' \u2191' : ' \u2193') : '')),
             React.createElement('th', { className: 'text-left px-5 py-4 text-xs font-medium text-gray-500 uppercase cursor-pointer hover:text-gray-700', onClick: () => { setSortBy('createdAt'); setSortDir(sortDir === 'asc' ? 'desc' : 'asc'); } }, t('date', getLang()) + (sortBy === 'createdAt' ? (sortDir === 'asc' ? ' \u2191' : ' \u2193') : '')),
             React.createElement('th', { className: 'text-left px-3 py-4 text-xs font-medium text-gray-500 uppercase w-8' }, React.createElement('input', { type: 'checkbox', onChange: (e: React.ChangeEvent<HTMLInputElement>) => { if (e.target.checked) setSelected(new Set(posts.map((p: any) => p.id))); else setSelected(new Set()); } })),
@@ -224,6 +248,7 @@ export default function Posts() {
               React.createElement('td', { className: 'px-5 py-4' }, React.createElement('div', { className: 'flex items-center gap-2' }, p.featured ? React.createElement('img', { src: p.featured, alt: '', className: 'w-8 h-8 object-cover rounded' }) : React.createElement('div', { className: 'w-8 h-8 bg-gray-100 rounded flex items-center justify-center' }, React.createElement('span', { className: 'text-xs text-gray-400' }, 'IMG')), React.createElement('span', { className: 'font-medium text-gray-900' }, p.title))),
               React.createElement('td', { className: 'px-5 py-4 text-sm text-gray-500' }, p.author?.username),
               React.createElement('td', { className: 'px-5 py-4' }, React.createElement('span', { className: 'flex items-center gap-1.5' }, p.password ? React.createElement('span', { className: 'text-xs text-gray-400', title: t('password protected', getLang()) }, '\u{1F512}') : null, p.sticky ? React.createElement(Pin, { size: 12, className: 'text-orange-500' }) : null, React.createElement('span', { className: `px-2 py-1 text-xs rounded-full font-medium ${p.status === 'published' ? 'bg-green-100 text-green-700' : p.status === 'draft' ? 'bg-yellow-100 text-yellow-700' : p.status === 'pending' ? 'bg-amber-100 text-amber-700' : p.status === 'trash' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}` }, t(p.status, getLang())))),
+              multiSite && React.createElement('td', { className: 'px-5 py-4 text-sm text-gray-500' }, siteName(p.siteId)),
               React.createElement('td', { className: 'px-5 py-4 text-sm text-gray-500' }, p.views || 0),
               // Date column: published date for published posts, creation date
               // for drafts (never the literal word "draft")

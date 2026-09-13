@@ -8,6 +8,7 @@ import { SiteRequest } from '../middleware/site';
 import { uniqueSlug } from '../utils/slug';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 import { sanitizeCssText } from '../utils/sanitize';
+import { siteFilterClause } from '../utils/siteFilter';
 
 const router = Router();
 // Protected-page password guessing is brute-forced per IP
@@ -19,7 +20,7 @@ const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeader
 function sanitizeVisualCss(css: string): string {
   return sanitizeCssText(css);
 }
-const pageSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'password', 'trash']).optional(), password: z.string().optional(), featured: z.string().optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), meta: z.record(z.string(), z.string()).optional() });
+const pageSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'password', 'trash']).optional(), password: z.string().optional(), featured: z.string().optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), meta: z.record(z.string(), z.string()).optional() });
 
 // 'password' status means "published but password protected" (WordPress style):
 // store it as status='published' + a non-empty password field.
@@ -119,10 +120,11 @@ router.post('/slug/:slug/password', passwordLimiter, (req: AuthRequest, res: Res
 
 router.get('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
   try {
+    const sf = siteFilterClause(req.query.siteId, 'p.siteId');
     const pages = db.prepare(`
       SELECT p.*, (SELECT COUNT(*) FROM Comment c WHERE c.postId = p.id AND c.status = 'approved') AS commentCount
-      FROM Post p WHERE p.type = ? ORDER BY p.menuOrder ASC
-    `).all('page') as any[];
+      FROM Post p WHERE p.type = ?${sf.clause} ORDER BY p.menuOrder ASC
+    `).all('page', ...sf.params) as any[];
     // Batch author + meta lookup (one query each, not one per page)
     const ids = pages.map((p: any) => p.id);
     const qmarks = ids.map(() => '?').join(',');
@@ -150,7 +152,7 @@ router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, 
     const id = cuid();
     const { status: storeStatus, password: storePassword } = normalizePage(data);
     withTransaction(() => {
-      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, featured, status, password, type, authorId, parentId, menuOrder, publishedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', data.featured || null, storeStatus, storePassword, 'page', req.user!.userId, data.parentId || null, data.menuOrder || 0, storeStatus === 'published' ? new Date().toISOString() : null);
+      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, featured, status, password, type, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', data.featured || null, storeStatus, storePassword, 'page', req.user!.userId, data.parentId || null, data.menuOrder || 0, storeStatus === 'published' ? new Date().toISOString() : null, data.siteId || null);
       if (data.meta) {
         for (const [key, value] of Object.entries(data.meta)) {
           db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
@@ -180,6 +182,7 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest
     }
     if (data.parentId !== undefined) { sets.push('parentId = ?'); vals.push(data.parentId); }
     if (data.menuOrder !== undefined) { sets.push('menuOrder = ?'); vals.push(data.menuOrder); }
+    if (data.siteId !== undefined) { sets.push('siteId = ?'); vals.push(data.siteId || null); }
     withTransaction(() => {
       if (data.meta) {
         db.prepare('DELETE FROM PostMeta WHERE postId = ?').run(req.params.id);

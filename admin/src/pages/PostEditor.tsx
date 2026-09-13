@@ -103,6 +103,12 @@ export default function PostEditor() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // New posts default to the site currently being browsed (multi-site only);
+  // the editor still offers "global (all sites)" explicitly.
+  useEffect(() => {
+    if (id || sites.length <= 1) return;
+    api.get('/sites/current').then(r => { if (r.data?.id) setSiteId(r.data.id); }).catch(() => {});
+  }, [id, sites.length]);
   useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); api.get('/users').then(r => setUsers(r.data)).catch(() => {});
     api.get('/categories').then(r => setCategories(r.data)); api.get('/media').then(r => setMediaItems(r.data.media || []));
     api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])).catch(() => {});
