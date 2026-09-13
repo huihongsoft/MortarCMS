@@ -9,6 +9,7 @@
 #
 #  可选参数:
 #     bash install.sh --port 8080 --dir /opt/mortar --no-service
+#     bash install.sh --upgrade        # 就地升级：更新依赖+重新构建，不新建服务
 #
 #  环境变量:
 #     MORTAR_PORT   监听端口（默认 3001）
@@ -33,6 +34,7 @@ REPO_TARBALL="https://codeload.github.com/huihongsoft/MortarCMS/tar.gz/refs/head
 PORT="${MORTAR_PORT:-3001}"
 INSTALL_DIR="${MORTAR_DIR:-}"
 SERVICE=1
+UPGRADE=0
 SERVICE_NAME="mortar"
 # Match package.json "engines": { "node": ">=20" } and the docs.
 NODE_MIN=20
@@ -46,8 +48,9 @@ while [[ $# -gt 0 ]]; do
       [ $# -ge 2 ] || err "--dir 需要一个目录"
       INSTALL_DIR="$2"; shift 2 ;;
     --no-service) SERVICE=0; shift ;;
+    --upgrade) UPGRADE=1; shift ;;
     -h|--help)
-      echo "用法: $0 [--port 8080] [--dir /opt/mortar] [--no-service]"; exit 0 ;;
+      echo "用法: $0 [--port 8080] [--dir /opt/mortar] [--no-service] [--upgrade]"; exit 0 ;;
     *) shift ;;
   esac
 done
@@ -393,6 +396,44 @@ EOF
   ok "管理命令已生成: $INSTALL_DIR/mortarctl.sh"
 }
 
+# ---------- 升级模式 ----------
+# In-place upgrade: update dependencies + rebuild, then restart the EXISTING
+# service. Never creates a new systemd unit, so it is safe on a server that
+# already runs Mortar (BT panel / manual / docker).
+upgrade_restart() {
+  if [ "$OS" = "linux" ] && have systemctl && as_root systemctl cat "$SERVICE_NAME" >/dev/null 2>&1; then
+    info "重启 systemd 服务: $SERVICE_NAME"
+    as_root systemctl restart "$SERVICE_NAME"
+    health_check
+    return
+  fi
+  warn "未发现 systemd 服务「${SERVICE_NAME}」，未自动重启。请用你现有的方式重启："
+  echo "  宝塔/面板 Node 项目：在面板点“重启”，或手动执行："
+  echo "    pkill -f '${INSTALL_DIR}/server'; cd ${INSTALL_DIR}/server && npm run dev"
+  echo "  生产模式（构建产物）："
+  echo "    pkill -f '${INSTALL_DIR}/server/dist'; cd ${INSTALL_DIR}/server && NODE_ENV=production PORT=${PORT} node dist/index.js"
+}
+
+run_upgrade() {
+  detect_os
+  check_prereq
+  if [ -z "$INSTALL_DIR" ]; then
+    if [ -f "./server/package.json" ]; then INSTALL_DIR="$(pwd)"; else
+      err "--upgrade 需要在 Mortar 源码目录运行，或加 --dir 指定目录"
+    fi
+  fi
+  cd "$INSTALL_DIR"
+  [ -f "./server/package.json" ] || err "未找到 Mortar 源码: ${INSTALL_DIR}"
+  info "升级模式：更新依赖并重新构建（不会新建/覆盖服务）"
+  install_deps
+  build_all
+  setup_env
+  upgrade_restart
+  echo ""
+  ok "升级完成（目录: ${INSTALL_DIR}）"
+  warn "如页面仍是旧版，请强制刷新浏览器缓存（Ctrl/Cmd+Shift+R）。"
+}
+
 # ---------- 主流程 ----------
 main() {
   echo ""
@@ -409,6 +450,7 @@ main() {
 
   detect_os
   check_prereq
+  if [ "$UPGRADE" = "1" ]; then run_upgrade; return; fi
   prepare_source
   install_deps
   build_all

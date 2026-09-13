@@ -6,10 +6,12 @@
 curl -fsSL https://raw.githubusercontent.com/huihongsoft/MortarCMS/main/install.sh | bash
 ```
 
-The script handles: OS/architecture detection (Linux/macOS), Node.js ≥ 22
+The script handles: OS/architecture detection (Linux/macOS) with the correct
+package-manager hints (apt/dnf/yum/zypper/pacman/apk/brew), Node.js ≥ 20
 checks, dependency installation (with npm-cache fallback), building admin /
 frontend / ESM / theme bundles / server, registering a **systemd** service
 (Linux) or **launchd** agent (macOS) with auto-restart, and a health check.
+`git` is optional — without it the source is downloaded as a tarball.
 
 Options:
 
@@ -24,6 +26,20 @@ Service management:
 ```bash
 ./mortarctl.sh {start|stop|restart|status|logs}   # or: systemctl ... mortar
 ```
+
+## ⬆️ Upgrading an existing install
+
+Re-run the installer in **upgrade mode** from the source directory — it
+updates dependencies, rebuilds, and restarts the existing service without
+creating a conflicting one:
+
+```bash
+cd /path/to/mortar
+curl -fsSL https://raw.githubusercontent.com/huihongsoft/MortarCMS/main/install.sh | bash -s -- --upgrade
+```
+
+If the site is not managed by systemd (e.g. a panel that runs `npm run dev`),
+the upgrade prints the exact restart command instead of restarting for you.
 
 ## 🐳 Docker
 
