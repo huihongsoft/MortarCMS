@@ -328,15 +328,18 @@ router.get('/admin', authenticate, authorize('admin', 'editor', 'author'), (req:
     const params: any[] = ['post'];
     if (req.user!.role === 'author') { sql += ' AND authorId = ?'; params.push(req.user!.userId); }
     if (status) { sql += ' AND status = ?'; params.push(status); }
-    if (search) { sql += ' AND title LIKE ?'; params.push('%' + search + '%'); }
+    // Fuzzy search across the fields an editor recognises an article by.
+    const searchLike = search ? '%' + search + '%' : '';
+    const searchClause = search ? ' AND (title LIKE ? OR excerpt LIKE ? OR content LIKE ?)' : '';
+    if (search) { sql += searchClause; params.push(searchLike, searchLike, searchLike); }
     sql += ' ORDER BY sticky DESC, ' + sortCol + ' ' + sortDir + ' LIMIT ? OFFSET ?';
     params.push(limit, (page - 1) * limit);
     const postsData = db.prepare(sql).all(...params) as any[];
-    const cntSql = 'SELECT COUNT(*) as cnt FROM Post WHERE type = ?' + (req.user!.role === 'author' ? ' AND authorId = ?' : '') + (status ? ' AND status = ?' : '') + (search ? ' AND title LIKE ?' : '');
+    const cntSql = 'SELECT COUNT(*) as cnt FROM Post WHERE type = ?' + (req.user!.role === 'author' ? ' AND authorId = ?' : '') + (status ? ' AND status = ?' : '') + searchClause;
     const cntParams: any[] = ['post'];
     if (req.user!.role === 'author') cntParams.push(req.user!.userId);
     if (status) cntParams.push(status);
-    if (search) cntParams.push('%' + search + '%');
+    if (search) cntParams.push(searchLike, searchLike, searchLike);
     const total = (db.prepare(cntSql).get(...cntParams) as any)?.cnt || 0;
     res.json({ posts: enrichPosts(postsData), total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }

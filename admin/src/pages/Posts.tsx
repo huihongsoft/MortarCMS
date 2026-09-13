@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Trash2, Eye, Pin, Trash, Copy, FileText, Languages } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, Pin, Trash, Copy, FileText, Languages, Search, X } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { useToast } from '../lib/toast';
 import api from '../lib/api';
@@ -25,6 +25,13 @@ export default function Posts() {
   const [sortDir, setSortDir] = useState('desc');
   const [counts, setCounts] = useState<Record<string,number>>({});
   const [filter, setFilter] = useState(() => new URLSearchParams(window.location.search).get('status') || '');
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
+  // Debounce the search box so we don't hit the API on every keystroke
+  useEffect(() => {
+    const h = setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 300);
+    return () => clearTimeout(h);
+  }, [searchInput]);
   // Keep the status filter in the URL so dashboard links land on the right list
   useEffect(() => {
     const url = new URL(window.location.href);
@@ -33,11 +40,14 @@ export default function Posts() {
   }, [filter]);
 
   useEffect(() => { api.get('/posts/admin?limit=1').then(r => setCounts(c => ({...c, all: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=published&limit=1').then(r => setCounts(c => ({...c, published: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=draft&limit=1').then(r => setCounts(c => ({...c, draft: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=pending&limit=1').then(r => setCounts(c => ({...c, pending: r.data.total || 0}))).catch(()=>{}); api.get('/posts/admin?status=trash&limit=1').then(r => setCounts(c => ({...c, trash: r.data.total || 0}))).catch(()=>{}); }, []);
-  useEffect(() => { fetchPosts(); }, [page, filter, sortBy, sortDir]);
+  useEffect(() => { fetchPosts(); }, [page, filter, sortBy, sortDir, search]);
 
   async function fetchPosts() {
     setLoading(true);
-    try { const r = await api.get(`/posts/admin?page=${page}&limit=15&status=${filter}&sortBy=${sortBy}&sortDir=${sortDir}`); setPosts(r.data.posts); setTotal(r.data.total); } catch {} finally { setLoading(false); }
+    try {
+      const q = `/posts/admin?page=${page}&limit=15&status=${filter}&sortBy=${sortBy}&sortDir=${sortDir}${search ? '&search=' + encodeURIComponent(search) : ''}`;
+      const r = await api.get(q); setPosts(r.data.posts); setTotal(r.data.total);
+    } catch {} finally { setLoading(false); }
   }
 
   async function deletePost(id: string) { if (!confirm(t('delete this post', getLang()))) return; await api.delete(`/posts/${id}`); fetchPosts(); }
@@ -171,13 +181,30 @@ export default function Posts() {
         
   
       React.createElement('button', { key: s, onClick: () => { setFilter(s === 'all' ? '' : s); setPage(1); }, className: `px-3 py-1.5 text-sm rounded-lg whitespace-nowrap ${(s === 'all' && !filter) || filter === s ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}` }, t(s, getLang()))
+      ),
+      // Search box (fuzzy match on title/excerpt/content), pinned to the right
+      React.createElement('div', { className: 'ml-auto relative' },
+        React.createElement(Search, { size: 15, className: 'absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none' }),
+        React.createElement('input', {
+          value: searchInput,
+          onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSearchInput(e.target.value),
+          placeholder: t('search posts', getLang()),
+          'aria-label': t('search posts', getLang()),
+          className: 'pl-9 pr-8 py-2 w-56 text-sm rounded-lg border border-gray-300 bg-white text-gray-700 focus:outline-none focus:ring-2 focus:ring-primary-500/30 focus:border-primary-500',
+        }),
+        searchInput && React.createElement('button', {
+          onClick: () => setSearchInput(''),
+          title: t('clear', getLang()),
+          'aria-label': t('clear', getLang()),
+          className: 'absolute right-2 top-1/2 -translate-y-1/2 p-1 text-gray-400 hover:text-gray-600',
+        }, React.createElement(X, { size: 14 }))
       )
     ),
     loading ? React.createElement('p', { className: 'text-gray-500' }, t('loading', getLang()))
     : posts.length === 0 ? React.createElement(EmptyState, {
         icon: FileText,
         title: t('no posts found', getLang()),
-        description: t('start writing and share your first post', getLang()),
+        description: search ? t('no posts match your search', getLang()) : t('start writing and share your first post', getLang()),
         action: React.createElement('button', { onClick: () => navigate('/posts/new'), className: 'btn-primary text-sm' }, React.createElement(Plus, { size: 15 }), t('new post', getLang())),
       })
     : React.createElement('div', { className: 'card overflow-x-auto' },

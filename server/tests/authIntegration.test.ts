@@ -144,6 +144,22 @@ describe('authorization', () => {
   });
 });
 
+describe('admin post search', () => {
+  it('fuzzy-matches a title substring', async () => {
+    const r = await fetch(base + '/posts/admin?search=Hello', { headers: bearer(tokens.admin) });
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.posts.some((p: any) => p.title === 'Hello')).toBe(true);
+    expect(body.total).toBeGreaterThanOrEqual(1);
+  });
+
+  it('returns no results for a non-matching query', async () => {
+    const r = await fetch(base + '/posts/admin?search=zzzznomatch', { headers: bearer(tokens.admin) });
+    expect(r.status).toBe(200);
+    expect((await r.json()).total).toBe(0);
+  });
+});
+
 describe('app passwords', () => {
   it('authenticates a full-scope app password', async () => {
     const r = await fetch(base + '/auth/me', { headers: appToken(tokens.RAW_FULL) });
