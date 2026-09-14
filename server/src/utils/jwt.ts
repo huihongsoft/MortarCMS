@@ -87,9 +87,9 @@ export function signToken(payload: { userId: string; role: string; type?: string
   return jwt.sign(payload, loadSecret(), { expiresIn });
 }
 
-export function verifyToken(token: string): { userId: string; role: string; type?: string; v?: number } | null {
+export function verifyToken(token: string): { userId: string; role: string; type?: string; v?: number; exp?: number } | null {
   try {
-    return jwt.verify(token, loadSecret(), { algorithms: ['HS256'] }) as { userId: string; role: string; type?: string; v?: number };
+    return jwt.verify(token, loadSecret(), { algorithms: ['HS256'] }) as { userId: string; role: string; type?: string; v?: number; exp?: number };
   } catch {
     return null;
   }

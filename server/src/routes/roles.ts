@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import db, { cuid } from '../utils/db';
-import { authenticate, requireCap, AuthRequest, invalidateRoleCache, getAllRoles } from '../middleware/auth';
+import { authenticate, requireCap, AuthRequest, invalidateRoleCache, getAllRoles, getRoleCapabilities } from '../middleware/auth';
 
 const router = Router();
 
@@ -83,11 +83,23 @@ router.get('/', authenticate, requireCap('manage_roles'), (req: AuthRequest, res
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Capability editing is a privilege boundary: a manager must not be able to grant
+// more than they hold. Without this, any role carrying `manage_roles` could write
+// capabilities: ['*'] onto the role it already has and become a full admin.
+function grantsWithinCaller(callerRole: string, requested: string[]): boolean {
+  const own = getRoleCapabilities(callerRole);
+  if (own.includes('*')) return true;
+  return requested.every(c => own.includes(c));
+}
+
 // Create a custom role
 router.post('/', authenticate, requireCap('manage_roles'), (req: AuthRequest, res: Response) => {
   try {
     const { name, capabilities } = req.body || {};
     if (!name || !String(name).trim()) { res.status(400).json({ error: '角色名称必填' }); return; }
+    if (Array.isArray(capabilities) && !grantsWithinCaller(req.user!.role, capabilities.map(String))) {
+      res.status(403).json({ error: '不能授予超出你自身权限范围的能力' }); return;
+    }
     const slug = String(name).trim().toLowerCase().replace(/[^a-z0-9-_]+/g, '-').replace(/^-+|-+$/g, '') || 'role-' + Date.now();
     if (db.prepare('SELECT id FROM Role WHERE slug = ?').get(slug)) { res.status(400).json({ error: '角色标识已存在: ' + slug }); return; }
     const caps = Array.isArray(capabilities) ? capabilities.map(String) : [];
@@ -109,6 +121,7 @@ router.put('/:slug', authenticate, requireCap('manage_roles'), (req: AuthRequest
     if (Array.isArray(capabilities)) {
       // admin always keeps full access
       const caps = existing.slug === 'admin' ? ['*'] : capabilities.map(String);
+      if (!grantsWithinCaller(req.user!.role, caps)) { res.status(403).json({ error: '不能授予超出你自身权限范围的能力' }); return; }
       sets.push('capabilities = ?'); vals.push(JSON.stringify(caps));
     }
     if (sets.length) { vals.push(existing.id); db.prepare('UPDATE Role SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }

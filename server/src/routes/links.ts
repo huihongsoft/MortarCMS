@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, resolveOptionalUser, getRoleCapabilities, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { slugify } from '../utils/slug';
 
@@ -58,10 +58,15 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// A valid Bearer token means an admin request (management view shows all
-// sites' links); anything else is a public visitor filtered by site.
+// The management view (all sites' links, including inactive ones) is for callers
+// that can manage links — the write routes below require `manage_options`.
+// Merely being logged in must not unlock it: a subscriber token used to bypass
+// the site filter and expose other sites' disabled links.
 function isAdminReq(req: AuthRequest): boolean {
-  return !!resolveOptionalUser(req);
+  const user = resolveOptionalUser(req);
+  if (!user) return false;
+  const caps = getRoleCapabilities(user.role);
+  return caps.includes('*') || caps.includes('manage_options');
 }
 
 // Admin: create link

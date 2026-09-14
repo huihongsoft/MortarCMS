@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import crypto from 'crypto';
 import db, { cuid } from '../utils/db';
-import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { WEBHOOK_EVENTS, deliverTestWebhook } from '../utils/webhooks';
 
 const router = Router();
@@ -15,7 +15,7 @@ function sanitizeEvents(raw: any): string[] | null {
 }
 
 // Admin: list webhooks (secret is never returned — only whether one is set)
-router.get('/admin/webhooks', authenticate, requireCap('manage_options'), (_req: AuthRequest, res: Response) => {
+router.get('/admin/webhooks', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
     const rows = db.prepare('SELECT id, name, url, events, active, lastStatus, lastError, lastSentAt, createdAt FROM Webhook ORDER BY createdAt DESC').all() as any[];
     res.json({ webhooks: rows.map((w: any) => ({ ...w, events: JSON.parse(w.events || '[]'), secretSet: !!w.secret })) });
@@ -23,7 +23,7 @@ router.get('/admin/webhooks', authenticate, requireCap('manage_options'), (_req:
 });
 
 // Admin: create webhook — generates the signing secret, returned exactly once
-router.post('/admin/webhooks', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/admin/webhooks', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const name = String(req.body?.name || '').trim();
     const url = String(req.body?.url || '').trim();
@@ -40,7 +40,7 @@ router.post('/admin/webhooks', authenticate, requireCap('manage_options'), (req:
 });
 
 // Admin: update webhook (name/url/events/active — secret is only reset via /reset-secret)
-router.put('/admin/webhooks/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.put('/admin/webhooks/:id', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Webhook WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Webhook not found' }); return; }
@@ -61,7 +61,7 @@ router.put('/admin/webhooks/:id', authenticate, requireCap('manage_options'), (r
 });
 
 // Admin: delete webhook
-router.delete('/admin/webhooks/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.delete('/admin/webhooks/:id', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const r = db.prepare('DELETE FROM Webhook WHERE id = ?').run(req.params.id);
     if (r.changes === 0) { res.status(404).json({ error: 'Webhook not found' }); return; }
@@ -70,7 +70,7 @@ router.delete('/admin/webhooks/:id', authenticate, requireCap('manage_options'),
 });
 
 // Admin: rotate the signing secret (returns the new one exactly once)
-router.post('/admin/webhooks/:id/reset-secret', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/admin/webhooks/:id/reset-secret', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT id FROM Webhook WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Webhook not found' }); return; }
@@ -81,7 +81,7 @@ router.post('/admin/webhooks/:id/reset-secret', authenticate, requireCap('manage
 });
 
 // Admin: send a test event to verify endpoint + signature
-router.post('/admin/webhooks/:id/test', authenticate, requireCap('manage_options'), async (req: AuthRequest, res: Response) => {
+router.post('/admin/webhooks/:id/test', authenticate, authorize('admin'), async (req: AuthRequest, res: Response) => {
   try {
     const result = await deliverTestWebhook(req.params.id);
     if (result.error === 'Unknown webhook') { res.status(404).json({ error: 'Webhook not found' }); return; }

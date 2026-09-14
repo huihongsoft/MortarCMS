@@ -1,5 +1,6 @@
 import { addAction } from '../../src/utils/hooks';
 import db from '../../src/utils/db';
+import { isPrivateIp } from '../../src/utils/ssrf';
 
 // Notify search engines about newly published posts:
 //  - Google & Bing sitemap ping (no configuration required)
@@ -17,6 +18,20 @@ function setting(key: string): string {
 function siteUrl(): string {
   const url = setting('site_url');
   return url ? url.replace(/\/$/, '') : '';
+}
+
+// The installer fills site_url in from the address the wizard was reached at, so
+// a local install has a localhost/private value. Announcing that to search
+// engines is wrong (and noisy), so treat a non-public site URL as unconfigured.
+export function isPublicSiteUrl(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    if (host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) return false;
+    // Only an IP literal can be judged here — a hostname would need a DNS lookup.
+    const bare = host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : host;
+    const isIpLiteral = bare.includes(':') || /^\d{1,3}(\.\d{1,3}){3}$/.test(bare);
+    return !(isIpLiteral && isPrivateIp(bare));
+  } catch { return false; }
 }
 
 async function pingGoogleBing(sitemapUrl: string): Promise<void> {
@@ -44,13 +59,17 @@ async function pingBaidu(postUrl: string): Promise<void> {
 export function register() {
   addAction('post_published', async (postId: string) => {
     try {
+      // Documented in the header but previously never read, so the flag had no
+      // effect; honour it now that pings fire by default on a fresh install.
+      if (setting('seo_ping_enabled') === '0') return;
       const base = siteUrl();
-      if (!base) return;
+      if (!base || !isPublicSiteUrl(base)) return;
       const post = db.prepare('SELECT slug, status FROM Post WHERE id = ?').get(postId) as any;
       if (!post || post.status !== 'published' || !post.slug) return;
       // Global ping endpoints don't accept a per-URL payload, so we ping the
-      // sitemap and Baidu push the exact URL.
-      await pingGoogleBing(base + '/sitemap.xml');
+      // sitemap and Baidu push the exact URL. The sitemap route lives under
+      // /api (see index.ts), not at the root.
+      await pingGoogleBing(base + '/api/sitemap.xml');
       await pingBaidu(base + '/post/' + post.slug);
     } catch { /* never break publishing on ping failures */ }
   }, 10, 'search-engine-ping');

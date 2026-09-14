@@ -25,6 +25,8 @@ router.get('/', authenticate, authorize('admin'), (req: AuthRequest, res: Respon
 router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res: Response) => {
   try {
     const data = updateUserSchema.parse(req.body);
+    const existing = db.prepare('SELECT role FROM User WHERE id = ?').get(req.params.id) as any;
+    if (!existing) { res.status(404).json({ error: 'User not found' }); return; }
     const sets: string[] = []; const vals: any[] = [];
     if (data.username !== undefined) { sets.push('username = ?'); vals.push(data.username); }
     if (data.email !== undefined) { sets.push('email = ?'); vals.push(data.email); }
@@ -34,6 +36,13 @@ router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, re
     if (data.password) {
       if (!passwordOk(data.password)) { res.status(400).json({ error: 'Password must be at least 8 characters with letters and numbers' }); return; }
       sets.push('password = ?'); vals.push(await bcrypt.hash(data.password, 12));
+    }
+    // A role change or an admin-set password must revoke existing sessions:
+    // authenticate() trusts the role claim embedded in the JWT, so without this
+    // a demoted admin keeps their old privileges until the token expires
+    // (this also revokes the user's app passwords, which is intended).
+    if ((data.role !== undefined && data.role !== existing.role) || data.password) {
+      sets.push('tokenVersion = tokenVersion + 1');
     }
     if (sets.length > 0) { vals.push(req.params.id); db.prepare('UPDATE User SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
     const user = db.prepare('SELECT id, username, email, role, avatar, bio, createdAt FROM User WHERE id = ?').get(req.params.id) as any;

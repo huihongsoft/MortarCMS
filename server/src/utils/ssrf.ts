@@ -2,6 +2,8 @@
 // addresses and follows redirects manually (default fetch follows them
 // transparently, which would let an external page redirect us into an
 // internal network), re-checking the resolved IP on every hop.
+// Fails closed: an IP literal is classified directly and a hostname that does
+// not resolve is refused, never assumed public.
 // Used by the AI theme-style analyzer and outbound webhook delivery.
 import dns from 'node:dns/promises';
 
@@ -93,8 +95,19 @@ export async function fetchUrlGuarded(url: string, opts: { method?: string; head
       u = new URL(current);
       if (!['http:', 'https:'].includes(u.protocol)) return null;
     } catch { return null; }
-    const addrs = await dns.lookup(u.hostname, { all: true }).catch(() => []);
-    if (addrs.some((a: any) => isPrivateIp(a.address))) return null;
+    // URL.hostname keeps the brackets of an IPv6 literal ("[::1]"), which
+    // dns.lookup cannot resolve — so classify a literal directly instead of
+    // letting a lookup failure fall through to the fetch. Mirrors
+    // plugins/manager.ts assertPublicUrl.
+    const host = u.hostname.toLowerCase().replace(/\.$/, '').replace(/^\[|\]$/g, '');
+    if (!host || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) return null;
+    if (/^[0-9.]+$/.test(host) || host.includes(':')) {
+      if (isPrivateIp(host)) return null;
+    } else {
+      // Fail closed: a name that does not resolve must not be treated as public.
+      const addrs = await dns.lookup(host, { all: true }).catch(() => []);
+      if (addrs.length === 0 || addrs.some((a: any) => isPrivateIp(a.address))) return null;
+    }
     let res: Response;
     try {
       res = await fetch(current, { method, headers: opts.headers, body: method === 'POST' ? opts.body : undefined, redirect: 'manual', signal: AbortSignal.timeout(opts.timeoutMs || 10000) });

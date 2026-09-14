@@ -26,7 +26,9 @@ const groups: { title: string; items: { to: string; icon: any; label: string; ro
       { to: '/tags', icon: TagIcon, label: t('tags', getLang()) },
       { to: '/links', icon: Link2, label: t('links', getLang()) },
       { to: '/forms', icon: ClipboardList, label: t('forms', getLang()) },
-      { to: '/subscribers', icon: Mail, label: t('subscribers', getLang()) },
+      // Subscriber management is admin-only on the server (it exposes the whole
+      // mailing list), so keep the nav entry in step.
+      { to: '/subscribers', icon: Mail, label: t('subscribers', getLang()), role: 'admin' },
     ],
   },
   {

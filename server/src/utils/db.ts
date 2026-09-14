@@ -279,6 +279,15 @@ export function initDB(): void {
       createdAt TEXT NOT NULL
     );
 
+    -- Revoked sessions ("log out" / "log out everywhere"). Persisted so a
+    -- restart cannot resurrect a logged-out token; keyed by a hash so the raw
+    -- token is never stored. Rows are purged once the token would have expired.
+    CREATE TABLE IF NOT EXISTS RevokedToken (
+      hash TEXT PRIMARY KEY,
+      expiresAt TEXT NOT NULL,
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
     CREATE TABLE IF NOT EXISTS Role (
       id TEXT PRIMARY KEY,
       slug TEXT NOT NULL UNIQUE,

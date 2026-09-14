@@ -5,7 +5,7 @@ import { execFileSync } from 'child_process';
 import db, { listSlowQueries, DB_PATH, closeDb } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
-import { assertSafeArchive } from '../utils/archive';
+import { assertArchiveWithinLimits } from '../utils/archive';
 import { UPLOADS_DIR as uploadsDir } from '../utils/paths';
 
 const router = Router();
@@ -169,17 +169,20 @@ router.get('/backup-full', authenticate, authorize('admin'), (_req: AuthRequest,
 });
 
 // Admin: restore a full backup zip (database + uploads)
-router.post('/restore-full', authenticate, authorize('admin'), upload.single('file'), (req: AuthRequest, res: Response) => {
+router.post('/restore-full', authenticate, authorize('admin'), upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return; }
     const tmpDir = path.join(require('os').tmpdir(), 'mortar-restore-' + Date.now());
     fs.mkdirSync(tmpDir, { recursive: true });
-    // Zip-slip guard: reject traversal entries BEFORE anything hits the disk
-    const archiveEntries = assertSafeArchive(req.file.path);
-    // Bound the archive (zip bomb / resource exhaustion): entry count first
-    if (archiveEntries.length > 5000) {
+    // Zip-slip guard plus entry-count and real-expansion limits, all BEFORE
+    // anything hits the disk (previously the size was only measured afterwards,
+    // so a 10MB zip bomb could fill /tmp before being rejected).
+    try {
+      await assertArchiveWithinLimits(req.file.path, { maxEntries: 5000, maxBytes: 1024 * 1024 * 1024 });
+    } catch (e: any) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
-      res.status(400).json({ error: 'Invalid backup: too many file entries' });
+      try { fs.unlinkSync(req.file.path); } catch {}
+      res.status(400).json({ error: 'Invalid backup: ' + e.message });
       return;
     }
     execFileSync('unzip', ['-q', req.file.path, '-d', tmpDir]);

@@ -4,12 +4,19 @@ import api from '../lib/api';
 import useSEO from '../hooks/useSEO';
 import { t } from '../lib/i18n';
 
+// Mirrors normalizeDomainInput in server/src/utils/siteUrl.ts: lowercase, and
+// drop a trailing root dot ("example.com." is the same host as "example.com"
+// but would never equal the Host header).
+function normalizeHost(host: string): string {
+  return host.toLowerCase().replace(/\.+$/, '');
+}
+
 export default function Install() {
   useSEO({ title: t('install mortar'), url: '/install', noindex: true });
   const [step, setStep] = useState(1);
   const [dbType, setDbType] = useState('sqlite');
   const [dbConfig, setDbConfig] = useState({ host: 'localhost', port: '3306', user: 'root', password: '', database: 'mortar' });
-  const [site, setSite] = useState({ siteTitle: '', siteDescription: '', adminUsername: 'admin', adminEmail: '', adminPassword: '' });
+  const [site, setSite] = useState({ siteTitle: '', siteDescription: '', siteUrl: window.location.origin, adminUsername: 'admin', adminEmail: '', adminPassword: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -22,7 +29,26 @@ export default function Install() {
   const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(site.adminEmail.trim());
   const pwOk = site.adminPassword.length >= 8 && site.adminPassword.length <= 128
     && /[A-Za-z]/.test(site.adminPassword) && /\d/.test(site.adminPassword);
-  const canInstall = !!site.siteTitle.trim() && emailOk && pwOk;
+  // Mirrors parseSiteUrl in server/src/utils/siteUrl.ts: an origin only — http(s)
+  // scheme, host, no path. Blank is allowed and keeps the local default.
+  function validSiteUrl(v: string): boolean {
+    const s = v.trim();
+    if (!s) return true;
+    if (/[\s\x00-\x1f\x7f]/.test(s) || !/^https?:\/\//i.test(s)) return false;
+    try {
+      const u = new URL(s);
+      if (u.username || u.password || u.pathname !== '/' || u.search || u.hash || !u.hostname) return false;
+      const host = normalizeHost(u.hostname);
+      if (host.startsWith('[')) return true; // IPv6 literal
+      if (!host || host.length > 253) return false;
+      return host.split('.').every(l => !!l && l.length <= 63 && !l.startsWith('-') && !l.endsWith('-') && /^[a-z0-9_-]+$/.test(l));
+    } catch { return false; }
+  }
+  const siteUrlOk = validSiteUrl(site.siteUrl);
+  const canInstall = !!site.siteTitle.trim() && emailOk && pwOk && siteUrlOk;
+  // Hostname the server will store on the Site row (no scheme, no port).
+  let derivedDomain = '';
+  try { if (siteUrlOk && site.siteUrl.trim()) derivedDomain = normalizeHost(new URL(site.siteUrl.trim()).hostname); } catch { derivedDomain = ''; }
 
   useEffect(() => {
     // If already installed, bounce to the home page
@@ -34,6 +60,7 @@ export default function Install() {
     if (!site.siteTitle.trim()) { setError(t('site title required')); return; }
     if (!emailOk) { setError(t('enter a valid email address')); return; }
     if (!pwOk) { setError(t('password must be at least 8 characters with letters and numbers')); return; }
+    if (!siteUrlOk) { setError(t('enter a valid http(s) url without a path')); return; }
     if (dbType !== 'sqlite' && (!dbConfig.host.trim() || !dbConfig.user.trim() || !dbConfig.database.trim())) {
       setError(t('database host, user and name are required')); return;
     }
@@ -41,7 +68,7 @@ export default function Install() {
     try {
       const r = await api.post('/install', {
         dbType, dbConfig: dbType === 'sqlite' ? undefined : dbConfig,
-        siteTitle: site.siteTitle, siteDescription: site.siteDescription,
+        siteTitle: site.siteTitle, siteDescription: site.siteDescription, siteUrl: site.siteUrl.trim(),
         adminEmail: site.adminEmail, adminPassword: site.adminPassword, adminUsername: site.adminUsername,
         sampleData,
       });
@@ -126,6 +153,14 @@ export default function Install() {
           React.createElement('div', { className: 'space-y-3' },
             React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('site title') + ' *'), React.createElement('input', { value: site.siteTitle, onChange: e => setSite({ ...site, siteTitle: e.target.value }), className: 'input-field', placeholder: t('my mortar site') })),
             React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('site description')), React.createElement('input', { value: site.siteDescription, onChange: e => setSite({ ...site, siteDescription: e.target.value }), className: 'input-field', placeholder: t('a short tagline') })),
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('site url')),
+              React.createElement('input', { value: site.siteUrl, onChange: e => setSite({ ...site, siteUrl: e.target.value }), className: 'input-field', placeholder: t('https://example.com') }),
+              React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, t('the public address of your site — used in canonical links, sitemaps and emails')),
+              derivedDomain && React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' }, t('domain to register') + ': ' + derivedDomain),
+              !siteUrlOk && React.createElement('p', { className: 'text-xs text-red-500 mt-1' }, t('enter a valid http(s) url without a path')),
+              siteUrlOk && !site.siteUrl.trim() && React.createElement('p', { className: 'text-xs text-amber-600 mt-1' }, t('leave blank to keep the local default (localhost:3001)'))
+            ),
             React.createElement('div', { className: 'border-t border-gray-100 pt-3' },
               React.createElement('p', { className: 'text-xs font-semibold text-gray-500 mb-3 flex items-center gap-1' }, React.createElement(User, { size: 12 }), t('admin account')),
               React.createElement('div', { className: 'grid grid-cols-2 gap-3' },

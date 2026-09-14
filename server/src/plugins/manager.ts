@@ -6,7 +6,7 @@ import dns from 'node:dns/promises';
 import { execFileSync } from 'child_process';
 import { tmpdir as osTmpDir } from 'os';
 import db from '../utils/db';
-import { assertSafeArchive } from '../utils/archive';
+import { assertArchiveWithinLimits } from '../utils/archive';
 import { isPrivateIp } from '../utils/ssrf';
 import { APP_VERSION } from '../utils/config';
 
@@ -211,12 +211,24 @@ export async function installFromUrl(url: string): Promise<{ ok: boolean; error?
     const ext = isGz ? 'tar.gz' : 'zip';
     archivePath = path.join(tmpDir, 'pkg.' + ext);
 
-    // Download
+    // Download, with a hard byte cap: the response used to be piped straight to
+    // disk, so a hostile server could stream indefinitely and fill the volume.
+    const MAX_DOWNLOAD = 100 * 1024 * 1024;
     await new Promise<void>((resolve, reject) => {
       const mod = url.startsWith('https') ? https : http;
       const req = mod.get(url, { headers: { 'User-Agent': 'Mortar-CMS/0.1' } }, (res) => {
         if (res.statusCode !== 200) { reject(new Error('Download failed: HTTP ' + res.statusCode)); res.resume(); return; }
+        let received = 0;
         const out = fs.createWriteStream(archivePath!);
+        res.on('data', (chunk: Buffer) => {
+          received += chunk.length;
+          if (received > MAX_DOWNLOAD) {
+            out.destroy();
+            res.destroy();
+            req.destroy();
+            reject(new Error('Download exceeds the ' + MAX_DOWNLOAD + ' byte limit'));
+          }
+        });
         res.pipe(out);
         out.on('finish', () => { out.close(); resolve(); });
         out.on('error', reject);
@@ -225,10 +237,11 @@ export async function installFromUrl(url: string): Promise<{ ok: boolean; error?
       req.setTimeout(30000, () => req.destroy(new Error('Download timed out')));
     });
 
-    // Extract into tmpDir/extracted (zip-slip guard: entries validated first)
+    // Extract into tmpDir/extracted (zip-slip guard, entry-count and real
+    // expansion limits all checked before extraction).
     const extractDir = path.join(tmpDir, 'extracted');
     fs.mkdirSync(extractDir, { recursive: true });
-    assertSafeArchive(archivePath);
+    await assertArchiveWithinLimits(archivePath, { maxEntries: 5000, maxBytes: 500 * 1024 * 1024 });
     if (isGz) execFileSync('tar', ['-xzf', archivePath, '-C', extractDir]);
     else execFileSync('unzip', ['-q', archivePath, '-d', extractDir]);
 

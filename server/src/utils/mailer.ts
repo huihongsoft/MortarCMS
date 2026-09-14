@@ -17,14 +17,19 @@ export interface MailSettings {
 
 export function getMailSettings(): MailSettings {
   const row = (key: string) => (db.prepare('SELECT value FROM Setting WHERE key = ?').get(key) as any)?.value || '';
-  const siteUrl = (row('site_url') || 'http://localhost').replace(/^https?:\/\//, '').replace(/\/$/, '');
+  // Default From address: derive the domain from the site URL. Take the
+  // hostname rather than the authority, so a port cannot leak into the address —
+  // the install default (http://host:3001) would otherwise produce the invalid
+  // "no-reply@host:3001".
+  let mailHost = 'localhost';
+  try { mailHost = new URL(row('site_url')).hostname || 'localhost'; } catch { /* unset or unparseable */ }
   return {
     host: row('smtp_host'),
     port: parseInt(row('smtp_port')) || 587,
     user: row('smtp_user'),
     pass: row('smtp_pass'),
     secure: row('smtp_secure') || 'tls',
-    from: row('smtp_from') || 'no-reply@' + siteUrl,
+    from: row('smtp_from') || 'no-reply@' + mailHost,
     // Certificates are verified by default; only self-signed/internal SMTP
     // servers should opt out via the smtp_allow_insecure_tls setting.
     allowInsecureTls: row('smtp_allow_insecure_tls') === '1',

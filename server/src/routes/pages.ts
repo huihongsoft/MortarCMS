@@ -1,5 +1,4 @@
 import { Router, Response } from 'express';
-import crypto from 'crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import db, { cuid, withTransaction } from '../utils/db';
@@ -9,6 +8,7 @@ import { uniqueSlug } from '../utils/slug';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 import { sanitizeCssText } from '../utils/sanitize';
 import { siteFilterClause } from '../utils/siteFilter';
+import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
 
 const router = Router();
 // Protected-page password guessing is brute-forced per IP
@@ -69,8 +69,7 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
     // Password protected — cookie must match, admins bypass.
     if (protectedPage && !isAdmin) {
       const cookieVal = getPassCookie(req, page.id);
-      const expected = crypto.createHash('sha256').update(page.id + ':' + page.password).digest('hex');
-      if (cookieVal !== expected) {
+      if (!contentUnlockMatches(cookieVal, page.id, page.password)) {
         const safe = { id: page.id, title: page.title, slug: page.slug, status: 'published', protected: true };
         res.json(safe);
         return;
@@ -96,16 +95,19 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
 
 // Verify a password for a protected page. On success set an httpOnly cookie
 // (hashed password, 7 days) so the visitor stays unlocked — like WordPress.
-router.post('/slug/:slug/password', passwordLimiter, (req: AuthRequest, res: Response) => {
+router.post('/slug/:slug/password', passwordLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const page = db.prepare('SELECT id, password FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'page') as any;
     if (!page || !page.password) { res.status(404).json({ error: 'Page not found' }); return; }
     const submitted = String((req.body || {}).password || '');
-    if (page.password !== submitted) {
+    const check = await verifyContentPassword(submitted, page.password);
+    if (!check.ok) {
       res.status(401).json({ error: 'wrong_password' });
       return;
     }
-    const hash = crypto.createHash('sha256').update(page.id + ':' + page.password).digest('hex');
+    // Legacy plaintext: replace it with a hash now that we know the plaintext.
+    if (check.upgraded) db.prepare('UPDATE Post SET password = ? WHERE id = ?').run(check.upgraded, page.id);
+    const hash = contentUnlockToken(page.id, check.upgraded || page.password);
     res.cookie('mortar_page_pass_' + page.id, hash, {
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -144,13 +146,15 @@ router.get('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, r
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.post('/', authenticate, authorize('admin', 'editor'), async (req: AuthRequest, res: Response) => {
   try {
     const data = pageSchema.parse(req.body);
     const allSlugs = (db.prepare('SELECT slug FROM Post WHERE type = ?').all('page') as any[]).map((s: any) => s.slug);
     const slug = uniqueSlug(data.title, allSlugs);
     const id = cuid();
-    const { status: storeStatus, password: storePassword } = normalizePage(data);
+    const { status: storeStatus, password: rawPassword } = normalizePage(data);
+    // Store a hash, never the plaintext (see utils/contentPassword).
+    const storePassword = rawPassword ? await hashContentPassword(rawPassword) : '';
     withTransaction(() => {
       db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, featured, status, password, type, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', data.featured || null, storeStatus, storePassword, 'page', req.user!.userId, data.parentId || null, data.menuOrder || 0, storeStatus === 'published' ? new Date().toISOString() : null, data.siteId || null);
       if (data.meta) {
@@ -164,7 +168,7 @@ router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, 
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, authorize('admin', 'editor'), async (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ? AND type = ?').get(req.params.id, 'page') as any;
     if (!existing) { res.status(404).json({ error: 'Page not found' }); return; }
@@ -177,7 +181,11 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest
     if (data.status !== undefined || data.password !== undefined) {
       const norm = normalizePage({ status: data.status, password: data.password }, existing.password || '');
       sets.push('status = ?'); vals.push(norm.status);
-      sets.push('password = ?'); vals.push(norm.password);
+      // Same unchanged-value rule as posts: the admin editor echoes the stored
+      // value back on every save, so only a genuinely new value is re-hashed.
+      if (norm.password !== existing.password) {
+        sets.push('password = ?'); vals.push(norm.password ? await hashContentPassword(norm.password) : '');
+      }
       if (norm.status === 'published' && !existing.publishedAt) { sets.push('publishedAt = ?'); vals.push(new Date().toISOString()); }
     }
     if (data.parentId !== undefined) { sets.push('parentId = ?'); vals.push(data.parentId); }

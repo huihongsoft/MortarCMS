@@ -1,13 +1,14 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
-import { isTokenBlacklisted } from './auth';
-import { verifyToken } from '../utils/jwt';
+import { authenticate, authorize, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { applyFilters, doAction } from '../utils/hooks';
 import { renderTemplate, sendEmail } from '../utils/mailer';
 
 const router = Router();
+// Every user-supplied value entering an email body must go through this. Kept at
+// module scope so a new notification cannot quietly omit it.
+const esc = (s: unknown) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 // Length caps prevent storage abuse / oversized notifications. Content is
 // stored raw (rendered as React text nodes on the frontend — never innerHTML)
 // and emails escape it; length bounds keep everything bounded.
@@ -60,18 +61,11 @@ router.post('/', (req: AuthRequest, res: Response) => {
   try {
     // Optional auth: a Bearer token links the comment to the account (for the
     // profile page's "my comments") without blocking anonymous commenters.
-    // Applies the same checks as authenticate (blacklist + session version)
-    // so revoked tokens can never claim an identity here.
-    try {
-      const h = req.headers.authorization || '';
-      if (h.startsWith('Bearer ') && !isTokenBlacklisted(h.slice(7))) {
-        const payload = verifyToken(h.slice(7));
-        if (payload) {
-          const user = db.prepare('SELECT tokenVersion FROM User WHERE id = ?').get(payload.userId) as any;
-          if (user && (payload.v === undefined || user.tokenVersion === payload.v)) req.user = payload;
-        }
-      }
-    } catch {}
+    // resolveOptionalUser applies every check authenticate does — blacklist,
+    // partial (2FA) tokens, session version — so a revoked or half-authenticated
+    // token can never claim an identity here.
+    const optionalUser = resolveOptionalUser(req);
+    if (optionalUser) req.user = optionalUser;
     const data = commentSchema.parse(req.body);
     const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(data.postId) as any;
     if (!post || post.status !== 'published') { res.status(404).json({ error: 'Post not found' }); return; }
@@ -103,7 +97,6 @@ router.post('/', (req: AuthRequest, res: Response) => {
       if (parent?.email) {
         try {
           // All user-supplied values are HTML-escaped before entering the email
-          const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
           const siteTitle = (db.prepare("SELECT value FROM Setting WHERE key = 'site_title'").get() as any)?.value || 'Mortar';
           const siteUrl = (db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || '';
           const replyHtml = '<div style="font-family:sans-serif;max-width:520px;margin:0 auto;">' +
@@ -124,7 +117,6 @@ router.post('/', (req: AuthRequest, res: Response) => {
     try {
       const adminEmail = (db.prepare("SELECT value FROM Setting WHERE key = 'admin_email'").get() as any)?.value;
       if (adminEmail) {
-        const esc = (s: string) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         const tpl = renderTemplate('comment_notification', { post_title: esc(post.title), comment: esc(data.content) });
         if (tpl) void sendEmail(adminEmail, tpl.subject, tpl.html);
       }
@@ -135,8 +127,8 @@ router.post('/', (req: AuthRequest, res: Response) => {
 
 router.get('/admin', authenticate, requireCap('moderate_comments'), (req: AuthRequest, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const status = req.query.status as string;
     let where = ''; const params: any[] = [];
     if (status) { where = ' WHERE c.status = ?'; params.push(status); }
@@ -181,11 +173,11 @@ function notifyThreadSubscribers(postId: string, comment: any): void {
     const siteTitle = (db.prepare("SELECT value FROM Setting WHERE key = 'site_title'").get() as any)?.value || 'Mortar';
     const siteUrl = (db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || '';
     const html = '<div style="font-family:sans-serif;max-width:520px;margin:0 auto;">' +
-      '<h2 style="color:#2563eb;">' + siteTitle + ' · 新评论通知</h2>' +
-      '<p style="color:#374151;">你订阅的《' + post.title + '》有了新评论：</p>' +
+      '<h2 style="color:#2563eb;">' + esc(siteTitle) + ' · 新评论通知</h2>' +
+      '<p style="color:#374151;">你订阅的《' + esc(post.title) + '》有了新评论：</p>' +
       '<div style="border-left:3px solid #2563eb;padding:8px 16px;margin:12px 0;color:#111827;">' +
-      '<strong>' + (comment.author || 'Anonymous') + '</strong>：' + String(comment.content || '').slice(0, 300) + '</div>' +
-      '<p style="color:#9ca3af;font-size:12px;">前往 <a href="' + siteUrl + '/post/' + post.slug + '#comments">' + siteTitle + '</a> 查看讨论</p></div>';
+      '<strong>' + esc(comment.author || 'Anonymous') + '</strong>：' + esc(String(comment.content || '').slice(0, 300)) + '</div>' +
+      '<p style="color:#9ca3af;font-size:12px;">前往 <a href="' + esc(siteUrl) + '/post/' + esc(post.slug) + '#comments">' + esc(siteTitle) + '</a> 查看讨论</p></div>';
     for (const s of subs) void sendEmail(s.email, '《' + post.title + '》有新评论', html);
   } catch {}
 }

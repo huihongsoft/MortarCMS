@@ -83,7 +83,10 @@ export default function Sites() {
       const st = settingsMap[s.id] || {};
       await api.put('/sites/' + s.id + '/settings', {
         site_title: st.site_title || s.name,
-        site_url: 'http://' + s.domain,
+        // Derive from the protocol the admin panel was loaded over — a hardcoded
+        // http:// would downgrade an HTTPS install (canonical / og:url / share
+        // links read this override through /api/settings).
+        site_url: window.location.protocol + '//' + s.domain,
         site_description: st.site_description || '',
       });
       toast.toast(t('site settings saved', getLang()));

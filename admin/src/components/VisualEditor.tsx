@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import grapesjs, { Editor, EditorConfig } from 'grapesjs';
 import 'grapesjs/dist/css/grapes.min.css';
+import DOMPurify from 'dompurify';
 import { t, getLang } from '../lib/i18n';
 
 // WordPress Gutenberg SVG icons (from @wordpress/icons)
@@ -75,12 +76,19 @@ const addToCanvas = (editor: any, html: string) => {
 // Content may arrive as a full document (some imports produce <body>…
 // </body>). GrapesJS parses fragments best — strip the document shell so the
 // canvas loads cleanly.
+//
+// The content is also sanitized here. It comes straight from the API, so an
+// author with only post-editing rights could otherwise hand markup to an
+// admin's canvas; GrapesJS strips <script> and on* attributes itself but not
+// every obfuscated form. DOMPurify is the same library the public themes render
+// with, so the canvas now shows exactly what a visitor will get.
 function normalizeContent(raw: string): string {
-  return String(raw || '')
+  const shellStripped = String(raw || '')
     .replace(/^\s*<html[^>]*>/i, '')
     .replace(/^\s*<body[^>]*>/i, '')
     .replace(/<\/body>\s*$/i, '')
     .replace(/<\/html>\s*$/i, '');
+  try { return DOMPurify.sanitize(shellStripped, { USE_PROFILES: { html: true } }); } catch { return shellStripped; }
 }
 
 interface VisualEditorProps {

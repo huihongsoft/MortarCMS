@@ -43,7 +43,7 @@ router.get('/export', authenticate, authorize('admin'), (_req: AuthRequest, res:
     // Never export credentials/secrets: SMTP password, JWT secret, AI provider
     // API keys and webhook tokens would leak the whole installation if the
     // export file fell into the wrong hands.
-    const SECRET_KEYS = ['smtp_pass', 'jwt_secret', 'ai_providers', 'ai_bindings', 'reset_token'];
+    const SECRET_KEYS = ['smtp_pass', 'jwt_secret', 'ai_providers', 'ai_bindings', 'reset_token', 'storage_secret', 'storage_key'];
     const SECRET_PREFIXES = ['jwt_', 'market_', 'ai_binding_'];
     data.settings = (db.prepare("SELECT key, value FROM Setting").all() as any[])
       .filter((s: any) => !SECRET_KEYS.includes(s.key) && !SECRET_PREFIXES.some(p => s.key.startsWith(p)));

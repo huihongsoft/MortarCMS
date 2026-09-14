@@ -4,18 +4,10 @@ import db, { cuid } from '../utils/db';
 import { authenticate, authorize, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { activeThemeName, readTheme, themeOverrides } from './themes';
+import { isHiddenSettingKey } from '../utils/settingsVisibility';
 import { APP_VERSION } from '../utils/config';
 
 const router = Router();
-
-// Credentials / system state: never returned by the general settings GET,
-// even to admins (dedicated endpoints exist: /ai/settings, /api/db/*)
-const CRED_KEYS = new Set(['ai_providers', 'ai_bindings', 'installed', 'active_plugins', 'storage_secret']);
-const CRED_PREFIXES = ['jwt_', 'market_', 'db_'];
-// Extra keys hidden from anonymous visitors (admin-only configuration)
-const ADMIN_KEYS = new Set(['admin_email']);
-// widgets_* holds admin-authored custom HTML — never expose it anonymously
-const ADMIN_PREFIXES = ['smtp_', 'custom_templates', 'maintenance_', 'ai_', 'widgets_'];
 
 // Settings that may never be written through the generic PUT endpoint (they
 // are managed by dedicated code paths: install wizard, plugins, jwt, backups)
@@ -31,8 +23,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     // unlock the admin view.
     const role = resolveOptionalUser(req)?.role || '';
     const isAdmin = role === 'admin';
-    const hidden = (key: string) => CRED_PREFIXES.some(p => key.startsWith(p)) || CRED_KEYS.has(key)
-      || (!isAdmin && (ADMIN_PREFIXES.some(p => key.startsWith(p)) || ADMIN_KEYS.has(key)));
+    const hidden = (key: string) => isHiddenSettingKey(key, isAdmin);
 
     const settings = db.prepare('SELECT key, value FROM Setting').all() as any[];
     const map: Record<string, string> = {};

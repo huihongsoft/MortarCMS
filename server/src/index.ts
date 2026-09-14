@@ -10,8 +10,7 @@ import { config, assertValidConfig, APP_VERSION } from './utils/config';
 import db, { initDB, closeDb } from './utils/db';
 import { logger } from './utils/logger';
 import { flushViews } from './utils/views';
-import { verifyToken } from './utils/jwt';
-import { appPasswordAuth } from './middleware/auth';
+import { appPasswordAuth, resolveOptionalUser } from './middleware/auth';
 import { doAction } from './utils/hooks';
 import authRoutes from './routes/auth';
 import postRoutes from './routes/posts';
@@ -165,13 +164,6 @@ const commentLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders
 // Maintenance mode middleware (auth + admin requests bypass so the site can be managed/recovered)
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/auth') || req.path.startsWith('/admin')) return next();
-  const header = req.headers.authorization;
-  if (header && header.startsWith('Bearer ')) {
-    try {
-      const payload = verifyToken(header.slice(7));
-      if (payload && payload.role === 'admin') return next();
-    } catch {}
-  }
   // Manual toggle OR an active scheduled maintenance window
   let active = false;
   const mm = db.prepare("SELECT value FROM Setting WHERE key = 'maintenance_mode'").get() as any;
@@ -191,8 +183,13 @@ app.use((req, res, next) => {
     let ip = (req.ip || req.socket.remoteAddress || '').replace(/^::ffff:/, '');
     if (ip === '::1') ip = '127.0.0.1';
     if (wl.includes(ip) || wl.includes('*')) { next(); return; }
+    // An admin may still browse and manage the site while it is closed. Resolve
+    // through the real middleware so a revoked, downgraded or 2FA-incomplete
+    // token cannot bypass the gate (a bare verifyToken payload would).
+    if (resolveOptionalUser(req)?.role === 'admin') { next(); return; }
     const msg = (db.prepare("SELECT value FROM Setting WHERE key = 'maintenance_message'").get() as any)?.value || 'Under maintenance';
-    return res.status(503).send('<!DOCTYPE html><html><head><title>Maintenance</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f9fafb;color:#374151}div{text-align:center;max-width:400px;padding:40px}h1{font-size:2rem;margin-bottom:1rem}p{color:#6b7280}</style></head><body><div><h1>\u{1F6E0} Under Maintenance</h1><p>' + msg + '</p></div></body></html>');
+    const safeMsg = String(msg).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    return res.status(503).send('<!DOCTYPE html><html><head><title>Maintenance</title><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#f9fafb;color:#374151}div{text-align:center;max-width:400px;padding:40px}h1{font-size:2rem;margin-bottom:1rem}p{color:#6b7280}</style></head><body><div><h1>\u{1F6E0} Under Maintenance</h1><p>' + safeMsg + '</p></div></body></html>');
   }
   next();
 });
@@ -255,14 +252,20 @@ const cacheControl = (maxAge: string, immutable = false) => (_req: any, res: any
 // Versioned build assets can be cached forever
 app.use('/assets', cacheControl('31536000', true), express.static(path.join(__dirname, '../../frontend/dist/assets')));
 app.use('/admin/assets', cacheControl('31536000', true), express.static(path.join(__dirname, '../../admin/dist/assets')));
+// Both static trees can hold operator-uploaded files, so both get the same CSP.
+// It applies when the file is navigated to as a document (e.g. opening an
+// uploaded SVG directly); loading a theme's CSS/JS as a subresource is unaffected
+// because a subresource's own CSP is not enforced against the parent page.
+const STATIC_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'";
 // Theme bundles: served for runtime loading of theme layout components
 app.use('/themes', (_req: any, res: any, next: any) => {
   res.setHeader('Cache-Control', 'public, max-age=300');
+  res.setHeader('Content-Security-Policy', STATIC_CSP);
   next();
 }, express.static(path.join(__dirname, '..', 'themes')));
 // Uploads: cache 1 day; CSP locks down script execution (e.g. uploaded SVGs)
 app.use('/uploads', cacheControl('86400'), (_req: any, res: any, next: any) => {
-  res.setHeader('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'");
+  res.setHeader('Content-Security-Policy', STATIC_CSP);
   next();
 }, express.static(uploadsDir));
 

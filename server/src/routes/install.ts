@@ -2,7 +2,8 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import fs from 'fs';
 import path from 'path';
-import db, { cuid, reconfigureDb, withTransaction } from '../utils/db';
+import db, { cuid, initDB, reconfigureDb, withTransaction } from '../utils/db';
+import { parseSiteUrl } from '../utils/siteUrl';
 import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
 
 const router = Router();
@@ -72,7 +73,7 @@ router.get('/', authenticate, authorize('admin'), (_req: AuthRequest, res: Respo
 router.post('/', async (req: AuthRequest, res: Response) => {
   try {
     if (installed()) { res.status(400).json({ error: 'Already installed' }); return; }
-    const { dbType, dbConfig, siteTitle, siteDescription, adminEmail, adminPassword, adminUsername, sampleData } = req.body || {};
+    const { dbType, dbConfig, siteTitle, siteDescription, siteUrl, adminEmail, adminPassword, adminUsername, sampleData } = req.body || {};
     if (!siteTitle || !adminEmail || !adminPassword) {
       res.status(400).json({ error: 'Site title, admin email and a password are required' }); return;
     }
@@ -81,6 +82,17 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(adminEmail))) {
       res.status(400).json({ error: 'Invalid admin email address' }); return;
+    }
+    // The public address of the site. Blank keeps the legacy behaviour (no
+    // site_url setting, localhost:3001 domain); the middleware strips the port
+    // from the Host header, so only the hostname is stored on the Site row.
+    let siteUrlValue = '';
+    let siteDomain = '';
+    if (siteUrl !== undefined && String(siteUrl).trim() !== '') {
+      const parsed = parseSiteUrl(siteUrl);
+      if ('error' in parsed) { res.status(400).json({ error: parsed.error }); return; }
+      siteUrlValue = parsed.url;
+      siteDomain = parsed.domain;
     }
     // 1. Reconfigure the database driver per user choice (SQLite default / MySQL / PostgreSQL)
     let databaseUrl = '';
@@ -96,7 +108,6 @@ router.post('/', async (req: AuthRequest, res: Response) => {
     try {
     reconfigureDb(databaseUrl);
     // 2. Initialize tables on the (possibly new) driver
-    const { initDB } = require('../utils/db');
     initDB();
     // 3. Create the admin account + base settings
     const password = await bcrypt.hash(adminPassword, 12);
@@ -113,11 +124,25 @@ router.post('/', async (req: AuthRequest, res: Response) => {
       // Least privilege for public sign-ups by default (changeable in Settings).
       upsert.run(cuid(), 'default_role', 'subscriber');
       upsert.run(cuid(), 'installed', '1');
+      if (siteUrlValue) upsert.run(cuid(), 'site_url', siteUrlValue);
       // 4. Fresh default site
       const hasSite = db.prepare('SELECT COUNT(*) as c FROM Site').get() as any;
       if (!hasSite || hasSite.c === 0) {
         const siteExists = db.prepare('SELECT id FROM Site WHERE slug = ?').get('default') as any;
-        if (!siteExists) db.prepare('INSERT INTO Site (id, name, slug, domain, isPrimary, active) VALUES (?, ?, ?, ?, 1, 1)').run(cuid(), siteTitle, 'default', 'localhost:3001');
+        if (!siteExists) db.prepare('INSERT INTO Site (id, name, slug, domain, isPrimary, active) VALUES (?, ?, ?, ?, 1, 1)').run(cuid(), siteTitle, 'default', siteDomain || 'localhost:3001');
+      } else if (siteDomain) {
+        // Re-install (the reset endpoint only clears the installed marker, so Site
+        // rows survive). Point the primary site at the new domain unless another
+        // site already claims it — domain is UNIQUE, and letting the constraint
+        // fire here would roll back the whole install.
+        const clash = db.prepare('SELECT id FROM Site WHERE domain = ? AND isPrimary = 0').get(siteDomain) as any;
+        if (clash) {
+          // Not silent: site_url above was still set to the requested domain, so
+          // the two would otherwise disagree with no hint as to why.
+          console.warn('[install] primary site domain left unchanged: ' + siteDomain + ' is already used by site ' + clash.id);
+        } else {
+          db.prepare('UPDATE Site SET domain = ? WHERE isPrimary = 1').run(siteDomain);
+        }
       }
     });
     // 5. Optional demo data (sample posts/categories/tags/comments/menu/links
@@ -152,7 +177,6 @@ router.post('/switch', authenticate, authorize('admin'), async (req: AuthRequest
     installing = true;
     try {
       reconfigureDb(databaseUrl);
-      const { initDB } = require('../utils/db');
       initDB();
       // Mark installed on the new database (the site remains installed)
       const upsert = db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");

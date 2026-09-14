@@ -6,7 +6,7 @@ import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/
 import { upload } from '../middleware/upload';
 import { purgeAllCaches } from '../utils/cache';
 import { execFileSync, execSync } from 'child_process';
-import { assertSafeArchive } from '../utils/archive';
+import { assertArchiveWithinLimits } from '../utils/archive';
 
 const router = Router();
 const themesDir = path.join(__dirname, '..', '..', 'themes');
@@ -106,13 +106,21 @@ router.put('/:name/settings', authenticate, authorize('admin'), (req: AuthReques
 });
 
 // Admin: install a theme from a zip (theme.json + optional screenshot.css etc.)
-router.post('/install', authenticate, authorize('admin'), upload.single('file'), (req: AuthRequest, res: Response) => {
+router.post('/install', authenticate, authorize('admin'), upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) { res.status(400).json({ error: 'No theme zip uploaded' }); return; }
     const tmpDir = path.join(require('os').tmpdir(), 'mortar-theme-' + Date.now());
     fs.mkdirSync(tmpDir, { recursive: true });
-    // Zip-slip guard: reject traversal entries BEFORE anything hits the disk
-    assertSafeArchive(req.file.path);
+    // Zip-slip guard, plus entry-count and real-expansion limits: all before
+    // anything hits the disk (a 10MB upload can otherwise expand to gigabytes).
+    try {
+      await assertArchiveWithinLimits(req.file.path, { maxEntries: 2000, maxBytes: 200 * 1024 * 1024 });
+    } catch (e: any) {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      try { fs.unlinkSync(req.file.path); } catch {}
+      res.status(400).json({ error: 'Invalid theme archive: ' + e.message });
+      return;
+    }
     execFileSync('unzip', ['-q', req.file.path, '-d', tmpDir]);
     // Find the theme root (dir containing theme.json)
     let root: string | null = null;

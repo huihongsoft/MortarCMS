@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import fs from 'fs';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { slugify, uniqueSlug } from '../utils/slug';
 import { parseFrontmatter, mdToHtml } from '../utils/markdown';
 import { sanitizeHtml } from '../utils/sanitize';
@@ -14,7 +14,7 @@ function esc(s: string): string { return s.replace(/&/g, '&amp;').replace(/</g, 
 function unesc(s: string): string { return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#039;/g, "'"); }
 
 // Admin: import WordPress WXR XML file
-router.post('/wxr', authenticate, requireCap('manage_options'), upload.single('file'), (req: AuthRequest, res: Response) => {
+router.post('/wxr', authenticate, authorize('admin'), upload.single('file'), (req: AuthRequest, res: Response) => {
   let tmpPath: string | null = null;
   try {
     if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return; }
@@ -169,7 +169,7 @@ router.post('/wxr', authenticate, requireCap('manage_options'), upload.single('f
 });
 
 // Admin: import Markdown files (frontmatter + body) as draft posts
-router.post('/markdown', authenticate, requireCap('manage_options'), upload.array('files', 20), (req: AuthRequest, res: Response) => {
+router.post('/markdown', authenticate, authorize('admin'), upload.array('files', 20), (req: AuthRequest, res: Response) => {
   try {
     const files = (req.files as Express.Multer.File[]) || [];
     if (files.length === 0) { res.status(400).json({ error: 'No files uploaded' }); return; }

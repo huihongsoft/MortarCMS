@@ -1,10 +1,10 @@
 import { Router, Response } from 'express';
-import crypto from 'crypto';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
+import { authenticate, authorize, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { verifyToken } from '../utils/jwt';
+import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
 import { SiteRequest } from '../middleware/site';
 import { slugify, uniqueSlug } from '../utils/slug';
 import { applyFilters, doAction } from '../utils/hooks';
@@ -18,14 +18,12 @@ const router = Router();
 const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, message: { error: 'Too many attempts, slow down' } });
 
 // Lightweight "is this visitor logged in?" check for public routes that don't
-// mount the full authenticate middleware (members-only filtering). App
-// passwords populate req.user globally; Bearer tokens are parsed here.
+// mount the full authenticate middleware (members-only filtering). Delegates to
+// resolveOptionalUser so a blacklisted, stale or 2FA-partial token cannot count
+// as a session — a bare verifyToken here would let an incomplete 2FA login read
+// members-only content.
 function isLoggedIn(req: AuthRequest): boolean {
-  if (req.user) return true;
-  const header = req.headers.authorization || '';
-  if (!header.startsWith('Bearer ')) return false;
-  const payload = verifyToken(header.slice(7));
-  return !!payload;
+  return !!resolveOptionalUser(req);
 }
 
 // Members-only posts (PostMeta _members_only='1') are hidden from anonymous
@@ -214,8 +212,7 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
       const raw = String(req.headers.cookie || '');
       const m = raw.match(new RegExp('mortar_post_pass_' + post.id + '=([^;]+)'));
       const cookieVal = m ? decodeURIComponent(m[1]) : null;
-      const expected = crypto.createHash('sha256').update(post.id + ':' + post.password).digest('hex');
-      if (cookieVal !== expected) {
+      if (!contentUnlockMatches(cookieVal, post.id, post.password)) {
         const safe = { id: post.id, title: post.title, slug: post.slug, status: post.status, protected: true };
         res.json(safe);
         return;
@@ -246,13 +243,16 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
 
 // Verify a password for a protected post; on success set an httpOnly cookie
 // (WordPress-style wp-postpass behaviour, matching the page flow).
-router.post('/slug/:slug/password', passwordLimiter, (req: AuthRequest, res: Response) => {
+router.post('/slug/:slug/password', passwordLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const post = db.prepare('SELECT id, password FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'post') as any;
     if (!post || !post.password) { res.status(404).json({ error: 'Post not found' }); return; }
     const submitted = String((req.body || {}).password || '');
-    if (post.password !== submitted) { res.status(401).json({ error: 'wrong_password' }); return; }
-    const hash = crypto.createHash('sha256').update(post.id + ':' + post.password).digest('hex');
+    const check = await verifyContentPassword(submitted, post.password);
+    if (!check.ok) { res.status(401).json({ error: 'wrong_password' }); return; }
+    // Legacy plaintext: replace it with a hash now that we know the plaintext.
+    if (check.upgraded) db.prepare('UPDATE Post SET password = ? WHERE id = ?').run(check.upgraded, post.id);
+    const hash = contentUnlockToken(post.id, check.upgraded || post.password);
     res.cookie('mortar_post_pass_' + post.id, hash, {
       httpOnly: true,
       maxAge: 7 * 24 * 60 * 60 * 1000,
@@ -269,7 +269,8 @@ router.post('/slug/:slug/password', passwordLimiter, (req: AuthRequest, res: Res
 // Public: popular posts by views
 router.get('/popular', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
-    const limit = parseInt(req.query.limit as string) || 5;
+    // Clamped: an unbounded limit lets an anonymous caller ask for the whole table.
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 5));
     const now = new Date().toISOString();
     const posts = db.prepare('SELECT * FROM Post WHERE type = ? AND status = ? AND (publishedAt IS NULL OR publishedAt <= ?)' + (req.siteId ? ' AND (siteId IS NULL OR siteId = ?)' : '') + ' ORDER BY views DESC, publishedAt DESC LIMIT ?').all(...(req.siteId ? ['post', 'published', now, req.siteId, limit] : ['post', 'published', now, limit])) as any[];
     res.json(enrichPosts(posts));
@@ -281,8 +282,8 @@ router.get('/popular', (req: AuthRequest & SiteRequest, res: Response) => {
 // Public: monthly archive
 router.get('/archive/:year/:month', (req: AuthRequest, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
     const y = req.params.year;
     const m = req.params.month.padStart(2, '0');
     const now = new Date().toISOString();
@@ -304,8 +305,8 @@ router.get('/archives', (_req: AuthRequest, res: Response) => {
 
 router.get('/author/:username', (req: AuthRequest, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 10;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
     const author = db.prepare('SELECT id FROM User WHERE username = ?').get(req.params.username) as any;
     if (!author) { res.status(404).json({ error: 'Author not found' }); return; }
     const where = 'p.type = ? AND p.status = ? AND p.authorId = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)';
@@ -350,7 +351,7 @@ router.get('/admin', authenticate, authorize('admin', 'editor', 'author'), (req:
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contributor'), (req: AuthRequest, res: Response) => {
+router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contributor'), async (req: AuthRequest, res: Response) => {
   try {
     const data = postSchema.parse(req.body);
     // Contributors submit drafts only (an editor publishes later), like WP
@@ -362,11 +363,17 @@ router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contribut
     // Admins/editors may assign an author; everyone else writes as themselves.
     // A supplied publish date drives scheduled publishing; otherwise publish now.
     const authorId = data.authorId && ['admin', 'editor'].includes(req.user!.role) ? data.authorId : req.user!.userId;
+    // Same rule as authorId: only admin/editor may target another site. An author
+    // assigning their own post to a different site would inject content into
+    // that site's frontend.
+    const siteId = data.siteId && ['admin', 'editor'].includes(req.user!.role) ? data.siteId : null;
     const publishedAt = data.publishedAt || (status === 'published' ? now : null);
+    // Store a hash, never the plaintext (see utils/contentPassword).
+    const password = data.password ? await hashContentPassword(data.password) : '';
     // The post row and its category/tag/meta rows must land together — a
     // half-written post would show up with missing relations.
     withTransaction(() => {
-      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', status, data.featured || null, data.password || '', authorId, data.parentId || null, data.menuOrder || 0, publishedAt, data.siteId || null);
+      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', status, data.featured || null, password, authorId, data.parentId || null, data.menuOrder || 0, publishedAt, siteId);
       if (data.categoryIds) for (const cid of data.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, cid);
       if (data.tagIds) for (const tid of data.tagIds) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tid);
       if (data.tagNames) for (const name of data.tagNames) {
@@ -388,7 +395,7 @@ router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contribut
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contributor'), (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contributor'), async (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
@@ -412,8 +419,16 @@ router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contrib
     }
     if (data.featured !== undefined) { sets.push('featured = ?'); vals.push(data.featured); }
     if (data.menuOrder !== undefined) { sets.push('menuOrder = ?'); vals.push(data.menuOrder); }
-    if (data.password !== undefined) { sets.push('password = ?'); vals.push(data.password); }
-    if (data.siteId !== undefined) { sets.push('siteId = ?'); vals.push(data.siteId || null); }
+    // The admin editor round-trips the stored value on every save, so an
+    // unchanged value must be left alone — re-hashing it would hash the hash and
+    // silently break the password. Only a genuinely new value is (re)hashed;
+    // sending '' clears the protection.
+    if (data.password !== undefined && data.password !== existing.password) {
+      sets.push('password = ?');
+      vals.push(data.password ? await hashContentPassword(data.password) : '');
+    }
+    // Only admin/editor may move a post between sites (mirrors the authorId rule).
+    if (data.siteId !== undefined && ['admin', 'editor'].includes(req.user!.role)) { sets.push('siteId = ?'); vals.push(data.siteId || null); }
     if (data.authorId !== undefined && ['admin', 'editor'].includes(req.user!.role)) { sets.push('authorId = ?'); vals.push(data.authorId); }
     if (data.publishedAt !== undefined) { sets.push('publishedAt = ?'); vals.push(data.publishedAt); }
     // Relation rewrites (delete-then-insert), the pre-save revision and the

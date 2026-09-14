@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
 import express from 'express';
-import { initDB } from '../src/utils/db';
+import db, { initDB } from '../src/utils/db';
 import installRoutes from '../src/routes/install';
 
 const DB_FILE = process.env.MORTAR_DB_PATH || '/tmp/mortar-vitest-install.db';
@@ -50,5 +50,22 @@ describe('install validation (rejects before touching the database)', () => {
   it('rejects missing required fields', async () => {
     const r = await post({ dbType: 'sqlite', siteTitle: 'T' });
     expect(r.status).toBe(400);
+  });
+
+  it.each([
+    ['no scheme', 'example.com'],
+    ['non-http scheme', 'ftp://example.com'],
+    ['with a path', 'https://example.com/blog'],
+    ['with whitespace', 'https://exa mple.com'],
+    ['not a URL', 'not-a-url'],
+  ])('rejects a site URL that is %s', async (_label, siteUrl) => {
+    const r = await post({ ...basePayload, adminEmail: 'a@b.dev', adminPassword: 'Passw0rd1', siteUrl });
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toMatch(/site url/i);
+  });
+
+  it('wrote nothing while rejecting', () => {
+    expect(db.prepare("SELECT value FROM Setting WHERE key = 'installed'").get()).toBeUndefined();
+    expect((db.prepare('SELECT COUNT(*) as c FROM Site').get() as any).c).toBe(0);
   });
 });

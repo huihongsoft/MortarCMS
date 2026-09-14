@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import db, { cuid } from '../utils/db';
@@ -77,7 +78,7 @@ router.post('/register', async (req: AuthRequest, res: Response) => {
       if (header.startsWith('Bearer ')) {
         const raw = header.slice(7);
         // A logged-out (blacklisted) token must not regain admin powers here.
-        if (!tokenBlacklist.has(raw)) {
+        if (!isTokenBlacklisted(raw)) {
           const payload = verifyToken(raw);
           // Never trust the role claim alone: re-check the CURRENT user row so
           // a demoted/deleted admin's token cannot create admins, and require a
@@ -112,13 +113,27 @@ router.post('/register', async (req: AuthRequest, res: Response) => {
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
+// A bcrypt hash of a random value, built on first use so start-up doesn't pay for
+// it. Comparing the submitted password against this when the account does not
+// exist spends the same time as a real check — returning immediately would make
+// "unknown email" measurably faster than "wrong password" (account enumeration).
+let dummyHash: string | null = null;
+function getDummyHash(): string {
+  if (!dummyHash) dummyHash = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 12);
+  return dummyHash;
+}
+
 router.post('/login', async (req: AuthRequest, res: Response) => {
   try {
     const data = loginSchema.parse(req.body);
     const ip = req.ip || '';
     if (checkLock(data.email, ip)) { res.status(429).json({ error: 'Too many failed attempts, try again in 15 minutes' }); return; }
     const user = db.prepare('SELECT * FROM User WHERE email = ?').get(data.email) as any;
-    if (!user) { recordFailure(data.email, ip); doAction('login_failed', data.email, ip, 'no_such_user'); res.status(401).json({ error: 'Invalid credentials' }); return; }
+    if (!user) {
+      await bcrypt.compare(data.password, getDummyHash());
+      recordFailure(data.email, ip); doAction('login_failed', data.email, ip, 'no_such_user');
+      res.status(401).json({ error: 'Invalid credentials' }); return;
+    }
     const valid = await bcrypt.compare(data.password, user.password);
     if (!valid) { recordFailure(data.email, ip); doAction('login_failed', data.email, ip, 'wrong_password'); res.status(401).json({ error: 'Invalid credentials' }); return; }
     loginFailures.delete(lockKey(data.email, ip));
@@ -154,8 +169,35 @@ router.post('/2fa/verify', async (req: AuthRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Logout: blacklist the presented token (in-memory; cleared on restart)
-const tokenBlacklist = new Set<string>();
+// Logout: revoke the presented token. Persisted (an in-memory Set was cleared on
+// restart, which resurrected logged-out tokens) and keyed by a hash so the raw
+// token is never written to the database.
+function tokenHash(token: string): string {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+export function isTokenBlacklisted(token: string): boolean {
+  try {
+    return !!db.prepare('SELECT 1 FROM RevokedToken WHERE hash = ?').get(tokenHash(token));
+  } catch {
+    // DB not ready: fail open here would resurrect a revoked token, but these two
+    // paths are pre-DB only, so treat an unreadable store as "not revoked".
+    return false;
+  }
+}
+
+function revokeToken(token: string): void {
+  try {
+    const payload = verifyToken(token);
+    const expiresAt = payload?.exp
+      ? new Date(payload.exp * 1000).toISOString()
+      : new Date(Date.now() + 7 * 24 * 3600_000).toISOString();
+    db.prepare('INSERT OR IGNORE INTO RevokedToken (hash, expiresAt) VALUES (?, ?)').run(tokenHash(token), expiresAt);
+    // Opportunistic purge keeps the table bounded without a scheduled job.
+    db.prepare('DELETE FROM RevokedToken WHERE expiresAt < ?').run(new Date().toISOString());
+  } catch { /* best effort — a failed revocation must not break logout */ }
+}
+
 router.post('/logout-all', authenticate, (req: AuthRequest, res: Response) => {
   try {
     if (req.user) {
@@ -167,14 +209,15 @@ router.post('/logout-all', authenticate, (req: AuthRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// authenticate is required: without it anyone could POST arbitrary values and
+// grow the RevokedToken table at will.
 router.post('/logout', authenticate, (req: AuthRequest, res: Response) => {
   try {
     const header = req.headers.authorization || '';
-    if (header.startsWith('Bearer ')) tokenBlacklist.add(header.slice(7));
+    if (header.startsWith('Bearer ')) revokeToken(header.slice(7));
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
-export function isTokenBlacklisted(token: string): boolean { return tokenBlacklist.has(token); }
 
 router.get('/me', authenticate, (req: AuthRequest, res: Response) => {
   try {
@@ -209,7 +252,10 @@ router.put('/me/password', authenticate, async (req: AuthRequest, res: Response)
     const ok = await bcrypt.compare(oldPassword, user.password);
     if (!ok) { res.status(401).json({ error: 'Current password is incorrect' }); return; }
     const hash = await bcrypt.hash(newPassword, 12);
-    db.prepare('UPDATE User SET password = ?, updatedAt = ? WHERE id = ?').run(hash, new Date().toISOString(), req.user!.userId);
+    // Bump the session version: a token stolen before the change must stop
+    // working. This also revokes the caller's current session, so the next
+    // request re-authenticates with the new password.
+    db.prepare('UPDATE User SET password = ?, tokenVersion = tokenVersion + 1, updatedAt = ? WHERE id = ?').run(hash, new Date().toISOString(), req.user!.userId);
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -308,7 +354,9 @@ router.post('/reset-password', async (req: AuthRequest, res: Response) => {
     const user = db.prepare('SELECT id FROM User WHERE reset_token = ? AND datetime(reset_expires) > datetime(?)').get(token, new Date().toISOString()) as any;
     if (!user) { res.status(400).json({ error: 'Invalid or expired token' }); return; }
     const hashed = await bcrypt.hash(password, 12);
-    db.prepare("UPDATE User SET password = ?, reset_token = '', reset_expires = '' WHERE id = ?").run(hashed, user.id);
+    // Revoke every existing session: a password reset is the recovery path for a
+    // compromised account, so tokens issued before it must not survive.
+    db.prepare("UPDATE User SET password = ?, reset_token = '', reset_expires = '', tokenVersion = tokenVersion + 1 WHERE id = ?").run(hashed, user.id);
     res.json({ message: 'Password has been reset.' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

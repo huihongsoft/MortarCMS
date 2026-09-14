@@ -232,6 +232,147 @@ So that the app itself knows it is behind HTTPS:
 Use `certbot` (Let's Encrypt) for TLS, or the 1Panel-style panel of your
 choice.
 
+## Multiple domains / multi-site
+
+One Mortar process serves many domains from a single database. Each domain maps
+to a `Site` row (Admin → Sites) and gets its own title, description, menus and
+content. A common layout: `example.com` for the main site, `blog.example.com`
+and `shop.example.com` for sections, all pointing at the same server.
+
+`./install.sh --domain example.com,blog.example.com` generates a ready-to-use
+`mortar-nginx.conf` with the configuration below; copy it to
+`/etc/nginx/conf.d/` and reload. The rest of this section explains what it does
+and why.
+
+### How a request picks its site
+
+The app resolves the site from the request's `Host` header: the port is
+stripped, the value is lowercased, and it is compared for **exact** equality
+against `Site.domain`. If nothing matches, the request is served by the
+**primary** site — silently, with no error. Browser requests and CDN/proxy
+front-ends must therefore forward the original `Host`, and every domain must be
+registered in Admin → Sites.
+
+### DNS
+
+Add an A (or AAAA) record for every domain and subdomain pointing at the server.
+A wildcard `*.example.com` record only helps if your DNS provider supports it —
+and note that it does **not** cover the bare `example.com`.
+
+### One vhost for all domains
+
+Per-site routing is done by the app, not by nginx, so all domains share a single
+`proxy_pass`:
+
+```nginx
+server {
+    listen 80;
+    server_name example.com blog.example.com shop.example.com;
+    location /.well-known/acme-challenge/ { root /var/www/html; }
+    location / { return 301 https://$host$request_uri; }
+}
+
+server {
+    listen 443 ssl http2;
+    server_name example.com blog.example.com shop.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3001;
+        proxy_set_header Host $host;                  # mandatory — see below
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+**`proxy_set_header Host $host` is mandatory.** Without it nginx sends
+`Host: 127.0.0.1:3001` to the app, no site matches, and *every* domain silently
+serves the primary site. `$host` is already lowercased and port-stripped, which
+is exactly what the resolver expects.
+
+### TLS
+
+Issue a certificate covering every name:
+
+```bash
+certbot certonly --nginx -d example.com -d blog.example.com -d shop.example.com
+```
+
+A wildcard `*.example.com` requires the DNS-01 challenge and does **not** cover
+the apex `example.com` — request `-d example.com -d '*.example.com'` if you want
+both.
+
+### www → bare domain
+
+`www.example.com` and `example.com` are different hostnames and do not match
+each other, so a request to the other one falls back to the primary site.
+Rather than creating a second site, redirect. `listen 443 ssl` needs a
+certificate in the same block, so add `-d www.example.com` to the certbot
+command above and reuse the certificate:
+
+```nginx
+server {
+    listen 443 ssl http2;
+    server_name www.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem;
+
+    return 301 https://example.com$request_uri;
+}
+```
+
+Register only the canonical host in Admin → Sites. (The generated
+`mortar-nginx.conf` does not include this block; add it by hand if you want it.)
+
+### Registering the domains
+
+In Admin → Sites, the **domain** field takes a bare hostname — no scheme, no
+port, no path (the API strips a pasted scheme and lowercases it, but a port or
+path will never match). The primary site is the fallback for anything
+unregistered. Per-site title and description overrides live in the same row.
+
+Set the canonical public URL in **Settings → General → Site URL** (the install
+wizard now fills this in from the address you installed through) so canonical
+tags, feeds and emails use the right scheme and host.
+
+### Verifying
+
+Check the app layer first, bypassing nginx, then the full path:
+
+```bash
+# App layer: fake the Host header straight at the app port
+curl -s -H "Host: blog.example.com" http://127.0.0.1:3001/api/sites/current
+
+# Full path
+curl -s https://blog.example.com/api/sites/current
+```
+
+The response contains the resolved site's `id`/`name`/`domain`.
+
+- Direct-to-app returns `blog`, through the domain returns the primary site →
+  nginx is not forwarding `Host`.
+- Both return the primary site → the domain is not registered (or the site is
+  inactive).
+
+### Pitfalls
+
+- **`TRUST_PROXY=1`** is required in `server/.env` whenever a proxy is in front
+  (`--domain` sets it). Otherwise rate limiting and visit tracking see the
+  proxy's IP instead of the visitor's.
+- A domain stored with a **port or path** never matches — the resolver compares
+  the port-stripped `Host` exactly.
+- **Unregistered hosts fail open**: they serve the primary site rather than
+  404. If a domain shows the wrong content, check registration before anything
+  else.
+- `/api/sitemap.xml` and `/api/feed/rss` build their links from the **global**
+  Site URL setting, not the per-site override, so on secondary domains they
+  point at the primary domain. Canonical tags, `og:url` and JSON-LD do honour
+  the per-site value.
+
 ## Deploying with 宝塔面板 (BT Panel / aaPanel)
 
 1. **Software store**: install *Node.js version manager* (Node 20+) and the

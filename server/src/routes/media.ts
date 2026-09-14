@@ -4,11 +4,12 @@ import path from 'path';
 import sharp from 'sharp';
 import rateLimit from 'express-rate-limit';
 import db, { cuid } from '../utils/db';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, authorize, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { doAction } from '../utils/hooks';
 import { upload } from '../middleware/upload';
 import { uploadPath, resolveUploadUrl } from '../utils/paths';
 import { getStorageConfig, storeFile, deleteRemoteFile, keyFromUrl } from '../utils/storage';
+import { stripEventHandlerAttrs, stripUnsafeUrlAttrs } from '../utils/sanitize';
 
 const router = Router();
 
@@ -59,8 +60,9 @@ function parseSrcsetList(media: any[]): any[] {
 
 router.get('/', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    // Clamped: media rows are expensive (each one triggers ensureResponsiveVariants).
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const search = (req.query.search as string) || '';
     let sql = 'SELECT m.*, u.username FROM Media m LEFT JOIN User u ON u.id = m.userId';
     const params: any[] = [];
@@ -76,8 +78,8 @@ router.get('/', authenticate, authorize('admin', 'editor', 'author'), (req: Auth
 
 router.get('/search', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const media = db.prepare('SELECT m.*, u.username FROM Media m LEFT JOIN User u ON u.id = m.userId ORDER BY m.createdAt DESC LIMIT ? OFFSET ?').all(limit, (page - 1) * limit) as any[];
     const total = (db.prepare('SELECT COUNT(*) as cnt FROM Media').get() as any)?.cnt || 0;
     media.forEach(ensureResponsiveVariants);
@@ -102,15 +104,16 @@ function checkMagic(mime: string, head: Buffer): boolean {
   return true; // no magic rule for this type (docx etc. are zip-based; checked above)
 }
 
-// Strip active content from SVG uploads: scripts, event handlers, foreignObject
+// Strip active content from SVG uploads. SVG-specific blocks first, then the
+// shared hardened attribute passes — the local regexes this used to carry missed
+// `/`-separated handlers and entity/whitespace-obfuscated `javascript:`.
 function sanitizeSvg(content: string): string {
-  return content
+  const stripped = content
     .replace(/<script[\s\S]*?<\/script>/gi, '')
     .replace(/<foreignObject[\s\S]*?<\/foreignObject>/gi, '')
-    .replace(/\son\w+\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/gi, '')
-    .replace(/javascript:/gi, '')
     .replace(/<!\[CDATA\[[\s\S]*?\]\]>/g, '')
     .replace(/<!--[\s\S]*?-->/g, '');
+  return stripUnsafeUrlAttrs(stripEventHandlerAttrs(stripped));
 }
 
 router.post('/upload', authenticate, authorize('admin', 'editor', 'author'), upload.single('file'), async (req: AuthRequest, res: Response) => {
@@ -227,6 +230,10 @@ router.get('/:id', (req: AuthRequest, res: Response) => {
   try {
     const media = db.prepare('SELECT m.*, u.username FROM Media m LEFT JOIN User u ON u.id = m.userId WHERE m.id = ?').get(req.params.id) as any;
     if (!media) { res.status(404).json({ error: 'Media not found' }); return; }
+    // Don't hand an anonymous caller the uploader's identity (user-enumeration
+    // class — CVE-2023-45809 in Wagtail). Staff still see it via the auth'd list.
+    const viewer = resolveOptionalUser(req);
+    if (!viewer || !['admin', 'editor', 'author'].includes(viewer.role)) { delete media.username; delete media.userId; }
     ensureResponsiveVariants(media);
     // Parse srcset JSON for the client
     if (media.srcset) {

@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, authorize, resolveOptionalUser, AuthRequest } from '../middleware/auth';
+import { isHiddenSettingKey } from '../utils/settingsVisibility';
 import { SiteRequest } from '../middleware/site';
 
 const router = Router();
@@ -11,8 +12,12 @@ router.get('/current', (req: SiteRequest, res: Response) => {
     const site = req.site || db.prepare('SELECT * FROM Site WHERE isPrimary = 1 LIMIT 1').get() as any;
     if (!site) { res.json({ single: true, id: null }); return; }
     const overrides = db.prepare('SELECT key, value FROM SiteSetting WHERE siteId = ?').all(site.id) as any[];
+    // This endpoint is public (it backs the frontend's site bootstrap), so apply
+    // the same key redaction as GET /api/settings — otherwise a credential
+    // written into SiteSetting would leak here.
+    const isAdmin = resolveOptionalUser(req)?.role === 'admin';
     const settings: Record<string, string> = {};
-    overrides.forEach((s: any) => { settings[s.key] = s.value; });
+    overrides.forEach((s: any) => { if (!isHiddenSettingKey(s.key, isAdmin)) settings[s.key] = s.value; });
     res.json({ id: site.id, name: site.name, slug: site.slug, domain: site.domain, description: site.description, isPrimary: site.isPrimary, settings });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
