@@ -62,15 +62,15 @@ function providerKey(): Buffer {
   return crypto.createHash('sha256').update(loadSecret()).digest();
 }
 
-function encryptProviders(providers: AIProvider[]): string {
+// Generic secret-blob encryption, reused for other credential JSON (bindings).
+export function encryptSecretJson(value: unknown): string {
   const iv = crypto.randomBytes(12);
   const cipher = crypto.createCipheriv('aes-256-gcm', providerKey(), iv);
-  const enc = Buffer.concat([cipher.update(JSON.stringify(providers), 'utf8'), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return PROVIDERS_ENC + Buffer.concat([iv, tag, enc]).toString('base64');
+  const enc = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()]);
+  return PROVIDERS_ENC + Buffer.concat([iv, cipher.getAuthTag(), enc]).toString('base64');
 }
 
-function decryptProviders(value: string): AIProvider[] | null {
+export function decryptSecretJson<T = unknown>(value: string): T | null {
   try {
     const raw = Buffer.from(value.slice(PROVIDERS_ENC.length), 'base64');
     const iv = raw.subarray(0, 12);
@@ -78,9 +78,21 @@ function decryptProviders(value: string): AIProvider[] | null {
     const data = raw.subarray(28);
     const decipher = crypto.createDecipheriv('aes-256-gcm', providerKey(), iv);
     decipher.setAuthTag(tag);
-    const list = JSON.parse(Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8'));
-    return Array.isArray(list) ? list : null;
+    return JSON.parse(Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')) as T;
   } catch { return null; }
+}
+
+export function isEncryptedSecret(value: string): boolean {
+  return String(value || '').startsWith(PROVIDERS_ENC);
+}
+
+function encryptProviders(providers: AIProvider[]): string {
+  return encryptSecretJson(providers);
+}
+
+function decryptProviders(value: string): AIProvider[] | null {
+  const list = decryptSecretJson<AIProvider[]>(value);
+  return Array.isArray(list) ? list : null;
 }
 
 export function getProviders(): AIProvider[] {

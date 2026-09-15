@@ -6,12 +6,15 @@ import { authenticate, authorize, requireCap, userCan, AuthRequest } from '../mi
 import {
   AIProvider, PROVIDER_PRESETS, getProviders, saveProviders, getDefaultProvider,
   setDefaultProvider, chatComplete, pushAssistantWithTools, pushToolResults, testProvider,
+  encryptSecretJson, decryptSecretJson, isEncryptedSecret,
 } from '../utils/ai';
 import {
   getAiAllowedRoles, getToolPermissions, isRoleAllowed, listToolSchemas, toolCallToResult, executeTool, guardUserMessage, memoryPrompt, prepareAiContent, friendlyTaskError,
 } from '../utils/aiTools';
 import { mdToHtml } from '../utils/markdown';
 import { purgeContentCaches } from '../utils/cache';
+import { fetchUrlGuarded } from '../utils/ssrf';
+import { SiteRequest } from '../middleware/site';
 
 const router = Router();
 
@@ -47,7 +50,7 @@ const SYSTEM_PROMPT =
 // ---- Provider settings (admin only) ----
 
 // Get providers (mask API keys) + permission config
-router.get('/settings', authenticate, requireCap('ai_manage', 'manage_options'), (req: AuthRequest, res: Response) => {
+router.get('/settings', authenticate, requireCap('ai_manage'), (req: AuthRequest, res: Response) => {
   try {
     const providers = getProviders().map((p: AIProvider) => ({
       ...p,
@@ -71,10 +74,14 @@ router.get('/settings', authenticate, requireCap('ai_manage', 'manage_options'),
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Save providers (apiKey kept if masked). ai_manage only — falling back to
-// manage_options would let editors overwrite provider API keys and grant
+// Save providers (apiKey kept if masked). Admin only: this decides where the
+// server sends requests AND which credentials it uses. A local endpoint is a
+// supported configuration (the Ollama preset points at localhost), so an
+// internal baseUrl is a feature, not a bug — which is exactly why configuring
+// it must not be delegable. Falling back to manage_options would let editors
+// point the provider at an internal host, overwrite API keys, and grant
 // themselves tool permissions (ai_allowed_roles / ai_tool_permissions).
-router.put('/settings', authenticate, requireCap('ai_manage'), (req: AuthRequest, res: Response) => {
+router.put('/settings', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const incoming = req.body?.providers as AIProvider[];
     if (!Array.isArray(incoming)) { res.status(400).json({ error: 'providers array required' }); return; }
@@ -100,8 +107,11 @@ router.put('/settings', authenticate, requireCap('ai_manage'), (req: AuthRequest
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Test a provider connection
-router.post('/test', authenticate, requireCap('ai_manage', 'manage_options'), async (req: AuthRequest, res: Response) => {
+// Test a provider connection. Admin only: the baseUrl comes from the request
+// body, so a caller-supplied value makes the server fetch an arbitrary URL
+// (internal port scanning, cloud metadata). It must match who may persist a
+// provider, otherwise "save an internal baseUrl, then test it" is the same hole.
+router.post('/test', authenticate, authorize('admin'), async (req: AuthRequest, res: Response) => {
   try {
     let p = req.body?.provider as AIProvider | undefined;
     // Testing an already-saved provider must not require re-typing the key:
@@ -177,7 +187,7 @@ function buildHistoryMessages(raw: any): { role: 'user' | 'assistant'; content: 
   return out;
 }
 
-router.post('/assistant', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
+router.post('/assistant', authenticate, enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     const now = Date.now();
@@ -198,7 +208,9 @@ router.post('/assistant', authenticate, enforceUsageLimit, async (req: AuthReque
       ...buildHistoryMessages(history),
       { role: 'user', content: guardUserMessage(String(message)) },
     ];
-    const ctx = { userId: req.user!.userId, role: req.user!.role };
+    // siteId lets the tools scope their queries to the site this request came
+    // from (multi-site installs otherwise read/write across all sites).
+    const ctx = { userId: req.user!.userId, role: req.user!.role, siteId: req.siteId || undefined };
     const opts: any = { tools };
     if (temperature !== undefined) opts.temperature = Math.min(2, Math.max(0, Number(temperature)));
     if (maxTokens !== undefined) opts.maxTokens = Math.min(16384, Math.max(64, Number(maxTokens)));
@@ -316,15 +328,33 @@ function usageLimitReached(): boolean {
   }
   return usageBlocked;
 }
+// Optional per-user daily cap (Setting: ai_usage_limit_daily_per_user, unset or
+// 0 = disabled). The global budget alone lets one account consume the whole
+// day's allowance for everyone; admins are exempt so a site owner can still work.
+function userUsageLimitReached(userId: string, role: string): boolean {
+  if (role === 'admin') return false;
+  try {
+    const limit = parseInt((db.prepare("SELECT value FROM Setting WHERE key = 'ai_usage_limit_daily_per_user'").get() as any)?.value || '') || 0;
+    if (!limit) return false;
+    const used = (db.prepare("SELECT COALESCE(SUM(tokens),0) as t FROM AiUsage WHERE userId = ? AND date(createdAt) = date('now')").get(userId) as any)?.t || 0;
+    return used >= limit;
+  } catch { return false; }
+}
+
 // Middleware applying the hard cap to every token-consuming endpoint
 function enforceUsageLimit(req: AuthRequest, res: Response, next: any): void {
   if (usageLimitReached()) { res.status(429).json({ error: '今日 AI 用量已达上限，请明天再试或联系管理员提高限额' }); return; }
+  if (req.user && userUsageLimitReached(req.user.userId, req.user.role)) {
+    res.status(429).json({ error: '今日个人 AI 用量已达上限，请明天再试' }); return;
+  }
   next();
 }
 
-function recordUsage(userId: string, kind: string, text: string, model?: string): void {
+// `tokensOverride` is for calls that produce no text to estimate from (image
+// generation), so they still count against the budget.
+function recordUsage(userId: string, kind: string, text: string, model?: string, tokensOverride?: number): void {
   try {
-    const tokens = Math.ceil((text || '').length / 3) + 20;
+    const tokens = tokensOverride ?? (Math.ceil((text || '').length / 3) + 20);
     db.prepare('INSERT INTO AiUsage (id, userId, kind, model, tokens, createdAt) VALUES (?, ?, ?, ?, ?, ?)')
       .run(cuid(), userId, kind, model || '', tokens, new Date().toISOString());
   } catch {}
@@ -524,7 +554,10 @@ router.post('/task', authenticate, enforceUsageLimit, (req: AuthRequest, res: Re
 
 router.get('/tasks', authenticate, (req: AuthRequest, res: Response) => {
   try {
-    const rows = req.user!.role === 'admin'
+    // "See every task" is the ai_tasks capability (admins always have it) —
+    // otherwise this endpoint only ever returned the caller's own tasks.
+    const canSeeAll = userCan(req.user, 'ai_tasks');
+    const rows = canSeeAll
       ? db.prepare('SELECT id, username, prompt, status, error, steps, createdAt, finishedAt FROM AiTask ORDER BY createdAt DESC LIMIT 50').all()
       : db.prepare('SELECT id, username, prompt, status, error, steps, createdAt, finishedAt FROM AiTask WHERE userId = ? ORDER BY createdAt DESC LIMIT 50').all(req.user!.userId);
     const tasks = (rows as any[]).map((t: any) => {
@@ -652,9 +685,10 @@ router.delete('/schedules/:id', authenticate, (req: AuthRequest, res: Response) 
 // AI review of pending comments (spam detection suggestion)
 router.post('/review-comments', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
-    // Reviewing comments exposes their content — require the moderation
-    // capability, not just AI access.
-    if (!userCan(req.user, 'moderate_comments')) { res.status(403).json({ error: 'Insufficient permissions' }); return; }
+    // Reviewing comments exposes their content. Gate on the dedicated ai_review
+    // capability so it is not a dead switch: before this, the endpoint checked
+    // moderate_comments and revoking ai_review restricted nothing.
+    if (!userCan(req.user, 'ai_review')) { res.status(403).json({ error: 'Insufficient permissions' }); return; }
     const provider = getDefaultProvider();
     if (!provider) { res.status(400).json({ error: '尚未配置 AI 服务商' }); return; }
     const comments = db.prepare("SELECT id, author, content FROM Comment WHERE status = 'pending' ORDER BY createdAt DESC LIMIT 10").all() as any[];
@@ -696,7 +730,7 @@ router.post('/compare', authenticate, enforceUsageLimit, async (req: AuthRequest
 });
 
 // Batch translate posts into a target language (creates drafts)
-router.post('/batch-translate', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
+router.post('/batch-translate', authenticate, enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
     const provider = getDefaultProvider();
@@ -708,8 +742,9 @@ router.post('/batch-translate', authenticate, enforceUsageLimit, async (req: Aut
     // editors/admins may translate anyone's. Otherwise an author could read
     // another user's draft/private content through the generated translation.
     const canEditOthers = userCan(req.user, 'edit_others_posts');
+    const siteId = req.siteId || null;
     const posts = ids
-      .map((id: string) => db.prepare("SELECT * FROM Post WHERE id = ? AND type = 'post'").get(id) as any)
+      .map((id: string) => db.prepare("SELECT * FROM Post WHERE id = ? AND type = 'post'" + (siteId ? ' AND (siteId IS NULL OR siteId = ?)' : '')).get(...(siteId ? [id, siteId] : [id])) as any)
       .filter((p: any) => p && p.status !== 'trash' && (canEditOthers || p.authorId === req.user!.userId));
     if (posts.length === 0) { res.status(404).json({ error: '未找到文章' }); return; }
 
@@ -726,8 +761,8 @@ router.post('/batch-translate', authenticate, enforceUsageLimit, async (req: Aut
         const body = lines.filter((l: string) => !l.startsWith('# ')).join('\n');
         const allSlugs = (db.prepare("SELECT slug FROM Post WHERE type = 'post'").all() as any[]).map((x: any) => x.slug);
         const id = cuid();
-        db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, featured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-          .run(id, newTitle, uniqueSlug(newTitle, allSlugs), prepareAiContent(body), (post.excerpt || '').slice(0, 300), 'draft', 'post', req.user!.userId, post.featured || null);
+        db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, featured, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+          .run(id, newTitle, uniqueSlug(newTitle, allSlugs), prepareAiContent(body), (post.excerpt || '').slice(0, 300), 'draft', 'post', req.user!.userId, post.featured || null, siteId);
         purgeContentCaches();
         results.push({ source: post.title, id, title: newTitle, status: 'ok' });
       } catch (e: any) {
@@ -852,23 +887,42 @@ router.delete('/sessions/:id', authenticate, (req: AuthRequest, res: Response) =
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Direct vision/image-gen helpers (UI-facing wrappers around the tools)
-router.post('/vision', authenticate, async (req: AuthRequest, res: Response) => {
+// Direct vision/image-gen helpers (UI-facing wrappers around the tools).
+// These consume paid provider calls, so they go through the same daily budget
+// and per-user throttle as every other AI endpoint — they used to bypass both,
+// which made them the cheapest way to burn the account's quota.
+const imageLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, message: { error: 'Too many image requests, slow down' } });
+// Rough cost of one image request, expressed in the token unit the budget uses.
+const IMAGE_TOKEN_EQUIVALENT = 5000;
+
+function throttledAiRequest(userId: string): boolean {
+  const now = Date.now();
+  const last = lastAiRequest.get(userId) || 0;
+  if (now - last < AI_MIN_INTERVAL_MS) return true;
+  lastAiRequest.set(userId, now);
+  return false;
+}
+
+router.post('/vision', authenticate, imageLimiter, enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
+    if (throttledAiRequest(req.user!.userId)) { res.status(429).json({ error: '请求过于频繁，请稍后再试' }); return; }
     const { url, question } = req.body || {};
     if (!url) { res.status(400).json({ error: 'url required' }); return; }
-    const out = await executeTool('analyze_image', { url, question: question || '' }, { userId: req.user!.userId, role: req.user!.role });
+    const out = await executeTool('analyze_image', { url, question: question || '' }, { userId: req.user!.userId, role: req.user!.role, siteId: req.siteId || undefined });
+    if (!out?.error) recordUsage(req.user!.userId, 'vision', String(out?.analysis || out?.text || ''), undefined, IMAGE_TOKEN_EQUIVALENT);
     res.json(out);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/image-gen', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/image-gen', authenticate, imageLimiter, enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
+    if (throttledAiRequest(req.user!.userId)) { res.status(429).json({ error: '请求过于频繁，请稍后再试' }); return; }
     const { prompt, size } = req.body || {};
     if (!prompt) { res.status(400).json({ error: 'prompt required' }); return; }
-    const out = await executeTool('generate_image', { prompt, size }, { userId: req.user!.userId, role: req.user!.role });
+    const out = await executeTool('generate_image', { prompt, size }, { userId: req.user!.userId, role: req.user!.role, siteId: req.siteId || undefined });
+    if (!out?.error) recordUsage(req.user!.userId, 'image-gen', '', undefined, IMAGE_TOKEN_EQUIVALENT);
     res.json(out);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -942,15 +996,23 @@ interface Binding {
   lastUsedAt: string | null;
 }
 
+// Bindings hold third-party credentials (ddAppSecret, wechatToken, ddAesKey,
+// webhook tokens), so they are encrypted at rest with the same cipher as the
+// provider keys — a leaked database backup must not hand those out. Legacy
+// plaintext rows are read as-is and re-encrypted on the next save.
 function getBindings(): Binding[] {
   const row = db.prepare("SELECT value FROM Setting WHERE key = 'ai_bindings'").get() as any;
   if (!row?.value) return [];
-  try { return JSON.parse(row.value); } catch { return []; }
+  const raw = String(row.value);
+  try {
+    const parsed = isEncryptedSecret(raw) ? decryptSecretJson<Binding[]>(raw) : JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch { return []; }
 }
 
 function saveBindings(bindings: Binding[]): void {
   db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, 'ai_bindings', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-    .run('ai_bindings', JSON.stringify(bindings));
+    .run('ai_bindings', encryptSecretJson(bindings));
 }
 
 // List bindings (admin) or own (regular users). Tokens are returned in full:
@@ -1158,8 +1220,18 @@ export async function sendDingtalkGroup(webhook: string, secret: string, content
       const sign = crypto.createHmac('sha256', secret).update(ts + '\n' + secret).digest('base64');
       url += (url.includes('?') ? '&' : '?') + 'timestamp=' + ts + '&sign=' + encodeURIComponent(sign);
     }
-    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msgtype: 'text', text: { content } }) });
-    const d: any = await r.json();
+    // The webhook URL is set by the binding's owner, so it is not ours to trust:
+    // route it through the SSRF guard (which also applies a timeout and caps the
+    // response) instead of a bare fetch that could POST into the internal network.
+    const r = await fetchUrlGuarded(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ msgtype: 'text', text: { content } }),
+      timeoutMs: 15000,
+    });
+    if (!r) return { ok: false, error: '无法访问该 Webhook（地址被拒绝或超时）' };
+    let d: any = {};
+    try { d = JSON.parse(r.text || '{}'); } catch { /* non-JSON reply */ }
     return d?.errcode === 0 ? { ok: true } : { ok: false, error: d?.errmsg || 'HTTP ' + r.status };
   } catch (e: any) { return { ok: false, error: e.message }; }
 }

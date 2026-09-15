@@ -98,8 +98,10 @@ router.post('/wxr', authenticate, authorize('admin'), upload.single('file'), (re
       const content = sanitizeHtml(item.content);
       const excerpt = sanitizeHtml(item.excerpt);
       withTransaction(() => {
-        db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, createdAt, updatedAt, publishedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
-          id, item.title, slug, content, excerpt, item.status === 'publish' ? 'published' : 'draft', type, authorId, now, now, item.status === 'publish' ? now : null
+        // siteId: the public lists filter on `siteId IS NULL OR siteId = ?`, so
+        // imported content without it would appear on every site.
+        db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, createdAt, updatedAt, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+          id, item.title, slug, content, excerpt, item.status === 'publish' ? 'published' : 'draft', type, authorId, now, now, item.status === 'publish' ? now : null, (req as AuthRequest & { siteId?: string }).siteId || null
         );
 
         // Categories
@@ -188,8 +190,8 @@ router.post('/markdown', authenticate, authorize('admin'), upload.array('files',
         const publishedAt = meta.date ? new Date(String(meta.date)).toISOString() : null;
         // Each file is atomic: the post and its tags/categories land together.
         withTransaction(() => {
-          db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-            .run(id, title, slug, mdToHtml(body), String(meta.excerpt || body.slice(0, 200)), status, 'post', req.user!.userId, publishedAt, now, now);
+          db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt, createdAt, updatedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+            .run(id, title, slug, mdToHtml(body), String(meta.excerpt || body.slice(0, 200)), status, 'post', req.user!.userId, publishedAt, now, now, (req as AuthRequest & { siteId?: string }).siteId || null);
           // Tags + categories from frontmatter
           for (const tagName of (meta.tags || []) as string[]) {
             const ts = String(tagName).trim().slice(0, 50);

@@ -5,16 +5,63 @@ import { slugify, uniqueSlug } from './slug';
 import { mdToHtml, parseFrontmatter } from './markdown';
 import { getDefaultProvider } from './ai';
 import { userCan } from '../middleware/auth';
+import { logActivity } from '../routes/activity';
 import { activeThemeName, createThemeBackup } from '../routes/themes';
 import { purgeAllCaches, purgeContentCaches } from './cache';
 import { sanitizeHtml } from './sanitize';
+import { isHiddenSettingKey } from './settingsVisibility';
 import { UPLOADS_DIR as uploadsDir } from './paths';
 import { fetchUrlGuarded } from './ssrf';
+
+// Outbound calls made by tools must never hang forever or buffer unbounded data.
+// These were plain fetch() calls: a slow or hostile endpoint could stall the
+// request indefinitely, and a provider that answers with a huge body (or a huge
+// "generated image") could exhaust memory.
+const AI_HTTP_TIMEOUT_MS = 90_000;     // model responses can legitimately be slow
+const AI_DOWNLOAD_TIMEOUT_MS = 30_000;
+const MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024;
+
+// Read a response body, refusing to buffer more than `maxBytes` (returns null).
+async function readCapped(res: Response, maxBytes: number): Promise<Buffer | null> {
+  const body: any = (res as any).body;
+  if (!body || typeof body.getReader !== 'function') {
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.length > maxBytes ? null : buf;
+  }
+  const reader = body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > maxBytes) { try { await reader.cancel(); } catch { /* already gone */ } return null; }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
+}
 import type { AIToolFunction, AIToolCall } from './ai';
 
 export interface ToolContext {
   userId: string;
   role: string;
+  // The site the request resolved to (middleware/site.ts). Optional: a
+  // single-site install has no domain registered and an empty value is fine.
+  siteId?: string;
+}
+
+// Scope a query to the site the request came from. Without this a multi-site
+// install would let the assistant read — and write — across every site, since
+// nothing else in the tool layer knows about sites. `alias` is the table name.
+function siteWhere(alias: string, ctx: ToolContext): { clause: string; params: any[] } {
+  if (!ctx.siteId) return { clause: '', params: [] };
+  return { clause: ` AND (${alias}.siteId IS NULL OR ${alias}.siteId = ?)`, params: [ctx.siteId] };
+}
+
+// Authors and contributors only see their own posts, mirroring the HTTP admin
+// list (routes/posts.ts). Editors/admins see everything in the site.
+function ownPostsOnly(ctx: ToolContext): boolean {
+  return ['author', 'contributor'].includes(ctx.role);
 }
 
 // ---- Sandbox: audit + sanitization for AI tool execution ----
@@ -160,15 +207,18 @@ function register(name: string, description: string, parameters: any, run: ToolF
 // --- Site stats ---
 register('get_site_stats', '获取站点统计信息：文章数、页面数、评论数、用户数、媒体数、标签数', {
   type: 'object', properties: {},
-}, async () => {
-  const one = (sql: string) => (db.prepare(sql).get() as any)?.cnt || 0;
+}, async (_args, ctx) => {
+  const one = (sql: string, params: any[] = []) => (db.prepare(sql).get(...params) as any)?.cnt || 0;
+  const postScope = siteWhere('Post', ctx);
+  const commentScope = siteWhere('Comment', ctx);
+  const mediaScope = siteWhere('Media', ctx);
   return {
-    posts: one("SELECT COUNT(*) as cnt FROM Post WHERE type = 'post'"),
-    publishedPosts: one("SELECT COUNT(*) as cnt FROM Post WHERE type = 'post' AND status = 'published'"),
-    pages: one("SELECT COUNT(*) as cnt FROM Post WHERE type = 'page'"),
-    comments: one('SELECT COUNT(*) as cnt FROM Comment'),
+    posts: one("SELECT COUNT(*) as cnt FROM Post WHERE type = 'post'" + postScope.clause, postScope.params),
+    publishedPosts: one("SELECT COUNT(*) as cnt FROM Post WHERE type = 'post' AND status = 'published'" + postScope.clause, postScope.params),
+    pages: one("SELECT COUNT(*) as cnt FROM Post WHERE type = 'page'" + postScope.clause, postScope.params),
+    comments: one('SELECT COUNT(*) as cnt FROM Comment WHERE 1=1' + commentScope.clause, commentScope.params),
     users: one('SELECT COUNT(*) as cnt FROM User'),
-    media: one('SELECT COUNT(*) as cnt FROM Media'),
+    media: one('SELECT COUNT(*) as cnt FROM Media WHERE 1=1' + mediaScope.clause, mediaScope.params),
     tags: one('SELECT COUNT(*) as cnt FROM Tag'),
     categories: one('SELECT COUNT(*) as cnt FROM Category'),
   };
@@ -182,12 +232,15 @@ register('list_posts', '列出文章，可按状态/关键词过滤，返回标�
     search: { type: 'string', description: '标题关键词' },
     limit: { type: 'number', description: '数量，默认 10，最大 30' },
   },
-}, async (args) => {
+}, async (args, ctx) => {
   const limit = Math.min(parseInt(args.limit) || 10, 30);
   let sql = "SELECT id, title, slug, status, excerpt, publishedAt, createdAt FROM Post WHERE type = 'post'";
   const params: any[] = [];
   if (args.status && args.status !== 'all') { sql += ' AND status = ?'; params.push(args.status); }
   if (args.search) { sql += ' AND title LIKE ?'; params.push('%' + args.search + '%'); }
+  const scope = siteWhere('Post', ctx);
+  sql += scope.clause; params.push(...scope.params);
+  if (ownPostsOnly(ctx)) { sql += ' AND authorId = ?'; params.push(ctx.userId); }
   sql += ' ORDER BY createdAt DESC LIMIT ?';
   params.push(limit);
   return db.prepare(sql).all(...params);
@@ -202,12 +255,19 @@ register('search_site_content', '在全站文章中检索内容，返回匹配�
     limit: { type: 'number', description: '返回条数，默认 3，最大 8' },
   },
   required: ['query'],
-}, async (args) => {
+}, async (args, ctx) => {
   const q = String(args.query || '').trim();
   if (!q) return { error: '查询词不能为空' };
   const limit = Math.min(parseInt(args.limit) || 3, 8);
   const terms = q.split(/\s+/).filter(Boolean).map((t: string) => t.replace(/[%_]/g, ''));
-  const rows = db.prepare("SELECT id, title, slug, content, excerpt, status FROM Post WHERE type IN ('post','page') ORDER BY createdAt DESC LIMIT 200").all() as any[];
+  // Site-scoped, trash excluded, and limited to what the caller could otherwise
+  // see: searching all sites would surface other sites' drafts and private posts.
+  const scope = siteWhere('Post', ctx);
+  let sql = "SELECT id, title, slug, content, excerpt, status FROM Post WHERE type IN ('post','page') AND status != 'trash'" + scope.clause;
+  const params: any[] = [...scope.params];
+  if (ownPostsOnly(ctx)) { sql += ' AND authorId = ?'; params.push(ctx.userId); }
+  sql += ' ORDER BY createdAt DESC LIMIT 200';
+  const rows = db.prepare(sql).all(...params) as any[];
 
   // Score by term hits in title/content/excerpt
   const scored = rows.map((p: any) => {
@@ -575,6 +635,7 @@ register('generate_image', '生成一张配图（如文章封面、插画）并�
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + provider.apiKey },
     body: JSON.stringify({ model: provider.model, prompt: String(args.prompt).slice(0, 1000), n: 1, size: args.size || '1024x1024' }),
+    signal: AbortSignal.timeout(AI_HTTP_TIMEOUT_MS),
   });
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
@@ -587,11 +648,17 @@ register('generate_image', '生成一张配图（如文章封面、插画）并�
 
   let buf: Buffer;
   if (imgData.startsWith('http')) {
-    const imgRes = await fetch(imgData);
+    // The URL comes from the provider's response, so it is not ours to trust:
+    // restrict the scheme, bound the time, and cap what we are willing to buffer.
+    if (!/^https?:\/\//i.test(imgData)) return { error: '服务商返回的图片地址无效' };
+    const imgRes = await fetch(imgData, { signal: AbortSignal.timeout(AI_DOWNLOAD_TIMEOUT_MS) });
     if (!imgRes.ok) return { error: '下载生成的图片失败' };
-    buf = Buffer.from(await imgRes.arrayBuffer());
+    const capped = await readCapped(imgRes, MAX_DOWNLOAD_BYTES);
+    if (!capped) return { error: '生成的图片超过大小上限（' + (MAX_DOWNLOAD_BYTES / 1024 / 1024) + 'MB）' };
+    buf = capped;
   } else {
     buf = Buffer.from(imgData, 'base64');
+    if (buf.length > MAX_DOWNLOAD_BYTES) return { error: '生成的图片超过大小上限' };
   }
 
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -652,14 +719,21 @@ register('write_post', '撰写并创建一篇新文章。可以给定标题和�
   const allSlugs = (db.prepare("SELECT slug FROM Post WHERE type = 'post'").all() as any[]).map((s: any) => s.slug);
   const slug = uniqueSlug(title, allSlugs);
   const id = cuid();
-  const status = args.status === 'published' ? 'published' : 'draft';
+  // Publishing is a capability, not just a parameter: the HTTP route keeps
+  // contributors on drafts, and the tool must not become a way around that.
+  const wantsPublish = args.status === 'published';
+  const canPublish = userCan(ctx, 'publish_posts');
+  const status = wantsPublish && canPublish ? 'published' : 'draft';
   const now = new Date().toISOString();
   const cleanContent = prepareAiContent(args.content);
   const excerpt = String(args.excerpt || '').trim().slice(0, 500) || autoExcerpt(cleanContent);
   const featuredRaw = String(args.featured || '').trim().slice(0, 500);
   const featured = /^(https?:\/\/|\/uploads\/|\/media\/)/i.test(featuredRaw) ? featuredRaw : '';
-  db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt, featured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, title, slug, cleanContent, excerpt, status, 'post', ctx.userId, status === 'published' ? now : null, featured || null);
+  // siteId matters: the public lists filter on `siteId IS NULL OR siteId = ?`,
+  // so a post created without it would show up on every site of a multi-site
+  // install.
+  db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt, featured, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, title, slug, cleanContent, excerpt, status, 'post', ctx.userId, status === 'published' ? now : null, featured || null, ctx.siteId || null);
   // Invalidate the public content caches: the tool call bypasses the HTTP
   // mutation middleware, so the list/archive/feed must be purged explicitly.
   purgeContentCaches();
@@ -691,7 +765,11 @@ register('write_post', '撰写并创建一篇新文章。可以给定标题和�
     db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tag.id);
   }
 
-  return { id, title, slug, status, featured: featured || null, message: status === 'published' ? '文章已发布' : '文章已保存为草稿' };
+  return {
+    id, title, slug, status, featured: featured || null,
+    message: status === 'published' ? '文章已发布' : '文章已保存为草稿',
+    ...(wantsPublish && !canPublish ? { note: '当前角色无发布权限，已保存为草稿，请让有权限的编辑发布' } : {}),
+  };
 });
 
 // --- Update post ---
@@ -720,16 +798,26 @@ register('update_post', '更新文章的部分字段（标题、内容、摘要�
     const f = String(args.featured).trim().slice(0, 500);
     sets.push('featured = ?'); vals.push(/^(https?:\/\/|\/uploads\/|\/media\/)/i.test(f) ? f : null);
   }
+  let publishBlocked = false;
   if (args.status !== undefined) {
-    sets.push('status = ?'); vals.push(args.status);
-    if (args.status === 'published' && !existing.publishedAt) { sets.push('publishedAt = ?'); vals.push(new Date().toISOString()); }
+    // Same rule as write_post: publishing needs the capability. The other
+    // fields still apply, so the assistant's edit is not thrown away.
+    if (args.status === 'published' && !userCan(ctx, 'publish_posts')) {
+      publishBlocked = true;
+    } else {
+      sets.push('status = ?'); vals.push(args.status);
+      if (args.status === 'published' && !existing.publishedAt) { sets.push('publishedAt = ?'); vals.push(new Date().toISOString()); }
+    }
   }
-  if (sets.length === 0) return { message: '没有需要更新的字段' };
+  if (sets.length === 0) return publishBlocked ? { error: '当前角色无发布权限' } : { message: '没有需要更新的字段' };
   sets.push('updatedAt = ?'); vals.push(new Date().toISOString());
   vals.push(args.id);
   db.prepare('UPDATE Post SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
   purgeContentCaches();
-  return { id: args.id, message: '文章已更新' };
+  return {
+    id: args.id, message: '文章已更新',
+    ...(publishBlocked ? { note: '当前角色无发布权限，未改变发布状态' } : {}),
+  };
 });
 
 // --- Comments ---
@@ -739,10 +827,12 @@ register('list_comments', '列出评论，可按状态过滤（pending/approved/
     status: { type: 'string', enum: ['all', 'pending', 'approved', 'spam'], description: '默认 pending' },
     limit: { type: 'number', description: '默认 10' },
   },
-}, async (args) => {
+}, async (args, ctx) => {
   const limit = Math.min(parseInt(args.limit) || 10, 30);
   const status = args.status && args.status !== 'all' ? args.status : 'pending';
-  return db.prepare('SELECT id, author, content, status, createdAt, postId FROM Comment WHERE status = ? ORDER BY createdAt DESC LIMIT ?').all(status, limit);
+  const scope = siteWhere('Comment', ctx);
+  return db.prepare('SELECT id, author, content, status, createdAt, postId FROM Comment WHERE status = ?' + scope.clause + ' ORDER BY createdAt DESC LIMIT ?')
+    .all(status, ...scope.params, limit);
 });
 
 // --- Categories & tags ---
@@ -759,7 +849,10 @@ register('get_site_settings', '获取站点配置（标题、描述、URL、每�
   const rows = db.prepare('SELECT key, value FROM Setting').all() as any[];
   const map: Record<string, string> = {};
   rows.forEach((r: any) => {
-    if (['smtp_', 'jwt_', 'market_', 'active_plugins', 'custom_templates', 'maintenance_', 'ai_'].some(p => r.key.startsWith(p))) return;
+    // Reuse the shared visibility rules with isAdmin=false, so this tool can
+    // never hand out what an anonymous settings read would not: the previous
+    // hand-maintained prefix list omitted `storage_` and leaked the S3 secret.
+    if (isHiddenSettingKey(r.key, false)) return;
     map[r.key] = r.value;
   });
   return map;
@@ -864,6 +957,7 @@ register('translate_post', '将站内一篇文章翻译成指定语言并创建�
   const res = await fetch(provider.baseUrl.replace(/\/$/, '') + '/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + provider.apiKey },
+    signal: AbortSignal.timeout(AI_HTTP_TIMEOUT_MS),
     body: JSON.stringify({
       model: provider.model,
       messages: [
@@ -882,8 +976,8 @@ register('translate_post', '将站内一篇文章翻译成指定语言并创建�
   const allSlugs = (db.prepare("SELECT slug FROM Post WHERE type = 'post'").all() as any[]).map((s: any) => s.slug);
   const slug = uniqueSlug(newTitle, allSlugs);
   const id = cuid();
-  db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, featured) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, newTitle, slug, prepareAiContent(body), (post.excerpt || '').slice(0, 300), 'draft', 'post', ctx.userId, post.featured || null);
+  db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, featured, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, newTitle, slug, prepareAiContent(body), (post.excerpt || '').slice(0, 300), 'draft', 'post', ctx.userId, post.featured || null, ctx.siteId || null);
   purgeContentCaches();
   return { id, title: newTitle, slug, status: 'draft', message: '已创建翻译草稿: ' + newTitle };
 });
@@ -908,6 +1002,7 @@ register('complete_post', '完善一篇文章：自动生成摘要、SEO 标题/
   const res = await fetch(provider.baseUrl.replace(/\/$/, '') + '/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + provider.apiKey },
+    signal: AbortSignal.timeout(AI_HTTP_TIMEOUT_MS),
     body: JSON.stringify({
       model: provider.model,
       messages: [
@@ -1002,6 +1097,7 @@ register('analyze_image', '分析媒体库中的一张图片：描述内容、�
   const res = await fetch(provider.baseUrl.replace(/\/$/, '') + '/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + provider.apiKey },
+    signal: AbortSignal.timeout(AI_HTTP_TIMEOUT_MS),
     body: JSON.stringify({
       model: provider.model,
       messages: [{
@@ -1034,6 +1130,11 @@ export function listToolSchemas(role: string): AIToolFunction[] {
   return result;
 }
 
+// Tools whose side effect should also land in the Activity log. AiAudit already
+// records every call, but it has no admin UI — Activity is what an operator can
+// actually see, and "an AI tool changed my site" must be traceable there.
+const AI_WRITE_TOOLS = new Set(['write_post', 'update_post', 'translate_post', 'complete_post', 'generate_image', 'apply_theme_style', 'update_site_settings']);
+
 export async function executeTool(name: string, args: any, ctx: ToolContext): Promise<any> {
   const def = tools[name];
   if (!def) return { error: '未知工具: ' + name };
@@ -1041,6 +1142,11 @@ export async function executeTool(name: string, args: any, ctx: ToolContext): Pr
   try {
     const result = await def.run(args || {}, ctx);
     auditToolCall(ctx, name, args, result); // sandbox audit trail
+    if (AI_WRITE_TOOLS.has(name) && !result?.error) {
+      const r: any = result || {};
+      const target = r.id || r.slug || '';
+      logActivity(ctx.userId, 'ai:' + name, (target ? target + ' ' : '') + String(r.message || r.title || '').slice(0, 150));
+    }
     return result;
   } catch (e: any) {
     const err = { error: '工具执行失败: ' + (e.message || e) };
