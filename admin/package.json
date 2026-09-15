@@ -12,10 +12,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tiptap/extension-image": "^3.29.2",
-    "@tiptap/extension-link": "^3.29.2",
-    "@tiptap/react": "^3.29.2",
-    "@tiptap/starter-kit": "^3.29.2",
+    "@tiptap/extension-image": "^3.31.3",
+    "@tiptap/extension-link": "^3.31.3",
+    "@tiptap/pm": "^3.31.3",
+    "@tiptap/react": "^3.31.3",
+    "@tiptap/starter-kit": "^3.31.3",
     "@types/qrcode": "^1.5.6",
     "axios": "^1.7.0",
     "diff": "^9.0.0",
