@@ -647,10 +647,13 @@ register('generate_image', '生成一张配图（如文章封面、插画）并�
   if (!imgData) return { error: '服务商未返回图片数据' };
 
   let buf: Buffer;
-  if (imgData.startsWith('http')) {
-    // The URL comes from the provider's response, so it is not ours to trust:
-    // restrict the scheme, bound the time, and cap what we are willing to buffer.
+  // A URL is anything with an explicit scheme, so a non-http(s) one is rejected
+  // here instead of falling through to base64 decoding and storing a junk file.
+  const isUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(imgData);
+  if (isUrl) {
     if (!/^https?:\/\//i.test(imgData)) return { error: '服务商返回的图片地址无效' };
+    // The URL comes from the provider's response, so it is not ours to trust:
+    // bound the time and cap what we are willing to buffer.
     const imgRes = await fetch(imgData, { signal: AbortSignal.timeout(AI_DOWNLOAD_TIMEOUT_MS) });
     if (!imgRes.ok) return { error: '下载生成的图片失败' };
     const capped = await readCapped(imgRes, MAX_DOWNLOAD_BYTES);

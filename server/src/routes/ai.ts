@@ -895,18 +895,22 @@ const imageLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: 
 // Rough cost of one image request, expressed in the token unit the budget uses.
 const IMAGE_TOKEN_EQUIVALENT = 5000;
 
-function throttledAiRequest(userId: string): boolean {
+// Kept per user AND per operation: analysing an image and then generating one is
+// a normal sequence (the Media page offers both), so they must not throttle each
+// other — only rapid repeats of the same operation are suppressed.
+function throttledAiRequest(userId: string, kind: string): boolean {
+  const key = userId + ':' + kind;
   const now = Date.now();
-  const last = lastAiRequest.get(userId) || 0;
+  const last = lastAiRequest.get(key) || 0;
   if (now - last < AI_MIN_INTERVAL_MS) return true;
-  lastAiRequest.set(userId, now);
+  lastAiRequest.set(key, now);
   return false;
 }
 
 router.post('/vision', authenticate, imageLimiter, enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
-    if (throttledAiRequest(req.user!.userId)) { res.status(429).json({ error: '请求过于频繁，请稍后再试' }); return; }
+    if (throttledAiRequest(req.user!.userId, 'vision')) { res.status(429).json({ error: '请求过于频繁，请稍后再试' }); return; }
     const { url, question } = req.body || {};
     if (!url) { res.status(400).json({ error: 'url required' }); return; }
     const out = await executeTool('analyze_image', { url, question: question || '' }, { userId: req.user!.userId, role: req.user!.role, siteId: req.siteId || undefined });
@@ -918,7 +922,7 @@ router.post('/vision', authenticate, imageLimiter, enforceUsageLimit, async (req
 router.post('/image-gen', authenticate, imageLimiter, enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
-    if (throttledAiRequest(req.user!.userId)) { res.status(429).json({ error: '请求过于频繁，请稍后再试' }); return; }
+    if (throttledAiRequest(req.user!.userId, 'image-gen')) { res.status(429).json({ error: '请求过于频繁，请稍后再试' }); return; }
     const { prompt, size } = req.body || {};
     if (!prompt) { res.status(400).json({ error: 'prompt required' }); return; }
     const out = await executeTool('generate_image', { prompt, size }, { userId: req.user!.userId, role: req.user!.role, siteId: req.siteId || undefined });
@@ -1154,6 +1158,13 @@ async function runWebhookReply(binding: Binding, message: string): Promise<strin
   const provider = getDefaultProvider();
   if (!provider) return 'AI 服务商尚未配置，请联系管理员。';
   if (!isRoleAllowed(user.role)) return '你的角色无权使用 AI 功能。';
+  // All three callback routes (generic / dingtalk / wechat) funnel through here,
+  // and this path used to skip the daily budget entirely — a bound bot was a free
+  // way around the cap. Reply with the reason rather than an HTTP error, since the
+  // caller is a chat bot rendering the response as the message.
+  if (usageLimitReached() || userUsageLimitReached(user.id, user.role)) {
+    return '今日 AI 用量已达上限，请稍后再试或联系管理员。';
+  }
 
   const tools = listToolSchemas(user.role);
   const msgs: any[] = [

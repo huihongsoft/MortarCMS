@@ -3,7 +3,7 @@ import fs from 'fs';
 import express from 'express';
 import db, { initDB } from '../src/utils/db';
 import { signToken } from '../src/utils/jwt';
-import { encryptSecretJson, decryptSecretJson, isEncryptedSecret } from '../src/utils/ai';
+import { encryptSecretJson, decryptSecretJson, isEncryptedSecret, saveProviders } from '../src/utils/ai';
 import { canUseTool, isRoleAllowed, executeTool } from '../src/utils/aiTools';
 import aiRoutes from '../src/routes/ai';
 
@@ -164,5 +164,30 @@ describe('dingtalk webhook cannot be pointed at the internal network', () => {
     const body = await r.json();
     expect(body.success).toBe(false);
     expect(String(body.error)).toMatch(/Webhook/);
+  });
+});
+
+// Declared last on purpose: exhausting the budget flips a module-level cache that
+// the other suites should not observe.
+describe('the bot callback respects the daily budget', () => {
+  it('refuses a webhook reply once the daily tokens are spent', async () => {
+    const create = await fetch(base + '/bindings', {
+      method: 'POST', headers: asAdmin,
+      body: JSON.stringify({ platform: 'wechat', userId: 'ad' }),
+    });
+    const token = (await create.json()).binding?.token;
+    expect(token).toBeTruthy();
+
+    // A provider must exist, otherwise the callback stops at "not configured"
+    // before it ever consults the budget.
+    saveProviders([{ id: 'p1', name: 'Test', type: 'openai', baseUrl: 'https://api.example.com/v1', model: 'm', apiKey: 'k', enabled: true } as any]);
+    setSetting('ai_usage_limit_daily', '1');
+    db.prepare("INSERT INTO AiUsage (id, userId, kind, model, tokens, createdAt) VALUES ('usage-x','ad','test','',100,?)").run(new Date().toISOString());
+
+    const r = await fetch(base + '/webhook/' + token, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ message: '你好' }),
+    });
+    expect((await r.json()).reply).toMatch(/用量已达上限/);
   });
 });
