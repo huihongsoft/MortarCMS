@@ -72,10 +72,10 @@ export default function Users() {
   }
 
   async function disable2fa() {
-    if (!(await dialog.confirm(t('disable 2fa?', getLang())))) return;
+    if (!(await dialog.confirm(t('disable 2fa?', getLang()), { danger: true }))) return;
     // Disabling 2FA now requires re-authentication — the account password (or
     // a current 2FA code if the device is available).
-    const password = await dialog.prompt(t('enter your password to disable 2fa', getLang()));
+    const password = await dialog.prompt({ message: t('enter your password to disable 2fa', getLang()), password: true });
     if (!password) return;
     try {
       await api.post('/auth/2fa/disable', { password });
@@ -167,9 +167,9 @@ export default function Users() {
             React.createElement('button', { onClick: updateProfile, className: 'btn-secondary w-full justify-center text-sm' }, t('update profile', getLang())),
             React.createElement('button', {
               onClick: async () => {
-                if (!(await dialog.confirm(t('log out everywhere?', getLang())))) return;
+                if (!(await dialog.confirm(t('log out everywhere?', getLang()), { danger: true }))) return;
                 await api.post('/auth/logout-all');
-                dialog.alert(t('logged out everywhere', getLang()));
+                await dialog.alert(t('logged out everywhere', getLang()));
                 localStorage.removeItem('mortar_token');
                 window.location.href = '/login';
               },

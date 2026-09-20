@@ -23,7 +23,9 @@ export default function SystemInfo() {
     setSwError(''); setSwLoading(true);
     try {
       const r = await api.post('/install/switch', { dbType: swDbType, dbConfig: swDbType === 'sqlite' ? undefined : swCfg });
-      dialog.alert(r.data.message);
+      // Await it: a reload right after would tear the dialog down unread (the
+      // native alert used to block, so this was fine before).
+      await dialog.alert(r.data.message);
       window.location.reload();
     } catch (e: any) { setSwError(e.response?.data?.error || t('switch failed', getLang())); setSwLoading(false); }
   }
@@ -86,7 +88,7 @@ export default function SystemInfo() {
             onChange: async (e: React.ChangeEvent<HTMLInputElement>) => {
               const f = e.target.files?.[0];
               if (!f) return;
-              if (!(await dialog.confirm(t('restore confirm', getLang())))) { e.target.value = ''; return; }
+              if (!(await dialog.confirm(t('restore confirm', getLang()), { danger: true }))) { e.target.value = ''; return; }
               const fd = new FormData();
               fd.append('file', f);
               api.post('/db/restore-full', fd).then(r => dialog.alert(t('restore complete', getLang()) + ': ' + (r.data.message || ''))).catch((err: any) => dialog.alert(err.response?.data?.error || t('restore failed', getLang())));

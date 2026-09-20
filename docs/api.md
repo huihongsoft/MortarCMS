@@ -118,7 +118,8 @@ GET    /api/db/backup               database download
 GET    /api/db/backup-full          database + uploads zip
 POST   /api/db/restore-full         restore from backup zip
 GET    /api/db/optimize             vacuum/analyze
-POST   /api/db/reset-content        admin: wipe all content (fresh empty site)
+POST   /api/db/reset-content        admin: wipe all content, all sites (fresh empty site)
+POST   /api/db/reset-demo           admin: the same wipe, then import the sample content
 GET    /api/install/status          installed?
 POST   /api/install                 install wizard (db choice + admin account, optional sampleData)
 GET    /api/install                 admin: current db configuration

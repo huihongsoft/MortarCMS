@@ -18,6 +18,7 @@ export default function SocialShare({ title, url, siteUrl }: Props) {
   async function copyLink() {
     try {
       await navigator.clipboard.writeText(fullUrl);
+      setManual(false);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {

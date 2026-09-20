@@ -1286,8 +1286,14 @@ const zh: Record<string, string> = {
 
 // Site reset (Settings → Tools)
 'reset site': '初始化站点',
-'reset site hint': '清空所有内容数据（文章、分类、标签、媒体、评论、菜单、链接、AI 数据、活动与访问统计），恢复到全新空站点。用户账号、角色权限与系统设置保留。此操作不可撤销。',
-'reset site confirm': '确定要初始化站点吗？所有内容数据将被永久删除，此操作不可撤销！',
+'demo data present': '当前站点包含演示数据，可用下方按钮清空或重新导入。',
+'reset and import demo': '初始化并导入演示数据',
+'reset demo confirm': '确定要初始化并导入演示数据吗？全部站点的所有内容与上传文件将被永久删除，用户账号、角色与系统设置保留。此操作不可撤销！',
+'reset demo confirm 2': '再次确认：删除后无法恢复。随后会写入演示文章/分类/标签/评论/菜单/链接，并切换到 softstore 演示主题。继续？',
+'reset demo done': '站点已初始化并导入演示数据',
+'reset demo failed': '演示数据导入失败',
+'reset site hint': '清空全部站点的内容数据（文章、分类、标签、媒体、评论、菜单、链接、AI 数据、活动与访问统计）并删除已上传的文件，恢复到全新空站点。用户账号与角色权限保留；主题、小工具、轮播等外观设置会恢复默认。此操作不可撤销。',
+'reset site confirm': '确定要初始化站点吗？全部站点的所有内容与上传文件将被永久删除，此操作不可撤销！',
 'site reset successful': '站点已初始化',
 'site reset failed': '初始化失败，请重试',
 'rows deleted': '行数据已删除',

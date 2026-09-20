@@ -22,8 +22,11 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 
   return React.createElement(ToastContext.Provider, { value: { toast: addToast } },
     children,
-    // bottom-16 keeps toasts above the footer status bar (StatusBar, ~42px)
-    React.createElement('div', { className: 'fixed bottom-16 right-6 z-[100] space-y-2' },
+    // bottom-16 keeps toasts above the footer status bar (StatusBar, ~42px).
+    // z-[210]: just above the dialog overlay (z-[200]) so feedback is not hidden
+    // behind the confirmation that triggered it, without jumping above every
+    // other layer on the page.
+    React.createElement('div', { className: 'fixed bottom-16 right-6 z-[210] space-y-2' },
       toasts.map(t => React.createElement('div', {
         key: t.id,
         className: `flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg text-sm font-medium transition-all ${

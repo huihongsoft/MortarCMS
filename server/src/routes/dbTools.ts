@@ -6,6 +6,8 @@ import db, { listSlowQueries, DB_PATH, closeDb } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { assertArchiveWithinLimits } from '../utils/archive';
+import { logger } from '../utils/logger';
+import { resetSite, importDemoData } from '../utils/demo';
 import { UPLOADS_DIR as uploadsDir } from '../utils/paths';
 
 const router = Router();
@@ -236,9 +238,31 @@ router.post('/restore-full', authenticate, authorize('admin'), upload.single('fi
 // but keeps user accounts, roles, system settings and site structure.
 router.post('/reset-content', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
-    const { resetSite } = require('../utils/demo');
     const stats = resetSite();
     res.json({ success: true, message: 'Site content reset', stats });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: wipe everything and install the sample content — what a user who
+// skipped demo data during install asks for later.
+//
+// Composed from the two existing routines on purpose: importDemoData() clears
+// the content tables itself but leaves uploaded files behind, while resetSite()
+// removes those files and the demo-owned settings too. Both are destructive, so
+// this is admin-only and the UI asks twice.
+router.post('/reset-demo', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+  try {
+    resetSite();
+    try {
+      const stats = importDemoData();
+      res.json({ success: true, message: 'Site reset and demo data imported', stats });
+    } catch (err: any) {
+      // The wipe already happened by the time the import can fail, so say that:
+      // a bare failure would leave the operator wondering whether their content
+      // survived. The detail goes to the log.
+      logger.error({ err }, 'demo import failed after reset');
+      res.status(500).json({ error: '站点内容已清空，但演示数据导入失败，请查看服务器日志后重试' });
+    }
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

@@ -53,7 +53,7 @@ export default function Appearance() {
 		if (!(await dialog.confirm(t('restore backup confirm', getLang()) + '「' + name + '」？'))) return;
 		try {
 			await api.post('/themes/' + activeTheme + '/backups/' + id + '/restore');
-			dialog.alert(t('restore backup success', getLang()));
+			await dialog.alert(t('restore backup success', getLang()));
 			window.location.reload();
 		} catch (e: any) { dialog.alert(e.response?.data?.error || t('save failed', getLang())); }
 	}
@@ -235,7 +235,7 @@ export default function Appearance() {
                 if (!f) return;
                 const fd = new FormData();
                 fd.append('file', f);
-                api.post('/themes/install', fd).then((r: any) => { dialog.alert(r.data.message); window.location.reload(); }).catch((err: any) => dialog.alert(err.response?.data?.error || t('install failed', getLang())));
+                api.post('/themes/install', fd).then(async (r: any) => { await dialog.alert(r.data.message); window.location.reload(); }).catch((err: any) => dialog.alert(err.response?.data?.error || t('install failed', getLang())));
                 e.target.value = '';
               },
             }),

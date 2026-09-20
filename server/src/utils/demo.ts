@@ -236,8 +236,13 @@ export function resetSite(): Record<string, number> {
   // Content wipe + demo-setting cleanup are one unit; files/caches follow after.
   withTransaction(() => {
     for (const t of CONTENT_TABLES) stats[t] = clearTable(t);
-    // Drop settings written by the demo data
-    for (const key of DEMO_SETTING_KEYS) db.prepare('DELETE FROM Setting WHERE key = ?').run(key);
+    // Drop settings written by the demo data — global and per-site. A per-site
+    // override of e.g. carousel_items still points at images this reset deletes,
+    // so leaving it would render broken images on that site's front page.
+    for (const key of DEMO_SETTING_KEYS) {
+      db.prepare('DELETE FROM Setting WHERE key = ?').run(key);
+      try { db.prepare('DELETE FROM SiteSetting WHERE key = ?').run(key); } catch { /* no SiteSetting table on very old installs */ }
+    }
   });
   // Clear uploaded media files (keep the directory + .gitkeep). The thumbs/
   // dir holds generated thumbnail caches keyed by media id — orphaned once

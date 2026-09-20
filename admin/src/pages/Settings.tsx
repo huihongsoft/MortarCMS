@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
-import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson, Trash2, Edit, HardDrive } from 'lucide-react';
+import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson, Trash2, Edit, HardDrive, Sparkles } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import Select from '../components/Select';
 import api, { downloadFile } from '../lib/api';
@@ -295,7 +295,7 @@ export default function Settings() {
           }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('export my data', getLang())),
           React.createElement('button', { onClick: async () => {
             if (!(await dialog.confirm(t('erase my data', getLang()) + '?', { danger: true }))) return;
-            try { await api.post('/gdpr/erase'); dialog.alert(t('data erased', getLang())); localStorage.removeItem('mortar_token'); window.location.href = '/admin/login'; }
+            try { await api.post('/gdpr/erase'); await dialog.alert(t('data erased', getLang())); localStorage.removeItem('mortar_token'); window.location.href = '/admin/login'; }
             catch (e: any) { dialog.alert(e.response?.data?.error || t('erase failed', getLang())); }
           }, className: 'btn-danger text-sm' }, t('erase my data', getLang()))
         )
@@ -571,7 +571,7 @@ export default function Settings() {
               const summary = preview
                 ? t('users', getLang()) + ': ' + preview.counts.users + ' · ' + t('posts', getLang()) + ': ' + preview.counts.posts + ' · ' + t('pages', getLang()) + ': ' + preview.counts.pages + ' · ' + t('comments', getLang()) + ': ' + preview.counts.comments + (preview.conflicts > 0 ? ' · ⚠ ' + preview.conflicts + ' ' + t('slug conflicts', getLang()) : '')
                 : '';
-              if (!(await dialog.confirm(t('import preview', getLang()) + (summary ? '\n\n' + summary : '') + '\n\n' + t('continue with import?', getLang())))) return;
+              if (!(await dialog.confirm(t('import preview', getLang()) + (summary ? '\n\n' + summary : '') + '\n\n' + t('continue with import?', getLang()), { danger: true }))) return;
               await api.post('/export/import', data);
               dialog.alert(t('import successful!', getLang()));
             } catch { dialog.alert(t('import failed. check file format.', getLang())); }
@@ -583,18 +583,42 @@ export default function Settings() {
       React.createElement('div', { className: 'card p-6 border-red-200 dark:border-red-900/50' },
         React.createElement('h3', { className: 'text-sm font-semibold text-red-600 dark:text-red-400 mb-3' }, t('reset site', getLang())),
         React.createElement('p', { className: 'text-sm text-gray-500 dark:text-gray-400 mb-4' }, t('reset site hint', getLang())),
+        // demo_imported was written by the importer and never read: this is what
+        // it is for — remind whoever inherited a demo site that the content is
+        // sample data and where to clear it.
+        settings.demo_imported === '1' && React.createElement('p', { className: 'text-xs text-amber-600 dark:text-amber-400 mb-3' }, '⚠ ' + t('demo data present', getLang())),
         React.createElement('button', {
           onClick: async () => {
             if (!(await dialog.confirm(t('reset site confirm', getLang()), { danger: true }))) return;
             try {
               const r = await api.post('/db/reset-content');
               const total = r.data?.stats ? Object.values(r.data.stats).reduce((a: number, b: any) => a + (Number(b) || 0), 0) : 0;
-              dialog.alert(t('site reset successful', getLang()) + (total > 0 ? ' (' + total + ' ' + t('rows deleted', getLang()) + ')' : ''));
+              // Await it: reloading immediately tore the dialog down before it
+              // could be read.
+              await dialog.alert(t('site reset successful', getLang()) + (total > 0 ? ' (' + total + ' ' + t('rows deleted', getLang()) + ')' : ''));
               window.location.reload();
             } catch { dialog.alert(t('site reset failed', getLang())); }
           },
           className: 'btn-danger text-sm',
-        }, React.createElement(Trash2, { size: 14 }), t('reset site', getLang()))
+        }, React.createElement(Trash2, { size: 14 }), t('reset site', getLang())),
+        // Same wipe, then the sample content: the choice a user who skipped demo
+        // data at install time wants later. Kept next to the plain reset so the
+        // difference (demo content afterwards) is the only thing to decide.
+        React.createElement('button', {
+          onClick: async () => {
+            if (!(await dialog.confirm(t('reset demo confirm', getLang()), { danger: true }))) return;
+            // The import rewrites the theme and writes content, so the second
+            // confirmation is a plain acknowledgement of the same warning.
+            if (!(await dialog.confirm(t('reset demo confirm 2', getLang()), { danger: true }))) return;
+            try {
+              const r = await api.post('/db/reset-demo');
+              const s = r.data?.stats || {};
+              await dialog.alert(t('reset demo done', getLang()) + ' (' + (Number(s.posts) || 0) + ' ' + t('posts', getLang()) + ')');
+              window.location.reload();
+            } catch (e: any) { dialog.alert(e.response?.data?.error || t('reset demo failed', getLang())); }
+          },
+          className: 'btn-danger text-sm ml-2',
+        }, React.createElement(Sparkles, { size: 14 }), t('reset and import demo', getLang()))
       ),
       React.createElement('div', { className: 'card p-6' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3' }, t('database', getLang())),
