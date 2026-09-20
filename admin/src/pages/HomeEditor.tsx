@@ -5,6 +5,7 @@ import { useToast } from '../lib/toast';
 import VisualEditor from '../components/VisualEditor';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 // Homepage visual editor — build the site front page with the same GrapesJS
 // canvas as posts/pages, saving HTML + CSS to the site settings (used by the
@@ -47,8 +48,8 @@ export default function HomeEditor() {
 
   // Back leaves via the editor's own header button — confirm before discarding
   // unsaved changes. No separate back button here to avoid a duplicated one.
-  function goBack() {
-    if (saveState === 'dirty' && !window.confirm(t('unsaved changes', getLang()))) return;
+  async function goBack() {
+    if (saveState === 'dirty' && !(await dialog.confirm(t('unsaved changes', getLang())))) return;
     navigate('/settings', { state: { tab: 'reading' } });
   }
 

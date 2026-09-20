@@ -3,6 +3,7 @@ import { diffLines } from 'diff';
 import { RotateCcw, GitCompare, X } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 function stripHtml(html: string): string {
   try {
@@ -26,7 +27,7 @@ export default function RevisionsPanel({ postId, onRestore }: RevisionsPanelProp
   }, [postId]);
 
   async function restore(revId: string) {
-    if (!confirm(t('restore this revision? the current state will be kept as a revision.', getLang()))) return;
+    if (!(await dialog.confirm(t('restore this revision? the current state will be kept as a revision.', getLang())))) return;
     const r = await api.put('/posts/' + postId + '/revisions/' + revId + '/restore');
     onRestore(r.data.post);
     api.get('/posts/' + postId + '/revisions').then(x => setRevisions(x.data || [])).catch(() => {});

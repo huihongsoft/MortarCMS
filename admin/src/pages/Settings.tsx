@@ -5,6 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import Select from '../components/Select';
 import api, { downloadFile } from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 type TabKey = 'general' | 'reading' | 'discussion' | 'privacy' | 'smtp' | 'storage' | 'maintenance' | 'tools';
 
@@ -39,10 +40,10 @@ export default function Settings() {
     if (!tplEdit) return;
     try {
       await api.put('/settings', { ['mail_template_' + tplEdit.name]: JSON.stringify({ subject: tplEdit.subject, body: tplEdit.body }) });
-      alert(t('template saved', getLang()));
+      dialog.alert(t('template saved', getLang()));
       setTplEdit(null);
       refreshTemplates();
-    } catch (e: any) { alert(e.response?.data?.error || t('save failed', getLang())); }
+    } catch (e: any) { dialog.alert(e.response?.data?.error || t('save failed', getLang())); }
   };
   const [tasks, setTasks] = useState<any[]>([]);
   const [dbStatus, setDbStatus] = useState<any>(null);
@@ -78,8 +79,8 @@ export default function Settings() {
       await api.put('/system/cache', { enabled: cacheInfo?.enabled !== false, ttl: cacheTtl });
       const r = await api.get('/system/cache');
       setCacheInfo(r.data);
-      alert(t('cache settings saved', getLang()));
-    } catch { alert(t('save failed', getLang())); }
+      dialog.alert(t('cache settings saved', getLang()));
+    } catch { dialog.alert(t('save failed', getLang())); }
   }
 
   async function purgeCache() {
@@ -87,8 +88,8 @@ export default function Settings() {
       const r = await api.post('/system/cache/purge');
       const s = await api.get('/system/cache');
       setCacheInfo(s.data);
-      alert(t('cache purged', getLang()) + ' (' + r.data?.purged + ')');
-    } catch { alert(t('purge failed', getLang())); }
+      dialog.alert(t('cache purged', getLang()) + ' (' + r.data?.purged + ')');
+    } catch { dialog.alert(t('purge failed', getLang())); }
   }
 
   // Returns true on success so callers can gate navigation (e.g. the "edit
@@ -124,7 +125,7 @@ export default function Settings() {
       window.dispatchEvent(new CustomEvent('mortar-settings-saved'));
       return true;
     } catch (e: any) {
-      alert(e.response?.data?.error || t('save failed', getLang()));
+      dialog.alert(e.response?.data?.error || t('save failed', getLang()));
       return false;
     }
   }
@@ -290,12 +291,12 @@ export default function Settings() {
               a.href = URL.createObjectURL(blob);
               a.download = 'my-data.json';
               a.click();
-            } catch { alert(t('export failed', getLang())); }
+            } catch { dialog.alert(t('export failed', getLang())); }
           }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('export my data', getLang())),
           React.createElement('button', { onClick: async () => {
-            if (!confirm(t('erase my data', getLang()) + '?')) return;
-            try { await api.post('/gdpr/erase'); alert(t('data erased', getLang())); localStorage.removeItem('mortar_token'); window.location.href = '/admin/login'; }
-            catch (e: any) { alert(e.response?.data?.error || t('erase failed', getLang())); }
+            if (!(await dialog.confirm(t('erase my data', getLang()) + '?', { danger: true }))) return;
+            try { await api.post('/gdpr/erase'); dialog.alert(t('data erased', getLang())); localStorage.removeItem('mortar_token'); window.location.href = '/admin/login'; }
+            catch (e: any) { dialog.alert(e.response?.data?.error || t('erase failed', getLang())); }
           }, className: 'btn-danger text-sm' }, t('erase my data', getLang()))
         )
       ),
@@ -319,9 +320,9 @@ export default function Settings() {
           React.createElement('button', { onClick: async () => {
             const id = (document.getElementById('gdpr-user') as HTMLSelectElement)?.value;
             if (!id) return;
-            if (!confirm(t('erase this user data?', getLang()))) return;
-            try { await api.post('/gdpr/admin/erase/' + id); alert(t('data erased', getLang())); }
-            catch (e: any) { alert(e.response?.data?.error || t('erase failed', getLang())); }
+            if (!(await dialog.confirm(t('erase this user data?', getLang()), { danger: true }))) return;
+            try { await api.post('/gdpr/admin/erase/' + id); dialog.alert(t('data erased', getLang())); }
+            catch (e: any) { dialog.alert(e.response?.data?.error || t('erase failed', getLang())); }
           }, className: 'btn-danger text-sm' }, t('erase user data', getLang()))
         )
       )
@@ -348,9 +349,9 @@ export default function Settings() {
             React.createElement('input', { id: 'smtp-test-to', defaultValue: settings.admin_email || '', placeholder: t('recipient email', getLang()), className: 'input-field w-56 text-sm' }),
             React.createElement('button', { onClick: async () => {
               const to = (document.getElementById('smtp-test-to') as HTMLInputElement).value.trim();
-              if (!to) { alert(t('enter a recipient email', getLang())); return; }
-              try { await api.post('/mailer/test', { to }); alert(t('test email sent', getLang()) + ': ' + to); }
-              catch (e: any) { alert(e.response?.data?.error || t('send failed', getLang())); }
+              if (!to) { dialog.alert(t('enter a recipient email', getLang())); return; }
+              try { await api.post('/mailer/test', { to }); dialog.alert(t('test email sent', getLang()) + ': ' + to); }
+              catch (e: any) { dialog.alert(e.response?.data?.error || t('send failed', getLang())); }
             }, className: 'btn-secondary text-sm' }, t('send test email', getLang())))
         )
       ),
@@ -374,15 +375,15 @@ export default function Settings() {
                   }
                   setTplEdit({ name: tp.name, subject, body });
                 }, className: 'text-xs text-primary-600 hover:text-primary-700' }, t('edit template', getLang())),
-                tp.customized && React.createElement('button', { onClick: () => {
-                  if (!window.confirm(t('reset template confirm', getLang()))) return;
-                  api.delete('/mailer/templates/' + tp.name).then(refreshTemplates).catch((e: any) => alert(e.response?.data?.error || t('failed', getLang())));
+                tp.customized && React.createElement('button', { onClick: async () => {
+                  if (!(await dialog.confirm(t('reset template confirm', getLang()), { danger: true }))) return;
+                  api.delete('/mailer/templates/' + tp.name).then(refreshTemplates).catch((e: any) => dialog.alert(e.response?.data?.error || t('failed', getLang())));
                 }, className: 'text-xs text-red-500 hover:text-red-600' }, t('reset template', getLang())),
                 React.createElement('button', { onClick: () => setPreviewTpl(previewTpl === tp.name ? '' : tp.name), className: 'text-xs text-primary-600 hover:text-primary-700' }, t('preview', getLang())),
-                React.createElement('button', { onClick: () => {
-                  const to = prompt(t('recipient email', getLang()));
+                React.createElement('button', { onClick: async () => {
+                  const to = await dialog.prompt(t('recipient email', getLang()));
                   if (!to) return;
-                  api.post('/mailer/send', { to, template: tp.name }).then(() => alert(t('template sent', getLang()))).catch((e: any) => alert(e.response?.data?.error || t('send failed', getLang())));
+                  api.post('/mailer/send', { to, template: tp.name }).then(() => dialog.alert(t('template sent', getLang()))).catch((e: any) => dialog.alert(e.response?.data?.error || t('send failed', getLang())));
                 }, className: 'text-xs text-primary-600 hover:text-primary-700' }, t('send template', getLang()))
               ),
               previewTpl === tp.name && React.createElement('div', { className: 'p-4 bg-white dark:bg-gray-900' },
@@ -431,13 +432,13 @@ export default function Settings() {
         React.createElement('div', { className: 'mt-5 pt-5 border-t border-gray-100 dark:border-gray-700 flex flex-wrap items-end gap-3' },
           React.createElement('button', { onClick: saveSettings, className: 'btn-primary text-sm' }, t('save changes', getLang())),
           React.createElement('button', { onClick: async () => {
-            try { await api.post('/settings/storage/test'); alert(t('connection ok', getLang())); }
-            catch (e: any) { alert(e.response?.data?.error || t('connection failed', getLang())); }
+            try { await api.post('/settings/storage/test'); dialog.alert(t('connection ok', getLang())); }
+            catch (e: any) { dialog.alert(e.response?.data?.error || t('connection failed', getLang())); }
           }, className: 'btn-secondary text-sm' }, t('test connection', getLang())),
           React.createElement('button', { onClick: async () => {
-            if (!window.confirm(t('migrate confirm', getLang()))) return;
-            try { await api.post('/system/tasks/sync_media_to_storage/run'); alert(t('migrate started', getLang())); }
-            catch (e: any) { alert(e.response?.data?.error || t('migrate failed', getLang())); }
+            if (!(await dialog.confirm(t('migrate confirm', getLang())))) return;
+            try { await api.post('/system/tasks/sync_media_to_storage/run'); dialog.alert(t('migrate started', getLang())); }
+            catch (e: any) { dialog.alert(e.response?.data?.error || t('migrate failed', getLang())); }
           }, className: 'btn-secondary text-sm' }, t('migrate media now', getLang()))
         )
       )
@@ -554,8 +555,8 @@ export default function Settings() {
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3' }, t('content', getLang())),
         React.createElement('p', { className: 'text-sm text-gray-500 dark:text-gray-400 mb-4' }, t('export all content as json or import from a previously exported file.', getLang())),
         React.createElement('div', { className: 'flex flex-wrap gap-3' },
-          React.createElement('button', { onClick: () => { if (!downloadFile('/export/export', 'mortar-export.json')) alert(t('download failed', getLang())); }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('download export', getLang())),
-          React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup', 'mortar-backup.db')) alert(t('download failed', getLang())); }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('download db backup', getLang())),
+          React.createElement('button', { onClick: () => { if (!downloadFile('/export/export', 'mortar-export.json')) dialog.alert(t('download failed', getLang())); }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('download export', getLang())),
+          React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup', 'mortar-backup.db')) dialog.alert(t('download failed', getLang())); }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('download db backup', getLang())),
         React.createElement('button', { onClick: () => {
           const input = document.createElement('input');
           input.type = 'file'; input.accept = '.json';
@@ -570,10 +571,10 @@ export default function Settings() {
               const summary = preview
                 ? t('users', getLang()) + ': ' + preview.counts.users + ' · ' + t('posts', getLang()) + ': ' + preview.counts.posts + ' · ' + t('pages', getLang()) + ': ' + preview.counts.pages + ' · ' + t('comments', getLang()) + ': ' + preview.counts.comments + (preview.conflicts > 0 ? ' · ⚠ ' + preview.conflicts + ' ' + t('slug conflicts', getLang()) : '')
                 : '';
-              if (!confirm(t('import preview', getLang()) + (summary ? '\n\n' + summary : '') + '\n\n' + t('continue with import?', getLang()))) return;
+              if (!(await dialog.confirm(t('import preview', getLang()) + (summary ? '\n\n' + summary : '') + '\n\n' + t('continue with import?', getLang())))) return;
               await api.post('/export/import', data);
-              alert(t('import successful!', getLang()));
-            } catch { alert(t('import failed. check file format.', getLang())); }
+              dialog.alert(t('import successful!', getLang()));
+            } catch { dialog.alert(t('import failed. check file format.', getLang())); }
           };
           input.click();
         }, className: 'btn-secondary text-sm' }, React.createElement(Upload, { size: 14 }), t('import json', getLang()))
@@ -584,13 +585,13 @@ export default function Settings() {
         React.createElement('p', { className: 'text-sm text-gray-500 dark:text-gray-400 mb-4' }, t('reset site hint', getLang())),
         React.createElement('button', {
           onClick: async () => {
-            if (!confirm(t('reset site confirm', getLang()))) return;
+            if (!(await dialog.confirm(t('reset site confirm', getLang()), { danger: true }))) return;
             try {
               const r = await api.post('/db/reset-content');
               const total = r.data?.stats ? Object.values(r.data.stats).reduce((a: number, b: any) => a + (Number(b) || 0), 0) : 0;
-              alert(t('site reset successful', getLang()) + (total > 0 ? ' (' + total + ' ' + t('rows deleted', getLang()) + ')' : ''));
+              dialog.alert(t('site reset successful', getLang()) + (total > 0 ? ' (' + total + ' ' + t('rows deleted', getLang()) + ')' : ''));
               window.location.reload();
-            } catch { alert(t('site reset failed', getLang())); }
+            } catch { dialog.alert(t('site reset failed', getLang())); }
           },
           className: 'btn-danger text-sm',
         }, React.createElement(Trash2, { size: 14 }), t('reset site', getLang()))
@@ -637,11 +638,11 @@ export default function Settings() {
           dbCheck.ok ? t('integrity ok', getLang()) : t('integrity failed', getLang()) + ': ' + dbCheck.detail
         ),
         React.createElement('div', { className: 'flex flex-wrap gap-3' },
-          React.createElement('button', { onClick: async () => { try { const r = await api.get('/db/optimize'); alert(r.data?.message || t('database optimized', getLang())); api.get('/db/status').then(x => setDbStatus(x.data)); } catch (e: any) { alert(e.response?.data?.error || t('optimize failed', getLang())); } }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('optimize database', getLang())),
-          React.createElement('button', { onClick: async () => { try { const r = await api.get('/db/integrity'); setDbCheck(r.data); } catch (e: any) { alert(e.response?.data?.error || t('check failed', getLang())); } }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('integrity check', getLang())),
-          React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup', 'mortar-backup.db')) alert(t('download failed', getLang())); }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('download db backup', getLang())),
-          React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup-full', 'mortar-backup.zip')) alert(t('download failed', getLang())); }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('full backup (zip)', getLang())),
-          React.createElement('button', { onClick: async () => { try { await api.post('/system/tasks/backup_database/run'); loadBackups(); alert(t('backup created', getLang())); } catch (e: any) { alert(e.response?.data?.error || t('backup failed', getLang())); } }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('backup now', getLang())),
+          React.createElement('button', { onClick: async () => { try { const r = await api.get('/db/optimize'); dialog.alert(r.data?.message || t('database optimized', getLang())); api.get('/db/status').then(x => setDbStatus(x.data)); } catch (e: any) { dialog.alert(e.response?.data?.error || t('optimize failed', getLang())); } }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('optimize database', getLang())),
+          React.createElement('button', { onClick: async () => { try { const r = await api.get('/db/integrity'); setDbCheck(r.data); } catch (e: any) { dialog.alert(e.response?.data?.error || t('check failed', getLang())); } }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('integrity check', getLang())),
+          React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup', 'mortar-backup.db')) dialog.alert(t('download failed', getLang())); }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('download db backup', getLang())),
+          React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup-full', 'mortar-backup.zip')) dialog.alert(t('download failed', getLang())); }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('full backup (zip)', getLang())),
+          React.createElement('button', { onClick: async () => { try { await api.post('/system/tasks/backup_database/run'); loadBackups(); dialog.alert(t('backup created', getLang())); } catch (e: any) { dialog.alert(e.response?.data?.error || t('backup failed', getLang())); } }, className: 'btn-secondary text-sm' }, React.createElement(Download, { size: 14 }), t('backup now', getLang())),
         ),
         // Retention + backup list
         React.createElement('div', { className: 'mt-4 pt-4 border-t border-gray-100 dark:border-gray-700' },
@@ -657,8 +658,8 @@ export default function Settings() {
                     React.createElement('span', { className: 'flex-1 truncate font-mono' }, b.name),
                     React.createElement('span', { className: 'text-gray-400' }, b.sizeKB + ' KB'),
                     React.createElement('span', { className: 'text-gray-400' }, new Date(b.at).toLocaleDateString()),
-                    React.createElement('button', { onClick: () => { if (!downloadFile('/db/backups/' + encodeURIComponent(b.name), b.name)) alert(t('download failed', getLang())); }, className: 'text-primary-600 hover:text-primary-700' }, t('download', getLang())),
-                    React.createElement('button', { onClick: async () => { if (!confirm(t('delete this backup?', getLang()))) return; await api.delete('/db/backups/' + encodeURIComponent(b.name)); loadBackups(); }, className: 'text-red-500 hover:text-red-700' }, t('delete', getLang()))
+                    React.createElement('button', { onClick: () => { if (!downloadFile('/db/backups/' + encodeURIComponent(b.name), b.name)) dialog.alert(t('download failed', getLang())); }, className: 'text-primary-600 hover:text-primary-700' }, t('download', getLang())),
+                    React.createElement('button', { onClick: async () => { if (!(await dialog.confirm(t('delete this backup?', getLang()), { danger: true }))) return; await api.delete('/db/backups/' + encodeURIComponent(b.name)); loadBackups(); }, className: 'text-red-500 hover:text-red-700' }, t('delete', getLang()))
                   )
                 )
               )

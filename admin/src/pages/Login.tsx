@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { t, getLang } from '../lib/i18n';
 import { LogIn } from 'lucide-react';
+import { dialog } from '../lib/dialog';
 
 export default function Login() {
   const { login, user } = useAuth();
@@ -75,7 +76,7 @@ export default function Login() {
         twoFactor && React.createElement('div', null, React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, t('2fa code', getLang())), React.createElement('input', { type: 'text', value: code, onChange: e => setCode(e.target.value), className: 'input-field text-center text-lg tracking-widest', placeholder: '000000', maxLength: 6, required: true })),
         React.createElement('button', { type: 'submit', disabled: loading, className: 'btn-primary w-full justify-center' }, React.createElement(LogIn, { size: 16 }), loading ? t('sign in', getLang()) + '...' : twoFactor ? t('verify 2fa', getLang()) : t('sign in', getLang())),
       
-      React.createElement('p', { className: 'text-sm text-gray-500 text-center mt-4' }, t('forgot password', getLang()) + '? ', React.createElement('a', { href: '#', onClick: async (e: React.MouseEvent) => { e.preventDefault(); const em = (document.getElementById('login-email') as HTMLInputElement)?.value; if (em) { await fetch('/api/auth/forgot-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: em }) }); alert(t('if the email exists, a reset link has been sent.', getLang())); } else { alert(t('enter your email first.', getLang())); } }, className: 'text-primary-600 hover:text-primary-700' }, t('restore', getLang()))),
+      React.createElement('p', { className: 'text-sm text-gray-500 text-center mt-4' }, t('forgot password', getLang()) + '? ', React.createElement('a', { href: '#', onClick: async (e: React.MouseEvent) => { e.preventDefault(); const em = (document.getElementById('login-email') as HTMLInputElement)?.value; if (em) { await fetch('/api/auth/forgot-password', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email: em }) }); dialog.alert(t('if the email exists, a reset link has been sent.', getLang())); } else { dialog.alert(t('enter your email first.', getLang())); } }, className: 'text-primary-600 hover:text-primary-700' }, t('restore', getLang()))),
       )
     )
   );

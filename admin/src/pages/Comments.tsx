@@ -3,6 +3,7 @@ import { Check, X, Trash2, Trash, Sparkles, Pencil, Save } from 'lucide-react';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
+import { dialog } from '../lib/dialog';
 
 export default function Comments() {
   const [comments, setComments] = useState<any[]>([]);
@@ -29,7 +30,7 @@ export default function Comments() {
   useEffect(() => { fetchComments(); }, [filter]);
   async function fetchComments() { try { const r = await api.get(`/comments/admin?limit=50&status=${filter}`); setComments(r.data.comments); setLoaded(true); } catch { setLoaded(true); } }
   async function updateStatus(id: string, status: string) { await api.put(`/comments/${id}`, { status }); fetchComments(); }
-  async function del(id: string) { if (!confirm(t('delete?', getLang()))) return; await api.delete('/comments/' + id); fetchComments(); }
+  async function del(id: string) { if (!(await dialog.confirm(t('delete?', getLang()), { danger: true }))) return; await api.delete('/comments/' + id); fetchComments(); }
   async function bulkAction(act: string) { if (selected.size === 0) return; await api.post('/comments/bulk-action', { ids: Array.from(selected), action: act }); toast.toast(selected.size + ' ' + t('comments', getLang()) + ' ' + act); setSelected(new Set()); fetchComments(); }
   async function runAiReview() {
     if (aiReviewing) return;
@@ -38,7 +39,7 @@ export default function Comments() {
     try {
       const r = await api.post('/ai/review-comments');
       setAiReview(r.data.verdicts || []);
-    } catch (e: any) { alert(e.response?.data?.error || t('ai review failed', getLang())); }
+    } catch (e: any) { dialog.alert(e.response?.data?.error || t('ai review failed', getLang())); }
     finally { setAiReviewing(false); }
   }
 

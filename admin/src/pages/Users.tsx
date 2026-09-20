@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
 import Select from '../components/Select';
+import { dialog } from '../lib/dialog';
 
 const roles = ['admin', 'editor', 'author', 'contributor', 'subscriber'];
 
@@ -24,13 +25,13 @@ export default function Users() {
   useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); }, []);
   async function updateSites(id: string, siteIds: string[]) {
     try { await api.put(`/users/${id}`, { siteIds }); setUsers(users.map((u: any) => u.id === id ? { ...u, siteIds } : u)); }
-    catch (e: any) { alert(e.response?.data?.error || t('update failed', getLang())); }
+    catch (e: any) { dialog.alert(e.response?.data?.error || t('update failed', getLang())); }
   }
   async function updateRole(id: string, role: string) {
     try { await api.put(`/users/${id}`, { role }); setUsers(users.map((u: any) => u.id === id ? { ...u, role } : u)); }
-    catch (e: any) { alert(e.response?.data?.error || t('update failed', getLang())); }
+    catch (e: any) { dialog.alert(e.response?.data?.error || t('update failed', getLang())); }
   }
-  async function del(id: string) { if (!confirm(t('delete this user?', getLang()))) return; try { await api.delete(`/users/${id}`); setUsers(users.filter((u: any) => u.id !== id)); } catch (e: any) { alert(e.response?.data?.error || t('delete failed', getLang())); } }
+  async function del(id: string) { if (!(await dialog.confirm(t('delete this user?', getLang()), { danger: true }))) return; try { await api.delete(`/users/${id}`); setUsers(users.filter((u: any) => u.id !== id)); } catch (e: any) { dialog.alert(e.response?.data?.error || t('delete failed', getLang())); } }
 
   // ---- 2FA management (self-service: the API acts on the logged-in user) ----
   const [twoFa, setTwoFa] = useState<null | { enabled: boolean; secret?: string; otpauth?: string }>(null);
@@ -56,7 +57,7 @@ export default function Users() {
       if (status.data?.enabled) { setTwoFa({ enabled: true }); return; }
       const s = await api.post('/auth/2fa/setup');
       setTwoFa({ enabled: false, secret: s.data.secret, otpauth: s.data.otpauth });
-    } catch (e: any) { alert(e.response?.data?.error || t('2fa setup failed', getLang())); }
+    } catch (e: any) { dialog.alert(e.response?.data?.error || t('2fa setup failed', getLang())); }
   }
 
   async function enable2fa() {
@@ -66,21 +67,21 @@ export default function Users() {
       await api.post('/auth/2fa/enable', { code: twoFaCode.trim() });
       setTwoFa({ enabled: true });
       api.get('/users').then(r => setUsers(r.data)).catch(() => {});
-    } catch (e: any) { alert(e.response?.data?.error || t('invalid 2fa code', getLang())); }
+    } catch (e: any) { dialog.alert(e.response?.data?.error || t('invalid 2fa code', getLang())); }
     finally { setTwoFaBusy(false); }
   }
 
   async function disable2fa() {
-    if (!confirm(t('disable 2fa?', getLang()))) return;
+    if (!(await dialog.confirm(t('disable 2fa?', getLang())))) return;
     // Disabling 2FA now requires re-authentication — the account password (or
     // a current 2FA code if the device is available).
-    const password = prompt(t('enter your password to disable 2fa', getLang()));
+    const password = await dialog.prompt(t('enter your password to disable 2fa', getLang()));
     if (!password) return;
     try {
       await api.post('/auth/2fa/disable', { password });
       setTwoFa(null);
       api.get('/users').then(r => setUsers(r.data)).catch(() => {});
-    } catch (e: any) { alert(e.response?.data?.error || t('2fa disable failed', getLang())); }
+    } catch (e: any) { dialog.alert(e.response?.data?.error || t('2fa disable failed', getLang())); }
   }
 
   function copyText(v: string) {
@@ -92,11 +93,11 @@ export default function Users() {
     const e = (document.getElementById('new-email') as HTMLInputElement).value;
     const p = (document.getElementById('new-password') as HTMLInputElement).value;
     const r = newRole;
-    if (!u || !e || !p) return alert(t('fill all fields', getLang()));
+    if (!u || !e || !p) return dialog.alert(t('fill all fields', getLang()));
     try {
       await api.post('/auth/register', { username: u, email: e, password: p, role: r });
       window.location.reload();
-    } catch (err: any) { alert(err.response?.data?.error || t('create failed', getLang())); }
+    } catch (err: any) { dialog.alert(err.response?.data?.error || t('create failed', getLang())); }
   }
 
   const [avatarUrl, setAvatarUrl] = useState(currentUser?.avatar || '');
@@ -121,7 +122,7 @@ export default function Users() {
     if (avatarUrl) data.avatar = avatarUrl;
     if (Object.keys(data).length > 0) {
       await api.put('/users/' + (currentUser?.id || ''), data);
-      alert(t('profile updated', getLang()));
+      dialog.alert(t('profile updated', getLang()));
     }
   }
 
@@ -166,9 +167,9 @@ export default function Users() {
             React.createElement('button', { onClick: updateProfile, className: 'btn-secondary w-full justify-center text-sm' }, t('update profile', getLang())),
             React.createElement('button', {
               onClick: async () => {
-                if (!confirm(t('log out everywhere?', getLang()))) return;
+                if (!(await dialog.confirm(t('log out everywhere?', getLang())))) return;
                 await api.post('/auth/logout-all');
-                alert(t('logged out everywhere', getLang()));
+                dialog.alert(t('logged out everywhere', getLang()));
                 localStorage.removeItem('mortar_token');
                 window.location.href = '/login';
               },

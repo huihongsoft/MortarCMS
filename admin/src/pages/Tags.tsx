@@ -3,6 +3,7 @@ import { Plus, Trash2, Pencil, Check, X, Tag as TagIcon } from 'lucide-react';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
+import { dialog } from '../lib/dialog';
 
 export default function Tags() {
   const [tags, setTags] = useState<any[]>([]);
@@ -28,7 +29,7 @@ export default function Tags() {
   function startEdit(tg: any) { setEditing(tg); setName(tg.name); setSlug(tg.slug); }
 
   async function del(tg: any) {
-    if (!confirm(t('delete tag', getLang()) + ' "' + tg.name + '"?')) return;
+    if (!(await dialog.confirm(t('delete tag', getLang()) + ' "' + tg.name + '"?', { danger: true }))) return;
     try { await api.delete('/tags/' + tg.id); toast.toast(t('tag deleted', getLang())); fetchTags(); }
     catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
   }

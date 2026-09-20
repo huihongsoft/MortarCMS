@@ -5,6 +5,7 @@ import api from '../lib/api';
 import { downloadFile } from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 interface Submission { id: string; data: Record<string, string>; ip: string; spam: number; status: string; createdAt: string }
 interface FieldDef { name: string; label: string }
@@ -48,7 +49,7 @@ export default function FormSubmissions() {
   };
 
   const remove = async (s: Submission) => {
-    if (!window.confirm(t('delete submission confirm', getLang()))) return;
+    if (!(await dialog.confirm(t('delete submission confirm', getLang()), { danger: true }))) return;
     try {
       await api.delete('/admin/forms/' + id + '/submissions/' + s.id);
       toast(t('form deleted', getLang()));

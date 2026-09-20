@@ -4,6 +4,7 @@ import api from '../lib/api';
 import { t, getLang, serverMessage, serverCallSummary } from '../lib/i18n';
 import Select from '../components/Select';
 import { useToast } from '../lib/toast';
+import { dialog } from '../lib/dialog';
 
 interface ChatMsg {
   role: 'user' | 'assistant';
@@ -333,7 +334,7 @@ export default function AIChat() {
   // Voice input (Web Speech API)
   function toggleVoice() {
     const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SR) { alert(t('voice not supported', getLang())); return; }
+    if (!SR) { dialog.alert(t('voice not supported', getLang())); return; }
     if (listening) { recognitionRef.current?.stop(); setListening(false); return; }
     const rec = new SR();
     rec.lang = 'zh-CN';
@@ -534,7 +535,7 @@ export default function AIChat() {
   }
 
   async function deleteTask(id: string) {
-    if (!confirm(t('delete this task?', getLang()))) return;
+    if (!(await dialog.confirm(t('delete this task?', getLang()), { danger: true }))) return;
     await api.delete('/ai/tasks/' + id);
     if (taskDetail?.id === id) setTaskDetail(null);
     fetchTasks();
@@ -625,7 +626,7 @@ export default function AIChat() {
   }
 
   async function clearAllSessions() {
-    if (!confirm(t('clear all sessions?', getLang()))) return;
+    if (!(await dialog.confirm(t('clear all sessions?', getLang()), { danger: true }))) return;
     try { await api.delete('/ai/sessions'); } catch {}
     serverIdsRef.current.clear();
     const s: Session = { id: 's' + Date.now(), title: t('new chat', getLang()), messages: [], ts: Date.now() };
@@ -1017,13 +1018,13 @@ export default function AIChat() {
                       const data = JSON.parse(await file.text());
                       const imported = Array.isArray(data) ? data : [];
                       const valid = imported.filter((x: any) => x && typeof x.id === 'string' && Array.isArray(x.messages));
-                      if (valid.length === 0) { alert(t('invalid sessions file', getLang())); return; }
+                      if (valid.length === 0) { dialog.alert(t('invalid sessions file', getLang())); return; }
                       for (const x of valid) {
                         api.post('/ai/sessions', { id: x.id, title: x.title || 'Imported', messages: x.messages }).then(() => serverIdsRef.current.add(x.id)).catch(() => {});
                       }
                       setSessions(prev => [...valid.map((x: any) => ({ id: x.id, title: x.title || 'Imported', messages: x.messages, ts: Date.now() })), ...prev]);
-                      alert(t('imported sessions', getLang()) + ': ' + valid.length);
-                    } catch { alert(t('invalid sessions file', getLang())); }
+                      dialog.alert(t('imported sessions', getLang()) + ': ' + valid.length);
+                    } catch { dialog.alert(t('invalid sessions file', getLang())); }
                   };
                   input.click();
                 },

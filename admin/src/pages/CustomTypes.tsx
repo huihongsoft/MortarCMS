@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Plus, Trash2, Layers } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 const SUPPORTS_OPTIONS = ['title', 'editor', 'excerpt', 'featured', 'categories', 'tags', 'comments'];
 
@@ -28,7 +29,7 @@ export default function CustomTypes() {
   }
 
   async function removeType(s: string) {
-    if (!window.confirm(t('delete custom type confirm', getLang()) + '「' + s + '」？')) return;
+    if (!(await dialog.confirm(t('delete custom type confirm', getLang()) + '「' + s + '」？', { danger: true }))) return;
     try {
       await api.delete('/post-types/' + s);
       setTypes(types.filter(x => x.slug !== s));

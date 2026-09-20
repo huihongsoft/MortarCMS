@@ -3,6 +3,7 @@ import { Plus, Shield, Users, Save, Trash2, KeyRound, Bot } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 interface Role {
   slug: string;
@@ -79,7 +80,7 @@ export default function Roles() {
   }
 
   async function deleteRole(slug: string) {
-    if (!confirm(t('delete role confirm', getLang()) + ' "' + slug + '"?')) return;
+    if (!(await dialog.confirm(t('delete role confirm', getLang()) + ' "' + slug + '"?', { danger: true }))) return;
     try {
       await api.delete('/roles/' + slug);
       const r = await api.get('/roles');

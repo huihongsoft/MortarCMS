@@ -4,6 +4,7 @@ import VisualEditor from '../components/VisualEditor';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 import Select from '../components/Select';
+import { dialog } from '../lib/dialog';
 
 export default function Appearance() {
   const [themes, setThemes] = useState<any[]>([]);
@@ -45,19 +46,19 @@ export default function Appearance() {
 			await api.post('/themes/' + activeTheme + '/backups', { name: backupName.trim() || undefined });
 			setBackupName('');
 			await loadBackups();
-		} catch (e: any) { alert(e.response?.data?.error || t('save failed', getLang())); }
+		} catch (e: any) { dialog.alert(e.response?.data?.error || t('save failed', getLang())); }
 		setBackupBusy(false);
 	}
 	async function restoreBackup(id: string, name: string) {
-		if (!window.confirm(t('restore backup confirm', getLang()) + '「' + name + '」？')) return;
+		if (!(await dialog.confirm(t('restore backup confirm', getLang()) + '「' + name + '」？'))) return;
 		try {
 			await api.post('/themes/' + activeTheme + '/backups/' + id + '/restore');
-			alert(t('restore backup success', getLang()));
+			dialog.alert(t('restore backup success', getLang()));
 			window.location.reload();
-		} catch (e: any) { alert(e.response?.data?.error || t('save failed', getLang())); }
+		} catch (e: any) { dialog.alert(e.response?.data?.error || t('save failed', getLang())); }
 	}
 	async function deleteBackup(id: string) {
-		if (!window.confirm(t('delete backup confirm', getLang()))) return;
+		if (!(await dialog.confirm(t('delete backup confirm', getLang()), { danger: true }))) return;
 		try { await api.delete('/themes/' + activeTheme + '/backups/' + id); await loadBackups(); } catch {}
 	}
 
@@ -74,7 +75,7 @@ export default function Appearance() {
 	}
 	async function saveFile() {
 		if (!fileBrowser || !fileBrowser.path) return;
-		try { await api.put('/themes/' + fileBrowser.theme + '/file', { path: fileBrowser.path, content: fileBrowser.content }); alert(t('file saved', getLang())); } catch (e: any) { alert(e.response?.data?.error || t('save failed', getLang())); }
+		try { await api.put('/themes/' + fileBrowser.theme + '/file', { path: fileBrowser.path, content: fileBrowser.content }); dialog.alert(t('file saved', getLang())); } catch (e: any) { dialog.alert(e.response?.data?.error || t('save failed', getLang())); }
 	}
 
 	useEffect(() => {
@@ -97,12 +98,12 @@ export default function Appearance() {
     try {
       const r = await api.post('/themes/rebuild');
       if (r.data?.success) {
-        alert('Theme bundles rebuilt:\n' + (r.data.results || []).join('\n'));
+        dialog.alert('Theme bundles rebuilt:\n' + (r.data.results || []).join('\n'));
       } else {
-        alert('Some themes failed:\n' + (r.data?.results || []).join('\n') + '\n\n' + (r.data?.error || ''));
+        dialog.alert('Some themes failed:\n' + (r.data?.results || []).join('\n') + '\n\n' + (r.data?.error || ''));
       }
     } catch (e: any) {
-      alert(e.response?.data?.error || 'Theme rebuild failed');
+      dialog.alert(e.response?.data?.error || 'Theme rebuild failed');
     } finally {
       setRebuilding(false);
     }
@@ -137,7 +138,7 @@ export default function Appearance() {
       setCarouselDirty(false);
       setSaved(true); setTimeout(() => setSaved(false), 2000);
       window.dispatchEvent(new Event('mortar-settings-saved'));
-    } catch (e: any) { alert(e.response?.data?.error || t('save failed', getLang())); }
+    } catch (e: any) { dialog.alert(e.response?.data?.error || t('save failed', getLang())); }
   }
 
   function openSectionEditor(location: string) {
@@ -208,9 +209,9 @@ export default function Appearance() {
                 React.createElement('button', {
                   onClick: async () => {
                     if (th.name === 'default') return;
-                    if (!confirm(t('delete theme', getLang()) + ' "' + th.name + '"?')) return;
+                    if (!(await dialog.confirm(t('delete theme', getLang()) + ' "' + th.name + '"?', { danger: true }))) return;
                     try { await api.delete('/themes/' + th.name); window.location.reload(); }
-                    catch (e: any) { alert(e.response?.data?.error || t('delete failed', getLang())); }
+                    catch (e: any) { dialog.alert(e.response?.data?.error || t('delete failed', getLang())); }
                   },
                   disabled: th.name === 'default',
                   className: 'p-1.5 ' + (th.name === 'default' ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600'),
@@ -234,7 +235,7 @@ export default function Appearance() {
                 if (!f) return;
                 const fd = new FormData();
                 fd.append('file', f);
-                api.post('/themes/install', fd).then((r: any) => { alert(r.data.message); window.location.reload(); }).catch((err: any) => alert(err.response?.data?.error || t('install failed', getLang())));
+                api.post('/themes/install', fd).then((r: any) => { dialog.alert(r.data.message); window.location.reload(); }).catch((err: any) => dialog.alert(err.response?.data?.error || t('install failed', getLang())));
                 e.target.value = '';
               },
             }),

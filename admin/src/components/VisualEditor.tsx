@@ -3,6 +3,7 @@ import grapesjs, { Editor, EditorConfig } from 'grapesjs';
 import 'grapesjs/dist/css/grapes.min.css';
 import DOMPurify from 'dompurify';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 // WordPress Gutenberg SVG icons (from @wordpress/icons)
 const S = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor">';
@@ -1719,12 +1720,12 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
               btn.textContent = __('restore');
               btn.className = 've-guten-cat-add-btn';
               btn.addEventListener('click', async () => {
-                if (!confirm(__('restore this revision? the current state will be kept as a revision.'))) return;
+                if (!(await dialog.confirm(__('restore this revision? the current state will be kept as a revision.')))) return;
                 try {
                   const rr = await fetch('/api/posts/' + ps?.postId + '/revisions/' + rev.id + '/restore', { method: 'PUT', headers: { Authorization: 'Bearer ' + token } });
-                  if (!rr.ok) { alert(__('restore failed')); return; }
+                  if (!rr.ok) { dialog.alert(__('restore failed')); return; }
                   pageSettingsRef.current?.onRestoreRevision?.({ title: rev.title, content: rev.content || '', excerpt: rev.excerpt || '' });
-                } catch { alert(__('restore failed')); }
+                } catch { dialog.alert(__('restore failed')); }
               });
               row.appendChild(time);
               row.appendChild(btn);

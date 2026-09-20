@@ -4,6 +4,7 @@ import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import Select from '../components/Select';
+import { dialog } from '../lib/dialog';
 
 // Navigation-site link model: categorized links with descriptions, sub-site
 // ownership, an optional linked page, and associated posts (e.g. the
@@ -69,7 +70,7 @@ export default function Links() {
   }
   function startEditFriend(f: any) { setFEditing(f); setFName(f.name); setFUrl(f.url); setFAvatar(f.avatar || ''); setFDesc(f.description || ''); }
   async function delFriend(f: any) {
-    if (!confirm(t('delete link', getLang()) + ' "' + f.name + '"?')) return;
+    if (!(await dialog.confirm(t('delete link', getLang()) + ' "' + f.name + '"?', { danger: true }))) return;
     try { await api.delete('/friend-links/' + f.id); toast.toast(t('link deleted', getLang())); api.get('/friend-links').then(r => setFriends(r.data || [])).catch(() => {}); }
     catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
   }
@@ -94,7 +95,7 @@ export default function Links() {
   }
 
   async function del(l: any) {
-    if (!confirm(t('delete link', getLang()) + ' "' + l.name + '"?')) return;
+    if (!(await dialog.confirm(t('delete link', getLang()) + ' "' + l.name + '"?', { danger: true }))) return;
     try { await api.delete('/links/' + l.id); toast.toast(t('link deleted', getLang())); fetchLinks(); }
     catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
   }
@@ -126,7 +127,7 @@ export default function Links() {
     } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
   }
   async function delCategory(c: any) {
-    if (!confirm(t('delete category', getLang()) + ' "' + c.name + '"?')) return;
+    if (!(await dialog.confirm(t('delete category', getLang()) + ' "' + c.name + '"?', { danger: true }))) return;
     try { await api.delete('/links/categories/' + c.id); toast.toast(t('category deleted', getLang())); fetchAll(); }
     catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
   }

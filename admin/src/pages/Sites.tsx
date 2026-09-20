@@ -3,6 +3,7 @@ import { Globe, Plus, Trash2, Star, Pencil, Check, X, Copy, Layers, RefreshCw } 
 import { useToast } from '../lib/toast';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 type ContentType = 'posts' | 'pages' | 'media' | 'comments';
 
@@ -63,7 +64,7 @@ export default function Sites() {
   }
 
   async function remove(s: any) {
-    if (!confirm(t('delete site', getLang()) + ' "' + s.name + '"?')) return;
+    if (!(await dialog.confirm(t('delete site', getLang()) + ' "' + s.name + '"?', { danger: true }))) return;
     try {
       await api.delete('/sites/' + s.id);
       fetchSites();

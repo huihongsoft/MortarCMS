@@ -6,6 +6,7 @@ import { useToast } from '../lib/toast';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 import Select from '../components/Select';
+import { dialog } from '../lib/dialog';
 
 export default function Posts() {
   const navigate = useNavigate();
@@ -64,7 +65,7 @@ export default function Posts() {
     } catch {} finally { setLoading(false); }
   }
 
-  async function deletePost(id: string) { if (!confirm(t('delete this post', getLang()))) return; await api.delete(`/posts/${id}`); fetchPosts(); }
+  async function deletePost(id: string) { if (!(await dialog.confirm(t('delete this post', getLang()), { danger: true }))) return; await api.delete(`/posts/${id}`); fetchPosts(); }
 
   async function quickSave() {
     if (!quickEdit) return;
@@ -105,13 +106,13 @@ export default function Posts() {
       const r = await api.post('/ai/batch-translate', { ids: Array.from(selected), language: batchLang });
       setBatchResults(r.data.results || []);
       setSelected(new Set());
-    } catch (e: any) { alert(e.response?.data?.error || t('save failed', getLang())); }
+    } catch (e: any) { dialog.alert(e.response?.data?.error || t('save failed', getLang())); }
     finally { setBatchRunning(false); }
   }
 
   async function bulkDelete() {
     if (selected.size === 0) return;
-    if (!confirm(t('permanently delete', getLang()) + ' ' + selected.size + ' ' + t('posts', getLang()) + '?')) return;
+    if (!(await dialog.confirm(t('permanently delete', getLang()) + ' ' + selected.size + ' ' + t('posts', getLang()) + '?', { danger: true }))) return;
     await api.post('/posts/bulk-delete', { ids: Array.from(selected) });
     toast.toast(selected.size + ' ' + t('posts permanently deleted', getLang()));
     setSelected(new Set());
@@ -141,7 +142,7 @@ export default function Posts() {
   async function reviewPost(id: string, action: 'approve' | 'reject') {
     let reason = '';
     if (action === 'reject') {
-      reason = window.prompt(t('rejection reason prompt', getLang())) || '';
+      reason = await dialog.prompt(t('rejection reason prompt', getLang())) || '';
     }
     try {
       await api.post('/posts/' + id + '/review', { action, reason });

@@ -4,6 +4,7 @@ import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
 import Select from '../components/Select';
+import { dialog } from '../lib/dialog';
 
 interface Binding {
   id: string;
@@ -106,7 +107,7 @@ export default function AIBindings() {
       await api.post('/ai/schedules', { name: schName, prompt: schPrompt, type: schType, intervalMinutes: schInterval, time: schTime, weekday: schWeekday, siteId: schSite || undefined });
       setSchName(''); setSchPrompt('');
       api.get('/ai/schedules').then(r => setSchedules(r.data.schedules || [])).catch(() => {});
-    } catch (e: any) { alert(e.response?.data?.error || t('create failed', getLang())); }
+    } catch (e: any) { dialog.alert(e.response?.data?.error || t('create failed', getLang())); }
   }
 
   async function delSchedule(id: string) {

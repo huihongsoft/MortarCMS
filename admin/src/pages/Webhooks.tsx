@@ -3,6 +3,7 @@ import { Plus, Pencil, Trash2, Send, KeyRound, Copy, CheckCircle2, XCircle, Info
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 interface Webhook {
   id: string; name: string; url: string; events: string[]; active: number;
@@ -72,7 +73,7 @@ export default function Webhooks() {
   };
 
   const remove = async (w: Webhook) => {
-    if (!window.confirm(t('delete webhook confirm', getLang()))) return;
+    if (!(await dialog.confirm(t('delete webhook confirm', getLang()), { danger: true }))) return;
     try {
       await api.delete('/admin/webhooks/' + w.id);
       toast(t('webhook deleted', getLang()));

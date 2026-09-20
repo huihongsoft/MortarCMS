@@ -5,6 +5,7 @@ import EmptyState from '../components/EmptyState';
 import Select from '../components/Select';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 export default function Pages() {
   const [pages, setPages] = useState<any[]>([]);
@@ -19,7 +20,7 @@ export default function Pages() {
     setLoaded(false);
     api.get('/pages?siteId=' + encodeURIComponent(siteFilter)).then(r => { setPages(r.data); setLoaded(true); }).catch(() => setLoaded(true));
   }, [siteFilter]);
-  async function del(id: string) { if (!confirm(t('delete this page', getLang()))) return; await api.delete(`/pages/${id}`); setPages(pages.filter((p: any) => p.id !== id)); }
+  async function del(id: string) { if (!(await dialog.confirm(t('delete this page', getLang()), { danger: true }))) return; await api.delete(`/pages/${id}`); setPages(pages.filter((p: any) => p.id !== id)); }
   return React.createElement('div', null,
     React.createElement('div', { className: 'flex items-center justify-between mb-6 gap-3' },
       React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('pages', getLang())),

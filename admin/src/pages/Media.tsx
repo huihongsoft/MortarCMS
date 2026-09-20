@@ -4,6 +4,7 @@ import EmptyState from '../components/EmptyState';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 function formatSize(bytes: number): string {
   if (!bytes) return '0 B';
@@ -137,8 +138,8 @@ export default function Media() {
     } catch (e: any) { toast.toast(e.response?.data?.error || t('bulk edit failed', getLang()), 'error'); }
   }
 
-  async function del(id: string) { if (!confirm(t('delete?', getLang()))) return; await api.delete('/media/' + id); setPreview(null); const r = await api.get('/media'); setMedia(r.data.media); }
-  async function bulkDelete() { if (selected.size === 0) return; if (!confirm(t('delete selected confirm', getLang()))) return; await api.post('/media/bulk-delete', { ids: Array.from(selected) }); setSelected(new Set()); const r = await api.get('/media'); setMedia(r.data.media); }
+  async function del(id: string) { if (!(await dialog.confirm(t('delete?', getLang()), { danger: true }))) return; await api.delete('/media/' + id); setPreview(null); const r = await api.get('/media'); setMedia(r.data.media); }
+  async function bulkDelete() { if (selected.size === 0) return; if (!(await dialog.confirm(t('delete selected confirm', getLang()), { danger: true }))) return; await api.post('/media/bulk-delete', { ids: Array.from(selected) }); setSelected(new Set()); const r = await api.get('/media'); setMedia(r.data.media); }
 
   // Paste-to-upload: paste an image from the clipboard
   useEffect(() => {
@@ -184,8 +185,8 @@ export default function Media() {
       if (r.data.url) {
         setGenPrompt('');
         const rr = await api.get('/media'); setMedia(rr.data.media);
-      } else alert(r.data.error || t('generation failed', getLang()));
-    } catch (e: any) { alert(e.response?.data?.error || t('generation failed', getLang())); }
+      } else dialog.alert(r.data.error || t('generation failed', getLang()));
+    } catch (e: any) { dialog.alert(e.response?.data?.error || t('generation failed', getLang())); }
     finally { setGenLoading(false); }
   }
   function closePreview() { setPreview(null); }

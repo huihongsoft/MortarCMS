@@ -5,6 +5,7 @@ import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
 import { describeActivity } from '../lib/activity';
 import Select from '../components/Select';
+import { dialog } from '../lib/dialog';
 
 interface Provider {
   id: string;
@@ -95,7 +96,7 @@ export default function AISettings() {
     try {
       const r = await api.post('/ai/compare', { prompt: cmpPrompt, providerAId: cmpA, providerBId: cmpB });
       setCmpResult(r.data);
-    } catch (e: any) { alert(e.response?.data?.error || t('compare failed', getLang())); }
+    } catch (e: any) { dialog.alert(e.response?.data?.error || t('compare failed', getLang())); }
     finally { setCmpLoading(false); }
   }
 

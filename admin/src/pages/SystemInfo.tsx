@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Server, Database, Cpu, HardDrive, CheckCircle2, XCircle, Activity, RefreshCw, X } from 'lucide-react';
 import api, { downloadFile } from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 export default function SystemInfo() {
   const [info, setInfo] = useState<any>(null);
@@ -22,7 +23,7 @@ export default function SystemInfo() {
     setSwError(''); setSwLoading(true);
     try {
       const r = await api.post('/install/switch', { dbType: swDbType, dbConfig: swDbType === 'sqlite' ? undefined : swCfg });
-      alert(r.data.message);
+      dialog.alert(r.data.message);
       window.location.reload();
     } catch (e: any) { setSwError(e.response?.data?.error || t('switch failed', getLang())); setSwLoading(false); }
   }
@@ -76,19 +77,19 @@ export default function SystemInfo() {
       React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('backup', getLang())),
       React.createElement('p', { className: 'text-xs text-gray-500 mb-4' }, t('backup description', getLang())),
       React.createElement('div', { className: 'flex flex-wrap gap-3 items-center' },
-        React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup-full', 'mortar-backup.zip')) alert(t('download failed', getLang())); }, className: 'btn-primary text-xs' }, t('download full backup', getLang())),
-        React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup', 'mortar-backup.db')) alert(t('download failed', getLang())); }, className: 'btn-secondary text-xs' }, t('download db backup', getLang())),
+        React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup-full', 'mortar-backup.zip')) dialog.alert(t('download failed', getLang())); }, className: 'btn-primary text-xs' }, t('download full backup', getLang())),
+        React.createElement('button', { onClick: () => { if (!downloadFile('/db/backup', 'mortar-backup.db')) dialog.alert(t('download failed', getLang())); }, className: 'btn-secondary text-xs' }, t('download db backup', getLang())),
         React.createElement('label', { className: 'btn-secondary text-xs cursor-pointer' },
           t('restore backup', getLang()),
           React.createElement('input', {
             type: 'file', accept: '.zip', className: 'hidden',
-            onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+            onChange: async (e: React.ChangeEvent<HTMLInputElement>) => {
               const f = e.target.files?.[0];
               if (!f) return;
-              if (!confirm(t('restore confirm', getLang()))) { e.target.value = ''; return; }
+              if (!(await dialog.confirm(t('restore confirm', getLang())))) { e.target.value = ''; return; }
               const fd = new FormData();
               fd.append('file', f);
-              api.post('/db/restore-full', fd).then(r => alert(t('restore complete', getLang()) + ': ' + (r.data.message || ''))).catch((err: any) => alert(err.response?.data?.error || t('restore failed', getLang())));
+              api.post('/db/restore-full', fd).then(r => dialog.alert(t('restore complete', getLang()) + ': ' + (r.data.message || ''))).catch((err: any) => dialog.alert(err.response?.data?.error || t('restore failed', getLang())));
               e.target.value = '';
             },
           }),

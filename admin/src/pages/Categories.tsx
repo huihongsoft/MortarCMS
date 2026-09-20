@@ -4,6 +4,7 @@ import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import Select from '../components/Select';
+import { dialog } from '../lib/dialog';
 
 export default function Categories() {
   const [cats, setCats] = useState<any[]>([]);
@@ -32,7 +33,7 @@ export default function Categories() {
   function startEdit(c: any) { setEditing(c); setName(c.name); setSlug(c.slug); setDescription(c.description || ''); setParentId(c.parentId || ''); }
 
   async function del(c: any) {
-    if (!confirm(t('delete category', getLang()) + ' "' + c.name + '"?')) return;
+    if (!(await dialog.confirm(t('delete category', getLang()) + ' "' + c.name + '"?', { danger: true }))) return;
     try { await api.delete('/categories/' + c.id); toast.toast(t('category deleted', getLang())); fetchCats(); }
     catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
   }

@@ -10,6 +10,7 @@ import DOMPurify from 'dompurify';
 import { Bold, Italic, Strikethrough, Heading1, Heading2, Heading3, List, ListOrdered, Quote, Code, Link2, ImagePlus, Undo2, Redo2, Eye, PenLine, Code2, X, LayoutGrid as BlocksIcon, Braces, LayoutTemplate, Check as CheckIcon, Trash2 as TrashIcon, Zap } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 export type EditorMode = 'rich' | 'markdown' | 'html';
 
@@ -304,8 +305,8 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
       const data = JSON.parse(text);
       const r = await api.post('/editor/templates/import', { templates: data.templates || [data] });
       loadCustomTemplates();
-      alert(t('imported', getLang()) + ' ' + r.data.imported + ' template(s)');
-    } catch { alert(t('invalid template file', getLang())); }
+      dialog.alert(t('imported', getLang()) + ' ' + r.data.imported + ' template(s)');
+    } catch { dialog.alert(t('invalid template file', getLang())); }
   }
 
   async function deleteCustomTemplate(id: string) {
@@ -371,8 +372,8 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
         btn(t('blockquote', getLang()), () => editor.chain().focus().toggleBlockquote().run(), editor.isActive('blockquote'), React.createElement(Quote, { size: 14 })),
         btn(t('code block', getLang()), () => editor.chain().focus().toggleCodeBlock().run(), editor.isActive('codeBlock'), React.createElement(Code, { size: 14 })),
         React.createElement('span', { className: 'w-px h-4 bg-gray-200 mx-1' }),
-        btn(t('link', getLang()), () => {
-          const url = prompt('URL:');
+        btn(t('link', getLang()), async () => {
+          const url = await dialog.prompt(t('enter a url', getLang()));
           if (url && !/^javascript:|^data:/i.test(url)) editor.chain().focus().setLink({ href: url }).run();
         }, editor.isActive('link'), React.createElement(Link2, { size: 14 })),
         btn(t('image', getLang()), () => openMedia(), false, React.createElement(ImagePlus, { size: 14 })),

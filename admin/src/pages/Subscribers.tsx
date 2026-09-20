@@ -4,6 +4,7 @@ import api from '../lib/api';
 import { downloadFile } from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 interface Subscriber { id: string; email: string; name: string; status: string; confirmed: number; createdAt: string }
 interface Stats { total: number; active: number; unsubscribed: number }
@@ -32,7 +33,7 @@ export default function Subscribers() {
   useEffect(load, [page, q, statusFilter]);
 
   const remove = async (s: Subscriber) => {
-    if (!window.confirm(t('delete subscriber confirm', getLang()))) return;
+    if (!(await dialog.confirm(t('delete subscriber confirm', getLang()), { danger: true }))) return;
     try {
       await api.delete('/admin/subscribers/' + s.id);
       toast(t('subscriber deleted', getLang()));
@@ -57,7 +58,7 @@ export default function Subscribers() {
   };
 
   const broadcast = async () => {
-    if (!window.confirm(t('broadcast confirm', getLang()) + ' (' + stats.active + ')')) return;
+    if (!(await dialog.confirm(t('broadcast confirm', getLang()) + ' (' + stats.active + ')'))) return;
     setSending(true);
     try {
       const r = await api.post('/admin/newsletter/send', {});

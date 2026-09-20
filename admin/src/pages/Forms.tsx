@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
+import { dialog } from '../lib/dialog';
 
 interface FormRow {
   id: string; name: string; slug: string; enabled: number;
@@ -68,7 +69,7 @@ export default function Forms() {
   };
 
   const remove = async (f: FormRow) => {
-    if (!window.confirm(t('delete form confirm', getLang()))) return;
+    if (!(await dialog.confirm(t('delete form confirm', getLang()), { danger: true }))) return;
     try {
       await api.delete('/admin/forms/' + f.id);
       toast(t('form deleted', getLang()));

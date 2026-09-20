@@ -4,6 +4,7 @@ import { useToast } from '../lib/toast';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 import Select from '../components/Select';
+import { dialog } from '../lib/dialog';
 
 const actionIcons: Record<string, any> = { init: Zap, post_published: RefreshCw, comment_added: PlusCircle, post_created: PlusCircle, post_updated: RefreshCw };
 const filterIcons: Record<string, any> = { post_content: Filter };
@@ -93,7 +94,7 @@ export default function Plugins() {
   }
 
   async function uninstall(name: string) {
-    if (!confirm(t('uninstall plugin', getLang()) + ' ' + name + '?')) return;
+    if (!(await dialog.confirm(t('uninstall plugin', getLang()) + ' ' + name + '?', { danger: true }))) return;
     try {
       await api.delete('/plugins/' + name);
       toast.toast(name + ' ' + t('uninstalled', getLang()));
