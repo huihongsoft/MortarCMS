@@ -90,6 +90,9 @@ const zh: Record<string, string> = {
   'categories': '分类',
   'category': '分类',
   'cdn url (optional, e.g. https://cdn.example.com)': 'CDN 地址(可选,如 https://cdn.example.com)',
+  'twitter handle (optional, e.g. @yoursite)': 'Twitter 账号(可选,如 @yoursite)',
+  'primary category (article section)': '主分类(文章板块)',
+  'first assigned category': '首个已选分类',
   'check back later': '稍后再来看看',
   'clone': '复制',
   'close': '关闭',
@@ -1708,6 +1711,32 @@ const zh: Record<string, string> = {
 '(start from h2)': '（从 h2 开始）',
 '(allow h1)': '（允许 h1）',
 'ai error': 'AI 错误',
+'this action needs confirmation': '此操作需要你确认',
+'execute': '执行',
+'unattended ai jobs': '无人值守任务',
+'all sites (no scope)': '全部站点（不限定）',
+'job site hint': '不限定站点时，定时任务与机器人可访问所有站点的内容；选定站点后仅在该站范围内操作。',
+'site scope': '站点范围',
+'site access': '可访问站点',
+'share link': '分享链接',
+'share link revoked': '分享链接已撤销',
+'revoke link': '撤销链接',
+'share link hint': '任何拿到此链接的人都可以查看这段对话（不含工具执行的原始输出）。',
+'daily token limit per user': '每人每日 token 上限',
+'ai audit trail': 'AI 操作审计',
+'ai audit hint': '每次 AI 工具调用的记录（工具与参数），保留 90 天。',
+'arguments': '参数',
+'no entries yet': '暂无记录',
+'site access hint': '不选表示不限站点（默认）。选择后，该用户只能操作所选站点。',
+'update post': '更新文章',
+'translate post': '翻译文章',
+'complete post': '完善文章',
+'generate image': '生成配图',
+'analyze image': '分析图片',
+'apply theme style': '调整主题样式',
+'update site settings': '修改站点设置',
+'unattended risky hint': '定时任务与机器人回调没有人在场确认。默认拒绝执行「发布 / 删除 / 修改主题 / 修改站点配置」这类高风险操作，并会说明需要人工在对话里确认。',
+'allow unattended high-risk actions': '允许无人值守任务自动执行高风险操作（发布、删除、改主题、改站点配置）',
 'formal': '正式',
 'casual': '口语化',
 'marketing': '营销',
@@ -1732,6 +1761,290 @@ export function getLang(): string {
   // Default to Chinese (the site's primary audience); visitors can switch
   // to English via the admin bar language toggle.
   return localStorage.getItem('mortar_lang') || 'zh';
+}
+
+// ---- Server-origin messages ----
+//
+// Task failures, tool errors and AI route errors are Chinese literals written by
+// the backend, so they cannot be dictionary keys the usual way round (the keys
+// above are English). Only the AI task/chat chain is covered here: the messages
+// a user reads in a toast, on a task, or in a notification. Anything absent
+// passes through untouched, so an unmapped message degrades to today's behaviour
+// instead of disappearing. Tool *outputs* are deliberately left alone — those
+// are data dumps (titles, JSON, counts), not copy.
+const serverMsgEn: Record<string, string> = {
+  '尚未配置 AI 服务商': 'No AI provider configured',
+  '未配置 AI 服务商': 'No AI provider configured',
+  '尚未配置 AI 服务商，请先在 AI 设置中配置': 'No AI provider configured yet — set one up in AI settings',
+  '你的角色无权使用 AI 功能': 'Your role cannot use the AI assistant',
+  '无权限': 'Not allowed',
+  '无权修改他人文章': "Not allowed to edit another user's post",
+  '无权查看该文章': 'Not allowed to view that post',
+  '无权翻译该文章': 'Not allowed to translate that post',
+  '无权查看该任务': 'Not allowed to view that task',
+  '无权操作该任务': 'Not allowed to change that task',
+  '文章未找到': 'Post not found',
+  '未找到文章': 'No post found',
+  '任务不存在': 'Task not found',
+  '会话不存在': 'Chat not found',
+  '分享不存在或已失效': 'This share link does not exist or has expired',
+  '绑定不存在': 'Binding not found',
+  '用户不存在': 'User not found',
+  '无效的绑定令牌': 'Invalid binding token',
+  '消息为空': 'Message is empty',
+  '标题不能为空': 'Title is required',
+  '请先填写文章标题': 'Add a title first',
+  '请先填写文章正文': 'Add some content first',
+  '查询词不能为空': 'Search term is required',
+  '搜索词不能为空': 'Search term is required',
+  '未知操作': 'Unknown action',
+  '任务创建过于频繁，请稍候再试': 'Too many tasks created — wait a moment and try again',
+  '同时最多运行 3 个任务，请等待当前任务完成后再试': 'At most 3 tasks can run at once — wait for one to finish',
+  '请求太频繁，请稍等几秒再试': 'Too many requests — wait a few seconds',
+  '请求过于频繁，请稍后再试': 'Too many requests — try again shortly',
+  '今日 AI 用量已达上限，任务已停止': "Today's AI quota is spent — the task was stopped",
+  '今日 AI 用量已达上限，请明天再试或联系管理员提高限额': "Today's AI quota is spent — try tomorrow or ask an admin to raise the limit",
+  '今日个人 AI 用量已达上限，请明天再试': 'Your daily AI quota is spent — try again tomorrow',
+  '任务执行超时（10 分钟上限）': 'Task timed out (10 minute limit)',
+  '任务执行失败，请重试': 'Task failed — please retry',
+  '工具执行失败，请稍后重试': 'Tool failed — try again later',
+  '无法连接 AI 服务商，请检查网络或服务商配置后重试': 'Cannot reach the AI provider — check the network and the provider settings',
+  'AI 工具调用异常，请精简任务描述后重试': 'The assistant made an invalid tool call — simplify the request and retry',
+  '操作失败，请稍后重试': 'That did not work — please try again',
+  '对比失败': 'Comparison failed',
+  '翻译失败': 'Translation failed',
+  '连接失败': 'Connection failed',
+  '确认已失效，请重新发起该操作': 'This confirmation expired — start the action again',
+  '该确认已执行过，请勿重复提交': 'That confirmation was already used',
+  '修改文章正文': 'Edit the body of a post',
+  '修改已发布文章的正文（对访客立即可见）': 'Edit the body of a published post (visible to visitors right away)',
+  '删除文章（移入回收站）': 'Delete a post (move to trash)',
+  '已达到工具调用次数上限，请简化问题重试。': 'Tool call limit reached — simplify your question and retry.',
+  '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。': 'Tool call limit reached. Some work may be done — split the task and retry.',
+  '服务商未返回图片数据': 'The provider returned no image data',
+  '服务商返回的图片地址无效': 'The provider returned an invalid image URL',
+  '生成的图片地址被拒绝（内网地址或无法访问）': 'The generated image URL was refused (internal address or unreachable)',
+  '生成的图片超过大小上限': 'The generated image is over the size limit',
+  '下载生成的图片失败': 'Could not download the generated image',
+  '仅支持本站 /uploads/ 目录中的图片': "Only images in this site's /uploads/ folder are supported",
+  '无法读取图片': 'Could not read the image',
+  '搜索服务暂时不可用（网络受限或服务被限流），请稍后重试，或改用站内检索': 'Search is unavailable right now (network or rate limit) — retry later or search the site instead',
+  '请输入完整的网址（以 http:// 或 https:// 开头）': 'Enter a full URL (starting with http:// or https://)',
+  '无法访问该网站（地址无效、内网地址被拒绝、超时或网络受限）': 'Cannot reach that site (invalid, internal, timed out or blocked)',
+  '未能获取到页面样式（页面可能依赖 JavaScript 渲染）': 'Could not read the page styles (the page may need JavaScript)',
+  '没有可应用的样式（至少提供颜色、字体或 custom_css 之一）': 'Nothing to apply — provide a color, a font or custom_css',
+  '请选择两个已启用的服务商': 'Pick two enabled providers',
+  '钉钉群机器人 Webhook 未配置': 'The DingTalk group robot webhook is not configured',
+  'AppKey/AppSecret 未配置': 'AppKey/AppSecret not configured',
+  '获取钉钉 access_token 失败': 'Could not get the DingTalk access_token',
+  '无法访问该 Webhook（地址被拒绝或超时）': 'Cannot reach that webhook (refused or timed out)',
+  '当前服务商未开启图片生成能力（需支持 /images/generations 的接口，如 gpt-image-1 / dall-e-3）。请在 AI 设置中为该服务商启用「图片生成」': 'This provider has no image generation enabled (it needs /images/generations, e.g. gpt-image-1). Turn on "image generation" for it in AI settings.',
+  '当前服务商未开启视觉能力（需支持图片输入的模型，如 gpt-4o）。请在 AI 设置中为该服务商启用「视觉」': 'This provider has no vision enabled (it needs an image-capable model such as gpt-4o). Turn on "vision" for it in AI settings.',
+};
+
+// Messages that carry a status code, a count or a name, matched by shape so the
+// number survives translation.
+const serverMsgPatterns: [RegExp, string][] = [
+  [/^没有权限使用该工具: (.+)$/, 'Not allowed to use the tool: $1'],
+  [/^未知工具: (.+)$/, 'Unknown tool: $1'],
+  [/^AI 请求失败 \((\d{3})\)$/, 'AI request failed ($1)'],
+  [/^AI 请求超时（(\d+)s）$/, 'AI request timed out ($1s)'],
+  [/^AI 服务商返回错误（(\d{3})），请检查 API Key、余额与模型配置$/, 'Provider returned an error ($1) — check the API key, balance and model settings'],
+  [/^图像生成失败 \((\d{3})\)，请检查服务商配置与余额$/, 'Image generation failed ($1) — check the provider settings and balance'],
+  [/^图片分析失败 \((\d{3})\)$/, 'Image analysis failed ($1)'],
+  [/^翻译失败 \((\d{3})\)$/, 'Translation failed ($1)'],
+  [/^生成失败 \((\d{3})\)$/, 'Generation failed ($1)'],
+  [/^下载生成的图片失败 \(HTTP (\d{3})\)$/, 'Could not download the generated image (HTTP $1)'],
+  [/^生成的图片超过大小上限（(\d+)MB）$/, 'The generated image is over the size limit ($1MB)'],
+  [/^无法访问该网站（HTTP (\d{3})）$/, 'Cannot reach that site (HTTP $1)'],
+  // No leading marker here: translate() strips "❌ "/"✅ " before matching and
+  // puts it back, so a pattern that also required the marker never matched.
+  [/^AI 任务完成: /, 'AI task finished: '],
+  [/^AI 任务失败: /, 'AI task failed: '],
+  [/^今日 AI 用量已达 (\d+)K tokens（限额 (\d+)K）$/, "Today's AI usage reached $1K tokens (limit $2K)"],
+  // Key names only ([\w、,. -]): with no keys the line is "修改站点配置：配置已更新",
+  // where a permissive capture swallows the result message and blocks the tail
+  // lookup that would have translated it.
+  [/^修改站点配置：([\w、,. -]*?)(?=：|$)/, 'Change site settings: $1'],
+  [/^已取消，未执行任何操作。$/, 'Cancelled — nothing was executed.'],
+  [/^该确认此前的提交已执行过，本次未重复执行。$/, 'That confirmation had already run — nothing was executed twice.'],
+  [/^文章已更新$/, 'Post updated'],
+  [/^文章已发布$/, 'Post published'],
+  [/^文章已保存为草稿$/, 'Post saved as a draft'],
+  // the warning runTask prepends when an unattended run had to refuse something
+  [/^有 (\d+) 个操作因需要人工确认而未执行（(.*)），请在 AI 对话中发起并确认。$/,
+    '$1 action(s) were not executed because they need human confirmation ($2) — start them in the AI chat and confirm there.'],
+  [/^该操作需要人工确认（(.*)），无人值守的任务不会自动执行。.*$/, 'That needs human confirmation ($1); an unattended run will not do it.'],
+  // framing lines of a turn that stopped on the confirmation card. No leading
+  // marker here either — translate() strips "✓ "/"⏸ " before matching.
+  // Lookahead, not a consumed '：': the text after it is a second server message
+  // ("已完成：文章已保存为草稿") that a tail rule still has to match.
+  [/^已完成(?=：)/, 'Done'],
+  [/^以下操作需要你确认后执行：/, 'These need your confirmation first: '],
+  [/^（另有 (\d+) 项高风险操作未纳入本次确认.*）$/, '($1 more high-risk action(s) were not included — ask me to continue after this)'],
+  [/^有 (\d+) 项待确认操作体积过大.*$/, '$1 action(s) are too large to fit in a confirmation card — split them up and ask again'],
+  // outcome of an approval, and the schedule it produced
+  [/^文章已排期，将于 (.*) 自动发布$/, 'Post scheduled to publish at $1'],
+];
+
+// Rules that rewrite the END of a line. They only run on lines carrying a status
+// mark ("✓ 删除…：已执行"), i.e. a result the server composed — a model sentence
+// that merely ends with the same phrase must not be rewritten.
+// One entry per `message` a tool returns (aiTools.ts), since a result line is
+// "<描述>：<message>". Ordered longest-first where two could overlap.
+// Rules whose patterns are NOT anchored — they describe a call the assistant
+// wants to make (riskyReason/describeCall in server/src/utils/aiApproval.ts) and
+// appear mid-line. Because they are unanchored they may only run on marked
+// lines: a model sentence like "我建议你先发布文章（对访客立即可见）《x》" contains
+// the same characters and must not be rewritten. Keep in step with riskyReason —
+// changing its wording there means changing it here, or a card silently reverts
+// to Chinese in English mode.
+const serverMsgMarkedPatterns: [RegExp, string][] = [
+  [/删除文章（移入回收站）《(.*)》/, 'Delete post "$1"'],
+  [/发布文章（对访客立即可见）《(.*)》/, 'Publish post "$1"'],
+  [/定时发布文章《(.*)》/, 'Schedule post "$1"'],
+  [/修改已发布文章的正文（对访客立即可见）《(.*)》/, 'Edit the body of published post "$1"'],
+  [/修改文章正文《(.*)》/, 'Edit the body of post "$1"'],
+  [/修改全站主题样式（会覆盖现有自定义 CSS）/, 'Change the site-wide theme (replaces the current custom CSS)'],
+  [/修改站点配置/, 'Change site settings'],
+];
+
+const serverMsgTailPatterns: [RegExp, string][] = [
+  [/：文章已排期，将于 (.*) 自动发布$/, ': scheduled to publish at $1'],
+  [/：已应用到当前主题「(.*)」，刷新页面即可看到效果$/, ' applied to theme "$1" — refresh to see it'],
+  [/：文章已完善（已追加相关阅读 (\d+) 篇）$/, ': post completed ($1 related posts linked)'],
+  [/：文章已完善$/, ': post completed'],
+  [/：已创建翻译草稿: (.*)$/, ': translation draft created: $1'],
+  [/：配置已更新$/, ': settings saved'],
+  [/：已执行$/, ': done'],
+  // covers every "未改变发布状态" variant: no publish permission, contributor
+  // held to drafts, no delete permission
+  [/：.*未改变发布状态$/, ': status unchanged — your role is not allowed to do that'],
+  [/：文章已更新$/, ': updated'],
+  [/：文章已发布$/, ': published'],
+  [/：文章已保存为草稿$/, ': saved as a draft'],
+  [/：没有需要更新的字段$/, ': nothing to update'],
+  [/：未找到文章$/, ': post not found'],
+];
+
+// Split a result line into its items on '；' — but not inside a book-title mark,
+// or a title like 《甲；乙》 would be cut in half.
+function splitItems(s: string): string[] {
+  const out: string[] = [];
+  let cur = '';
+  let depth = 0;
+  for (const ch of s) {
+    if (ch === '《') depth++;
+    else if (ch === '》') depth = Math.max(0, depth - 1);
+    if (ch === '；' && depth === 0) { out.push(cur); cur = ''; continue; }
+    cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+// `requireContext` makes an unanchored rule only fire at the start of the text or
+// right after a '：' — the two positions a server-composed description occupies.
+function applyRules(text: string, rules: [RegExp, string][], requireContext = false): { out: string; hit: boolean } {
+  let out = text;
+  let hit = false;
+  for (const [re, en] of rules) {
+    if (requireContext) {
+      const m = re.exec(out);
+      if (!m) continue;
+      const pre = out.slice(0, m.index);
+      // '：' (server text) or ': ' (after an anchored prefix already translated)
+      if (pre !== '' && !pre.endsWith('：') && !pre.endsWith(': ')) continue;
+      out = out.slice(0, m.index) + out.slice(m.index).replace(re, en);
+      hit = true;
+    } else if (re.test(out)) {
+      out = out.replace(re, en);
+      hit = true;
+    }
+  }
+  return { out, hit };
+}
+
+// Translate a bare call description, as shown on the confirmation card and in the
+// pending line. The card renders descriptions without a status marker, so the
+// marked rule set — which only runs for marked lines — would skip them and the
+// card would sit in Chinese while the bubble above it was translated.
+export function serverCallSummary(text: string, lang?: string): string {
+  const s = String(text || '');
+  if (!s.trim() || (lang || getLang()) !== 'en') return s;
+  const exact = serverMsgEn[s.trim()];
+  if (exact) return exact;
+  let hit = false;
+  const out = splitItems(s).map(seg => {
+    const r = applyRules(seg, serverMsgMarkedPatterns.concat(serverMsgTailPatterns), true);
+    if (r.hit) hit = true;
+    return r.out;
+  }).join('; ');
+  return hit ? out : s;
+}
+
+// Translate a message that came from the server. Chinese is this layer's source
+// language, so zh mode shows the string exactly as the backend wrote it.
+export function serverMessage(msg: string, lang?: string): string {
+  const s = String(msg || '');
+  if (!s.trim()) return s;
+  if ((lang || getLang()) !== 'en') return s;
+  const translate = (line: string): string => {
+    // "❌ AI 请求失败 (401)" is a server message with a status marker glued on —
+    // match the text after the marker and put the marker back, or every
+    // prefixed message silently falls through untranslated.
+    const marked = /^([❌✅⚠✓✗⏸]\uFE0F?\s*)(.*)$/.exec(line);
+    const mark = marked ? marked[1] : '';
+    const body = marked ? marked[2] : line;
+    const exact = serverMsgEn[body.trim()];
+    if (exact) return mark + exact;
+    // A server result line can list several items joined by '；' ("已完成：A；B",
+    // "以下操作需要你确认后执行：A；B"). Each item is a separate message, and
+    // translating the line as a whole let a pattern's capture run past the
+    // separator and swallow the next item's text.
+    // The unanchored and tail rule sets only run for marked lines — text the
+    // server composed. Even then a description must start the segment or follow
+    // a '：', because a MODEL line may also begin with "⚠" ("⚠ 注意：该操作会修改
+    // 站点配置") and must not be rewritten.
+    let hit = false;
+    const out = splitItems(body).map(seg => {
+      let text = seg;
+      let segHit = false;
+      if (mark) {
+        // Marked rules run FIRST: the anchored pass rewrites the framing prefix
+        // ("以下操作需要你确认后执行：" → "…first: "), and after that the '：' a
+        // description must follow is gone.
+        const r2 = applyRules(text, serverMsgMarkedPatterns, true);
+        text = r2.out;
+        segHit = r2.hit;
+      }
+      const r1 = applyRules(text, serverMsgPatterns);
+      text = r1.out;
+      segHit = segHit || r1.hit;
+      if (mark) {
+        const r3 = applyRules(text, serverMsgTailPatterns);
+        text = r3.out;
+        segHit = segHit || r3.hit;
+        // A result tail is often a message the exact map already knows
+        // ("…：文章未找到" / "…：无权修改他人文章"), which the whole-body lookup
+        // above can never reach because of the '：' prefix.
+        const ci = text.lastIndexOf('：');
+        if (ci !== -1) {
+          const tail = text.slice(ci + 1);
+          const mapped = serverMsgEn[tail.trim()];
+          if (mapped) { text = text.slice(0, ci + 1) + mapped; segHit = true; }
+        }
+      }
+      if (segHit) hit = true;
+      return text;
+    }).join('; '); // zh returned above, so the separator is always the Latin one here
+    // Only on a line we actually translated (structural colons), never on model
+    // prose, which may legitimately contain a full-width colon.
+    return hit ? mark + out.replace(/：/g, ': ') : line;
+  };
+  // Notifications are built as "<header>\n<summary>", where the summary can be
+  // another server message — line by line either matches or is left alone.
+  return s.includes('\n') ? s.split('\n').map(translate).join('\n') : translate(s);
 }
 
 export function setLang(lang: string) {

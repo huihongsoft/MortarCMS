@@ -171,9 +171,16 @@ export function registerBuiltinTasks(): void {
     id: 'ai_usage_report',
     name: 'AI usage weekly report',
     desc: 'Emails admins a summary of the past 7 days of AI usage (requires SMTP)',
-    intervalMs: 86_400_000,
+    // Weekly, matching the name and the 7-day window. It ran daily before, and
+    // nothing recorded when it last sent, so every restart or deploy made the
+    // scheduler think a week had passed and mail the report again (multiplied by
+    // the number of instances). The send time is now persisted.
+    intervalMs: 7 * 86_400_000,
     fn: async () => {
       try {
+        const sentKey = 'ai_usage_report_last_sent';
+        const lastSent = (db.prepare('SELECT value FROM Setting WHERE key = ?').get(sentKey) as any)?.value;
+        if (lastSent && Date.now() - new Date(lastSent).getTime() < 7 * 86_400_000) return;
         const admins = db.prepare("SELECT email FROM User WHERE role = 'admin' AND email != ''").all() as any[];
         const sendEmailMod = await import('./mailer');
         const since = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
@@ -190,8 +197,49 @@ export function registerBuiltinTasks(): void {
         for (const a of admins) {
           await sendEmailMod.sendEmail(a.email, siteTitle + ' AI 用量周报', html);
         }
+        db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+          .run(sentKey, sentKey, new Date().toISOString());
         console.log('[Task] AI usage report sent to ' + admins.length + ' admin(s)');
       } catch {}
+    },
+  });
+
+  // AI bookkeeping grows one row per tool call / per request, and nothing else
+  // ever deletes it: the audit rows alone carry args + output (up to ~6KB each),
+  // so a modest site reaches hundreds of MB a year. AiUsage is deliberately NOT
+  // pruned — it is the source for the daily budget and for the all-time totals on
+  // /ai/usage, and a silent "totals actually mean the last N days" is worse than
+  // the rows it would save (they are tiny next to AiAudit).
+  registerTask({
+    id: 'prune_ai_records',
+    name: 'Prune old AI records',
+    desc: 'Drops AI audit rows older than 90 days, read notifications older than 30 days, and AI sessions untouched for a year',
+    intervalMs: 86_400_000,
+    fn: () => {
+      try {
+        const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
+        const audit = db.prepare('DELETE FROM AiAudit WHERE createdAt < ?').run(daysAgo(90)).changes;
+        const notes = db.prepare('DELETE FROM AiNotification WHERE read = 1 AND createdAt < ?').run(daysAgo(30)).changes;
+        const sessions = db.prepare('DELETE FROM AiSession WHERE updatedAt < ?').run(daysAgo(365)).changes;
+        // Expired share links: they used to stay readable forever, and they live
+        // in the Setting table where they bloat every settings read. Rows written
+        // before the TTL existed have no expiresAt, so age is the fallback.
+        let shares = 0;
+        try {
+          const nowIso = new Date().toISOString();
+          const cutoff = daysAgo(30); // matches SHARE_TTL_MS in routes/ai.ts
+          for (const r of db.prepare("SELECT key, value FROM Setting WHERE key LIKE 'ai_share_%'").all() as any[]) {
+            let exp = '';
+            let created = '';
+            try { const d = JSON.parse(r.value || '{}'); exp = String(d?.expiresAt || ''); created = String(d?.createdAt || ''); } catch { /* unparsable: leave it alone */ }
+            const stale = exp ? exp < nowIso : (created ? created < cutoff : false);
+            if (stale) shares += db.prepare('DELETE FROM Setting WHERE key = ?').run(r.key).changes;
+          }
+        } catch { /* pruning must never break the task */ }
+        if (audit || notes || sessions || shares) {
+          console.log('[Task] Pruned AI records: audit=' + audit + ' notifications=' + notes + ' sessions=' + sessions + ' shares=' + shares);
+        }
+      } catch { /* pruning must never break the scheduler */ }
     },
   });
 

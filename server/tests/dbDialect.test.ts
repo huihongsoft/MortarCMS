@@ -80,3 +80,20 @@ describe('pgFmt', () => {
     expect(pgFmt('%H:%M')).toBe('HH24:MI');
   });
 });
+
+// Packaging guard: the worker and its translator are plain JavaScript, and the
+// deployed entry point is `node dist/index.js`. tsc only emits them because
+// tsconfig sets allowJs — without it a MySQL/Postgres install died at startup
+// with ENOENT from new Worker(__dirname + '/dbWorker.js').
+describe('build configuration', () => {
+  it('emits the plain-JS worker files', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const root = path.join(__dirname, '..');
+    for (const f of ['dbWorker.js', 'dbDialect.js']) {
+      expect(fs.existsSync(path.join(root, 'src/utils', f)), f + ' missing').toBe(true);
+    }
+    const tsconfig = fs.readFileSync(path.join(root, 'tsconfig.json'), 'utf8');
+    expect(tsconfig).toMatch(/"allowJs":\s*true/);
+  });
+});

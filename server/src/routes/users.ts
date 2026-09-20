@@ -4,13 +4,30 @@ import { z } from 'zod';
 import db, { withTransaction } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { passwordOk } from './auth';
+import { getUserSiteIds, setUserSites } from '../utils/userSites';
 
 const router = Router();
-const updateUserSchema = z.object({ username: z.string().min(3).max(30).optional(), email: z.string().email().max(254).optional(), role: z.string().max(20).optional(), password: z.string().min(6).max(128).optional(), bio: z.string().max(500).optional(), avatar: z.string().max(500).optional() });
+const updateUserSchema = z.object({
+  username: z.string().min(3).max(30).optional(), email: z.string().email().max(254).optional(),
+  role: z.string().max(20).optional(), password: z.string().min(6).max(128).optional(),
+  bio: z.string().max(500).optional(), avatar: z.string().max(500).optional(),
+  // Sites this user may act on. Empty array = unrestricted (the default and the
+  // pre-upgrade behaviour); see utils/userSites.ts.
+  siteIds: z.array(z.string()).optional(),
+});
 
 router.get('/', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const users = db.prepare('SELECT id, username, email, role, avatar, bio, createdAt, two_factor_enabled FROM User ORDER BY createdAt DESC').all() as any[];
+    // Which sites each user is assigned to, so the UI can show and edit it.
+    if (users.length > 0) {
+      try {
+        const rows = db.prepare('SELECT userId, siteId FROM UserSite').all() as any[];
+        const byUser = new Map<string, string[]>();
+        rows.forEach(r => byUser.set(r.userId, [...(byUser.get(r.userId) || []), r.siteId]));
+        users.forEach((u: any) => { u.siteIds = byUser.get(u.id) || []; });
+      } catch { /* table missing on a very old database */ }
+    }
     if (users.length > 0) {
       // One count query for all users instead of one per user
       const counts = new Map<string, number>();
@@ -45,7 +62,10 @@ router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, re
       sets.push('tokenVersion = tokenVersion + 1');
     }
     if (sets.length > 0) { vals.push(req.params.id); db.prepare('UPDATE User SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
+    // Assignments live in their own table (a user may belong to several sites).
+    if (data.siteIds !== undefined) setUserSites(req.params.id, data.siteIds);
     const user = db.prepare('SELECT id, username, email, role, avatar, bio, createdAt FROM User WHERE id = ?').get(req.params.id) as any;
+    user.siteIds = getUserSiteIds(req.params.id);
     res.json(user);
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });

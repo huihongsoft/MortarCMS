@@ -15,7 +15,9 @@ export default function ShareView({ settings }: { settings: Record<string, strin
     api.get('/ai/share/' + token).then(r => setData(r.data)).catch(() => setError(true));
   }, [token]);
 
-  useSEO({ siteTitle: settings.site_title, title: error ? t('share not found') : (data ? (data.username || 'AI') + t("'s AI conversation") : t('share') + ' AI'), url: window.location.origin + '/share/ai/' + token });
+  // A shared conversation is public but not meant to be discovered: keep it out
+  // of the index (the server sends the same signal via X-Robots-Tag).
+  useSEO({ siteTitle: settings.site_title, title: error ? t('share not found') : (data ? (data.username || 'AI') + t("'s AI conversation") : t('share') + ' AI'), url: window.location.origin + '/share/ai/' + token, noindex: true });
 
   if (error) return React.createElement('div', { className: 'max-w-2xl mx-auto px-4 py-20 text-center' },
     React.createElement('h1', { className: 'text-2xl font-bold text-gray-900 mb-2' }, t('share not found')),

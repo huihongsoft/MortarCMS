@@ -10,6 +10,7 @@ import { config, assertValidConfig, APP_VERSION } from './utils/config';
 import db, { initDB, closeDb } from './utils/db';
 import { logger } from './utils/logger';
 import { flushViews } from './utils/views';
+import { buildSeoMeta, injectSeoMeta, isKnownRoute, buildRobotsTxt, buildCrawlerFallback } from './utils/seoMeta';
 import { appPasswordAuth, resolveOptionalUser } from './middleware/auth';
 import { doAction } from './utils/hooks';
 import authRoutes from './routes/auth';
@@ -406,17 +407,10 @@ app.use('/api', tasksRoutes);
 
 app.get('/api/health', (_req, res) => { res.json({ status: 'ok', version: APP_VERSION }); });
 
-// robots.txt (honors the blog_public SEO setting)
-app.get('/robots.txt', (_req, res) => {
+// robots.txt (honors the blog_public SEO setting, per site)
+app.get('/robots.txt', (req, res) => {
   try {
-    const row = db.prepare("SELECT value FROM Setting WHERE key = 'blog_public'").get() as any;
-    const allow = !(row && row.value === '0');
-    const siteUrl = (db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || '';
-    const sitemap = (siteUrl || 'http://localhost:3001').replace(/\/$/, '') + '/api/sitemap.xml';
-    const body = (allow
-      ? 'User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /api/\n\nSitemap: ' + sitemap + '\n'
-      : 'User-agent: *\nDisallow: /\n');
-    res.type('text/plain').send(body);
+    res.type('text/plain').send(buildRobotsTxt((req as any).siteId));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -555,8 +549,40 @@ if (fs.existsSync(adminDist)) {
 const frontendDist = path.join(__dirname, '../../frontend/dist');
 if (fs.existsSync(frontendDist)) {
   console.log('Serving Frontend SPA from ' + frontendDist);
-  app.use(express.static(frontendDist));
-  app.get('*', (_req, res) => { res.sendFile(path.join(frontendDist, 'index.html')); });
+  const frontendIndexHtml = path.join(frontendDist, 'index.html');
+  // index:false so "/" reaches the catch-all below instead of being served
+  // straight from disk — otherwise the homepage would skip the SEO injection.
+  app.use(express.static(frontendDist, { index: false }));
+  // The shell is read once and cached: it only changes on rebuild/redeploy, which
+  // restarts the process.
+  let shellCache: string | null = null;
+  const frontendShell = (): string | null => {
+    if (shellCache === null) { try { shellCache = fs.readFileSync(frontendIndexHtml, 'utf8'); } catch { shellCache = ''; } }
+    return shellCache || null;
+  };
+  app.get('*', (req, res) => {
+    const shell = frontendShell();
+    if (!shell) { res.sendFile(frontendIndexHtml); return; }
+    try {
+      const origin = (req.secure ? 'https' : 'http') + '://' + (req.headers.host || 'localhost');
+      const meta = buildSeoMeta(req.path, { siteId: (req as any).siteId, origin });
+      // A path the SPA has no route for is a real 404 — otherwise every unknown
+      // URL answered 200 with the app shell (a "soft 404" that search engines
+      // report). The shell is still rendered so visitors see the 404 page.
+      const known = isKnownRoute(req.path);
+      // A route whose shape is valid but whose content is gone (a deleted post) is
+      // 404 too — otherwise search engines keep an empty shell indexed.
+      const missing = !known || meta.notFound;
+      // X-Robots-Tag rather than a <meta> tag: the client hook removes a robots
+      // meta it did not set, so a tag would not survive hydration.
+      if (missing || meta.noindex) res.setHeader('X-Robots-Tag', 'noindex, nofollow');
+      // Crawlers that do not run JS would otherwise get an empty <div id="root">.
+      const fallback = missing || meta.noindex ? null : buildCrawlerFallback(req.path, (req as any).siteId);
+      res.status(missing ? 404 : 200).type('html').send(injectSeoMeta(shell, meta, fallback));
+    } catch {
+      res.sendFile(frontendIndexHtml);
+    }
+  });
 }
 
 

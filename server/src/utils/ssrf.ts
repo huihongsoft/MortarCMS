@@ -83,10 +83,34 @@ export function isPrivateIp(ip: string): boolean {
   return false;
 }
 
-// SSRF-guarded fetch: GET by default, POST when opts.body is set. Returns
-// {status, text} or null on refusal/error. Redirects are followed manually
-// and each hop's resolved IP is checked.
-export async function fetchUrlGuarded(url: string, opts: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs?: number } = {}): Promise<{ status: number; text: string } | null> {
+export type GuardedOpts = { method?: string; headers?: Record<string, string>; body?: string; timeoutMs?: number };
+
+// Read a response body up to `maxBytes`, returning null once the cap is passed
+// (streaming, so an endless or oversized response is never buffered whole).
+export async function readCappedBytes(res: Response, maxBytes: number): Promise<Buffer | null> {
+  const body: any = (res as any).body;
+  if (!body || typeof body.getReader !== 'function') {
+    const buf = Buffer.from(await res.arrayBuffer());
+    return buf.length > maxBytes ? null : buf;
+  }
+  const reader = body.getReader();
+  const chunks: Buffer[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.length;
+    if (total > maxBytes) { try { await reader.cancel(); } catch { /* already gone */ } return null; }
+    chunks.push(Buffer.from(value));
+  }
+  return Buffer.concat(chunks);
+}
+
+// The guard itself: vets every hop's resolved address and follows redirects
+// manually (default fetch follows them transparently, which would let an
+// external page redirect us into an internal network). Handing back the raw
+// Response lets callers read it as text or as bytes.
+async function guardedFetch(url: string, opts: GuardedOpts): Promise<Response | null> {
   let current = url;
   const method = (opts.method || 'GET').toUpperCase();
   for (let hop = 0; hop < 5; hop++) {
@@ -118,8 +142,25 @@ export async function fetchUrlGuarded(url: string, opts: { method?: string; head
       try { current = new URL(loc, current).href; } catch { return null; }
       continue;
     }
-    if (!res.ok) return { status: res.status, text: '' };
-    return { status: res.status, text: (await res.text()).slice(0, 2_000_000) };
+    return res;
   }
   return null;
+}
+
+// SSRF-guarded fetch: GET by default, POST when opts.body is set. Returns
+// {status, text} or null on refusal/error.
+export async function fetchUrlGuarded(url: string, opts: GuardedOpts = {}): Promise<{ status: number; text: string } | null> {
+  const res = await guardedFetch(url, opts);
+  if (!res) return null;
+  if (!res.ok) return { status: res.status, text: '' };
+  return { status: res.status, text: (await res.text()).slice(0, 2_000_000) };
+}
+
+// Same guard, for binary bodies (generated images). `buffer` is null when the
+// response was over maxBytes; the whole result is null when the address was
+// refused or the request failed.
+export async function fetchUrlGuardedBuffer(url: string, opts: GuardedOpts = {}, maxBytes = 10 * 1024 * 1024): Promise<{ status: number; buffer: Buffer | null } | null> {
+  const res = await guardedFetch(url, opts);
+  if (!res) return null;
+  return { status: res.status, buffer: res.ok ? await readCappedBytes(res, maxBytes) : null };
 }

@@ -4,7 +4,9 @@ import useSEO from '../hooks/useSEO';
 import { t } from '../lib/i18n';
 
 export default function NotFound() {
-  useSEO({ title: '404 - ' + t('page not found'), url: window.location.origin + '/404' });
+  // A not-found page has nothing to index (the server answers 404 for unknown
+  // paths and adds the same signal as a header).
+  useSEO({ title: '404 - ' + t('page not found'), url: window.location.origin + '/404', noindex: true });
   return React.createElement('div', { className: 'max-w-md mx-auto px-4 py-20 text-center' },
     React.createElement('h1', { className: 'text-6xl font-bold text-gray-200 mb-4' }, '404'),
     React.createElement('h2', { className: 'text-xl font-semibold text-gray-900 mb-2' }, t('page not found')),

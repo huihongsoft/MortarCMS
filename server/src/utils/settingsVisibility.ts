@@ -5,7 +5,10 @@
 // Credentials / system state: never returned by a generic settings GET, even to
 // admins (dedicated endpoints exist: /ai/settings, /api/db/*).
 const CRED_KEYS = new Set(['ai_providers', 'ai_bindings', 'installed', 'active_plugins', 'storage_secret']);
-const CRED_PREFIXES = ['jwt_', 'market_', 'db_'];
+// ai_share_* holds shareable-conversation blobs: content, not configuration, and
+// it must not ride along in a generic settings response (nor be counted on by the
+// AI's get_site_settings). Dedicated endpoint: GET/POST/DELETE /api/ai/share.
+const CRED_PREFIXES = ['jwt_', 'market_', 'db_', 'ai_share_'];
 
 // Extra keys hidden from everyone below admin (admin-only configuration the
 // admin UI still needs to read and round-trip).

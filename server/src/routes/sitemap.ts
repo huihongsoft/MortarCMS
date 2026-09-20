@@ -2,6 +2,8 @@ import { Router, Response } from 'express';
 import db from '../utils/db';
 import { AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
+import { effectiveSetting } from '../utils/siteSettings';
+import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
 
 const router = Router();
 
@@ -21,21 +23,32 @@ router.get('/sitemap.xml', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     const siteId = req.siteId || null;
     if (cache && cache.siteId === siteId && Date.now() - cache.at < 5 * 60 * 1000) { res.type('application/xml'); res.send(cache.xml); return; }
-    const settings = db.prepare('SELECT key, value FROM Setting').all() as any[];
-    const cfg: Record<string, string> = {};
-    settings.forEach((s: any) => { cfg[s.key] = s.value; });
-    const siteUrl = (cfg.site_url || 'http://localhost:3001').replace(/\/$/, '');
+    // Per-site override first: a secondary site's sitemap must not advertise the
+    // primary site's domain.
+    const siteUrl = (effectiveSetting(siteId || undefined, 'site_url') || 'http://localhost:3001').replace(/\/$/, '');
 
     const now = new Date().toISOString();
     const posts = (req.siteId
-      ? db.prepare("SELECT slug, strftime('%Y-%m-%d', COALESCE(publishedAt, createdAt)) as date FROM Post WHERE type = 'post' AND status = 'published' AND (publishedAt IS NULL OR publishedAt <= ?) AND (siteId IS NULL OR siteId = ?) ORDER BY publishedAt DESC").all(now, req.siteId)
-      : db.prepare("SELECT slug, strftime('%Y-%m-%d', COALESCE(publishedAt, createdAt)) as date FROM Post WHERE type = 'post' AND status = 'published' AND (publishedAt IS NULL OR publishedAt <= ?) ORDER BY publishedAt DESC").all(now)) as any[];
+      ? db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type = 'post' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND (p.siteId IS NULL OR p.siteId = ?)" + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC').all(now, req.siteId)
+      : db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type = 'post' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC').all(now)) as any[];
     const pages = (req.siteId
-      ? db.prepare("SELECT slug, strftime('%Y-%m-%d', COALESCE(publishedAt, createdAt)) as date FROM Post WHERE type = 'page' AND status = 'published' AND (publishedAt IS NULL OR publishedAt <= ?) AND (siteId IS NULL OR siteId = ?)").all(now, req.siteId)
-      : db.prepare("SELECT slug, strftime('%Y-%m-%d', COALESCE(publishedAt, createdAt)) as date FROM Post WHERE type = 'page' AND status = 'published' AND (publishedAt IS NULL OR publishedAt <= ?)").all(now)) as any[];
-    const categories = db.prepare('SELECT slug FROM Category').all() as any[];
-    const tags = db.prepare('SELECT slug FROM Tag').all() as any[];
-    const authors = db.prepare('SELECT username FROM User WHERE role != ?').all('subscriber') as any[];
+      ? db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type = 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND (p.siteId IS NULL OR p.siteId = ?)" + PUBLIC_POST_CONDITIONS).all(now, req.siteId)
+      : db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type = 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + PUBLIC_POST_CONDITIONS).all(now)) as any[];
+    // Only listing pages that actually have content on THIS site: a global list
+    // advertises URLs that render empty for the crawler (and, on a multi-site
+    // install, URLs that belong to another site).
+    const siteScope = req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '';
+    const siteArgs = req.siteId ? [now, req.siteId] : [now];
+    const live = "p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + siteScope;
+    const categories = (req.siteId
+      ? db.prepare('SELECT DISTINCT c.slug FROM Category c JOIN PostCategory pc ON pc.categoryId = c.id JOIN Post p ON p.id = pc.postId WHERE ' + live).all(...siteArgs)
+      : db.prepare('SELECT slug FROM Category').all()) as any[];
+    const tags = (req.siteId
+      ? db.prepare('SELECT DISTINCT t.slug FROM Tag t JOIN PostTag pt ON pt.tagId = t.id JOIN Post p ON p.id = pt.postId WHERE ' + live).all(...siteArgs)
+      : db.prepare('SELECT slug FROM Tag').all()) as any[];
+    const authors = (req.siteId
+      ? db.prepare('SELECT DISTINCT u.username FROM User u JOIN Post p ON p.authorId = u.id WHERE ' + live).all(...siteArgs)
+      : db.prepare('SELECT username FROM User WHERE role != ?').all('subscriber')) as any[];
 
     let xml = '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
     xml += '<url><loc>' + siteUrl + '</loc><changefreq>daily</changefreq><priority>1.0</priority></url>';

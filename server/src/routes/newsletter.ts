@@ -134,7 +134,13 @@ router.post('/admin/newsletter/send', ...adminGuard, async (req: AuthRequest, re
     const to = String(req.body?.to || '').trim();
     const info = siteInfo();
     const base = info.url || 'http://localhost:3001';
-    const recent = db.prepare("SELECT id, title, slug, excerpt, publishedAt FROM Post WHERE type = 'post' AND status = 'published' AND (publishedAt IS NULL OR publishedAt <= ?) ORDER BY publishedAt DESC LIMIT 10").all(new Date().toISOString()) as any[];
+    // Scoped to the site this request resolved to (and to publicly visible posts):
+    // the digest used to mix in every other site's posts on a multi-site install.
+    const nlNow = new Date().toISOString();
+    const nlScope = (req as any).siteId ? ' AND (siteId IS NULL OR siteId = ?)' : '';
+    const recent = db.prepare(
+      "SELECT id, title, slug, excerpt, publishedAt FROM Post WHERE type = 'post' AND status = 'published' AND (publishedAt IS NULL OR publishedAt <= ?)" + nlScope + ' ORDER BY publishedAt DESC LIMIT 10'
+    ).all(...((req as any).siteId ? [nlNow, (req as any).siteId] : [nlNow])) as any[];
     if (recent.length === 0 && !to) { res.status(400).json({ error: 'No published posts to send' }); return; }
     const items = recent.map(p =>
       '<div style="margin-bottom:16px;"><a href="' + base + '/post/' + p.slug + '" style="font-size:16px;font-weight:600;color:#2563eb;text-decoration:none;">' + String(p.title).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</a>' +

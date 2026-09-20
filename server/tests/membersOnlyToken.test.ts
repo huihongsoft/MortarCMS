@@ -43,6 +43,59 @@ async function getPost(token?: string) {
   return fetch(base + '/posts/slug/members-post', { headers });
 }
 
+// The single-post route refuses a protected body until the cookie unlocks it,
+// but the public lists returned the whole row — shipping the body and the
+// protection hash. These pin the list shape.
+describe('public list payloads hide protected bodies and the password hash', () => {
+  beforeAll(() => {
+    db.prepare("INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, password, publishedAt) VALUES ('post2','Protected','protected-post','<p>TOP-SECRET-BODY</p>','visible excerpt','published','post','u1','$2a$10$storedhash', ?)")
+      .run(new Date().toISOString());
+  });
+
+  it('omits the body and the hash for anonymous callers', async () => {
+    const list = await (await fetch(base + '/posts')).json();
+    const raw = JSON.stringify(list);
+    expect(raw).not.toContain('TOP-SECRET-BODY');
+    expect(raw).not.toContain('storedhash');
+    expect(raw).not.toContain('"password"');
+    // the card data itself is still there (the list is not broken by the strip)
+    expect(list.posts.some((p: any) => p.slug === 'protected-post')).toBe(true);
+    expect(list.posts.find((p: any) => p.slug === 'protected-post').excerpt).toBe('visible excerpt');
+    // enrichPosts embeds the author row; its email is not public data
+    expect(raw).not.toContain('@example.dev');
+    expect(list.posts[0].author?.username).toBeTruthy();
+    expect(list.posts[0].author?.email).toBeUndefined();
+  });
+
+  it('omits them from the popular list too', async () => {
+    const raw = JSON.stringify(await (await fetch(base + '/posts/popular')).json());
+    expect(raw).not.toContain('TOP-SECRET-BODY');
+    expect(raw).not.toContain('storedhash');
+  });
+
+  it('still lets an editor read the body, but never the hash', async () => {
+    // a real editor: the role comes from the stored user, not the token claim
+    db.prepare("INSERT OR REPLACE INTO User (id, username, email, password, role, tokenVersion) VALUES ('ed1','ed1','ed1@example.dev','x','editor',0)").run();
+    const list = await (await fetch(base + '/posts', { headers: { authorization: 'Bearer ' + signToken({ userId: 'ed1', role: 'editor', v: 0 }) } })).json();
+    const p = list.posts.find((x: any) => x.slug === 'protected-post');
+    expect(p.content).toContain('TOP-SECRET-BODY');
+    expect(p.password).toBeUndefined();
+  });
+});
+
+describe('public archive month', () => {
+  it('serves the month instead of erroring', async () => {
+    // This build reports SQLITE_DQS=0, so a double-quoted "%Y-%m" is read as an
+    // identifier and the whole route 500s with "no such column".
+    const [y, m] = new Date().toISOString().slice(0, 7).split('-');
+    const r = await fetch(base + '/posts/archive/' + y + '/' + m);
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(Array.isArray(body.posts)).toBe(true);
+    expect(body.archive).toEqual({ year: y, month: m });
+  });
+});
+
 describe('members-only gating', () => {
   it('blocks an anonymous visitor', async () => {
     const r = await getPost();

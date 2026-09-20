@@ -17,6 +17,7 @@ interface Binding {
   ddAesKey?: string;
   ddAppKey?: string;
   ddAppSecret?: string;
+  siteId?: string | null;   // unset = the bot may reach every site
   userId: string;
   username: string;
   createdAt: string;
@@ -43,16 +44,25 @@ export default function AIBindings() {
   const [schInterval, setSchInterval] = useState(60);
   const [schTime, setSchTime] = useState('09:00');
   const [schWeekday, setSchWeekday] = useState(1);
+  // Site scope for jobs that run without a human: without it, a scheduled job or
+  // a bound bot runs with no site filter, which on a multi-site install means it
+  // can reach every site. Only admin/editor may pick one (server enforces it).
+  const [sites, setSites] = useState<any[]>([]);
+  const [bindingSite, setBindingSite] = useState('');
+  const [schSite, setSchSite] = useState('');
 
   useEffect(() => {
     api.get('/ai/bindings').then(r => setBindings(r.data.bindings || [])).catch(() => {});
     api.get('/users').then(r => setUsers(r.data || [])).catch(() => {});
     api.get('/ai/schedules').then(r => setSchedules(r.data.schedules || [])).catch(() => {});
+    // /sites is admin-only: a non-admin gets no options, the selects stay hidden
+    // and no permission error is surfaced.
+    api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {});
   }, []);
 
   async function create() {
     try {
-      const r = await api.post('/ai/bindings', { platform, userId, label, ...(platform === 'dingtalk' ? dd : {}) });
+      const r = await api.post('/ai/bindings', { platform, userId, label, siteId: bindingSite || undefined, ...(platform === 'dingtalk' ? dd : {}) });
       setBindings([...bindings, r.data.binding]);
       setPlatform('wechat'); setUserId(''); setLabel(''); setDd({ ddWebhook: '', ddSecret: '', ddToken: '', ddAesKey: '', ddAppKey: '', ddAppSecret: '' });
       toast.toast(t('binding created', getLang()));
@@ -93,7 +103,7 @@ export default function AIBindings() {
   async function addSchedule() {
     if (!schName.trim() || !schPrompt.trim()) return;
     try {
-      await api.post('/ai/schedules', { name: schName, prompt: schPrompt, type: schType, intervalMinutes: schInterval, time: schTime, weekday: schWeekday });
+      await api.post('/ai/schedules', { name: schName, prompt: schPrompt, type: schType, intervalMinutes: schInterval, time: schTime, weekday: schWeekday, siteId: schSite || undefined });
       setSchName(''); setSchPrompt('');
       api.get('/ai/schedules').then(r => setSchedules(r.data.schedules || [])).catch(() => {});
     } catch (e: any) { alert(e.response?.data?.error || t('create failed', getLang())); }
@@ -124,8 +134,12 @@ export default function AIBindings() {
           React.createElement('option', { value: '' }, t('select user', getLang())),
           users.map(u => React.createElement('option', { key: u.id, value: u.id }, u.username + ' (' + u.role + ')'))),
         React.createElement('input', { value: label, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setLabel(e.target.value), placeholder: t('binding label', getLang()), className: 'input-field' }),
+        sites.length > 0 && React.createElement(Select, { value: bindingSite, onChange: (v: string) => setBindingSite(v), className: 'input-field' },
+          React.createElement('option', { value: '' }, t('all sites (no scope)', getLang())),
+          sites.map(s => React.createElement('option', { key: s.id, value: s.id }, s.name))),
         React.createElement('button', { onClick: create, disabled: !userId, className: 'btn-primary' }, React.createElement(Plus, { size: 16 }), t('create', getLang()))
       ),
+      sites.length > 0 && React.createElement('p', { className: 'text-[11px] text-gray-400 mt-2' }, t('job site hint', getLang())),
       platform === 'dingtalk' && React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3 mt-3' },
         ['ddWebhook', 'ddSecret', 'ddToken', 'ddAesKey', 'ddAppKey', 'ddAppSecret'].map(k => {
           const labels: Record<string, string> = {
@@ -156,6 +170,10 @@ export default function AIBindings() {
                 React.createElement('div', { className: 'min-w-0' },
                   React.createElement('p', { className: 'font-medium text-gray-900 text-sm' }, b.label + ' (' + (b.platform === 'wechat' ? '微信' : '钉钉') + ')'),
                   React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' }, t('bound user', getLang()) + ': ' + b.username),
+                  // Visible so an operator can tell whether this bot is scoped —
+                  // a silent scope change would otherwise be invisible.
+                  React.createElement('p', { className: 'text-[11px] text-gray-400 mt-0.5' },
+                    t('site scope', getLang()) + ': ' + (b.siteId ? (sites.find((s: any) => s.id === b.siteId)?.name || b.siteId) : t('all sites (no scope)', getLang()))),
                   React.createElement('div', { className: 'flex items-center gap-1 text-[11px] text-gray-400 mt-1' },
                     React.createElement(Clock, { size: 11 }), b.lastUsedAt ? t('last used', getLang()) + ': ' + new Date(b.lastUsedAt).toLocaleString() : t('never used', getLang())),
                 )
@@ -211,7 +229,11 @@ export default function AIBindings() {
           : React.createElement('input', { type: 'time', value: schTime, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSchTime(e.target.value), className: 'input-field w-32 text-sm' }, null),
         schType === 'weekly' && React.createElement(Select, { value: schWeekday, onChange: (v: string) => setSchWeekday(parseInt(v)), className: 'input-field w-32 text-sm' },
           [['1', 'monday'], ['2', 'tuesday'], ['3', 'wednesday'], ['4', 'thursday'], ['5', 'friday'], ['6', 'saturday'], ['0', 'sunday']].map(([v, l]) => React.createElement('option', { key: v, value: v }, t(l, getLang())))),
+        sites.length > 0 && React.createElement(Select, { value: schSite, onChange: (v: string) => setSchSite(v), className: 'input-field w-40 text-sm' },
+          React.createElement('option', { value: '' }, t('all sites (no scope)', getLang())),
+          sites.map(s => React.createElement('option', { key: s.id, value: s.id }, s.name))),
         React.createElement('button', { onClick: addSchedule, disabled: !schName.trim() || !schPrompt.trim(), className: 'btn-primary text-sm' }, React.createElement(Plus, { size: 15 }), t('create', getLang()))),
+      sites.length > 0 && React.createElement('p', { className: 'text-[11px] text-gray-400 mb-3' }, t('job site hint', getLang())),
       schedules.length === 0
         ? React.createElement('p', { className: 'text-sm text-gray-400' }, t('no schedules yet', getLang()))
         : React.createElement('div', { className: 'space-y-2' },
@@ -219,6 +241,8 @@ export default function AIBindings() {
               React.createElement('div', { className: 'flex-1 min-w-0' },
                 React.createElement('p', { className: 'text-sm text-gray-800 font-medium truncate' }, sch.name),
                 React.createElement('p', { className: 'text-[11px] text-gray-400 truncate' }, sch.prompt),
+                React.createElement('p', { className: 'text-[11px] text-gray-400 mt-0.5' },
+                  t('site scope', getLang()) + ': ' + (sch.siteId ? (sites.find((s: any) => s.id === sch.siteId)?.name || sch.siteId) : t('all sites (no scope)', getLang()))),
                 React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' },
                   sch.type === 'interval' ? t('every n minutes', getLang()) + ': ' + sch.intervalMinutes
                     : sch.type === 'weekly' ? t('weekly on', getLang()) + ' ' + t(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][sch.weekday] || 'sun', getLang()) + ' ' + sch.time

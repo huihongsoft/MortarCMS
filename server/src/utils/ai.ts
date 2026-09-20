@@ -1,4 +1,78 @@
 import db from './db';
+import { logger } from './logger';
+
+// ---- Errors shown to users vs. errors kept in the log ----
+//
+// A provider's error body is written by the provider, not by us: it routinely
+// quotes account and org ids, quota state, request ids, internal endpoints, and
+// sometimes the offending key itself ("Incorrect API key provided: sk-abc…").
+// None of that belongs in a task error, a chat bubble or a toast, so the raw
+// body goes to the server log and the thrown error carries only the status.
+// Same rule for anything else: a message we did not write is not user-facing.
+
+// Strip credential-shaped substrings before they reach the log file. Exported
+// so the test can pin the shapes that must not survive into a log line.
+export function scrubSecrets(s: string): string {
+  return String(s || '')
+    // key-ish names with a separator (sk-live-…, api_key-…)
+    .replace(/\b(?:sk|pk|rk|api|key|token|secret)[-_][A-Za-z0-9_-]{8,}/gi, '[redacted]')
+    // Slack-style and other vendor prefixes
+    .replace(/\b(?:xox[baprs]|ghp|gho|glpat|AKIA)[-_A-Za-z0-9]{8,}/gi, '[redacted]')
+    .replace(/(Bearer\s+)[A-Za-z0-9._-]{8,}/gi, '$1[redacted]')
+    .replace(/(Authorization:\s*\w+\s+)[A-Za-z0-9._-]{3,}/gi, '$1[redacted]')
+    // Secret-ish headers (x-api-key: …) — same minimum length as the query rule,
+    // so a short test key does not survive in the log on one path and not the other
+    .replace(/\b((?:x-api-key|x-auth-token)\s*:\s*)[A-Za-z0-9._-]{3,}/gi, '$1[redacted]')
+    // Secrets carried in a query string or form body (webhook URLs, OAuth). The
+    // \b matters: without it "design=" and "assign=" match "sign=".
+    .replace(/\b((?:access_token|refresh_token|api_?key|apikey|secret|sign|sig|signature|password|passwd|token|key)=)[^&\s"'<>]{3,}/gi, '$1[redacted]')
+    // The same names as JSON pairs ({"access_token":"…"}) — where the separator
+    // is a quote and colon rather than '='.
+    .replace(/("(?:access_token|refresh_token|api_?key|apikey|secret|sign|sig|signature|password|passwd|token|key)"\s*:\s*")[^"]{3,}(")/gi, '$1[redacted]$2');
+}
+
+export function logAiDetail(kind: string, detail: string, extra: Record<string, any> = {}): void {
+  try { logger.warn({ ...extra, detail: scrubSecrets(detail).slice(0, 1000) }, kind); } catch { /* logging must never throw */ }
+}
+
+// Errors we raise ourselves carry a message written for the user. Prefixes are
+// matched explicitly so the list is a whitelist, not a guess: anything else
+// (engine text, file paths, SQL, provider bodies) is replaced and logged.
+const USER_FACING_PREFIXES = [
+  'AI 请求失败', 'AI 请求超时', 'AI 工具调用异常', 'AI 服务商',
+  '尚未配置', '未配置 AI', '未找到文章', '你的角色无权', '当前角色无',
+  '请求太频繁', '请求过于频繁', '今日 AI 用量', '今日个人 AI 用量',
+  '任务执行超时', '任务执行失败', '工具执行失败', '没有权限使用该工具',
+  '无法连接 AI 服务商',
+];
+
+// The fallback is only ever reached by an *internal* failure: a provider that
+// misbehaved already arrives as a whitelisted message ('AI 请求失败 (401)',
+// 'AI 请求超时…') or as the network shape below. So the default stays neutral —
+// these routes (sessions, bindings, memories, share, notifications, tasks) are
+// not AI calls, and blaming the provider for a storage error misleads the person
+// trying to fix it.
+export function userFacingAiError(err: any, fallback = '操作失败，请稍后重试'): string {
+  const msg = String((err && (err.message || err)) || '');
+  if (msg && USER_FACING_PREFIXES.some(p => msg.startsWith(p))) return msg;
+  // `cause` is where fetch hides the real story ("connect ECONNREFUSED host:port");
+  // it belongs in the log even though the user must not see it.
+  const cause = String((err && err.cause && (err.cause.message || err.cause)) || '');
+  logAiDetail('ai error withheld from the client', cause ? msg + ' <- ' + cause : msg || String(err));
+  // A failed connection reports the host and port it tried ("connect
+  // ECONNREFUSED 127.0.0.1:11434"). The shape is worth keeping, the address is
+  // not — so answer with a message we wrote instead of the engine's.
+  if (/ECONNREFUSED|ENOTFOUND|ETIMEDOUT|EAI_AGAIN|fetch failed|socket hang up|network/i.test(msg)) {
+    return '无法连接 AI 服务商，请检查网络或服务商配置后重试';
+  }
+  return fallback;
+}
+
+// A failed provider call: the status is the user's business, the body is not.
+export function providerError(status: number, detail: string): Error {
+  logAiDetail('ai provider request failed', detail, { status });
+  return new Error('AI 请求失败 (' + status + ')');
+}
 
 // ---- AI provider configuration (persisted in the Setting table) ----
 
@@ -104,7 +178,13 @@ export function getProviders(): AIProvider[] {
       ? decryptProviders(raw)
       : JSON.parse(raw) as AIProvider[]; // legacy plaintext
     return Array.isArray(list) ? list : [];
-  } catch { return []; }
+  } catch (e: any) {
+    // Returning [] silently turned "the ciphertext no longer decrypts" (a changed
+    // JWT_SECRET, or a database restored onto another instance) into "no provider
+    // is configured", so the only clue was a misleading error message.
+    logAiDetail('ai provider config unreadable', String(e?.message || e), {});
+    return [];
+  }
 }
 
 export function saveProviders(providers: AIProvider[]): void {
@@ -199,8 +279,7 @@ async function openaiChat(provider: AIProvider, messages: AIMessage[], tools: AI
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error('AI 请求失败 (' + res.status + '): ' + errText.slice(0, 300));
+    throw providerError(res.status, await res.text().catch(() => ''));
   }
 
   if (onDelta) {
@@ -244,8 +323,7 @@ async function anthropicChat(provider: AIProvider, messages: AIMessage[], tools:
     body: JSON.stringify(body),
   });
   if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error('AI 请求失败 (' + res.status + '): ' + errText.slice(0, 300));
+    throw providerError(res.status, await res.text().catch(() => ''));
   }
 
   if (onDelta) {
@@ -377,6 +455,7 @@ export async function testProvider(provider: AIProvider): Promise<{ ok: boolean;
     await chatComplete(provider, [{ role: 'user', content: 'Reply with the single word: ok' }]);
     return { ok: true, message: '连接成功' };
   } catch (e: any) {
-    return { ok: false, message: e.message || '连接失败' };
+    // Shown in the AI settings panel: keep it to messages we wrote.
+    return { ok: false, message: userFacingAiError(e, '连接失败') };
   }
 }

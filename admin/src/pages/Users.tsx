@@ -18,6 +18,14 @@ export default function Users() {
   useEffect(() => { api.get('/users').then(r => { setUsers(r.data); setLoaded(true); }).catch(() => { setLoaded(true); setError(t('failed to load users', getLang())); }); }, []);
   const filteredUsers = roleFilter ? users.filter((u: any) => u.role === roleFilter) : users;
 
+  // Site access for this user (utils/userSites.ts on the server): no selection
+  // means unrestricted, which is what every pre-existing user looks like.
+  const [sites, setSites] = useState<any[]>([]);
+  useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); }, []);
+  async function updateSites(id: string, siteIds: string[]) {
+    try { await api.put(`/users/${id}`, { siteIds }); setUsers(users.map((u: any) => u.id === id ? { ...u, siteIds } : u)); }
+    catch (e: any) { alert(e.response?.data?.error || t('update failed', getLang())); }
+  }
   async function updateRole(id: string, role: string) {
     try { await api.put(`/users/${id}`, { role }); setUsers(users.map((u: any) => u.id === id ? { ...u, role } : u)); }
     catch (e: any) { alert(e.response?.data?.error || t('update failed', getLang())); }
@@ -216,6 +224,7 @@ export default function Users() {
                 React.createElement('th', { className: 'text-left px-4 py-3' }, t('email', getLang())),
                 React.createElement('th', { className: 'text-left px-4 py-3' }, t('role', getLang())),
                 React.createElement('th', { className: 'text-left px-4 py-3' }, t('posts', getLang())),
+                sites.length > 0 && React.createElement('th', { className: 'text-left px-4 py-3 hidden lg:table-cell' }, t('site access', getLang())),
                 // Hide less critical columns on narrow windows so the table
                 // fits without clipping the actions column
                 React.createElement('th', { className: 'text-left px-4 py-3 hidden md:table-cell' }, t('2fa', getLang())),
@@ -244,6 +253,17 @@ export default function Users() {
                     )
                   ),
                   React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500 dark:text-gray-400' }, u._count?.posts || 0),
+                  sites.length > 0 && React.createElement('td', { className: 'px-4 py-3 hidden lg:table-cell' },
+                    u.role === 'admin'
+                      ? React.createElement('span', { className: 'text-[10px] text-gray-400' }, t('all sites (no scope)', getLang()))
+                      : React.createElement('select', {
+                          multiple: true,
+                          value: u.siteIds || [],
+                          onChange: (e: any) => updateSites(u.id, Array.from(e.target.selectedOptions).map((o: any) => o.value)),
+                          className: 'input-field text-xs',
+                          style: { width: 150, minHeight: 54 },
+                          title: t('site access hint', getLang()),
+                        }, sites.map((s: any) => React.createElement('option', { key: s.id, value: s.id }, s.name)))),
                   React.createElement('td', { className: 'px-4 py-3 hidden md:table-cell' },
                     React.createElement('span', { className: 'px-2 py-0.5 text-[11px] rounded-full font-medium ' + (u.two_factor_enabled ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400') },
                       u.two_factor_enabled ? t('2fa enabled', getLang()) : t('2fa disabled', getLang()))),

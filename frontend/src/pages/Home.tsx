@@ -46,7 +46,9 @@ export default function Home({ settings }: { settings: Record<string, string> })
   const siteOrigin = settings.site_url || window.location.origin;
   useSEO({
     siteTitle: settings.site_title,
-    title: frontPage ? frontPage.title : catSlug ? (isTagPage ? t('tag', settings) + ': ' : isTypePage ? '' : '') + catSlug.replace(/-/g, ' ') : settings.site_title || undefined,
+    // No title on the plain homepage: useSEO already appends the site name, so
+    // passing site_title here produced "Site - Site".
+    title: frontPage ? frontPage.title : catSlug ? (isTagPage ? t('tag', settings) + ': ' : isTypePage ? '' : '') + catSlug.replace(/-/g, ' ') : undefined,
     description: frontPage ? frontPage.excerpt || '' : settings.site_description || '',
     url: siteOrigin + '/' + (catSlug ? (isTagPage ? 'tag/' : isTypePage ? 'type/' : 'category/') + catSlug : ''),
     jsonLd: [

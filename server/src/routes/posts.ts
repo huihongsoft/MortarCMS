@@ -10,7 +10,8 @@ import { slugify, uniqueSlug } from '../utils/slug';
 import { applyFilters, doAction } from '../utils/hooks';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 import { sanitizeCssText } from '../utils/sanitize';
-import { siteFilterClause } from '../utils/siteFilter';
+import { normalizeSeoField } from '../utils/seoFields';
+import { siteScopeForFilter, mayWriteSite } from '../utils/userSites';
 import { trackView } from '../utils/views';
 
 const router = Router();
@@ -32,6 +33,38 @@ function isMembersOnly(postId: string): boolean {
   return !!db.prepare("SELECT 1 FROM PostMeta WHERE postId = ? AND key = '_members_only' AND value = '1'").get(postId);
 }
 const MEMBERS_ONLY_EXCLUDE = " AND NOT EXISTS (SELECT 1 FROM PostMeta pm WHERE pm.postId = p.id AND pm.key = '_members_only' AND pm.value = '1')";
+
+// Public payload shape for the list endpoints.
+//
+// They returned the selected row verbatim, which shipped two things it should
+// not: the content-protection hash (offline-crackable, and never needed by a
+// client — the editor reads it from the admin endpoints) and the full body of a
+// password-protected post. GET /slug/:slug refuses that body until the cookie
+// unlocks it; the lists bypassed the gate by returning `p.*`. Admins/editors may
+// read protected bodies (the single-post route lets them through), so they keep
+// `content`; everyone else loses it until they unlock the post.
+function publicShape(posts: any[], canBypass: boolean): any[] {
+  return (posts || []).map((p: any) => {
+    const { password, ...rest } = p;
+    if (!canBypass && password) delete rest.content;
+    // enrichPosts embeds the author row it fetched (id, username, email, avatar).
+    // The email is not public data and was shipping to anonymous visitors.
+    if (rest.author && typeof rest.author === 'object' && !canBypass) {
+      const { email, ...author } = rest.author;
+      rest.author = author;
+    }
+    return rest;
+  });
+}
+
+// Who may read a protected body without unlocking it (mirrors /slug/:slug).
+// These list routes are public, so they never run `authenticate` and `req.user`
+// is empty — the caller has to be resolved the same way isLoggedIn does it, or
+// every editor would be treated as anonymous.
+function mayBypassProtection(req: AuthRequest): boolean {
+  const user = req.user || resolveOptionalUser(req);
+  return !!user && ['admin', 'editor'].includes(user.role);
+}
 
 // Visual-editor CSS is rendered into a <style> tag on the public site, so
 // dangerous primitives are stripped at write time (defense in depth with the
@@ -156,7 +189,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     const total = (db.prepare(countSql).get(...countParams) as any)?.cnt || 0;
     const posts = enrichPosts(postsData);
     posts.forEach((p: any) => { p.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', p.content || '', p), p), { siteId: req.siteId }); });
-    res.json({ posts, total, page, totalPages: Math.ceil(total / limit) });
+    res.json({ posts: publicShape(posts, mayBypassProtection(req)), total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -231,7 +264,9 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
       res.status(403).json({ private: true, membersOnly: true, title: post.title, slug: post.slug });
       return;
     }
-    trackView(post.id); // batched in memory, flushed to the DB periodically
+    // batched in memory, flushed periodically; the visitor key keeps one reader
+    // (or one crawler) from inflating the count by reloading
+    trackView(post.id, (req.ip || '') + '|' + String(req.headers['user-agent'] || '').slice(0, 80));
     const enriched = enrichPost(post);
     // Never expose the protection password to the public API
     enriched.hasPassword = !!post.password;
@@ -273,7 +308,7 @@ router.get('/popular', (req: AuthRequest & SiteRequest, res: Response) => {
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 5));
     const now = new Date().toISOString();
     const posts = db.prepare('SELECT * FROM Post WHERE type = ? AND status = ? AND (publishedAt IS NULL OR publishedAt <= ?)' + (req.siteId ? ' AND (siteId IS NULL OR siteId = ?)' : '') + ' ORDER BY views DESC, publishedAt DESC LIMIT ?').all(...(req.siteId ? ['post', 'published', now, req.siteId, limit] : ['post', 'published', now, limit])) as any[];
-    res.json(enrichPosts(posts));
+    res.json(publicShape(enrichPosts(posts), mayBypassProtection(req)));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -287,11 +322,14 @@ router.get('/archive/:year/:month', (req: AuthRequest, res: Response) => {
     const y = req.params.year;
     const m = req.params.month.padStart(2, '0');
     const now = new Date().toISOString();
-    const where = 'p.type = ? AND p.status = ? AND strftime("%Y-%m", p.publishedAt) = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)';
+    // Single quotes: this build reports DQS=0, so a double-quoted "%Y-%m" is
+    // parsed as an identifier and the whole (public) archive month route 500s
+    // with "no such column". It was the only double-quoted literal in the repo.
+    const where = "p.type = ? AND p.status = ? AND strftime('%Y-%m', p.publishedAt) = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)";
     const ym = y + '-' + m;
     const posts = db.prepare('SELECT DISTINCT p.* FROM Post p WHERE ' + where + ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?').all('post', 'published', ym, now, limit, (page - 1) * limit) as any[];
     const total = (db.prepare('SELECT COUNT(DISTINCT p.id) as cnt FROM Post p WHERE ' + where).get('post', 'published', ym, now) as any)?.cnt || 0;
-    res.json({ posts: enrichPosts(posts), total, page, totalPages: Math.ceil(total / limit), archive: { year: y, month: m } });
+    res.json({ posts: publicShape(enrichPosts(posts), mayBypassProtection(req)), total, page, totalPages: Math.ceil(total / limit), archive: { year: y, month: m } });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -312,7 +350,7 @@ router.get('/author/:username', (req: AuthRequest, res: Response) => {
     const where = 'p.type = ? AND p.status = ? AND p.authorId = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)';
     const posts = db.prepare('SELECT DISTINCT p.* FROM Post p WHERE ' + where + ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?').all('post', 'published', author.id, new Date().toISOString(), limit, (page - 1) * limit) as any[];
     const total = (db.prepare('SELECT COUNT(DISTINCT p.id) as cnt FROM Post p WHERE ' + where).get('post', 'published', author.id, new Date().toISOString()) as any)?.cnt || 0;
-    res.json({ posts: enrichPosts(posts), total, page, totalPages: Math.ceil(total / limit), author: { username: req.params.username } });
+    res.json({ posts: publicShape(enrichPosts(posts), mayBypassProtection(req)), total, page, totalPages: Math.ceil(total / limit), author: { username: req.params.username } });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -335,7 +373,10 @@ router.get('/admin', authenticate, authorize('admin', 'editor', 'author'), (req:
     const searchClause = search ? ' AND (title LIKE ? OR excerpt LIKE ? OR content LIKE ?)' : '';
     if (search) { sql += searchClause; params.push(searchLike, searchLike, searchLike); }
     // Optional admin site filter (all / global / a specific site)
-    const sf = siteFilterClause(req.query.siteId);
+    // Site filter validated against the caller's assignments: an editor assigned
+    // to one site cannot widen the list to another by naming it here.
+    const sf = siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId);
+    if (sf.denied) { res.status(403).json({ error: '无权访问该站点' }); return; }
     sql += sf.clause; params.push(...sf.params);
     sql += ' ORDER BY sticky DESC, ' + sortCol + ' ' + sortDir + ' LIMIT ? OFFSET ?';
     params.push(limit, (page - 1) * limit);
@@ -366,6 +407,10 @@ router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contribut
     // Same rule as authorId: only admin/editor may target another site. An author
     // assigning their own post to a different site would inject content into
     // that site's frontend.
+    // Role gate (admin/editor) as before, plus the assignment check.
+    if (data.siteId !== undefined && !mayWriteSite(req.user!.userId, req.user!.role, data.siteId)) {
+      res.status(403).json({ error: '无权在该站点创建内容' }); return;
+    }
     const siteId = data.siteId && ['admin', 'editor'].includes(req.user!.role) ? data.siteId : null;
     const publishedAt = data.publishedAt || (status === 'published' ? now : null);
     // Store a hash, never the plaintext (see utils/contentPassword).
@@ -384,7 +429,7 @@ router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contribut
       }
       if (data.meta) {
         for (const [key, value] of Object.entries(data.meta)) {
-          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
+          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : normalizeSeoField(key, value));
         }
       }
     });
@@ -428,7 +473,10 @@ router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contrib
       vals.push(data.password ? await hashContentPassword(data.password) : '');
     }
     // Only admin/editor may move a post between sites (mirrors the authorId rule).
-    if (data.siteId !== undefined && ['admin', 'editor'].includes(req.user!.role)) { sets.push('siteId = ?'); vals.push(data.siteId || null); }
+    if (data.siteId !== undefined && ['admin', 'editor'].includes(req.user!.role)) {
+      if (!mayWriteSite(req.user!.userId, req.user!.role, data.siteId)) { res.status(403).json({ error: '无权移到该站点' }); return; }
+      sets.push('siteId = ?'); vals.push(data.siteId || null);
+    }
     if (data.authorId !== undefined && ['admin', 'editor'].includes(req.user!.role)) { sets.push('authorId = ?'); vals.push(data.authorId); }
     if (data.publishedAt !== undefined) { sets.push('publishedAt = ?'); vals.push(data.publishedAt); }
     // Relation rewrites (delete-then-insert), the pre-save revision and the
@@ -440,7 +488,7 @@ router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contrib
       if (data.meta) {
         db.prepare('DELETE FROM PostMeta WHERE postId = ?').run(req.params.id);
         for (const [key, value] of Object.entries(data.meta)) {
-          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
+          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, key === '_visual_css' ? sanitizeVisualCss(value) : normalizeSeoField(key, value));
         }
       }
       if (sets.length > 0) {
@@ -589,7 +637,7 @@ router.get('/:id/related', (req: AuthRequest, res: Response) => {
     const posts = db.prepare(
       'SELECT DISTINCT p.* FROM Post p JOIN PostCategory pc ON pc.postId = p.id WHERE pc.categoryId IN (' + placeholders + ') AND p.id != ? AND p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?) ORDER BY p.publishedAt DESC LIMIT 4'
     ).all(...catIds, req.params.id, 'post', 'published', now) as any[];
-    res.json(enrichPosts(posts));
+    res.json(publicShape(enrichPosts(posts), mayBypassProtection(req)));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

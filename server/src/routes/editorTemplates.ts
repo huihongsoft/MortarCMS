@@ -6,6 +6,7 @@ import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { renderShortcode, listShortcodes } from '../utils/shortcodes';
 import { stripDangerousHtml, sanitizeCssText } from '../utils/sanitize';
+import { clampResolvedSite } from '../utils/userSites';
 
 const CMS_TYPES = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud', 'link-list'];
 
@@ -44,7 +45,9 @@ router.get('/preview-cms/:type', authenticate, requireCap('edit_posts'), (req: A
     Object.entries(req.query).forEach(([k, v]) => { if (typeof v === 'string') attrs[k] = v; });
     if (!('limit' in attrs)) attrs.limit = '5';
     // Site-scoped preview: same visibility rules as the rendered page
-    const html = renderShortcode(type, attrs, { siteId: req.siteId });
+    // Preview renders the same shortcodes the public page will, so it must use a
+    // site this editor may read — the Host header is not authority.
+    const html = renderShortcode(type, attrs, { siteId: clampResolvedSite(req, req.user!.userId, req.user!.role) });
     res.json({ html });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

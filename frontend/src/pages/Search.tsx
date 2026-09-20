@@ -23,7 +23,9 @@ export default function SearchPage({ settings }: { settings: Record<string, stri
     api.post('/posts/search-log', { q: query }).catch(() => {});
   }, [query]);
 
-  useSEO({ siteTitle: settings.site_title, title: query ? t('search') + ': ' + query : t('search'), url: window.location.origin + '/search?q=' + encodeURIComponent(query) });
+  // Search result pages are thin, query-specific duplicates: keep them out of the
+  // index (the server sends the same signal via X-Robots-Tag).
+  useSEO({ siteTitle: settings.site_title, title: query ? t('search') + ': ' + query : t('search'), url: window.location.origin + '/search?q=' + encodeURIComponent(query), noindex: true });
 
   const Layout = useTheme().SearchLayout;
   return React.createElement(Layout, { query, posts, loading, error });

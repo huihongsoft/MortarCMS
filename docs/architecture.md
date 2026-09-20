@@ -83,6 +83,7 @@ User ──┬── Post ──┬── PostCategory ── Category
 Role                     RBAC roles (slug, name, capabilities JSON, isSystem)
 Setting / SiteSetting    global + per-site key-value
 Site                     multi-site domains
+UserSite                 which sites a user may act on (see "Site access" below)
 Menu                     menus with site isolation
 Link                     friend links
 Visit                    PV/UV analytics
@@ -96,6 +97,27 @@ AiUsage                  request/token usage statistics
 ```
 
 All primary keys are CUID strings; dates are ISO-8601 text in UTC.
+
+## Site access (multi-site)
+
+`req.siteId` is resolved from the Host header (`middleware/site.ts`). That header
+is client-controlled, so it decides **which site a request looks like it belongs
+to, not what the caller is allowed to touch**. Authorisation comes from
+`UserSite` (`utils/userSites.ts`):
+
+* admins act on any site;
+* a user with **no** assignments is unrestricted — the behaviour of every install
+  before this existed, so upgrading changes nothing until an operator assigns
+  sites (Users → *site access*);
+* a user **with** assignments is confined to those sites plus the shared
+  (site-less) content: admin lists are narrowed to that set, naming another site
+  is refused with 403, and create/update bodies cannot target one either.
+
+The same rule is applied to the AI assistant's entry points
+(`actingSiteId` in `routes/ai.ts`) and to scheduled jobs / bot bindings when the
+site is chosen. Public rendering is deliberately *not* affected: a visitor — or a
+logged-in user reading another site's frontend — still sees that site's content,
+because it is public.
 
 ## Admin SPA
 

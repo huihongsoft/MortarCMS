@@ -3,6 +3,7 @@ import { Save, Zap, Plus, Trash2, KeyRound, Server } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
+import { describeActivity } from '../lib/activity';
 import Select from '../components/Select';
 
 interface Provider {
@@ -28,6 +29,7 @@ const TOOL_NAMES = [
   'web_search', 'analyze_image', 'remember', 'recall',
   // 管理
   'update_site_settings',
+  'get_post_analytics',
 ];
 
 export default function AISettings() {
@@ -48,6 +50,11 @@ export default function AISettings() {
   const [cmpLoading, setCmpLoading] = useState(false);
   const [memories, setMemories] = useState<any[]>([]);
   const [usageLimit, setUsageLimit] = useState('');
+  const [usageLimitPerUser, setUsageLimitPerUser] = useState('');
+  // The audit trail had no UI at all: every AI tool call is recorded (AiAudit),
+  // but the only way to read it was the raw endpoint.
+  const [audit, setAudit] = useState<any[]>([]);
+  const [allowUnattendedRisky, setAllowUnattendedRisky] = useState(false);
 
   useEffect(() => {
     api.get('/ai/settings').then(r => {
@@ -57,9 +64,12 @@ export default function AISettings() {
       setAllowedRoles(r.data.allowedRoles || []);
       setToolPermissions(r.data.toolPermissions || {});
       setRoles(r.data.roles || []);
+      setAllowUnattendedRisky(!!r.data.allowUnattendedRisky);
       api.get('/ai/usage').then(r => setUsage(r.data)).catch(() => {});
       api.get('/ai/memories').then(r => setMemories(r.data.memories || [])).catch(() => {});
       setUsageLimit(r.data?.usageLimit || '');
+      setUsageLimitPerUser(r.data?.usageLimitPerUser || '');
+      api.get('/ai/audit').then(a => setAudit(a.data?.logs || [])).catch(() => {});
     }).catch(() => {});
   }, []);
 
@@ -212,6 +222,12 @@ export default function AISettings() {
           React.createElement('button', { onClick: async () => {
             try { await api.put('/settings', { ai_usage_limit_daily: String(usageLimit || '') }); toast.toast(t('saved', getLang())); }
             catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+          }, className: 'btn-secondary text-xs' }, t('save', getLang())),
+          React.createElement('label', { className: 'text-xs text-gray-500 ml-3' }, t('daily token limit per user', getLang())),
+          React.createElement('input', { type: 'number', min: 0, step: 1000, value: usageLimitPerUser, onChange: e => setUsageLimitPerUser(e.target.value), className: 'input-field w-28 text-xs py-1.5' }),
+          React.createElement('button', { onClick: async () => {
+            try { await api.put('/ai/settings', { usageLimitPerUser: String(usageLimitPerUser || '') }); toast.toast(t('saved', getLang())); }
+            catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
           }, className: 'btn-secondary text-xs' }, t('save', getLang()))
         )
       ),
@@ -255,6 +271,28 @@ export default function AISettings() {
               React.createElement('td', { className: 'py-1.5 text-xs text-gray-500' }, r.kind),
               React.createElement('td', { className: 'py-1.5 text-xs text-gray-500 text-right' }, r.tokens))))))
     ),
+
+    // ---- AI audit trail ----
+    React.createElement('div', { className: 'card p-6 mb-6' },
+      React.createElement('div', { className: 'flex items-center justify-between mb-1 flex-wrap gap-2' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('ai audit trail', getLang())),
+        React.createElement('span', { className: 'text-xs text-gray-400' }, audit.length + ' ' + t('entries', getLang()))),
+      React.createElement('p', { className: 'text-xs text-gray-400 mb-3' }, t('ai audit hint', getLang())),
+      audit.length === 0
+        ? React.createElement('p', { className: 'text-sm text-gray-400' }, t('no entries yet', getLang()))
+        : React.createElement('div', { className: 'max-h-56 overflow-y-auto' },
+            React.createElement('table', { className: 'w-full text-left' },
+              React.createElement('thead', null, React.createElement('tr', { className: 'border-b border-gray-100' },
+                React.createElement('th', { className: 'py-1.5 text-[10px] uppercase text-gray-400' }, t('time', getLang())),
+                React.createElement('th', { className: 'py-1.5 text-[10px] uppercase text-gray-400' }, t('user', getLang())),
+                React.createElement('th', { className: 'py-1.5 text-[10px] uppercase text-gray-400' }, t('tool', getLang())),
+                React.createElement('th', { className: 'py-1.5 text-[10px] uppercase text-gray-400' }, t('arguments', getLang())))),
+              React.createElement('tbody', null, audit.slice(0, 20).map((l: any, i: number) =>
+                React.createElement('tr', { key: i, className: 'border-b border-gray-50' },
+                  React.createElement('td', { className: 'py-1.5 text-xs text-gray-500 whitespace-nowrap' }, new Date(l.createdAt).toLocaleString()),
+                  React.createElement('td', { className: 'py-1.5 text-xs text-gray-700 dark:text-gray-200' }, l.userId || '-'),
+                  React.createElement('td', { className: 'py-1.5 text-xs text-gray-700 dark:text-gray-200' }, describeActivity('ai:' + l.tool, getLang())),
+                  React.createElement('td', { className: 'py-1.5 text-xs text-gray-400 truncate max-w-[240px]', title: String(l.args || '') }, String(l.args || '').slice(0, 120))))))) ),
 
     // ---- Long-term memory ----
     React.createElement('div', { className: 'card p-6 mb-6' },
@@ -313,6 +351,28 @@ export default function AISettings() {
           )
         )
       )
+    ),
+
+    // ---- Unattended jobs ----
+    // Scheduled jobs and bot webhooks have nobody to approve a risky call, so
+    // the assistant refuses to publish, delete, retheme or reconfigure on its
+    // own. Turning this on hands that authority back to unattended runs.
+    React.createElement('div', { className: 'card p-6 mt-6' },
+      React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-2 uppercase tracking-wider' }, t('unattended ai jobs', getLang())),
+      React.createElement('p', { className: 'text-xs text-gray-400 mb-3' }, t('unattended risky hint', getLang())),
+      React.createElement('label', { className: 'flex items-start gap-2 cursor-pointer' },
+        React.createElement('input', {
+          type: 'checkbox',
+          checked: allowUnattendedRisky,
+          onChange: async (e: any) => {
+            const v = !!e.target.checked;
+            setAllowUnattendedRisky(v);
+            try { await api.put('/ai/settings', { allowUnattendedRisky: v }); toast.toast(t('saved', getLang())); }
+            catch (err: any) { setAllowUnattendedRisky(!v); toast.toast(err.response?.data?.error || t('save failed', getLang()), 'error'); }
+          },
+          className: 'mt-0.5 rounded border-gray-300 text-primary-600',
+        }),
+        React.createElement('span', { className: 'text-sm text-gray-700 dark:text-gray-200' }, t('allow unattended high-risk actions', getLang())))
     )
   );
 }

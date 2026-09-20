@@ -1,4 +1,5 @@
 import db from './db';
+import { PUBLIC_POST_CONDITIONS } from './publicPosts';
 
 // Shortcode system: [tag attr="value"]content[/tag]
 type ShortcodeFn = (attrs: Record<string, string>, content: string, ctx: any) => string;
@@ -97,9 +98,22 @@ addShortcode('video', (attrs) => {
 
 // ---- CMS Data shortcodes (used by VisualEditor dynamic blocks) ----
 
-addShortcode('post-list', (attrs) => {
+addShortcode('post-list', (attrs, _content, ctx) => {
   const limit = Math.min(parseInt(attrs.limit || '5') || 5, 20);
-  const posts = db.prepare("SELECT id, title, slug, excerpt, featured, publishedAt FROM Post WHERE type = 'post' AND status = 'published' ORDER BY publishedAt DESC LIMIT ?").all(limit) as any[];
+  // Same conditions as the public API lists: a shortcode is rendered into a
+  // public page, so it must not surface a password-protected, members-only,
+  // noindex or not-yet-due post (it used to show all of them).
+  // Site-scoped when the renderer knows the site (routes pass it in ctx), so a
+  // block on site A's page cannot list site B's posts.
+  const siteId = ctx?.siteId as string | undefined;
+  const scope = siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '';
+  const args: any[] = [new Date().toISOString()];
+  if (siteId) args.push(siteId);
+  args.push(limit);
+  const posts = db.prepare(
+    "SELECT p.id, p.title, p.slug, p.excerpt, p.featured, p.publishedAt FROM Post p WHERE p.type = 'post' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" +
+    PUBLIC_POST_CONDITIONS + scope + ' ORDER BY p.publishedAt DESC LIMIT ?'
+  ).all(...args) as any[];
   if (posts.length === 0) return '<p class="text-gray-400 text-sm italic">No posts yet.</p>';
   const items = posts.map((p: any) => {
     const title = esc(p.title);
@@ -116,9 +130,19 @@ addShortcode('categories', () => {
   return '<div class="cms-rendered-categories">' + items + '</div>';
 }, 'Category list with post counts');
 
-addShortcode('comments', (attrs) => {
+addShortcode('comments', (attrs, _content, ctx) => {
   const limit = Math.min(parseInt(attrs.limit || '5') || 5, 20);
-  const comments = db.prepare("SELECT c.author, c.content, c.createdAt, p.title as postTitle, p.slug as postSlug FROM Comment c JOIN Post p ON p.id = c.postId WHERE c.status = 'approved' ORDER BY c.createdAt DESC LIMIT ?").all(limit) as any[];
+  // The parent post must be publicly readable too — otherwise this renders the
+  // title of a protected/draft/scheduled post together with its comments.
+  const cSite = ctx?.siteId as string | undefined;
+  const cScope = cSite ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '';
+  const cArgs: any[] = [new Date().toISOString()];
+  if (cSite) cArgs.push(cSite);
+  cArgs.push(limit);
+  const comments = db.prepare(
+    "SELECT c.author, c.content, c.createdAt, p.title as postTitle, p.slug as postSlug FROM Comment c JOIN Post p ON p.id = c.postId WHERE c.status = 'approved' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" +
+    PUBLIC_POST_CONDITIONS + cScope + ' ORDER BY c.createdAt DESC LIMIT ?'
+  ).all(...cArgs) as any[];
   if (comments.length === 0) return '<p class="text-gray-400 text-sm italic">No comments yet.</p>';
   const items = comments.map((c: any) => '<div style="padding:10px 0;border-bottom:1px solid #f3f4f6;"><p style="margin:0;font-size:13px;color:#374151;">' + esc(c.content.substring(0, 150)) + '</p><p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">' + esc(c.author) + ' on <a href="/post/' + esc(c.postSlug) + '" style="color:#6b7280;text-decoration:none;">' + esc(c.postTitle || 'post') + '</a></p></div>').join('');
   return '<div class="cms-rendered-comments">' + items + '</div>';

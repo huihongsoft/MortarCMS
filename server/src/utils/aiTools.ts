@@ -1,9 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import db, { cuid } from './db';
+import db, { cuid, withTransaction } from './db';
 import { slugify, uniqueSlug } from './slug';
 import { mdToHtml, parseFrontmatter } from './markdown';
-import { getDefaultProvider } from './ai';
+import { getDefaultProvider, userFacingAiError, logAiDetail } from './ai';
+import { riskyReason, setPluginRiskResolver } from './aiApproval';
 import { userCan } from '../middleware/auth';
 import { logActivity } from '../routes/activity';
 import { activeThemeName, createThemeBackup } from '../routes/themes';
@@ -11,7 +12,7 @@ import { purgeAllCaches, purgeContentCaches } from './cache';
 import { sanitizeHtml } from './sanitize';
 import { isHiddenSettingKey } from './settingsVisibility';
 import { UPLOADS_DIR as uploadsDir } from './paths';
-import { fetchUrlGuarded } from './ssrf';
+import { fetchUrlGuarded, fetchUrlGuardedBuffer, readCappedBytes } from './ssrf';
 
 // Outbound calls made by tools must never hang forever or buffer unbounded data.
 // These were plain fetch() calls: a slow or hostile endpoint could stall the
@@ -21,25 +22,6 @@ const AI_HTTP_TIMEOUT_MS = 90_000;     // model responses can legitimately be sl
 const AI_DOWNLOAD_TIMEOUT_MS = 30_000;
 const MAX_DOWNLOAD_BYTES = 10 * 1024 * 1024;
 
-// Read a response body, refusing to buffer more than `maxBytes` (returns null).
-async function readCapped(res: Response, maxBytes: number): Promise<Buffer | null> {
-  const body: any = (res as any).body;
-  if (!body || typeof body.getReader !== 'function') {
-    const buf = Buffer.from(await res.arrayBuffer());
-    return buf.length > maxBytes ? null : buf;
-  }
-  const reader = body.getReader();
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.length;
-    if (total > maxBytes) { try { await reader.cancel(); } catch { /* already gone */ } return null; }
-    chunks.push(Buffer.from(value));
-  }
-  return Buffer.concat(chunks);
-}
 import type { AIToolFunction, AIToolCall } from './ai';
 
 export interface ToolContext {
@@ -89,7 +71,11 @@ export function friendlyTaskError(e: any): string {
   if (/ECONNREFUSED|ENOTFOUND|ETIMEDOUT|fetch failed|AbortError|aborted/i.test(msg)) return '无法连接 AI 服务商，请检查网络或服务商配置后重试';
   if (/(\b40[0-9]\b|\b429\b|\b500\b)/.test(msg)) return 'AI 服务商返回错误（' + (msg.match(/\b\d{3}\b/) || [''])[0] + '），请检查 API Key、余额与模型配置';
   if (/Tool call|tool_call|function call/i.test(msg)) return 'AI 工具调用异常，请精简任务描述后重试';
-  return msg.slice(0, 200);
+  // Everything left is an unmapped internal error. It is stored on the task and
+  // rendered in the admin, so it must not carry engine text, file paths, SQL or
+  // provider bodies — userFacingAiError logs the detail and returns a generic
+  // line instead of echoing it.
+  return userFacingAiError(e, '任务执行失败，请重试');
 }
 
 // Wrap user-supplied text so prompt-injection instructions are inert
@@ -183,6 +169,11 @@ export function getToolPermissions(): Record<string, string[]> {
 }
 
 // Roles that can use each tool. Admin can use everything.
+// A name here is a backstop for a tool that may be registered later —
+// `delete_posts` and `update_user_roles` are not registered today, so this set
+// does NOT mean deleting is admin-only. The destructive path that exists
+// (update_post → status 'trash') mirrors routes/posts.ts and is gated by role
+// inside that tool, not here.
 const ADMIN_ONLY = new Set(['update_site_settings', 'delete_posts', 'update_user_roles', 'apply_theme_style']);
 
 export function canUseTool(role: string, toolName: string): boolean {
@@ -224,11 +215,98 @@ register('get_site_stats', '获取站点统计信息：文章数、页面数、�
   };
 });
 
+// --- Content analytics (read-only) ---
+// Only numbers that exist in this database: views is a single cumulative
+// counter per post (utils/views.ts flushes in-memory increments into it), so
+// there is no per-day view log and therefore NO way to report a traffic trend.
+// The response says so explicitly — a model asked "how did traffic do this
+// month" will otherwise invent a curve rather than admit the gap.
+register('get_post_analytics', '获取内容数据（只读）：阅读量排行、总阅读量、发文节奏、评论互动、零阅读文章。所有数值均来自站内统计，请直接引用返回的数字，不要估算或编造；流量趋势类问题如返回中未包含，说明系统未记录该数据。', {
+  type: 'object',
+  properties: {
+    months: { type: 'number', description: '发文节奏的统计月数，默认 6，最大 24' },
+    limit: { type: 'number', description: '各排行榜条数，默认 5，最大 15' },
+  },
+}, async (args, ctx) => {
+  const months = Math.min(Math.max(parseInt(args.months) || 6, 1), 24);
+  const limit = Math.min(Math.max(parseInt(args.limit) || 5, 1), 15);
+  // Aliased queries must scope on the alias: referring to Post.siteId while the
+  // table is `Post p` would not resolve.
+  const pscope = siteWhere('p', ctx);
+  const own = ownPostsOnly(ctx);
+  const ownClause = own ? ' AND p.authorId = ?' : '';
+  const ownArgs = own ? [ctx.userId] : [];
+
+  const since = new Date(Date.now() - months * 31 * 86400000).toISOString();
+  const published = "p.type = 'post' AND p.status = 'published'";
+
+  const totals = db.prepare(
+    'SELECT COUNT(*) as posts, COALESCE(SUM(COALESCE(p.views, 0)), 0) as views FROM Post p WHERE ' + published + pscope.clause + ownClause
+  ).get(...pscope.params, ...ownArgs) as any;
+
+  // Top read: the same ordering the public "popular" list uses. `views > 0` keeps
+  // never-read posts out of a "top read" ranking and drops any legacy NULL.
+  // (Measured: the planner picks idx_post_status_type and sorts with a temp
+  // b-tree either way, so this is about the result set, not the index — ~30ms on
+  // 100k posts. The expensive query in this tool was the comment join below.)
+  const topByViews = db.prepare(
+    'SELECT p.title, p.slug, p.views as views, p.publishedAt FROM Post p WHERE ' + published + ' AND p.views > 0' + pscope.clause + ownClause +
+    ' ORDER BY p.views DESC, p.publishedAt DESC LIMIT ?'
+  ).all(...pscope.params, ...ownArgs, limit) as any[];
+
+  // Publishing cadence — a real trend (it comes from publishedAt), unlike views.
+  const publishing = db.prepare(
+    "SELECT strftime('%Y-%m', p.publishedAt) as month, COUNT(*) as posts FROM Post p WHERE " + published +
+    ' AND p.publishedAt IS NOT NULL AND p.publishedAt >= ?' + pscope.clause + ownClause + ' GROUP BY month ORDER BY month DESC'
+  ).all(since, ...pscope.params, ...ownArgs) as any[];
+
+  // Bounded to the most-read 500 posts before the join: joining every published
+  // post against the whole comment table took ~1.4s on 1M comments, for a
+  // "most commented" list nobody reads past the first few rows.
+  const mostCommented = db.prepare(
+    'SELECT p.title, p.slug, COUNT(c.id) as comments FROM (' +
+    'SELECT p.id, p.title, p.slug FROM Post p WHERE ' + published + ' AND p.views > 0' + pscope.clause + ownClause +
+    ' ORDER BY p.views DESC LIMIT 500' +
+    ") p JOIN Comment c ON c.postId = p.id AND c.status = 'approved'" +
+    ' GROUP BY p.id, p.title, p.slug ORDER BY comments DESC LIMIT ?'
+  ).all(...pscope.params, ...ownArgs, limit) as any[];
+
+  // Published but never read: the cheapest content-audit signal.
+  const zeroViews = (db.prepare(
+    'SELECT COUNT(*) as cnt FROM Post p WHERE ' + published + ' AND COALESCE(p.views, 0) = 0' + pscope.clause + ownClause
+  ).get(...pscope.params, ...ownArgs) as any)?.cnt || 0;
+  const zeroSamples = db.prepare(
+    'SELECT p.title, p.publishedAt FROM Post p WHERE ' + published + ' AND COALESCE(p.views, 0) = 0' + pscope.clause + ownClause +
+    ' ORDER BY p.publishedAt DESC LIMIT ?'
+  ).all(...pscope.params, ...ownArgs, limit) as any[];
+
+  const commentCounts = db.prepare(
+    "SELECT COALESCE(SUM(CASE WHEN c.status = 'approved' THEN 1 ELSE 0 END), 0) as approved," +
+    " COALESCE(SUM(CASE WHEN c.status = 'pending' THEN 1 ELSE 0 END), 0) as pending" +
+    ' FROM Comment c JOIN Post p ON p.id = c.postId WHERE ' + published + pscope.clause + ownClause
+  ).get(...pscope.params, ...ownArgs) as any;
+
+  return {
+    scope: { months, ownPostsOnly: own },
+    totals: {
+      publishedPosts: totals?.posts || 0,
+      totalViews: totals?.views || 0,
+      avgViewsPerPost: totals?.posts ? Math.round((totals.views || 0) / totals.posts) : 0,
+      comments: { approved: commentCounts?.approved || 0, pending: commentCounts?.pending || 0 },
+    },
+    topByViews: topByViews.map(p => ({ title: p.title, url: '/post/' + p.slug, views: p.views })),
+    monthlyPublishing: publishing.map(m => ({ month: m.month, posts: m.posts })),
+    mostCommented: mostCommented.map(p => ({ title: p.title, url: '/post/' + p.slug, comments: p.comments })),
+    zeroViews: { count: zeroViews, samples: zeroSamples.map(p => p.title) },
+    unavailable: '系统只保存每篇文章的累计阅读量，没有按天记录，因此无法提供阅读量趋势曲线（发文节奏是真实数据，可用）。',
+  };
+});
+
 // --- List/search posts ---
 register('list_posts', '列出文章，可按状态/关键词过滤，返回标题、slug、状态、发布日期', {
   type: 'object',
   properties: {
-    status: { type: 'string', enum: ['all', 'published', 'draft', 'trash'], description: '文章状态，默认 all' },
+    status: { type: 'string', enum: ['all', 'published', 'draft', 'scheduled', 'trash'], description: '文章状态，默认 all' },
     search: { type: 'string', description: '标题关键词' },
     limit: { type: 'number', description: '数量，默认 10，最大 30' },
   },
@@ -617,6 +695,55 @@ register('apply_theme_style', '把配色、字体等主题样式应用到当前�
   return { applied, theme: tname, message: '已应用到当前主题「' + tname + '」，刷新页面即可看到效果' };
 });
 
+// True when both URLs share a scheme+host+port, i.e. the asset is served by the
+// same endpoint the admin configured as the provider.
+function sameOrigin(a: string, b: string): boolean {
+  try { return new URL(a).origin === new URL(b).origin; } catch { return false; }
+}
+
+// Download a generated image from the URL the provider returned. Anything
+// outside the provider's own origin goes through the SSRF guard; that origin is
+// the one exception because it is already the admin-configured endpoint, and a
+// self-hosted provider legitimately serves its assets from it.
+// Exported for the regression test that pins the redirect behaviour below:
+// this is the one outbound fetch whose guard is conditional, so it is the one
+// worth testing directly rather than through a fake provider.
+export async function downloadProviderImage(url: string, providerBaseUrl: string, maxBytes: number): Promise<{ buf: Buffer } | { error: string }> {
+  const tooBig = { error: '生成的图片超过大小上限（' + (maxBytes / 1024 / 1024) + 'MB）' };
+  const viaGuard = async (target = url): Promise<{ buf: Buffer } | { error: string }> => {
+    const guarded = await fetchUrlGuardedBuffer(target, { timeoutMs: AI_DOWNLOAD_TIMEOUT_MS }, maxBytes);
+    if (!guarded) return { error: '生成的图片地址被拒绝（内网地址或无法访问）' };
+    if (guarded.status !== 200) return { error: '下载生成的图片失败 (HTTP ' + guarded.status + ')' };
+    return guarded.buffer ? { buf: guarded.buffer } : tooBig;
+  };
+  if (!sameOrigin(url, providerBaseUrl)) return viaGuard();
+  // Same origin means "the admin already trusts this endpoint to serve us" — so a
+  // redirect that STAYS inside that origin is followed (a self-hosted provider
+  // may well bounce /images/x to /files/x), while one that leaves it is handed to
+  // the guard. Letting the default `redirect: 'follow'` do it would walk
+  // straight past the guard into 169.254.169.254.
+  let current = url;
+  for (let hop = 0; hop < 4; hop++) {
+    const res = await fetch(current, { signal: AbortSignal.timeout(AI_DOWNLOAD_TIMEOUT_MS), redirect: 'manual' }).catch(() => null);
+    if (!res) return { error: '下载生成的图片失败' };
+    if (REDIRECT_CODES.includes(res.status)) {
+      const loc = res.headers.get('location');
+      if (!loc) return { error: '下载生成的图片失败' };
+      let next: string;
+      try { next = new URL(loc, current).href; } catch { return { error: '下载生成的图片失败' }; }
+      if (!sameOrigin(next, providerBaseUrl)) return viaGuard(next);
+      current = next;
+      continue;
+    }
+    if (!res.ok) return { error: '下载生成的图片失败' };
+    const buf = await readCappedBytes(res, maxBytes);
+    return buf ? { buf } : tooBig;
+  }
+  return { error: '下载生成的图片失败（重定向次数过多）' };
+}
+
+const REDIRECT_CODES = [301, 302, 303, 307, 308];
+
 // --- Image generation: AI creates a banner/cover and saves it to the
 // media library (OpenAI-compatible /images/generations endpoints) ---
 register('generate_image', '生成一张配图（如文章封面、插画）并保存到媒体库，返回图片 URL。生成文章封面时，把返回的 url 传给 write_post / update_post 的 featured 参数即可设为文章封面。', {
@@ -639,7 +766,8 @@ register('generate_image', '生成一张配图（如文章封面、插画）并�
   });
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
-    return { error: '图像生成失败 (' + res.status + '): ' + errText.slice(0, 200) };
+    logAiDetail('image generation failed', errText, { status: res.status });
+    return { error: '图像生成失败 (' + res.status + ')，请检查服务商配置与余额' };
   }
   const j: any = await res.json();
   const item = j.data?.[0];
@@ -652,25 +780,50 @@ register('generate_image', '生成一张配图（如文章封面、插画）并�
   const isUrl = /^[a-z][a-z0-9+.-]*:\/\//i.test(imgData);
   if (isUrl) {
     if (!/^https?:\/\//i.test(imgData)) return { error: '服务商返回的图片地址无效' };
-    // The URL comes from the provider's response, so it is not ours to trust:
-    // bound the time and cap what we are willing to buffer.
-    const imgRes = await fetch(imgData, { signal: AbortSignal.timeout(AI_DOWNLOAD_TIMEOUT_MS) });
-    if (!imgRes.ok) return { error: '下载生成的图片失败' };
-    const capped = await readCapped(imgRes, MAX_DOWNLOAD_BYTES);
-    if (!capped) return { error: '生成的图片超过大小上限（' + (MAX_DOWNLOAD_BYTES / 1024 / 1024) + 'MB）' };
-    buf = capped;
+    // The URL comes from the provider's response, so it is not ours to trust: a
+    // hostile or compromised provider could point it at the cloud metadata
+    // endpoint or an internal service, and the fetched bytes land in a file we
+    // then serve. Guard it like every other outbound call. The provider's own
+    // origin is the one exception — a self-hosted provider on localhost or a LAN
+    // address legitimately serves its own assets, and that endpoint is already
+    // the admin-configured one (see PUT /ai/settings), so fetching from it
+    // grants no access that was not already granted.
+    const capped = await downloadProviderImage(imgData, provider.baseUrl, MAX_DOWNLOAD_BYTES);
+    if ('error' in capped) return { error: capped.error };
+    buf = capped.buf;
   } else {
     buf = Buffer.from(imgData, 'base64');
     if (buf.length > MAX_DOWNLOAD_BYTES) return { error: '生成的图片超过大小上限' };
   }
 
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-  const filename = 'ai-' + Date.now() + '.png';
+  // Date.now() alone collides for two generations in the same millisecond (a
+  // batch or a retry), and the second write would silently replace the first.
+  const filename = 'ai-' + Date.now() + '-' + require('crypto').randomBytes(4).toString('hex') + '.png';
   fs.writeFileSync(path.join(uploadsDir, filename), buf);
 
+  // Dimensions and a thumbnail, the same fields an uploaded image gets. Without
+  // them the frontend <img> had no intrinsic size (layout shift on load) and
+  // og:image shipped without width/height; a Chinese placeholder title also ended
+  // up as the public alt text.
+  let width: number | null = null;
+  let height: number | null = null;
+  let thumbnail = '';
+  try {
+    const sharpMod = require('sharp');
+    const meta = await sharpMod(path.join(uploadsDir, filename)).metadata();
+    width = meta?.width || null;
+    height = meta?.height || null;
+    const thumbsDir = path.join(uploadsDir, 'thumbs');
+    if (!fs.existsSync(thumbsDir)) fs.mkdirSync(thumbsDir, { recursive: true });
+    // Same convention as the upload path: /uploads/thumbs/<filename>
+    await sharpMod(path.join(uploadsDir, filename)).resize({ width: 300, withoutEnlargement: true }).jpeg({ quality: 80 }).toFile(path.join(thumbsDir, filename));
+    thumbnail = '/uploads/thumbs/' + filename;
+  } catch { /* metadata is a nicety — never fail the generation over it */ }
+
   const id = cuid();
-  db.prepare('INSERT INTO Media (id, filename, original, mimeType, size, url, alt, title, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, filename, filename, 'image/png', buf.length, '/uploads/' + filename, '', 'AI 生成图片', ctx.userId);
+  db.prepare('INSERT INTO Media (id, filename, original, mimeType, size, url, alt, title, width, height, thumbnail, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+    .run(id, filename, filename, 'image/png', buf.length, '/uploads/' + filename, '', 'AI generated image', width, height, thumbnail, ctx.userId);
   return { url: '/uploads/' + filename, saved: true };
 });
 
@@ -682,9 +835,12 @@ register('get_post', '获取单篇文章的完整内容，通过 id 或 slug', {
     slug: { type: 'string', description: '文章 slug' },
   },
 }, async (args, ctx) => {
-  const row = args.id
-    ? db.prepare("SELECT * FROM Post WHERE id = ?").get(args.id)
-    : db.prepare("SELECT * FROM Post WHERE slug = ?").get(args.slug) as any;
+  // Site-scoped like the list tools: on a multi-site install, an id (or a slug,
+  // which repeats across sites) must not reach another site's post.
+  const scope = siteWhere('Post', ctx);
+  const row = (args.id
+    ? db.prepare('SELECT * FROM Post WHERE id = ?' + scope.clause).get(args.id, ...scope.params)
+    : db.prepare('SELECT * FROM Post WHERE slug = ?' + scope.clause).get(args.slug, ...scope.params)) as any;
   if (!row) return { error: '文章未找到' };
   // Drafts / password-protected posts are visible only to their author (or
   // anyone with edit_others_posts) — never hand them to another user's AI
@@ -696,6 +852,53 @@ register('get_post', '获取单篇文章的完整内容，通过 id 或 slug', {
   return safe;
 });
 
+// Snapshot the pre-edit state into Revision before the assistant overwrites a
+// post. The HTTP routes do this on every save (routes/posts.ts), but the tools
+// write to the table directly, so without it an AI rewrite would be the one
+// edit in the CMS that cannot be rolled back — the exact case where a rollback
+// matters most, since a bulk rewrite touches many posts at once.
+function snapshotRevision(post: any): void {
+  // Deliberately NOT swallowed: every caller runs it inside the same transaction
+  // as the write it protects, so a snapshot that cannot be written must roll the
+  // edit back. Silently continuing would produce exactly the edit that has no
+  // rollback point — the thing this exists to prevent. Callers that pass through
+  // executeTool turn the throw into a tool error.
+  db.prepare('INSERT INTO Revision (id, postId, title, content, excerpt, createdAt) VALUES (?, ?, ?, ?, ?, ?)')
+    .run(cuid(), post.id, post.title, post.content || '', post.excerpt || '', new Date().toISOString());
+}
+
+// Normalize a scheduling timestamp. Anything the model sends is parsed and
+// stored as a UTC ISO string — the shape every other publishedAt has, and the
+// one the scheduler's string comparison relies on (scheduler.ts flips
+// 'scheduled' → 'published' once publishedAt <= now). A missing, unparseable or
+// past value returns null rather than being guessed at, so a bad date cannot
+// silently publish something immediately.
+function futureIso(value: any): string | null {
+  // Only accept a plausible near-future instant. An unbounded value is not just
+  // noise: `new Date(1e16).toISOString()` throws RangeError (losing the whole
+  // write_post call), and years past 9999 format as "+033658-…", where '+' sorts
+  // BELOW digits — the scheduler compares publishedAt as a string, so such a row
+  // would look already due and publish immediately instead of on schedule.
+  const now = Date.now();
+  const acceptable = (ms: number) => Number.isFinite(ms) && ms > now && ms <= now + 50 * 365 * 86400000;
+  const iso = (ms: number) => {
+    const s = new Date(ms).toISOString();
+    return /^\d{4}-/.test(s) ? s : null; // exactly the shape the scheduler expects
+  };
+  // Epoch numbers/strings first: "1790000000000" is a date to a model, but
+  // `new Date('1790000000000')` is Invalid Date — it would silently downgrade a
+  // perfectly good schedule to a draft.
+  const asEpoch = typeof value === 'number' ? value : (/^\d{10,13}$/.test(String(value || '').trim()) ? Number(value) : NaN);
+  if (Number.isFinite(asEpoch)) {
+    const ms = String(Math.trunc(Math.abs(asEpoch))).length <= 10 ? asEpoch * 1000 : asEpoch; // seconds vs ms
+    return acceptable(ms) ? iso(ms) : null;
+  }
+  const raw = String(value || '').trim();
+  if (!raw) return null;
+  const t = new Date(raw).getTime();
+  return acceptable(t) ? iso(t) : null;
+}
+
 // Fallback excerpt for AI posts: when the model does not provide one, derive
 // it from the cleaned content so list cards render like manually written posts.
 function autoExcerpt(html: string): string {
@@ -704,14 +907,15 @@ function autoExcerpt(html: string): string {
 }
 
 // --- Write post (the flagship tool) ---
-register('write_post', '撰写并创建一篇新文章。可以给定标题和内容（支持 HTML 或 Markdown），可指定状态、分类、标签、封面图。这是 AI 写作的核心工具。', {
+register('write_post', '撰写并创建一篇新文章。可以给定标题和内容（支持 HTML 或 Markdown），可指定状态、分类、标签、封面图；状态设为 scheduled 并给出 publishedAt 可定时发布。这是 AI 写作的核心工具。', {
   type: 'object',
   properties: {
     title: { type: 'string', description: '文章标题（必填）' },
     content: { type: 'string', description: '文章正文，支持 HTML（如 <h2>、<p>、<ul>）' },
     excerpt: { type: 'string', description: '文章摘要（不提供时自动从正文提取）' },
     featured: { type: 'string', description: '封面图 URL（可选；可先用 generate_image 生成图片，再把它返回的 url 传到这里作为文章封面）' },
-    status: { type: 'string', enum: ['draft', 'published'], description: '默认 draft' },
+    status: { type: 'string', enum: ['draft', 'published', 'scheduled'], description: '默认 draft；scheduled 需同时给出未来的 publishedAt' },
+    publishedAt: { type: 'string', description: '定时发布时间（ISO 8601，如 2026-09-21T09:00:00+08:00），仅在 status=scheduled 时使用' },
     categoryNames: { type: 'array', items: { type: 'string' }, description: '分类名称数组' },
     tagNames: { type: 'array', items: { type: 'string' }, description: '标签名称数组' },
   },
@@ -722,11 +926,24 @@ register('write_post', '撰写并创建一篇新文章。可以给定标题和�
   const allSlugs = (db.prepare("SELECT slug FROM Post WHERE type = 'post'").all() as any[]).map((s: any) => s.slug);
   const slug = uniqueSlug(title, allSlugs);
   const id = cuid();
-  // Publishing is a capability, not just a parameter: the HTTP route keeps
-  // contributors on drafts, and the tool must not become a way around that.
-  const wantsPublish = args.status === 'published';
+  // Publishing — now or on a schedule — is a capability, not just a parameter:
+  // the HTTP route keeps contributors on drafts, and the tool must not become a
+  // way around that.
   const canPublish = userCan(ctx, 'publish_posts');
-  const status = wantsPublish && canPublish ? 'published' : 'draft';
+  const wantsPublish = args.status === 'published';
+  const wantsSchedule = args.status === 'scheduled';
+  let status = 'draft';
+  let scheduledAt: string | null = null;
+  let note: string | undefined;
+  if (wantsPublish && canPublish) {
+    status = 'published';
+  } else if (wantsSchedule && canPublish) {
+    scheduledAt = futureIso(args.publishedAt);
+    if (scheduledAt) status = 'scheduled';
+    else note = '定时发布需要未来的 publishedAt（ISO 格式，如 2026-09-21T09:00:00+08:00），已保存为草稿';
+  } else if (wantsPublish || wantsSchedule) {
+    note = '当前角色无发布权限，已保存为草稿，请让有权限的编辑发布';
+  }
   const now = new Date().toISOString();
   const cleanContent = prepareAiContent(args.content);
   const excerpt = String(args.excerpt || '').trim().slice(0, 500) || autoExcerpt(cleanContent);
@@ -736,7 +953,7 @@ register('write_post', '撰写并创建一篇新文章。可以给定标题和�
   // so a post created without it would show up on every site of a multi-site
   // install.
   db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt, featured, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, title, slug, cleanContent, excerpt, status, 'post', ctx.userId, status === 'published' ? now : null, featured || null, ctx.siteId || null);
+    .run(id, title, slug, cleanContent, excerpt, status, 'post', ctx.userId, status === 'published' ? now : scheduledAt, featured || null, ctx.siteId || null);
   // Invalidate the public content caches: the tool call bypasses the HTTP
   // mutation middleware, so the list/archive/feed must be purged explicitly.
   purgeContentCaches();
@@ -770,13 +987,16 @@ register('write_post', '撰写并创建一篇新文章。可以给定标题和�
 
   return {
     id, title, slug, status, featured: featured || null,
-    message: status === 'published' ? '文章已发布' : '文章已保存为草稿',
-    ...(wantsPublish && !canPublish ? { note: '当前角色无发布权限，已保存为草稿，请让有权限的编辑发布' } : {}),
+    ...(scheduledAt ? { publishedAt: scheduledAt } : {}),
+    message: status === 'published' ? '文章已发布'
+      : status === 'scheduled' ? '文章已排期，将于 ' + scheduledAt + ' 自动发布'
+      : '文章已保存为草稿',
+    ...(note ? { note } : {}),
   };
 });
 
 // --- Update post ---
-register('update_post', '更新文章的部分字段（标题、内容、摘要、状态、封面图）', {
+register('update_post', '更新文章的部分字段（标题、内容、摘要、状态、封面图）；status=scheduled 并给出 publishedAt 可改为定时发布', {
   type: 'object',
   properties: {
     id: { type: 'string', description: '文章 id（必填）' },
@@ -784,42 +1004,84 @@ register('update_post', '更新文章的部分字段（标题、内容、摘要�
     content: { type: 'string' },
     excerpt: { type: 'string' },
     featured: { type: 'string', description: '封面图 URL（可先用 generate_image 生成后传入）' },
-    status: { type: 'string', enum: ['draft', 'published', 'trash'] },
+    status: { type: 'string', enum: ['draft', 'published', 'scheduled', 'trash'] },
+    publishedAt: { type: 'string', description: '定时发布时间（ISO 8601），仅在 status=scheduled 时使用' },
   },
   required: ['id'],
 }, async (args, ctx) => {
-  const existing = db.prepare('SELECT * FROM Post WHERE id = ? AND type = ?').get(args.id, 'post') as any;
+  const scope = siteWhere('Post', ctx);
+  const existing = db.prepare('SELECT * FROM Post WHERE id = ? AND type = ?' + scope.clause).get(args.id, 'post', ...scope.params) as any;
   if (!existing) return { error: '文章未找到' };
   // AI tools act on the calling user's behalf — never let a prompt-injected
   // id mutate someone else's post (unless the user may edit others' posts)
   if (existing.authorId !== ctx.userId && !userCan(ctx, 'edit_others_posts')) return { error: '无权修改他人文章' };
   const sets: string[] = []; const vals: any[] = [];
-  if (args.title !== undefined) { sets.push('title = ?'); vals.push(args.title); }
-  if (args.content !== undefined) { sets.push('content = ?'); vals.push(prepareAiContent(args.content)); }
-  if (args.excerpt !== undefined) { sets.push('excerpt = ?'); vals.push(String(args.excerpt).slice(0, 500)); }
+  // `!= null`, not `!== undefined`: a model that emits null for a field it has
+  // nothing to say about must not blank the post — `String(null)` would store the
+  // literal "null" as the excerpt, and null content would wipe the body.
+  const nextTitle = args.title != null ? String(args.title) : undefined;
+  // Prepared once and used for BOTH the write and the snapshot comparison below:
+  // comparing the raw argument against stored HTML can read as "unchanged" while
+  // the value actually written differs, which would skip the rollback point.
+  const nextContent = args.content != null ? prepareAiContent(args.content) : undefined;
+  const nextExcerpt = args.excerpt != null ? String(args.excerpt).slice(0, 500) : undefined;
+  if (nextTitle !== undefined) { sets.push('title = ?'); vals.push(nextTitle); }
+  if (nextContent !== undefined) { sets.push('content = ?'); vals.push(nextContent); }
+  if (nextExcerpt !== undefined) { sets.push('excerpt = ?'); vals.push(nextExcerpt); }
   if (args.featured !== undefined) {
     const f = String(args.featured).trim().slice(0, 500);
     sets.push('featured = ?'); vals.push(/^(https?:\/\/|\/uploads\/|\/media\/)/i.test(f) ? f : null);
   }
-  let publishBlocked = false;
+  // Status changes are gated exactly as routes/posts.ts gates them: a
+  // contributor may only ever hold a draft, publishing or scheduling needs
+  // publish_posts, and trashing needs a role the DELETE route would accept. The
+  // other fields still apply, so the assistant's edit is not thrown away.
+  let statusBlocked: string | null = null;
   if (args.status !== undefined) {
-    // Same rule as write_post: publishing needs the capability. The other
-    // fields still apply, so the assistant's edit is not thrown away.
-    if (args.status === 'published' && !userCan(ctx, 'publish_posts')) {
-      publishBlocked = true;
+    const next = args.status;
+    if (ctx.role === 'contributor' && next !== 'draft') {
+      statusBlocked = '当前角色只能保持草稿，未改变发布状态';
+    } else if ((next === 'published' || next === 'scheduled') && !userCan(ctx, 'publish_posts')) {
+      statusBlocked = '当前角色无发布权限，未改变发布状态';
+    } else if (next === 'trash' && !['admin', 'editor', 'author'].includes(ctx.role)) {
+      statusBlocked = '当前角色无删除权限，未改变发布状态';
+    } else if (next === 'scheduled') {
+      const at = futureIso(args.publishedAt);
+      if (!at) {
+        statusBlocked = '定时发布需要未来的 publishedAt（ISO 格式，如 2026-09-21T09:00:00+08:00）';
+      } else {
+        sets.push('status = ?'); vals.push('scheduled');
+        sets.push('publishedAt = ?'); vals.push(at);
+      }
     } else {
-      sets.push('status = ?'); vals.push(args.status);
-      if (args.status === 'published' && !existing.publishedAt) { sets.push('publishedAt = ?'); vals.push(new Date().toISOString()); }
+      sets.push('status = ?'); vals.push(next);
+      if (next === 'published') {
+        // Mirrors routes/posts.ts: a published post must not keep a future date,
+        // or it would be published yet invisible in the public lists while still
+        // reachable by slug.
+        const future = existing.publishedAt && existing.publishedAt > new Date().toISOString();
+        if (!existing.publishedAt || future) { sets.push('publishedAt = ?'); vals.push(new Date().toISOString()); }
+      }
     }
   }
-  if (sets.length === 0) return publishBlocked ? { error: '当前角色无发布权限' } : { message: '没有需要更新的字段' };
+  if (sets.length === 0) return statusBlocked ? { error: statusBlocked } : { message: '没有需要更新的字段' };
+  // Snapshot only when a field a revision actually covers changes, matching the
+  // HTTP route: a status-only toggle needs no rollback point. Snapshot and
+  // update commit together (routes/posts.ts does the same) — otherwise a failed
+  // snapshot leaves an edit with nothing to roll back to.
+  const changed = (nextTitle !== undefined && nextTitle !== existing.title)
+    || (nextContent !== undefined && nextContent !== String(existing.content || ''))
+    || (nextExcerpt !== undefined && nextExcerpt !== String(existing.excerpt || ''));
   sets.push('updatedAt = ?'); vals.push(new Date().toISOString());
   vals.push(args.id);
-  db.prepare('UPDATE Post SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
+  withTransaction(() => {
+    if (changed) snapshotRevision(existing);
+    db.prepare('UPDATE Post SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
+  });
   purgeContentCaches();
   return {
     id: args.id, message: '文章已更新',
-    ...(publishBlocked ? { note: '当前角色无发布权限，未改变发布状态' } : {}),
+    ...(statusBlocked ? { note: statusBlocked } : {}),
   };
 });
 
@@ -877,18 +1139,35 @@ register('update_site_settings', '更新站点配置（如 site_title、site_des
     settings: { type: 'object', description: '要更新的键值对，例如 {"site_title": "新标题"}' },
   },
   required: ['settings'],
-}, async (args) => {
-  const upsert = db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+}, async (args, ctx) => {
+  const upsertGlobal = db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value');
+  // On a multi-site install the value a visitor actually sees is the SiteSetting
+  // override, which wins over the global row (utils/siteSettings.ts). Writing the
+  // global row while an override exists reported "updated" and changed nothing on
+  // this site — and silently changed every other site instead. So: scoped request
+  // writes the site's override, unscoped writes the global default.
+  const setSite = db.prepare('INSERT INTO SiteSetting (siteId, key, value) VALUES (?, ?, ?) ON CONFLICT(siteId, key) DO UPDATE SET value = excluded.value');
+  const siteId = ctx?.siteId;
   const entries = args.settings || {};
   const updated: string[] = [];
   const skipped: string[] = [];
   for (const [k, v] of Object.entries(entries)) {
     if (typeof k !== 'string' || typeof v !== 'string') continue;
     if (!AI_WRITABLE_SETTINGS.has(k)) { skipped.push(k); continue; }
-    upsert.run(cuid(), k, v);
+    try {
+      if (siteId) setSite.run(siteId, k, v);
+      else upsertGlobal.run(cuid(), k, v);
+    } catch {
+      // No Site table on this install: fall back to the global value.
+      upsertGlobal.run(cuid(), k, v);
+    }
     updated.push(k);
   }
-  return { message: '配置已更新', updated, skipped };
+  return {
+    message: '配置已更新',
+    scope: siteId ? '站点「' + siteId + '」' : '全站默认',
+    updated, skipped,
+  };
 });
 
 // ---- Long-term memory: per-user facts the assistant can save/recall ----
@@ -945,7 +1224,8 @@ register('translate_post', '将站内一篇文章翻译成指定语言并创建�
   },
   required: ['id'],
 }, async (args, ctx) => {
-  const post = db.prepare("SELECT * FROM Post WHERE id = ? AND type = 'post'").get(args.id) as any;
+  const scope = siteWhere('Post', ctx);
+  const post = db.prepare("SELECT * FROM Post WHERE id = ? AND type = 'post'" + scope.clause).get(args.id, ...scope.params) as any;
   if (!post) return { error: '文章未找到' };
   // Translating a post copies its content — never let a prompt-injected id
   // exfiltrate someone else's draft / password-protected post
@@ -969,7 +1249,7 @@ register('translate_post', '将站内一篇文章翻译成指定语言并创建�
       ],
     }),
   });
-  if (!res.ok) { const t = await res.text().catch(() => ''); return { error: '翻译失败 (' + res.status + '): ' + t.slice(0, 200) }; }
+  if (!res.ok) { const t = await res.text().catch(() => ''); logAiDetail('translate failed', t, { status: res.status }); return { error: '翻译失败 (' + res.status + ')' }; }
   const j: any = await res.json();
   const out = j.choices?.[0]?.message?.content || '';
   const lines = out.split('\n');
@@ -994,7 +1274,8 @@ register('complete_post', '完善一篇文章：自动生成摘要、SEO 标题/
   },
   required: ['id'],
 }, async (args, ctx) => {
-  const post = db.prepare("SELECT * FROM Post WHERE id = ?").get(args.id) as any;
+  const scope = siteWhere('Post', ctx);
+  const post = db.prepare('SELECT * FROM Post WHERE id = ?' + scope.clause).get(args.id, ...scope.params) as any;
   if (!post) return { error: '文章未找到' };
   // Same ownership rule as update_post: complete only your own posts
   if (post.authorId !== ctx.userId && !userCan(ctx, 'edit_others_posts')) return { error: '无权修改他人文章' };
@@ -1023,23 +1304,20 @@ register('complete_post', '完善一篇文章：自动生成摘要、SEO 标题/
   const seoDesc = grab(/SEO描述[:：]\s*(.+)/);
   const tags = grab(/标签[:：]\s*(.+)/).split(/[,，]/).map((x: string) => x.trim()).filter(Boolean);
 
-  if (excerpt) db.prepare('UPDATE Post SET excerpt = ?, updatedAt = ? WHERE id = ?').run(excerpt, new Date().toISOString(), post.id);
-  if (seoTitle || seoDesc) {
-    db.prepare("INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, '_seo_title', ?) ON CONFLICT(postId, key) DO UPDATE SET value = excluded.value").run(cuid(), post.id, seoTitle || '');
-    db.prepare("INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, '_seo_desc', ?) ON CONFLICT(postId, key) DO UPDATE SET value = excluded.value").run(cuid(), post.id, seoDesc || '');
-  }
-  for (const name of tags.slice(0, 6)) {
-    const tagSlug = slugify(name);
-    let tag: any = db.prepare('SELECT id FROM Tag WHERE slug = ?').get(tagSlug);
-    if (!tag) { const tid = cuid(); db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tid, name, tagSlug); tag = { id: tid }; }
-    db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(post.id, tag.id);
-  }
   // Internal interlinking: append a "related reading" block linking to other
-  // published posts that share keywords with this article's title.
+  // published posts that share keywords with this article's title. Resolved
+  // before anything is written so the snapshot below can tell whether the body
+  // is about to change.
   const related: any[] = [];
   try {
     const titleWords = (post.title || '').toLowerCase().split(/[\s，。、,]+/).filter((w: string) => w.length >= 2);
-    const others = db.prepare("SELECT id, title, slug FROM Post WHERE type = 'post' AND status = 'published' AND id != ? ORDER BY publishedAt DESC LIMIT 30").all(post.id) as any[];
+    // Site-scoped, and only posts that are actually public right now: a link to
+    // another site's post would leak its title/slug into this site's body, and a
+    // scheduled post is not visible to the reader clicking the link.
+    const others = db.prepare(
+      "SELECT id, title, slug FROM Post WHERE type = 'post' AND status = 'published' AND (publishedAt IS NULL OR publishedAt <= ?) AND id != ?" +
+      scope.clause + ' ORDER BY publishedAt DESC LIMIT 30'
+    ).all(new Date().toISOString(), post.id, ...scope.params) as any[];
     const scored = others.map((o: any) => {
       const ot = (o.title || '').toLowerCase();
       let score = 0;
@@ -1048,14 +1326,63 @@ register('complete_post', '完善一篇文章：自动生成摘要、SEO 标题/
     }).filter(x => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 2);
     related.push(...scored.map(x => x.o));
   } catch {}
-  if (related.length) {
-    const links = related.map((r: any) => '<li><a href="/post/' + r.slug + '">' + (r.title || '') + '</a></li>').join('');
-    const block = '<div class="related-reading" style="margin-top:32px;padding-top:24px;border-top:1px solid #e5e7eb;"><h3 style="font-size:18px;font-weight:600;margin:0 0 12px;">相关阅读</h3><ul style="margin:0;padding-left:20px;line-height:1.9;">' + links + '</ul></div>';
-    const updated = (post.content || '') + block;
-    db.prepare('UPDATE Post SET content = ?, updatedAt = ? WHERE id = ?').run(updated, new Date().toISOString(), post.id);
+  // Append once, not once per call: the block is part of the stored content now,
+  // so a second complete_post on the same post would otherwise stack a duplicate
+  // "相关阅读" section every time.
+  const alreadyLinked = /class="related-reading"/.test(post.content || '');
+  const appendsBody = related.length > 0 && !alreadyLinked;
+  // "Changed", not "produced something": the model returns the same excerpt and
+  // tags every run, and treating that as a change stacked identical revisions
+  // (and reported work that did not happen) on every repeat.
+  const excerptChanges = !!excerpt && excerpt !== (post.excerpt || '');
+
+  // The writes below replace the post's metadata and append a related-reading
+  // block to its body — snapshot the pre-call state so the whole operation can
+  // be rolled back from the revisions panel. The append counts: it rewrites
+  // content, so a run that produces no excerpt/SEO/tags but does interlink
+  // still needs a rollback point.
+  if (!excerptChanges && !seoTitle && !seoDesc && !tags.length && !appendsBody) {
+    return {
+      excerpt, seoTitle, seoDesc, tags, related: 0,
+      message: alreadyLinked ? '文章已完善（相关阅读已存在，未重复追加）' : '文章已完善（无内容变更）',
+    };
   }
-  if (excerpt || seoTitle || seoDesc || tags.length || related.length) purgeContentCaches();
-  return { excerpt, seoTitle, seoDesc, tags, related: related.length, message: '文章已完善' + (related.length ? '（已追加相关阅读 ' + related.length + ' 篇）' : '') };
+  // Snapshot and the writes it protects go together: a snapshot without the
+  // write is a bogus "previous version", a write without the snapshot is an
+  // unrecoverable edit.
+  withTransaction(() => {
+    // Only when something a revision actually records is touched: a revision row
+    // only holds title/content/excerpt, so an SEO-or-tags-only run would add an
+    // entry that differs from its predecessor in nothing.
+    if (excerptChanges || appendsBody) snapshotRevision(post);
+    if (excerptChanges) db.prepare('UPDATE Post SET excerpt = ?, updatedAt = ? WHERE id = ?').run(excerpt, new Date().toISOString(), post.id);
+    if (seoTitle || seoDesc) {
+      db.prepare("INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, '_seo_title', ?) ON CONFLICT(postId, key) DO UPDATE SET value = excluded.value").run(cuid(), post.id, seoTitle || '');
+      db.prepare("INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, '_seo_desc', ?) ON CONFLICT(postId, key) DO UPDATE SET value = excluded.value").run(cuid(), post.id, seoDesc || '');
+    }
+    for (const name of tags.slice(0, 6)) {
+      const tagSlug = slugify(name);
+      let tag: any = db.prepare('SELECT id FROM Tag WHERE slug = ?').get(tagSlug);
+      if (!tag) { const tid = cuid(); db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tid, name, tagSlug); tag = { id: tid }; }
+      db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(post.id, tag.id);
+    }
+    if (appendsBody) {
+      // Titles come from other posts and are injected as HTML — escape them, or a
+      // post titled with markup breaks the block (and would be stored into this
+      // post's body verbatim).
+      const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+      const links = related.map((r: any) => '<li><a href="/post/' + esc(r.slug) + '">' + esc(r.title) + '</a></li>').join('');
+      const block = '<div class="related-reading" style="margin-top:32px;padding-top:24px;border-top:1px solid #e5e7eb;"><h3 style="font-size:18px;font-weight:600;margin:0 0 12px;">相关阅读</h3><ul style="margin:0;padding-left:20px;line-height:1.9;">' + links + '</ul></div>';
+      db.prepare('UPDATE Post SET content = ?, updatedAt = ? WHERE id = ?').run((post.content || '') + block, new Date().toISOString(), post.id);
+    }
+  });
+  purgeContentCaches();
+  // `related` reports what was appended, not what was found — reporting 1 for a
+  // block that was already there told the user work had happened when it had not.
+  return {
+    excerpt, seoTitle, seoDesc, tags, related: appendsBody ? related.length : 0,
+    message: '文章已完善' + (appendsBody ? '（已追加相关阅读 ' + related.length + ' 篇）' : alreadyLinked ? '（相关阅读已存在，未重复追加）' : ''),
+  };
 });
 
 // ---- Image understanding (vision): analyze a media-library image ----
@@ -1112,14 +1439,52 @@ register('analyze_image', '分析媒体库中的一张图片：描述内容、�
       }],
     }),
   });
-  if (!res.ok) { const t = await res.text().catch(() => ''); return { error: '图片分析失败 (' + res.status + '): ' + t.slice(0, 200) }; }
+  if (!res.ok) { const t = await res.text().catch(() => ''); logAiDetail('image analysis failed', t, { status: res.status }); return { error: '图片分析失败 (' + res.status + ')' }; }
   const j: any = await res.json();
   return { analysis: j.choices?.[0]?.message?.content || '' };
 });
 
-// Public registry so plugins can add their own AI tools
-export function registerTool(name: string, description: string, parameters: any, run: ToolFn): void {
+// Risk declared by plugin tools (see registerTool below).
+const pluginRisk = new Map<string, { reason: string } | ((args: any) => string | null)>();
+setPluginRiskResolver((name, args) => {
+  const declared = pluginRisk.get(name);
+  if (!declared) return null;
+  if (typeof declared === 'function') {
+    try { return declared(args) || null; } catch { return '插件工具执行'; }
+  }
+  return declared.reason;
+});
+
+export function pluginRiskyReason(name: string, args: any): string | null {
+  const declared = pluginRisk.get(name);
+  if (!declared) return null;
+  if (typeof declared === 'function') {
+    try { return declared(args) || null; } catch { return '插件工具执行'; }
+  }
+  return declared.reason;
+}
+
+// Public registry so plugins can add their own AI tools.
+//
+// A plugin may not shadow an existing name: `register` overwrites by design (the
+// built-ins rely on it), so without this guard a plugin could replace
+// `update_post` with something that skips the ownership checks the original
+// performs.
+//
+// `risk` is how a plugin opts its tool into the human-confirmation gate — either
+// a fixed reason or a function of the arguments. Omitting it means "treat as
+// low-risk", which is the only thing the assistant can assume about a tool it
+// does not know.
+export function registerTool(
+  name: string, description: string, parameters: any, run: ToolFn,
+  risk?: { reason: string } | ((args: any) => string | null),
+): void {
+  if (tools[name]) {
+    logAiDetail('ai tool registration refused', 'a plugin tried to replace the built-in tool "' + name + '"', {});
+    return;
+  }
   register(name, description, parameters, run);
+  if (risk) pluginRisk.set(name, risk);
 }
 
 // ---- Exports ----
@@ -1152,7 +1517,11 @@ export async function executeTool(name: string, args: any, ctx: ToolContext): Pr
     }
     return result;
   } catch (e: any) {
-    const err = { error: '工具执行失败: ' + (e.message || e) };
+    // The message travels on: into the model's context, into the task steps the
+    // admin renders, and into the audit row. A raw exception would disclose
+    // server internals to all three, so the detail is logged and the caller only
+    // ever sees a message we wrote.
+    const err = { error: userFacingAiError(e, '工具执行失败，请稍后重试') };
     auditToolCall(ctx, name, args, err);
     return err;
   }
@@ -1161,4 +1530,29 @@ export async function executeTool(name: string, args: any, ctx: ToolContext): Pr
 // Re-export for the agent loop
 export function toolCallToResult(tc: AIToolCall, ctx: ToolContext): Promise<{ id: string; output: string }> {
   return executeTool(tc.name, tc.args, ctx).then(r => ({ id: tc.id, output: JSON.stringify(r) }));
+}
+
+// Scheduled jobs and bot webhooks run with nobody watching, so there is no one
+// to approve a risky call. Refusing it (rather than executing it) is what keeps
+// the chat confirmation from being decorative: otherwise an injected
+// instruction would simply take the unattended path instead.
+//
+// The refusal is returned as a tool result so the model reports what it could
+// not do instead of silently skipping it.
+export function executeToolUnattended(name: string, args: any, ctx: ToolContext): Promise<any> {
+  const reason = riskyReason(name, args, ctx);
+  if (reason && !unattendedRiskyAllowed()) {
+    return Promise.resolve({
+      error: '该操作需要人工确认（' + reason + '），无人值守的任务不会自动执行。请在 AI 对话中发起该操作，确认后再执行。',
+    });
+  }
+  return executeTool(name, args, ctx);
+}
+
+// Escape hatch for operators who deliberately want unattended jobs to publish or
+// delete on their own (Setting: ai_allow_unattended_risky). Off unless set.
+function unattendedRiskyAllowed(): boolean {
+  try {
+    return (db.prepare("SELECT value FROM Setting WHERE key = 'ai_allow_unattended_risky'").get() as any)?.value === '1';
+  } catch { return false; }
 }

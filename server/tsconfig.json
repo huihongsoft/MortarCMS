@@ -7,6 +7,12 @@
     "rootDir": "./src",
     "strict": true,
     "esModuleInterop": true,
+    // Required, not optional: utils/dbWorker.js and utils/dbDialect.js are plain
+    // JavaScript (the remote-driver worker and its SQL translator). Without this
+    // tsc emitted neither, so `node dist/index.js` — which is what install.sh and
+    // the systemd/launchd units run — had no worker to spawn and a MySQL/Postgres
+    // install died at startup with ENOENT from new Worker().
+    "allowJs": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import DOMPurify from 'dompurify';
 import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson, Trash2, Edit, HardDrive } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -12,6 +12,11 @@ export default function Settings() {
   const navigate = useNavigate();
   const location = useLocation();
   const [settings, setSettings] = useState<Record<string, string>>({});
+  // What the API returned when this page loaded. Used to send only the fields the
+  // user actually edited: the form used to PUT every loaded key, so saving any
+  // field wrote this page's snapshot back over anything changed in the meantime —
+  // including settings the AI assistant had just updated.
+  const baselineRef = useRef<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
   // Return from the homepage editor lands back on the Reading tab
   const [tab, setTab] = useState<TabKey>(((location.state as any)?.tab as TabKey) || 'general');
@@ -46,7 +51,7 @@ export default function Settings() {
   const [dbBackups, setDbBackups] = useState<any[]>([]);
   async function loadBackups() { api.get('/db/backups').then(r => setDbBackups(r.data?.backups || [])).catch(() => {}); }
   useEffect(() => {
-    api.get('/settings').then(r => setSettings(r.data));
+    api.get('/settings').then(r => { setSettings(r.data); baselineRef.current = { ...(r.data || {}) }; });
     api.get('/pages').then(r => setPages(r.data)).catch(() => {});
     api.get('/roles').then(r => setRoles(r.data?.roles || [])).catch(() => {});
     api.get('/system/cache').then(r => { setCacheInfo(r.data); setCacheTtl(r.data?.ttlSeconds || 60); }).catch(() => {});
@@ -98,10 +103,20 @@ export default function Settings() {
       // back to a stale snapshot held in this page's state.
       // storage_secret is never returned by the API (credential): an empty
       // input means "keep the stored value", so it is excluded from the payload.
+      // The same reasoning now covers every other key: only fields the user
+      // edited are sent, so saving this form cannot revert a setting that changed
+      // elsewhere (the AI assistant can update site settings while it is open).
       const payload = Object.fromEntries(
-        Object.entries(settings).filter(([k, v]) => v !== null && v !== undefined && k !== 'homepage_html' && k !== 'homepage_css' && !(k === 'storage_secret' && !v))
+        Object.entries(settings).filter(([k, v]) =>
+          v !== null && v !== undefined && k !== 'homepage_html' && k !== 'homepage_css'
+          && !(k === 'storage_secret' && !v)
+          // Only what the user changed: an untouched field must not be written.
+          && String(v) !== String(baselineRef.current[k] ?? '')
+        )
       );
+      if (Object.keys(payload).length === 0) { setSaved(true); setTimeout(() => setSaved(false), 2000); return true; }
       await api.put('/settings', payload);
+      baselineRef.current = { ...baselineRef.current, ...payload };
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
       // Let the sidebar re-read dev_mode so the developer-mode menu entries
@@ -155,6 +170,7 @@ export default function Settings() {
         field('site_description', t('site description', getLang())),
         field('site_url', t('site url', getLang())),
         field('cdn_url', t('cdn url (optional, e.g. https://cdn.example.com)', getLang())),
+        field('seo_twitter_handle', t('twitter handle (optional, e.g. @yoursite)', getLang())),
         field('admin_email', t('admin email', getLang()), 'email'),
         field('timezone', t('timezone', getLang())),
         // Default language + date format on the same row

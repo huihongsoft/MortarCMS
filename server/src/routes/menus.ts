@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { mayWriteSite } from '../utils/userSites';
 import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
@@ -43,6 +44,10 @@ router.get('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, r
 router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
   try {
     const { name, location, items, siteId } = req.body;
+    // Naming a site requires that site to be one the caller is assigned to.
+    if (siteId !== undefined && siteId !== null && !mayWriteSite(req.user!.userId, req.user!.role, siteId)) {
+      res.status(403).json({ error: '无权在该站点创建内容' }); return;
+    }
     assertSafeMenuItems(items);
     const id = cuid();
     db.prepare('INSERT INTO Menu (id, name, location, items, siteId) VALUES (?, ?, ?, ?, ?)').run(id, name || 'Menu', location || 'primary', JSON.stringify(items || []), siteId || null);
@@ -55,6 +60,9 @@ router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, 
 router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
   try {
     const { name, items, location, siteId } = req.body;
+    if (siteId !== undefined && siteId !== null && !mayWriteSite(req.user!.userId, req.user!.role, siteId)) {
+      res.status(403).json({ error: '无权移到该站点' }); return;
+    }
     if (items) assertSafeMenuItems(items);
     withTransaction(() => {
       if (name !== undefined) db.prepare('UPDATE Menu SET name = ? WHERE id = ?').run(name, req.params.id);

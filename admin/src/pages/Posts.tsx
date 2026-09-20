@@ -50,6 +50,7 @@ export default function Posts() {
     api.get('/posts/admin?limit=1' + sf).then(r => setCounts(c => ({...c, all: r.data.total || 0}))).catch(()=>{});
     api.get('/posts/admin?status=published&limit=1' + sf).then(r => setCounts(c => ({...c, published: r.data.total || 0}))).catch(()=>{});
     api.get('/posts/admin?status=draft&limit=1' + sf).then(r => setCounts(c => ({...c, draft: r.data.total || 0}))).catch(()=>{});
+    api.get('/posts/admin?status=scheduled&limit=1' + sf).then(r => setCounts(c => ({...c, scheduled: r.data.total || 0}))).catch(()=>{});
     api.get('/posts/admin?status=pending&limit=1' + sf).then(r => setCounts(c => ({...c, pending: r.data.total || 0}))).catch(()=>{});
     api.get('/posts/admin?status=trash&limit=1' + sf).then(r => setCounts(c => ({...c, trash: r.data.total || 0}))).catch(()=>{});
   }, [siteFilter]);
@@ -190,7 +191,9 @@ export default function Posts() {
           )))
       ),
       React.createElement('div', { className: 'flex items-center gap-3 mb-4 flex-wrap' },
-      ['all', 'published', 'draft', 'pending', 'trash'].map(s =>
+      // 'scheduled' included: the assistant can schedule a post, and without a tab
+      // those rows were only reachable through "all".
+      ['all', 'published', 'draft', 'scheduled', 'pending', 'trash'].map(s =>
         
   
       React.createElement('button', { key: s, onClick: () => { setFilter(s === 'all' ? '' : s); setPage(1); }, className: `px-3 py-1.5 text-sm rounded-lg whitespace-nowrap ${(s === 'all' && !filter) || filter === s ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}` }, t(s, getLang()))

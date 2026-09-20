@@ -1,14 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell, Download, Settings2, Share2, Mic, BookOpen, X, Upload, Menu, Rocket, MoreHorizontal, LayoutTemplate, Bookmark } from 'lucide-react';
 import api from '../lib/api';
-import { t, getLang } from '../lib/i18n';
+import { t, getLang, serverMessage, serverCallSummary } from '../lib/i18n';
 import Select from '../components/Select';
+import { useToast } from '../lib/toast';
 
 interface ChatMsg {
   role: 'user' | 'assistant';
   content: string;
   tools?: string[];
   toolResults?: { name: string; output: string }[];
+  // A turn that stopped on a high-risk tool call: the server holds nothing, the
+  // signed plan travels with the message and is sent back on approval.
+  pending?: { token: string; calls: { id?: string; name: string; summary: string }[] };
   ts?: number;
 }
 
@@ -29,6 +33,10 @@ interface Session {
   title: string;
   messages: ChatMsg[];
   ts: number;
+  // Set when the user cleared this conversation locally. The lazy loader refetches
+  // an empty session from the server; this keeps a failed server-side clear (e.g.
+  // offline) from resurrecting the history.
+  cleared?: boolean;
 }
 
 // Texts are English keys resolved through t() at render time, so the UI and
@@ -289,6 +297,7 @@ function inlineMd(s: string): React.ReactNode[] {
 }
 
 export default function AIChat() {
+  const toast = useToast();
   const [sessions, setSessions] = useState<Session[]>(() => {
     try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'); } catch { return []; }
   });
@@ -307,6 +316,9 @@ export default function AIChat() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [copied, setCopied] = useState<string | null>(null);
+  // Share link shown in a project-styled dialog (it used to be a browser alert).
+  const [shareUrl, setShareUrl] = useState('');
+  const [shareToken, setShareToken] = useState('');
   const [paramsOpen, setParamsOpen] = useState(false);
   const [temperature, setTemperature] = useState(0.7);
   const [maxTokens, setMaxTokens] = useState(4096);
@@ -552,7 +564,7 @@ export default function AIChat() {
   function openSessionFull(id: string) {
     setSessionId(id);
     const s = sessions.find(x => x.id === id);
-    if (s && s.messages.length === 0 && serverIdsRef.current.has(id)) {
+    if (s && s.messages.length === 0 && !s.cleared && serverIdsRef.current.has(id)) {
       api.get('/ai/sessions/' + id).then(r => {
         setSessions(prev => prev.map(x => x.id === id ? { ...x, messages: r.data?.messages || [], ts: Date.now() } : x));
       }).catch(() => {});
@@ -630,23 +642,60 @@ export default function AIChat() {
     URL.revokeObjectURL(url);
   }
 
-  async function shareSession() {
-    if (!active?.messages.length) return;
+  // The server returns an absolute URL built from the site's configured domain
+  // (primary site on a multi-site install), so it is used as-is — prefixing
+  // window.location.origin is what published localhost links.
+  async function shareMessages(list: { role: string; content: string }[]) {
+    if (!list.length) return;
     try {
-      const r = await api.post('/ai/share', { messages: active.messages });
-      const url = window.location.origin + r.data.url;
-      navigator.clipboard.writeText(url);
+      const r = await api.post('/ai/share', { messages: list });
+      const url = String(r.data?.url || '');
+      if (!url) return;
       setError('');
-      setCopied('share');
-      setTimeout(() => setCopied(null), 1500);
-      alert(t('share link copied', getLang()) + ': ' + url);
+      setShareUrl(url);
+      setShareToken(String(r.data?.token || ''));
+      navigator.clipboard.writeText(url).then(() => { setCopied('share'); setTimeout(() => setCopied(null), 1500); }).catch(() => {});
     } catch (e: any) { setError(e.response?.data?.error || t('share failed', getLang())); }
+  }
+
+  function shareSession() {
+    shareMessages((active?.messages || []).map((m: any) => ({ role: m.role, content: String(m.content || '') })));
+  }
+
+  // A task is a conversation too (prompt in, report out), so the same share flow
+  // applies — only the interesting parts are sent, not the execution trace.
+  function shareTask(task: any) {
+    if (!task) return;
+    const list = [{ role: 'user', content: String(task.prompt || '') }];
+    if (task.result) list.push({ role: 'assistant', content: String(task.result) });
+    shareMessages(list);
+  }
+
+  async function revokeShare() {
+    if (!shareToken) return;
+    try {
+      await api.delete('/ai/share/' + shareToken);
+      setShareUrl(''); setShareToken('');
+      toast.toast(t('share link revoked', getLang()));
+    } catch (e: any) { setError(e.response?.data?.error || t('request failed', getLang())); }
+  }
+
+  // Clearing the visible conversation must clear the stored one too: the
+  // debounced push skips empty sessions, so the server copy kept the messages and
+  // opening the session again lazy-loaded them straight back.
+  async function clearCurrentChat() {
+    if (!active) return;
+    const id = active.id;
+    updateSession(id, x => ({ ...x, messages: [], pending: undefined, cleared: true }));
+    if (serverIdsRef.current.has(id)) {
+      try { await api.put('/ai/sessions/' + id, { title: active.title, messages: [] }); } catch {}
+    }
   }
 
   function exportSession() {
     if (!active?.messages.length) return;
     const md = active.messages.map(m =>
-      (m.role === 'user' ? '## 👤 我\n' : '## 🤖 AI' + (m.tools?.length ? '（调用了: ' + m.tools.join(', ') + '）' : '') + '\n') + '\n' + m.content + '\n'
+      (m.role === 'user' ? '## 👤 我\n' : '## 🤖 AI' + (m.tools?.length ? '（调用了: ' + m.tools.join(', ') + '）' : '') + '\n') + '\n' + serverMessage(m.content, getLang()) + '\n'
     ).join('\n---\n\n');
     downloadFile('AI对话-' + active.title + '.md', '# ' + active.title + '\n\n' + md);
   }
@@ -658,8 +707,11 @@ export default function AIChat() {
         '### 步骤 ' + (i + 1) + '\n' + (st.type === 'think' ? st.content : '工具 `' + st.name + '`\n```json\n' + JSON.stringify(st.output, null, 1) + '\n```')
       ).join('\n\n');
     }
-    if (task.result) md += '\n\n## 结果\n\n' + task.result;
-    if (task.error) md += '\n\n## 错误\n\n' + task.error;
+    // The result carries server-authored lines (the confirmation prompt, the
+    // "done so far" list, the unattended warning), so it goes through the same
+    // mapping as the on-screen render.
+    if (task.result) md += '\n\n## 结果\n\n' + serverMessage(task.result, getLang());
+    if (task.error) md += '\n\n## ' + t('error', getLang()) + '\n\n' + serverMessage(task.error, getLang());
     downloadFile('AI任务-' + task.prompt.slice(0, 20) + '.md', md);
   }
 
@@ -697,6 +749,44 @@ export default function AIChat() {
         if (active) updateSession(active.id, x => ({ ...x, messages: [...x.messages, { role: 'assistant', content: HELP_TEXT(), ts: Date.now() }] }));
         return null;
       default: return null; // unknown -> send as-is
+    }
+  }
+
+  // Approve or cancel the high-risk calls a turn stopped on. The server executes
+  // the signed plan (or nothing), and whatever it reports replaces the card and
+  // stays in the conversation, so the next turn knows what actually happened.
+  async function decideApproval(index: number, msg: any, approved: boolean) {
+    if (!msg?.pending || busy) return;
+    const sid = active?.id || '';
+    setError('');
+    setBusy(true);
+    try {
+      const r = await api.post('/ai/assistant/approve', { token: msg.pending.token, approved });
+      const summary = String(r.data?.summary || '');
+      updateSession(sid, x => ({
+        ...x,
+        messages: x.messages.map((m: any, i: number) => i === index
+          ? { ...m, pending: undefined, content: (m.content ? m.content + '\n\n' : '') + summary }
+          : m),
+      }));
+    } catch (e: any) {
+      // A 409 (already executed) or 400 (expired) will never succeed on retry, so
+      // leaving the card with live buttons stranded the user with an action they
+      // could neither complete nor dismiss. Report the reason and retire the card.
+      const msg = e.response?.data?.error || t('request failed', getLang());
+      const terminal = [400, 409].includes(e.response?.status);
+      if (terminal) {
+        updateSession(sid, x => ({
+          ...x,
+          messages: x.messages.map((m: any, i: number) => i === index
+            ? { ...m, pending: undefined, content: (m.content ? m.content + '\n\n' : '') + '⚠ ' + msg }
+            : m),
+        }));
+      } else {
+        setError(msg);
+      }
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -741,12 +831,20 @@ export default function AIChat() {
     }
 
     try {
-      const res = await fetch('/api/ai/assistant', {
+      const reqInit: RequestInit = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('mortar_token') || '') },
         body: JSON.stringify({ message: msg, temperature, maxTokens, includeContext, history: historyPayload }),
         signal: controller.signal,
-      });
+      };
+      let res = await fetch('/api/ai/assistant', reqInit);
+      // The server keeps a short per-user guard against misfires. A legitimate
+      // fast follow-up message trips it, so wait the window out once instead of
+      // showing the user an error (and making the retry button pointless).
+      if (res.status === 429) {
+        await new Promise((r) => setTimeout(r, 2200));
+        res = await fetch('/api/ai/assistant', reqInit);
+      }
       if (!res.ok) {
         const d = await res.json().catch(() => ({}));
         throw new Error(d.error || t('request failed', getLang()) + ' (' + res.status + ')');
@@ -757,6 +855,7 @@ export default function AIChat() {
       let full = '';
       let lastTools: string[] = [];
       let lastToolResults: { name: string; output: string }[] = [];
+      let lastPending: ChatMsg['pending'] = undefined;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -766,25 +865,31 @@ export default function AIChat() {
         for (const chunk of lines) {
           const line = chunk.trim();
           if (!line.startsWith('data:')) continue;
-          try {
-            const j = JSON.parse(line.slice(5).trim());
-            if (j.type === 'delta') {
-              full += j.text;
-              updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults, ts: Date.now() }] }));
-            } else if (j.type === 'tools') {
-              lastTools = j.tools || [];
-              updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults, ts: Date.now() }] }));
-            } else if (j.type === 'tool_result') {
-              lastToolResults = [...lastToolResults, { name: String(j.name || 'tool'), output: String(j.output || '') }];
-            } else if (j.type === 'done') {
-              full = j.content || full;
-            } else if (j.type === 'error') {
-              throw new Error(j.error || t('ai error', getLang()));
-            }
-          } catch {}
+          // Parse in its own try: wrapping the whole dispatch meant the `error`
+          // event's throw was caught by the empty catch below and the user saw a
+          // silent empty reply instead of the failure.
+          let j: any;
+          try { j = JSON.parse(line.slice(5).trim()); } catch { continue; }
+          if (j.type === 'delta') {
+            full += j.text;
+            updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults, pending: lastPending, ts: Date.now() }] }));
+          } else if (j.type === 'tools') {
+            lastTools = j.tools || [];
+            updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults, pending: lastPending, ts: Date.now() }] }));
+          } else if (j.type === 'tool_result') {
+            lastToolResults = [...lastToolResults, { name: String(j.name || 'tool'), output: String(j.output || '') }];
+          } else if (j.type === 'pending') {
+            // High-risk calls the server did NOT run: the turn ended here and
+            // waits for the user to approve or cancel.
+            lastPending = { token: String(j.token || ''), calls: Array.isArray(j.calls) ? j.calls : [] };
+          } else if (j.type === 'done') {
+            full = j.content || full;
+          } else if (j.type === 'error') {
+            throw new Error(j.error || t('ai error', getLang()));
+          }
         }
       }
-      updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults, ts: Date.now() }] }));
+      updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults, pending: lastPending, ts: Date.now() }] }));
     } catch (e: any) {
       if (e.name === 'AbortError') {
         updateSession(sid, x => ({ ...x, messages: history }));
@@ -814,17 +919,28 @@ export default function AIChat() {
     const controller = new AbortController();
     abortRef.current = controller;
     try {
-      const res = await fetch('/api/ai/assistant', {
+      const reqInit: RequestInit = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + (localStorage.getItem('mortar_token') || '') },
         body: JSON.stringify({ message: msg, temperature, maxTokens, includeContext }),
         signal: controller.signal,
-      });
+      };
+      let res = await fetch('/api/ai/assistant', reqInit);
+      // Same short server-side guard as send(): wait it out once (regenerate is
+      // often clicked right after the previous turn).
+      if (res.status === 429) {
+        await new Promise((r) => setTimeout(r, 2200));
+        res = await fetch('/api/ai/assistant', reqInit);
+      }
       if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || t('request failed', getLang())); }
       const reader = res.body!.getReader();
       const decoder = new TextDecoder();
       let buf = ''; let full = ''; let lastTools: string[] = [];
       let lastToolResults: { name: string; output: string }[] = [];
+      // Same pending handling as send(): regenerating a turn can hit the same
+      // high-risk calls, and without this the reply would say "需要确认" with no
+      // card to click — the operation would be quietly impossible.
+      let lastPending: ChatMsg['pending'] = undefined;
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -833,17 +949,17 @@ export default function AIChat() {
         for (const chunk of lines) {
           const line = chunk.trim();
           if (!line.startsWith('data:')) continue;
-          try {
-            const j = JSON.parse(line.slice(5).trim());
-            if (j.type === 'delta') { full += j.text; updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults }] })); }
-            else if (j.type === 'tools') { lastTools = j.tools || []; updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults }] })); }
-            else if (j.type === 'tool_result') { lastToolResults = [...lastToolResults, { name: String(j.name || 'tool'), output: String(j.output || '') }]; }
-            else if (j.type === 'done') { full = j.content || full; }
-            else if (j.type === 'error') throw new Error(j.error || t('ai error', getLang()));
-          } catch {}
+          let j: any;
+          try { j = JSON.parse(line.slice(5).trim()); } catch { continue; }
+          if (j.type === 'delta') { full += j.text; updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults, pending: lastPending }] })); }
+          else if (j.type === 'tools') { lastTools = j.tools || []; updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults, pending: lastPending }] })); }
+          else if (j.type === 'tool_result') { lastToolResults = [...lastToolResults, { name: String(j.name || 'tool'), output: String(j.output || '') }]; }
+          else if (j.type === 'pending') { lastPending = { token: String(j.token || ''), calls: Array.isArray(j.calls) ? j.calls : [] }; }
+          else if (j.type === 'done') { full = j.content || full; }
+          else if (j.type === 'error') throw new Error(j.error || t('ai error', getLang()));
         }
       }
-      updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults }] }));
+      updateSession(sid, x => ({ ...x, messages: [...history, { role: 'assistant', content: full, tools: lastTools, toolResults: lastToolResults, pending: lastPending }] }));
     } catch (e: any) {
       if (e.name !== 'AbortError') setError(e.message || t('request failed', getLang()));
       updateSession(sid, x => ({ ...x, messages: history }));
@@ -953,7 +1069,7 @@ export default function AIChat() {
                   React.createElement('div', { className: 'flex items-center gap-2 mt-1 pl-3.5' },
                     React.createElement('span', { className: 'text-[9px] text-gray-400' }, t(tk.status, getLang())),
                     React.createElement('span', { className: 'text-[9px] text-gray-400' }, new Date(tk.createdAt).toLocaleString()),
-                    tk.status === 'failed' && React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); retryTask(tk.id); }, className: 'text-[9px] text-primary-600 hover:underline flex items-center gap-0.5' }, React.createElement(RotateCcw, { size: 9 }), t('retry', getLang())),
+                    tk.status === 'failed' && React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); retryTask(tk.id); }, className: 'shrink-0 whitespace-nowrap text-[9px] text-primary-600 hover:underline flex items-center gap-0.5' }, React.createElement(RotateCcw, { size: 9 }), t('retry', getLang())),
                     tk.status === 'running' && React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); cancelTask(tk.id); }, className: 'text-[9px] text-gray-400 hover:text-red-500' }, t('cancel', getLang())),
                     React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); deleteTask(tk.id); }, className: 'text-[9px] text-gray-300 hover:text-red-500' }, t('delete', getLang()))
                   )
@@ -1030,21 +1146,39 @@ export default function AIChat() {
       ),
       React.createElement('div', { className: 'flex items-center gap-2' },
         error && React.createElement(React.Fragment, null,
-          React.createElement('p', { className: 'text-xs text-red-600' }, error),
+          // The error wraps (up to two lines) and the button never does: it used
+          // to be squeezed by the toolbar next to it and broke "重试" in half.
+          React.createElement('p', { className: 'text-xs text-red-600 max-w-[240px] leading-snug' }, serverMessage(error, getLang())),
           React.createElement('button', {
             onClick: () => { const last = [...messages].filter(m => m.role === 'user').pop(); if (last) send(last.content); },
-            className: 'text-xs px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-300 hover:border-primary-400 hover:text-primary-600',
-          }, React.createElement(RotateCcw, { size: 11 }), ' ' + t('retry', getLang())),
+            className: 'shrink-0 whitespace-nowrap inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-300 hover:border-primary-400 hover:text-primary-600',
+          }, React.createElement(RotateCcw, { size: 11 }), t('retry', getLang())),
         ),
-        active?.messages.length ? React.createElement(React.Fragment, null,
-          React.createElement('button', { onClick: exportSession, className: 'text-xs text-gray-400 hover:text-primary-600 flex items-center gap-1' },
-            React.createElement(Download, { size: 12 }), t('export', getLang())),
-          React.createElement('button', { onClick: shareSession, className: 'text-xs text-gray-400 hover:text-primary-600 flex items-center gap-1' },
-            React.createElement(Share2, { size: 12 }), t('share', getLang())),
-          React.createElement('button', {
-            onClick: () => updateSession(active.id, x => ({ ...x, messages: [] })),
-            className: 'text-xs text-gray-400 hover:text-red-600',
-          }, t('clear history', getLang()))) : null,
+        // These act on whatever the CURRENT tab is showing: the chat conversation,
+        // or the selected task. They used to key off the chat session alone, so
+        // they sat in the header of the task list acting on something invisible.
+        // Nothing to act on in this context → no buttons.
+        tab === 'chat'
+          ? (active?.messages.length ? React.createElement(React.Fragment, null,
+              React.createElement('button', { onClick: exportSession, className: 'text-xs text-gray-400 hover:text-primary-600 flex items-center gap-1' },
+                React.createElement(Download, { size: 12 }), t('export', getLang())),
+              React.createElement('button', { onClick: shareSession, className: 'text-xs text-gray-400 hover:text-primary-600 flex items-center gap-1' },
+                React.createElement(Share2, { size: 12 }), t('share', getLang())),
+              React.createElement('button', {
+                onClick: clearCurrentChat,
+                className: 'text-xs text-gray-400 hover:text-red-600',
+              }, t('clear history', getLang()))) : null)
+          : (taskDetail && (taskDetail.result || (taskDetail.steps?.length || 0) > 0) ? React.createElement(React.Fragment, null,
+              React.createElement('button', { onClick: () => exportTask(taskDetail), className: 'text-xs text-gray-400 hover:text-primary-600 flex items-center gap-1' },
+                React.createElement(Download, { size: 12 }), t('export', getLang())),
+              React.createElement('button', { onClick: () => shareTask(taskDetail), className: 'text-xs text-gray-400 hover:text-primary-600 flex items-center gap-1' },
+                React.createElement(Share2, { size: 12 }), t('share', getLang())),
+              // 清空对话 is chat-specific; the task equivalent is dismissing the
+              // detail view (removing the record stays on its list row).
+              React.createElement('button', {
+                onClick: () => setTaskDetail(null),
+                className: 'text-xs text-gray-400 hover:text-red-600',
+              }, t('close', getLang()))) : null),
         React.createElement('button', {
           onClick: () => setIncludeContext(!includeContext),
           title: t('site context', getLang()),
@@ -1076,7 +1210,7 @@ export default function AIChat() {
                 onClick: () => openNotification(n),
                 className: 'w-full text-left px-3 py-2.5 border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors',
               },
-                React.createElement('p', { className: 'text-xs text-gray-700 dark:text-gray-200 whitespace-pre-line' + (n.read ? ' opacity-60' : ' font-medium') }, n.message),
+                React.createElement('p', { className: 'text-xs text-gray-700 dark:text-gray-200 whitespace-pre-line' + (n.read ? ' opacity-60' : ' font-medium') }, serverMessage(n.message, getLang())),
                 React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, new Date(n.createdAt).toLocaleString())))),
           ),
         ),
@@ -1096,12 +1230,12 @@ export default function AIChat() {
               ),
               React.createElement('div', { className: 'flex items-center gap-2 mb-3' },
                 React.createElement('span', { className: 'px-1.5 py-0.5 text-[10px] rounded-full font-medium ' + (taskDetail.status === 'done' ? 'bg-green-100 text-green-700' : taskDetail.status === 'failed' ? 'bg-red-100 text-red-700' : taskDetail.status === 'cancelled' ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-700 animate-pulse') }, t(taskDetail.status, getLang())),
-                taskDetail.error && React.createElement('span', { className: 'text-xs text-red-600 break-words' }, '✗ ' + taskDetail.error)
+                taskDetail.error && React.createElement('span', { className: 'text-xs text-red-600 break-words' }, '✗ ' + serverMessage(taskDetail.error, getLang()))
               ),
               // The task report comes first so it is immediately visible;
               // the execution trace (tool calls + results) is folded away
               // below it and expands only while the task is running.
-              taskDetail.result && React.createElement('div', { className: 'text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 rounded-lg p-3' }, renderMd(taskDetail.result)),
+              taskDetail.result && React.createElement('div', { className: 'text-sm text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-900 rounded-lg p-3' }, renderMd(serverMessage(taskDetail.result, getLang()))),
               taskDetail.steps && taskDetail.steps.length > 0 && React.createElement('details', {
                 key: 'trace-' + (taskDetail.status === 'running' ? 'open' : 'done'),
                 open: taskDetail.status === 'running' ? true : undefined,
@@ -1200,6 +1334,24 @@ export default function AIChat() {
       )
     ),
     // Save-template dialog (name + content)
+    shareUrl && React.createElement('div', { className: 'fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4', onClick: () => setShareUrl('') },
+      React.createElement('div', { className: 'bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-5', onClick: (e: React.MouseEvent) => e.stopPropagation() },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-white mb-1' }, t('share link', getLang())),
+        React.createElement('p', { className: 'text-xs text-gray-400 mb-3' }, t('share link hint', getLang())),
+        React.createElement('div', { className: 'flex gap-2' },
+          React.createElement('input', {
+            readOnly: true, value: shareUrl, className: 'input-field flex-1 text-xs',
+            onFocus: (e: React.FocusEvent<HTMLInputElement>) => e.target.select(),
+          }),
+          React.createElement('button', {
+            onClick: () => { navigator.clipboard.writeText(shareUrl).then(() => { setCopied('share'); setTimeout(() => setCopied(null), 1500); }).catch(() => {}); },
+            className: 'btn-primary text-xs shrink-0',
+          }, copied === 'share' ? t('copied', getLang()) : t('copy', getLang()))),
+        React.createElement('div', { className: 'flex items-center justify-end gap-2 mt-4' },
+          // Revoking is only possible for a link created in this session (that is
+          // when its token is known), and it is the only way to unshare.
+          shareToken && React.createElement('button', { onClick: revokeShare, className: 'text-xs text-red-500 hover:text-red-600 mr-auto' }, t('revoke link', getLang())),
+          React.createElement('button', { onClick: () => { setShareUrl(''); setShareToken(''); }, className: 'btn-secondary text-sm' }, t('close', getLang()))))),
     tplModal && React.createElement('div', { className: 'fixed inset-0 z-[100] bg-black/40 flex items-center justify-center p-4', onClick: () => setTplModal(false) },
       React.createElement('div', { className: 'bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-5', onClick: (e: React.MouseEvent) => e.stopPropagation() },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-white mb-4' }, t('save input as template', getLang())),
@@ -1258,6 +1410,23 @@ export default function AIChat() {
                   renderToolOutput(String(tr.output || ''))
                 );
               })),
+            m.role === 'assistant' && m.pending && React.createElement('div', { className: 'mb-2 rounded-xl border border-amber-200 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10 p-2.5' },
+              React.createElement('p', { className: 'text-[11px] font-semibold text-amber-700 dark:text-amber-300 mb-1' },
+                '⚠ ' + t('this action needs confirmation', getLang())),
+              React.createElement('ul', { className: 'mb-2 space-y-0.5' },
+                m.pending.calls.map((c: any, ci: number) => React.createElement('li', { key: ci, className: 'text-[11px] text-amber-800 dark:text-amber-200 break-words' },
+                  '• ' + serverCallSummary(String(c.summary || c.name || ''), getLang())))),
+              React.createElement('div', { className: 'flex gap-2' },
+                React.createElement('button', {
+                  onClick: () => decideApproval(i, m, true),
+                  disabled: busy,
+                  className: 'text-[11px] px-2 py-0.5 rounded border border-amber-300 dark:border-amber-500/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 dark:hover:bg-amber-500/20 disabled:opacity-50',
+                }, t('execute', getLang())),
+                React.createElement('button', {
+                  onClick: () => decideApproval(i, m, false),
+                  disabled: busy,
+                  className: 'text-[11px] px-2 py-0.5 rounded border border-gray-200 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50',
+                }, t('cancel', getLang())))),
             m.role === 'assistant' && !m.content && busy
               ? React.createElement('div', { className: 'flex gap-1 py-1' },
                   [0, 1, 2].map(d => React.createElement('span', { key: d, className: 'w-1.5 h-1.5 rounded-full bg-gray-300 animate-bounce', style: { animationDelay: d * 0.15 + 's' } })))
@@ -1268,7 +1437,10 @@ export default function AIChat() {
                     const showFull = !isLong || expanded[msgKey];
                     const preview = m.content.slice(0, 300) + '…';
                     return React.createElement(React.Fragment, null,
-                      React.createElement('div', { className: 'min-w-0 break-words' }, showFull ? renderMd(m.content) : renderMd(preview)),
+                      // The bubble is the main place these server lines are read
+                      // ("⏸ …需要你确认后执行", "✓ 已完成：…"), so it needs the same
+                      // mapping the task/notification/export surfaces get.
+                      React.createElement('div', { className: 'min-w-0 break-words' }, showFull ? renderMd(serverMessage(m.content, getLang())) : renderMd(serverMessage(preview, getLang()))),
                       isLong && React.createElement('button', {
                         onClick: () => setExpanded({ ...expanded, [msgKey]: !showFull }),
                         className: 'text-xs text-primary-600 hover:text-primary-700 mt-1',

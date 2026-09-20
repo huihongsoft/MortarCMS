@@ -22,8 +22,14 @@ router.get('/current', (req: SiteRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Admin: list all sites with per-site content stats
-router.get('/', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+// List all sites with per-site content stats.
+//
+// Editors included: the AI bindings/schedules screens let an editor scope a job
+// to a site (routes/ai.ts resolveJobSite allows admin+editor), and with an
+// admin-only list they had no way to reach that capability in the UI. Editors can
+// already move a post between sites (routes/posts.ts), so the site list is not
+// new information for them; per-site settings (GET /:id) stay admin-only.
+router.get('/', authenticate, authorize('admin', 'editor'), (_req: AuthRequest, res: Response) => {
   try {
     const sites = db.prepare('SELECT * FROM Site ORDER BY isPrimary DESC, createdAt ASC').all() as any[];
     const countBySite = (table: string, siteId: string, type?: string): number => {

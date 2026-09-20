@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import { mayWriteSite } from '../utils/userSites';
 import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, requireCap, resolveOptionalUser, getRoleCapabilities, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
@@ -171,6 +172,9 @@ router.post('/categories', authenticate, requireCap('manage_options'), (req: Aut
   try {
     const { name, description, menuOrder, siteId, pageId } = req.body || {};
     if (!name) { res.status(400).json({ error: 'name required' }); return; }
+    if (siteId !== undefined && siteId !== null && !mayWriteSite(req.user!.userId, req.user!.role, siteId)) {
+      res.status(403).json({ error: '无权在该站点创建内容' }); return;
+    }
     const slug = slugify(name);
     const exists = db.prepare('SELECT id FROM LinkCategory WHERE slug = ?').get(slug);
     if (exists) { res.status(400).json({ error: 'Category already exists' }); return; }
@@ -190,7 +194,10 @@ router.put('/categories/:id', authenticate, requireCap('manage_options'), (req: 
     if (name !== undefined) { sets.push('name = ?'); vals.push(name); sets.push('slug = ?'); vals.push(slugify(name)); }
     if (description !== undefined) { sets.push('description = ?'); vals.push(description); }
     if (menuOrder !== undefined) { sets.push('menuOrder = ?'); vals.push(menuOrder || 0); }
-    if (siteId !== undefined) { sets.push('siteId = ?'); vals.push(siteId || null); }
+    if (siteId !== undefined) {
+      if (!mayWriteSite(req.user!.userId, req.user!.role, siteId)) { res.status(403).json({ error: '无权移到该站点' }); return; }
+      sets.push('siteId = ?'); vals.push(siteId || null);
+    }
     if (pageId !== undefined) { sets.push('pageId = ?'); vals.push(pageId || null); }
     if (sets.length > 0) { vals.push(req.params.id); db.prepare('UPDATE LinkCategory SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
     // Renamed / landing page changed: keep menu items pointing at this

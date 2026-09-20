@@ -129,10 +129,23 @@ POST   /api/install/reset           admin only: re-run the wizard
 
 ```
 GET    /api/ai/settings             provider config (keys masked) + permission config
+                                    (allowedRoles, toolPermissions, usageLimit,
+                                    allowUnattendedRisky)
 PUT    /api/ai/settings             save providers / default / allowed roles / tool perms
+                                    / allowUnattendedRisky (admin only)
 POST   /api/ai/test                 test a provider connection
 POST   /api/ai/chat                 plain chat (no tools)
-POST   /api/ai/assistant            streaming agent (SSE: delta/tools/done) + tools
+POST   /api/ai/assistant            streaming agent (SSE) + tools. Events:
+                                      delta       incremental text
+                                      tools       tool names about to run
+                                      tool_result a tool's output (name + output)
+                                      pending     high-risk calls that were NOT run;
+                                                  carries {token, calls[]} to approve
+                                      done        final text
+                                      error       failure message
+POST   /api/ai/assistant/approve    approve or cancel a pending plan: {token, approved}
+                                    the token is signed, bound to its user, valid for
+                                    10 minutes, and single-use (a replay gets 409)
 POST   /api/ai/generate             editor helpers (generate/polish/continue/translate/
                                     summarize/seo/tags/topics; style & language opts)
 POST   /api/ai/task                 start async task (step tracking)

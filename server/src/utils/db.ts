@@ -288,6 +288,26 @@ export function initDB(): void {
       createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
     );
 
+    -- Single-use record for AI approval tokens. Those tokens are signed and
+    -- deliberately stateless, so replay protection needs one row per consumed
+    -- plan: without it a lost response makes the user retry the approval and the
+    -- write happens twice (verified: two drafts from one token). Keyed by a hash
+    -- so the token itself is never stored; rows are purged once expired.
+    CREATE TABLE IF NOT EXISTS AiApprovalUse (
+      hash TEXT PRIMARY KEY,
+      expiresAt TEXT NOT NULL,
+      createdAt TEXT NOT NULL DEFAULT (CURRENT_TIMESTAMP)
+    );
+
+    -- Sites a user may act on (utils/userSites.ts). A user with no rows here
+    -- keeps the old behaviour — any site — so upgrading never locks anyone out;
+    -- assigning sites switches that user to explicit-only.
+    CREATE TABLE IF NOT EXISTS UserSite (
+      userId TEXT NOT NULL REFERENCES User(id) ON DELETE CASCADE,
+      siteId TEXT NOT NULL REFERENCES Site(id) ON DELETE CASCADE,
+      PRIMARY KEY (userId, siteId)
+    );
+
     CREATE TABLE IF NOT EXISTS Role (
       id TEXT PRIMARY KEY,
       slug TEXT NOT NULL UNIQUE,
@@ -693,6 +713,16 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
       db.exec(`UPDATE AppPassword SET token_version = COALESCE(
         (SELECT tokenVersion FROM User WHERE User.id = AppPassword.userId), 0)
         WHERE token_version = 0`);
+    },
+  },
+  {
+    version: 12,
+    name: 'ai-task-site',
+    up: () => {
+      // The site a task was started from. Without it a retry ran with no site
+      // scope at all, so on a multi-site install a task could read and write
+      // across every site.
+      addColumn('AiTask', 'siteId', 'TEXT');
     },
   },
 ];

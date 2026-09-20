@@ -69,6 +69,9 @@ export default function PostEditor() {
   const [seoNoindex, setSeoNoindex] = useState(false);
   const [seoCanonical, setSeoCanonical] = useState('');
   const [seoOgImage, setSeoOgImage] = useState('');
+  // Reported as article:section. The schema has no "primary category", so the
+  // editor names one explicitly; empty falls back to the first assigned.
+  const [seoPrimaryCategory, setSeoPrimaryCategory] = useState('');
   const [templates, setTemplates] = useState<any[]>([]);
   const [templateName, setTemplateName] = useState('');
   const [saving, setSaving] = useState(false);
@@ -112,9 +115,9 @@ export default function PostEditor() {
   useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); api.get('/users').then(r => setUsers(r.data)).catch(() => {});
     api.get('/categories').then(r => setCategories(r.data)); api.get('/media').then(r => setMediaItems(r.data.media || []));
     api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])).catch(() => {});
-    if (id) { api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.categoryId || c.category?.id) || []); setTagNames(p.tags?.map((t: any) => t.name || t.tag?.name) || []); if (p.featured) setFeatured(p.featured); if (p.allowComments !== undefined) setAllowComments(p.allowComments); if (p.password) setPassword(p.password); if (p.siteId) setSiteId(p.siteId); if (p.authorId) setAuthorId(p.authorId); if (p.publishedAt) { const d = new Date(p.publishedAt); const pad = (n: number) => String(n).padStart(2, '0'); setPublishDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`); } if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); if (p.meta?._seo_title) setSeoTitle(p.meta._seo_title); if (p.meta?._seo_desc) setSeoDesc(p.meta._seo_desc); if (p.meta?._seo_noindex) setSeoNoindex(p.meta._seo_noindex === '1'); if (p.meta?._seo_canonical) setSeoCanonical(p.meta._seo_canonical); if (p.meta?._seo_og_image) setSeoOgImage(p.meta._seo_og_image);
+    if (id) { api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.categoryId || c.category?.id) || []); setTagNames(p.tags?.map((t: any) => t.name || t.tag?.name) || []); if (p.featured) setFeatured(p.featured); if (p.allowComments !== undefined) setAllowComments(p.allowComments); if (p.password) setPassword(p.password); if (p.siteId) setSiteId(p.siteId); if (p.authorId) setAuthorId(p.authorId); if (p.publishedAt) { const d = new Date(p.publishedAt); const pad = (n: number) => String(n).padStart(2, '0'); setPublishDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`); } if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); if (p.meta?._seo_title) setSeoTitle(p.meta._seo_title); if (p.meta?._seo_desc) setSeoDesc(p.meta._seo_desc); if (p.meta?._seo_noindex) setSeoNoindex(p.meta._seo_noindex === '1'); if (p.meta?._seo_canonical) setSeoCanonical(p.meta._seo_canonical); if (p.meta?._seo_og_image) setSeoOgImage(p.meta._seo_og_image); if (p.meta?._seo_primary_category) setSeoPrimaryCategory(p.meta._seo_primary_category);
       // Custom fields: load user-defined keys (system keys with _ prefixes are managed by their own panels)
-      const systemKeys = ['_visual_css', '_seo_title', '_seo_desc', '_seo_noindex', '_seo_canonical', '_seo_og_image'];
+      const systemKeys = ['_visual_css', '_seo_title', '_seo_desc', '_seo_noindex', '_seo_canonical', '_seo_og_image', '_seo_primary_category'];
       if (p.meta) setMetaFields(Object.entries(p.meta).filter(([k]) => !systemKeys.includes(k) && k.trim()).map(([key, value]) => ({ key, value: String(value) })));
       // Baseline the autosave snapshot AFTER the async load, otherwise the
       // initial empty state looks "changed" and triggers a spurious save
@@ -142,7 +145,7 @@ export default function PostEditor() {
         ? (status || 'draft')
         : (s === 'draft' ? 'draft' : (status === 'draft' || status === 'pending' ? 'published' : status));
       const payload: any = { title, slug: slug || undefined, content, excerpt, status: finalStatus, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: finalStatus !== 'draft' && schedDate ? new Date(schedDate).toISOString() : undefined, authorId: authorId || undefined, siteId: siteId || null, allowComments, password };
-      payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc, _seo_noindex: seoNoindex ? '1' : '', _seo_canonical: seoCanonical, _seo_og_image: seoOgImage };
+      payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc, _seo_noindex: seoNoindex ? '1' : '', _seo_canonical: seoCanonical, _seo_og_image: seoOgImage, _seo_primary_category: seoPrimaryCategory };
       // Custom fields (user-defined key/value pairs) ride along in meta
       for (const mf of metaFields) { if (mf.key.trim()) payload.meta[mf.key.trim()] = mf.value; }
       const postId = id || createdIdRef.current;
@@ -355,6 +358,16 @@ export default function PostEditor() {
           React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('og image url (optional)', getLang())),
           React.createElement('input', { value: seoOgImage, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSeoOgImage(e.target.value), placeholder: featured || 'https://.../image.jpg', className: 'input-field text-xs' })
         ),
+        React.createElement('div', { className: 'mb-3' },
+          React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('primary category (article section)', getLang())),
+          // Only the post's own categories are offered: picking one outside them
+          // would be meaningless for article:section.
+          React.createElement('select', { value: seoPrimaryCategory, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => setSeoPrimaryCategory(e.target.value), className: 'input-field text-xs' },
+            React.createElement('option', { value: '' }, t('first assigned category', getLang())),
+            categories.filter((c: any) => categoryIds.includes(c.id)).map((c: any) =>
+              React.createElement('option', { key: c.id, value: c.id }, c.name))
+          )
+        ),
         // Google-style search preview
         React.createElement('div', { className: 'rounded-lg border border-gray-200 bg-white p-3' },
           React.createElement('p', { className: 'text-sm text-blue-700 hover:underline truncate' }, seoTitle || title || 'Post title'),
@@ -515,13 +528,14 @@ export default function PostEditor() {
               else if (!v && status === 'scheduled') setStatus('draft');
             },
             // ---- Extended panels (same info as the rich-text sidebar) ----
-            seoTitle, seoDesc, seoNoindex, seoCanonical, seoOgImage,
+            seoTitle, seoDesc, seoNoindex, seoCanonical, seoOgImage, seoPrimaryCategory,
             onSeoChange: (patch: any) => {
               if (patch.seoTitle !== undefined) setSeoTitle(patch.seoTitle);
               if (patch.seoDesc !== undefined) setSeoDesc(patch.seoDesc);
               if (patch.seoNoindex !== undefined) setSeoNoindex(patch.seoNoindex);
               if (patch.seoCanonical !== undefined) setSeoCanonical(patch.seoCanonical);
               if (patch.seoOgImage !== undefined) setSeoOgImage(patch.seoOgImage);
+              if (patch.seoPrimaryCategory !== undefined) setSeoPrimaryCategory(patch.seoPrimaryCategory);
               setSaveState('dirty');
             },
             sites, siteId,

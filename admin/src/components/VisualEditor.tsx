@@ -142,7 +142,8 @@ interface VisualEditorProps {
     seoNoindex?: boolean;
     seoCanonical?: string;
     seoOgImage?: string;
-    onSeoChange?: (patch: { seoTitle?: string; seoDesc?: string; seoNoindex?: boolean; seoCanonical?: string; seoOgImage?: string }) => void;
+    seoPrimaryCategory?: string;
+    onSeoChange?: (patch: { seoTitle?: string; seoDesc?: string; seoNoindex?: boolean; seoCanonical?: string; seoOgImage?: string; seoPrimaryCategory?: string }) => void;
     sites?: { id: string; name: string; isPrimary?: number }[];
     siteId?: string;
     onSiteIdChange?: (v: string) => void;
@@ -1577,6 +1578,11 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
             <input data-field="seoCanonical" value="${escAttr(ps?.seoCanonical || '')}" class="ve-guten-input" />
             <label class="ve-guten-field-hint" style="margin:10px 0 4px;">${__('og image url (optional)')}</label>
             <input data-field="seoOgImage" value="${escAttr(ps?.seoOgImage || '')}" class="ve-guten-input" />
+            <label class="ve-guten-field-hint" style="margin:10px 0 4px;">${__('primary category (article section)')}</label>
+            <select data-field="seoPrimaryCategory" class="ve-guten-select">
+              <option value="">${__('first assigned category')}</option>
+              ${(ps?.categories || []).filter((c: any) => (ps?.categoryIds || []).includes(c.id)).map((c: any) => `<option value="${escAttr(c.id)}" ${ps?.seoPrimaryCategory === c.id ? 'selected' : ''}>${escAttr(c.name)}</option>`).join('')}
+            </select>
           </div>
         </div>` : '';
       const secSite = isPost && ps?.sites?.length ? `
@@ -1645,6 +1651,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         else if (el.dataset.field === 'seoNoindex') ps?.onSeoChange?.({ seoNoindex: (el as HTMLInputElement).checked });
         else if (el.dataset.field === 'seoCanonical') ps?.onSeoChange?.({ seoCanonical: (el as HTMLInputElement).value });
         else if (el.dataset.field === 'seoOgImage') ps?.onSeoChange?.({ seoOgImage: (el as HTMLInputElement).value });
+        else if (el.dataset.field === 'seoPrimaryCategory') ps?.onSeoChange?.({ seoPrimaryCategory: (el as HTMLSelectElement).value });
         const vis = el.dataset.vis;
         if (vis) {
           // Visibility radios: password shows the password field; leaving
@@ -2355,6 +2362,8 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     if (seoC && pageSettings.seoCanonical !== undefined && seoC.value !== (pageSettings.seoCanonical || '') && document.activeElement !== seoC) seoC.value = pageSettings.seoCanonical || '';
     const seoO = panel.querySelector('[data-field="seoOgImage"]') as HTMLInputElement;
     if (seoO && pageSettings.seoOgImage !== undefined && seoO.value !== (pageSettings.seoOgImage || '') && document.activeElement !== seoO) seoO.value = pageSettings.seoOgImage || '';
+    const seoPc = panel.querySelector('[data-field="seoPrimaryCategory"]') as HTMLSelectElement;
+    if (seoPc && pageSettings.seoPrimaryCategory !== undefined && seoPc.value !== (pageSettings.seoPrimaryCategory || '') && document.activeElement !== seoPc) seoPc.value = pageSettings.seoPrimaryCategory || '';
     // Categories / tags lists (may change from text mode, AI suggestions, …)
     renderPostPanelLists();
   }, [pageSettings]);

@@ -7,7 +7,8 @@ import { SiteRequest } from '../middleware/site';
 import { uniqueSlug } from '../utils/slug';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 import { sanitizeCssText } from '../utils/sanitize';
-import { siteFilterClause } from '../utils/siteFilter';
+import { normalizeSeoField } from '../utils/seoFields';
+import { siteScopeForFilter, mayWriteSite } from '../utils/userSites';
 import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
 
 const router = Router();
@@ -122,7 +123,8 @@ router.post('/slug/:slug/password', passwordLimiter, async (req: AuthRequest, re
 
 router.get('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
   try {
-    const sf = siteFilterClause(req.query.siteId, 'p.siteId');
+    const sf = siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId, 'p.siteId');
+    if (sf.denied) { res.status(403).json({ error: '无权访问该站点' }); return; }
     const pages = db.prepare(`
       SELECT p.*, (SELECT COUNT(*) FROM Comment c WHERE c.postId = p.id AND c.status = 'approved') AS commentCount
       FROM Post p WHERE p.type = ?${sf.clause} ORDER BY p.menuOrder ASC
@@ -155,11 +157,14 @@ router.post('/', authenticate, authorize('admin', 'editor'), async (req: AuthReq
     const { status: storeStatus, password: rawPassword } = normalizePage(data);
     // Store a hash, never the plaintext (see utils/contentPassword).
     const storePassword = rawPassword ? await hashContentPassword(rawPassword) : '';
+    if (data.siteId !== undefined && !mayWriteSite(req.user!.userId, req.user!.role, data.siteId)) {
+      res.status(403).json({ error: '无权在该站点创建内容' }); return;
+    }
     withTransaction(() => {
       db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, featured, status, password, type, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', data.featured || null, storeStatus, storePassword, 'page', req.user!.userId, data.parentId || null, data.menuOrder || 0, storeStatus === 'published' ? new Date().toISOString() : null, data.siteId || null);
       if (data.meta) {
         for (const [key, value] of Object.entries(data.meta)) {
-          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
+          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : normalizeSeoField(key, value));
         }
       }
     });
@@ -190,12 +195,15 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), async (req: AuthR
     }
     if (data.parentId !== undefined) { sets.push('parentId = ?'); vals.push(data.parentId); }
     if (data.menuOrder !== undefined) { sets.push('menuOrder = ?'); vals.push(data.menuOrder); }
-    if (data.siteId !== undefined) { sets.push('siteId = ?'); vals.push(data.siteId || null); }
+    if (data.siteId !== undefined) {
+      if (!mayWriteSite(req.user!.userId, req.user!.role, data.siteId)) { res.status(403).json({ error: '无权移到该站点' }); return; }
+      sets.push('siteId = ?'); vals.push(data.siteId || null);
+    }
     withTransaction(() => {
       if (data.meta) {
         db.prepare('DELETE FROM PostMeta WHERE postId = ?').run(req.params.id);
         for (const [key, value] of Object.entries(data.meta)) {
-          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, key === '_visual_css' ? sanitizeVisualCss(value) : value);
+          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, key === '_visual_css' ? sanitizeVisualCss(value) : normalizeSeoField(key, value));
         }
       }
       if (sets.length > 0) {
