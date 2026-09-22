@@ -40,6 +40,10 @@ export default function PageEditor() {
   // stay=false (publish): navigate to pages; stay=true (draft from the builder):
   // keep editing in place
   async function handleSave(s: string, stay = false) {
+    // The visual editor's own header can call this without a title (its buttons are
+    // not disabled on !title like the ones above), and the API requires one: check
+    // it here so the user gets a sentence instead of a raw validation error.
+    if (!title.trim()) { toast.toast(t('please enter a title first', getLang()), 'error'); return; }
     setSaving(true);
     setSaveState('saving');
     try {

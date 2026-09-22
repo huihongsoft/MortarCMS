@@ -13,6 +13,7 @@ import { timeAgo, readingTime, useTimeTick } from '../../lib/time';
 import { gravatarUrl } from '../../lib/gravatar';
 import { t } from '../../lib/i18n';
 import DOMPurify from 'dompurify';
+import { postPath } from '../../lib/permalink';
 
 
 
@@ -83,7 +84,7 @@ export default function PostLayout(props: any) {
           author.bio && React.createElement('p', { className: 'text-sm text-gray-500 mt-1' }, author.bio),
         ),
       ),
-      settings.theme_show_share_buttons !== '0' && React.createElement(SocialShare, { title: post.title, url: '/post/' + post.slug, siteUrl: settings.site_url }),
+      settings.theme_show_share_buttons !== '0' && React.createElement(SocialShare, { title: post.title, url: postPath(post.slug), siteUrl: settings.site_url }),
     ),
     React.createElement('section', { className: 'mt-4' },
       React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-2' }, t('comments', settings), post.commentCount > 0 ? ' (' + post.commentCount + ')' : ''),

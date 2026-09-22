@@ -4,6 +4,7 @@ import { Calendar, User } from 'lucide-react';
 import { cdnUrl } from '../../lib/cdn';
 import { timeAgo } from '../../lib/time';
 import { t } from '../../lib/i18n';
+import { postPath } from '../../lib/permalink';
 
 // WordPress Twenty Twenty-Four style homepage: hero + spacious card grid
 export default function TTHomeLayout(props: any) {
@@ -30,17 +31,17 @@ export default function TTHomeLayout(props: any) {
         : React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-16' },
             posts.map((p: any) =>
               React.createElement('article', { key: p.id, className: 'flex flex-col' },
-                p.featured && React.createElement(Link, { to: '/post/' + p.slug },
+                p.featured && React.createElement(Link, { to: postPath(p.slug) },
                   React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full aspect-[16/10] object-cover rounded-lg mb-5', loading: 'lazy' })),
                 React.createElement('div', { className: 'flex items-center gap-3 text-xs text-gray-400 mb-2' },
                   React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Calendar, { size: 12 }), timeAgo(p.publishedAt || p.createdAt)),
                   React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(User, { size: 12 }), p.author?.username),
                   p.categories?.[0] && React.createElement('span', { className: 'text-gray-300' }, '/', p.categories[0].name),
                 ),
-                React.createElement(Link, { to: '/post/' + p.slug },
+                React.createElement(Link, { to: postPath(p.slug) },
                   React.createElement('h2', { className: 'text-2xl font-semibold tracking-tight text-gray-900 hover:text-gray-600 mb-2' }, p.title)),
                 p.excerpt && React.createElement('p', { className: 'text-gray-500 text-sm leading-relaxed flex-1' }, p.excerpt),
-                React.createElement(Link, { to: '/post/' + p.slug, className: 'inline-flex items-center gap-1 mt-3 text-sm font-medium text-gray-900 border-b border-gray-900 pb-0.5 w-fit hover:text-gray-600' },
+                React.createElement(Link, { to: postPath(p.slug), className: 'inline-flex items-center gap-1 mt-3 text-sm font-medium text-gray-900 border-b border-gray-900 pb-0.5 w-fit hover:text-gray-600' },
                   t('read more', settings), React.createElement('span', null, '\u2192')),
               )
             )

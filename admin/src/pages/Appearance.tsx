@@ -5,8 +5,13 @@ import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 import Select from '../components/Select';
 import { dialog } from '../lib/dialog';
+import { postPath, usePermalinkPrefix } from '../lib/permalink';
 
 export default function Appearance() {
+  // Carousel slides hold a free-text link. The example in the placeholder used
+  // to be a hardcoded /post/xxx, which under a custom permalink prefix pointed
+  // admins at a URL shape the site no longer serves.
+  const permalink = usePermalinkPrefix();
   const [themes, setThemes] = useState<any[]>([]);
   const [activeTheme, setActiveTheme] = useState('');
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -25,14 +30,14 @@ export default function Appearance() {
 	const [devMode, setDevMode] = useState(false);
 	const [carouselItems, setCarouselItems] = useState<{ image: string; title: string; link: string; alt: string }[]>([]);
 	const [carouselDirty, setCarouselDirty] = useState(false);
+	// Options for theme settings of type 'categories' (e.g. softstore's homepage
+	// tab list). Loaded once — a new category needs a reload, same as elsewhere.
+	const [categories, setCategories] = useState<{ id: string; name: string; slug: string }[]>([]);
+	// '' = install-wide; a site id = edit that site's theme and its settings.
+	const [siteList, setSiteList] = useState<any[]>([]);
+	const [scopeSite, setScopeSite] = useState('');
 	useEffect(() => {
-		const load = () => api.get('/settings').then(r => {
-			setDevMode(r.data?.dev_mode === '1');
-			try { const items = JSON.parse(r.data?.carousel_items || '[]'); setCarouselItems(Array.isArray(items) ? items : []); } catch { setCarouselItems([]); }
-		}).catch(() => {});
-		load();
-		window.addEventListener('mortar-settings-saved', load);
-		return () => window.removeEventListener('mortar-settings-saved', load);
+		api.get('/categories').then(r => setCategories(Array.isArray(r.data) ? r.data : [])).catch(() => {});
 	}, []);
 
 	async function loadBackups() {
@@ -50,7 +55,7 @@ export default function Appearance() {
 		setBackupBusy(false);
 	}
 	async function restoreBackup(id: string, name: string) {
-		if (!(await dialog.confirm(t('restore backup confirm', getLang()) + '「' + name + '」？'))) return;
+		if (!(await dialog.confirm(t('restore backup confirm', getLang()) + '「' + name + '」？', { danger: true }))) return;
 		try {
 			await api.post('/themes/' + activeTheme + '/backups/' + id + '/restore');
 			await dialog.alert(t('restore backup success', getLang()));
@@ -79,17 +84,53 @@ export default function Appearance() {
 	}
 
 	useEffect(() => {
-		api.get('/themes').then(r => { setThemes(r.data.themes || []); setActiveTheme(r.data.active || 'default'); }).catch(() => {});
-		api.get('/settings').then(r => {
+		// The list is scope-aware: with a site selected, `active` is that site's
+		// theme (and its card previews use the site's own overrides).
+		api.get('/themes' + (scopeSite ? '?siteId=' + encodeURIComponent(scopeSite) : ''))
+			.then(r => { setThemes(r.data.themes || []); setActiveTheme(r.data.active || 'default'); })
+			.catch(() => {});
+	}, [scopeSite]);
+	useEffect(() => { api.get('/sites').then(r => setSiteList(r.data?.sites || [])).catch(() => {}); }, []);
+	// Load the effective settings of the selected scope: install-wide (no
+	// query) or one site's (admins may ask for any site by id).
+	const scopeQuery = scopeSite ? '?siteId=' + encodeURIComponent(scopeSite) : '';
+	useEffect(() => {
+		let cancelled = false;
+		api.get('/settings' + scopeQuery).then(r => {
+			if (cancelled) return;
 			setSettings(r.data);
-			if (r.data.theme_custom_css) setCustomCss(r.data.theme_custom_css);
+			if (r.data.theme_name) setActiveTheme(r.data.theme_name);
+			setCustomCss(r.data.theme_custom_css || '');
+			// The carousel is part of this payload, so it follows the scope too.
+			setDevMode(r.data?.dev_mode === '1');
+			try { const items = JSON.parse(r.data?.carousel_items || '[]'); setCarouselItems(Array.isArray(items) ? items : []); } catch { setCarouselItems([]); }
 		}).catch(() => {});
-	}, []);
+		return () => { cancelled = true; };
+	}, [scopeSite]);
 	useEffect(() => { if (activeTheme) loadBackups(); }, [activeTheme]);
 
+  // `name` activates for the selected scope only: a site can run its own theme
+  // while the rest of the install keeps the current one.
   async function activate(name: string) {
-    await api.post('/themes/' + name + '/activate');
-    window.location.reload();
+    try {
+      await api.post('/themes/' + name + '/activate', scopeSite ? { siteId: scopeSite } : undefined);
+    } catch (e: any) {
+      dialog.alert(e.response?.data?.error || t('save failed', getLang()));
+      return;
+    }
+    setActiveTheme(name);
+    // Refresh the list so the "active" badge follows the scope.
+    api.get('/themes' + (scopeSite ? '?siteId=' + encodeURIComponent(scopeSite) : ''))
+      .then(r => { setThemes(r.data.themes || []); setActiveTheme(r.data.active || name); })
+      .catch(() => {});
+    if (!scopeSite) window.location.reload();
+  }
+
+  // Preview a theme (or the unsaved CSS) in the scope being edited: with a site
+  // selected, opening the admin's own host would show that host's theme instead.
+  function previewUrl(extra: string) {
+    const host = scopeSite ? (siteList.find((x: any) => x.id === scopeSite)?.domain || '') : '';
+    return (host ? window.location.protocol + '//' + host : '') + '/' + extra;
   }
 
   // One-click rebuild of built-in theme bundles from frontend source
@@ -122,19 +163,26 @@ export default function Appearance() {
     }
 	    if (activeTheme) {
 	      themeSettings.custom_css = customCss;
-	      await api.put('/themes/' + activeTheme + '/settings', themeSettings);
+	      // ?siteId scopes the write to that site's own layer (SiteSetting);
+	      // without it the values are the install-wide defaults.
+	      await api.put('/themes/' + activeTheme + '/settings' + (scopeSite ? '?siteId=' + encodeURIComponent(scopeSite) : ''), themeSettings);
 	    }
-    // Site identity stays global
-    const identity: Record<string, string> = {};
-    if (settings.site_logo !== undefined) identity.site_logo = settings.site_logo;
-    if (settings.favicon !== undefined) identity.favicon = settings.favicon;
-    if (Object.keys(identity).length > 0) await api.put('/settings', identity);
+    // Site identity stays global, and while a site scope is selected the form
+    // shows that site's *effective* logo/favicon — writing those back would copy
+    // one site's value over the install-wide one for every other site.
+    if (!scopeSite) {
+      const identity: Record<string, string> = {};
+      if (settings.site_logo !== undefined) identity.site_logo = settings.site_logo;
+      if (settings.favicon !== undefined) identity.favicon = settings.favicon;
+      if (Object.keys(identity).length > 0) await api.put('/settings', identity);
+    }
     setSaved(true); setTimeout(() => setSaved(false), 2000);
   }
 
   async function saveCarousel() {
     try {
-      await api.put('/settings', { carousel_items: JSON.stringify(carouselItems.filter(c => c.image.trim())) });
+      const url = scopeSite ? '/sites/' + scopeSite + '/settings' : '/settings';
+      await api.put(url, { carousel_items: JSON.stringify(carouselItems.filter(c => c.image.trim())) });
       setCarouselDirty(false);
       setSaved(true); setTimeout(() => setSaved(false), 2000);
       window.dispatchEvent(new Event('mortar-settings-saved'));
@@ -154,8 +202,10 @@ export default function Appearance() {
 
   async function saveSection() {
     if (!editingSection) return;
-    await api.put('/themes/sections/' + editingSection, { html: sectionHtml, css: sectionCss });
-    const r = await api.get('/settings');
+    await api.put('/themes/sections/' + editingSection + scopeQuery, { html: sectionHtml, css: sectionCss });
+    // Reload through the current scope, or a scoped form would silently swap to
+    // install-wide values (and the next Save would write them into the site).
+    const r = await api.get('/settings' + scopeQuery);
     setSettings(r.data);
     setEditingSection(null);
   }
@@ -186,6 +236,18 @@ export default function Appearance() {
       React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('appearance', getLang())),
       React.createElement('button', { onClick: save, className: 'btn-primary' }, React.createElement(Save, { size: 16 }), saved ? t('saved!', getLang()) : t('save', getLang()))
     ),
+    // Which scope the theme and its settings are read from and written to. A site
+    // can run its own theme and its own colours; without a selection everything
+    // here is the install-wide default the other sites inherit.
+    React.createElement('div', { className: 'card p-4 mb-6 flex flex-wrap items-center gap-3' },
+      React.createElement('span', { className: 'text-sm font-medium text-gray-700 dark:text-gray-200' }, t('apply to', getLang())),
+      React.createElement(Select, { value: scopeSite, onChange: (v: string) => setScopeSite(v), className: 'input-field max-w-xs' },
+        React.createElement('option', { value: '' }, t('all sites (install-wide)', getLang())),
+        siteList.map((s: any) => React.createElement('option', { key: s.id, value: s.id }, s.name))),
+      React.createElement('span', { className: 'text-xs text-gray-500 dark:text-gray-400' },
+        scopeSite
+          ? t('editing this site only: its theme, colours, fonts and theme settings. other sites keep the install-wide values.', getLang())
+          : t('editing the install-wide default that every site inherits unless it was given its own theme.', getLang()))),
     React.createElement('div', { className: 'card p-6 mb-6' },
       React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4 uppercase tracking-wider' }, t('themes', getLang())),
       React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-4' },
@@ -204,7 +266,7 @@ export default function Appearance() {
               React.createElement('div', { className: 'flex items-center gap-2 shrink-0' },
                 devMode && React.createElement('button', { onClick: () => openFileBrowser(th.name), className: 'btn-secondary text-xs' }, t('edit files', getLang())),
                 React.createElement('button', { onClick: () => setThemeDetail(th), className: 'btn-secondary text-xs' }, t('details', getLang())),
-                React.createElement('button', { onClick: () => window.open('/?theme=' + th.name, '_blank'), className: 'btn-secondary text-xs' }, t('preview', getLang())),
+                React.createElement('button', { onClick: () => window.open(previewUrl('?theme=' + th.name), '_blank'), className: 'btn-secondary text-xs' }, t('preview', getLang())),
                 !th.active && React.createElement('button', { onClick: () => activate(th.name), className: 'btn-secondary text-xs' }, t('activate', getLang())),
                 React.createElement('button', {
                   onClick: async () => {
@@ -259,21 +321,64 @@ export default function Appearance() {
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('theme custom settings', getLang())),
           React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),
         React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4' },
-          schema.map((f: any) =>
-            React.createElement('div', { key: f.key },
-              React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, f.label),
+          schema.map((f: any) => {
+            // Labels come from theme.json; the dictionary keys are English, so a
+            // label written as an English sentence gets translated here.
+            const label = t(f.label, getLang());
+            const stored = settings['theme_' + f.key] || f.default || '';
+            if (f.type === 'category') {
+              // Single-choice variant: a dropdown of the site's categories. The
+              // empty option is the theme's own default (softstore then shows its
+              // "latest software" block).
+              //
+              // Only categories with at least two posts are offered: these blocks
+              // lay their posts out two per row, so a one-post category would put
+              // a single item alone on its line. A choice that no longer qualifies
+              // (its posts were deleted) stays listed, so the saved value is never
+              // silently shown as something else.
+              const eligible = categories.filter((c: any) => (c._count?.posts || 0) >= 2);
+              const options = stored && !eligible.some((c: any) => c.slug === stored)
+                ? [...categories.filter((c: any) => c.slug === stored), ...eligible]
+                : eligible;
+              return React.createElement('div', { key: f.key },
+                React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, label),
+                React.createElement(Select, { value: stored, onChange: (v: string) => setSettings({ ...settings, ['theme_' + f.key]: v }), className: 'input-field' },
+                  React.createElement('option', { value: '' }, t('default: latest software', getLang())),
+                  options.map((c: any) => React.createElement('option', { key: c.id, value: c.slug }, c.name))),
+                React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, t('only categories with 2 or more posts are listed', getLang())));
+            }
+            if (f.type === 'categories') {
+              // Comma-separated slugs. Empty means "no filter" — the theme then
+              // shows its own default selection.
+              const picked = stored.split(',').map((s: string) => s.trim()).filter(Boolean);
+              const toggle = (slug: string) => {
+                const next = picked.includes(slug) ? picked.filter((s: string) => s !== slug) : [...picked, slug];
+                setSettings({ ...settings, ['theme_' + f.key]: next.join(',') });
+              };
+              return React.createElement('div', { key: f.key, className: 'md:col-span-2' },
+                React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, label),
+                categories.length === 0
+                  ? React.createElement('p', { className: 'text-xs text-gray-400' }, t('no categories yet', getLang()))
+                  : React.createElement('div', { className: 'flex flex-wrap gap-x-4 gap-y-2 py-1' },
+                      categories.map((c: any) => React.createElement('label', { key: c.id, className: 'flex items-center gap-2 cursor-pointer text-sm text-gray-600' },
+                        React.createElement('input', { type: 'checkbox', checked: picked.includes(c.slug), onChange: () => toggle(c.slug), className: 'rounded border-gray-300 text-primary-600' }),
+                        c.name))),
+                React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, t('leave empty to show the theme default; extra tabs are dropped when they do not fit', getLang())));
+            }
+            return React.createElement('div', { key: f.key },
+              React.createElement('label', { className: 'block text-sm font-medium text-gray-700 mb-1' }, label),
               f.type === 'checkbox'
                 ? React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer py-2.5' },
-                    React.createElement('input', { type: 'checkbox', checked: (settings['theme_' + f.key] || f.default || '') === '1', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.checked ? '1' : '0' }), className: 'rounded border-gray-300 text-primary-600' }),
-                    React.createElement('span', { className: 'text-sm text-gray-600' }, f.label))
+                    React.createElement('input', { type: 'checkbox', checked: (stored) === '1', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.checked ? '1' : '0' }), className: 'rounded border-gray-300 text-primary-600' }),
+                    React.createElement('span', { className: 'text-sm text-gray-600' }, label))
                 : f.type === 'select'
-                  ? React.createElement(Select, { value: settings['theme_' + f.key] || f.default || '', onChange: (v: string) => setSettings({ ...settings, ['theme_' + f.key]: v }), className: 'input-field' },
+                  ? React.createElement(Select, { value: stored, onChange: (v: string) => setSettings({ ...settings, ['theme_' + f.key]: v }), className: 'input-field' },
                       (f.options || []).map((o: string) => React.createElement('option', { key: o, value: o }, o)))
                   : f.type === 'textarea'
-                    ? React.createElement('textarea', { value: settings['theme_' + f.key] || f.default || '', onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.value }), rows: 3, className: 'input-field' })
-                    : React.createElement('input', { type: f.type === 'color' ? 'color' : 'text', value: settings['theme_' + f.key] || f.default || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.value }), className: 'input-field' })
-            )
-          )
+                    ? React.createElement('textarea', { value: stored, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.value }), rows: 3, className: 'input-field' })
+                    : React.createElement('input', { type: f.type === 'color' ? 'color' : 'text', value: stored, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, ['theme_' + f.key]: e.target.value }), className: 'input-field' })
+            );
+          })
         )
       );
     })(),
@@ -342,7 +447,7 @@ export default function Appearance() {
             React.createElement('input', { value: c.image, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...carouselItems]; n[i] = { ...n[i], image: e.target.value }; setCarouselItems(n); setCarouselDirty(true); }, className: 'input-field text-xs flex-1', placeholder: t('image url', getLang()) + ' (https://... ' + t('or', getLang()) + ' /uploads/...)', 'aria-label': t('image url', getLang()) }),
             React.createElement('button', { onClick: () => { setCarouselItems(carouselItems.filter((_, j) => j !== i)); setCarouselDirty(true); }, className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()), 'aria-label': t('delete', getLang()) }, React.createElement('span', null, '✕'))),
           React.createElement('input', { value: c.title, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...carouselItems]; n[i] = { ...n[i], title: e.target.value }; setCarouselItems(n); setCarouselDirty(true); }, className: 'input-field text-xs', placeholder: t('title', getLang()), 'aria-label': t('title', getLang()) }),
-          React.createElement('input', { value: c.link, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...carouselItems]; n[i] = { ...n[i], link: e.target.value }; setCarouselItems(n); setCarouselDirty(true); }, className: 'input-field text-xs', placeholder: t('link', getLang()) + ' (/post/xxx)', 'aria-label': t('link', getLang()) }),
+          React.createElement('input', { value: c.link, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...carouselItems]; n[i] = { ...n[i], link: e.target.value }; setCarouselItems(n); setCarouselDirty(true); }, className: 'input-field text-xs', placeholder: t('link', getLang()) + ' (' + postPath(permalink, 'xxx') + ' ' + t('or', getLang()) + ' https://...)', 'aria-label': t('link', getLang()) }),
         )),
         React.createElement('div', { className: 'flex gap-2' },
           React.createElement('button', { onClick: () => { setCarouselItems([...carouselItems, { image: '', title: '', link: '', alt: '' }]); setCarouselDirty(true); }, className: 'btn-secondary text-sm' }, '+ ' + t('add slide', getLang())),
@@ -366,12 +471,17 @@ export default function Appearance() {
         }),
         // Live preview of unsaved CSS (frontend reads ?preview_css=)
         React.createElement('div', { className: 'flex gap-2 mt-3' },
-          React.createElement('button', { onClick: () => window.open('/?preview_css=' + encodeURIComponent(customCss), '_blank'), disabled: !customCss.trim(), className: 'btn-secondary text-sm disabled:opacity-40' }, t('preview custom css', getLang()))
+          React.createElement('button', { onClick: () => window.open(previewUrl('?preview_css=' + encodeURIComponent(customCss)), '_blank'), disabled: !customCss.trim(), className: 'btn-secondary text-sm disabled:opacity-40' }, t('preview custom css', getLang()))
         ),
       ),
       // Theme backups (snapshots of settings + custom CSS, rollback point for
-      // panel edits and AI apply_theme_style calls)
-      React.createElement('details', { className: 'card p-6 mb-6' },
+      // panel edits and AI apply_theme_style calls).
+      //
+      // Hidden while a site scope is selected: a backup holds the *install-wide*
+      // values, so restoring one from here would rewrite every site's settings
+      // and still leave the selected site untouched — destructive and useless at
+      // the same time.
+      !scopeSite && React.createElement('details', { className: 'card p-6 mb-6' },
         React.createElement('summary', { className: 'cursor-pointer select-none list-none flex items-center justify-between py-0.5 -my-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 px-2 -mx-2 transition-colors' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('theme backups', getLang())),
           React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),

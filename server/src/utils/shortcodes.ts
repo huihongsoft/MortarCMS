@@ -1,5 +1,6 @@
 import db from './db';
 import { PUBLIC_POST_CONDITIONS } from './publicPosts';
+import { postUrl } from './slug';
 
 // Shortcode system: [tag attr="value"]content[/tag]
 type ShortcodeFn = (attrs: Record<string, string>, content: string, ctx: any) => string;
@@ -118,7 +119,7 @@ addShortcode('post-list', (attrs, _content, ctx) => {
   const items = posts.map((p: any) => {
     const title = esc(p.title);
     const img = p.featured ? '<img src="' + esc(p.featured) + '" alt="' + title + '" loading="lazy" style="width:80px;height:80px;object-fit:cover;border-radius:8px;flex-shrink:0;">' : '';
-    return '<a href="/post/' + esc(p.slug) + '" style="display:flex;gap:16px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #e5e7eb;text-decoration:none;color:inherit;">' + img + '<div><h4 style="margin:0 0 4px;font-size:15px;color:#111827;">' + title + '</h4><p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">' + esc((p.excerpt || '').substring(0, 120)) + '</p></div></a>';
+    return '<a href="' + esc(postUrl(p.slug)) + '" style="display:flex;gap:16px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #e5e7eb;text-decoration:none;color:inherit;">' + img + '<div><h4 style="margin:0 0 4px;font-size:15px;color:#111827;">' + title + '</h4><p style="margin:0;font-size:13px;color:#6b7280;line-height:1.5;">' + esc((p.excerpt || '').substring(0, 120)) + '</p></div></a>';
   }).join('');
   return '<div class="cms-rendered-post-list">' + items + '</div>';
 }, 'Latest published posts (limit=)');
@@ -144,7 +145,7 @@ addShortcode('comments', (attrs, _content, ctx) => {
     PUBLIC_POST_CONDITIONS + cScope + ' ORDER BY c.createdAt DESC LIMIT ?'
   ).all(...cArgs) as any[];
   if (comments.length === 0) return '<p class="text-gray-400 text-sm italic">No comments yet.</p>';
-  const items = comments.map((c: any) => '<div style="padding:10px 0;border-bottom:1px solid #f3f4f6;"><p style="margin:0;font-size:13px;color:#374151;">' + esc(c.content.substring(0, 150)) + '</p><p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">' + esc(c.author) + ' on <a href="/post/' + esc(c.postSlug) + '" style="color:#6b7280;text-decoration:none;">' + esc(c.postTitle || 'post') + '</a></p></div>').join('');
+  const items = comments.map((c: any) => '<div style="padding:10px 0;border-bottom:1px solid #f3f4f6;"><p style="margin:0;font-size:13px;color:#374151;">' + esc(c.content.substring(0, 150)) + '</p><p style="margin:4px 0 0;font-size:12px;color:#9ca3af;">' + esc(c.author) + ' on <a href="' + esc(postUrl(c.postSlug)) + '" style="color:#6b7280;text-decoration:none;">' + esc(c.postTitle || 'post') + '</a></p></div>').join('');
   return '<div class="cms-rendered-comments">' + items + '</div>';
 }, 'Recent approved comments (limit=)');
 
@@ -207,7 +208,7 @@ addShortcode('link-list', (attrs, _content, ctx) => {
     const avatar = l.avatar ? '<img src="' + esc(l.avatar) + '" alt="" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0;">'
       : '<span style="width:36px;height:36px;border-radius:50%;background:#e0edff;color:#1d4ed8;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;flex-shrink:0;">' + esc((l.name || '?')[0].toUpperCase()) + '</span>';
     const desc = l.description ? '<p style="margin:4px 0 0;font-size:13px;color:#6b7280;line-height:1.5;">' + esc(l.description) + '</p>' : '';
-    const postLinks = posts.map((p: any) => '<a href="/post/' + esc(p.slug) + '" style="display:inline-block;margin:6px 6px 0 0;padding:2px 10px;border-radius:999px;background:#e0edff;color:#1d4ed8;font-size:12px;text-decoration:none;">' + esc(p.title) + '</a>').join('');
+    const postLinks = posts.map((p: any) => '<a href="' + esc(postUrl(p.slug)) + '" style="display:inline-block;margin:6px 6px 0 0;padding:2px 10px;border-radius:999px;background:#e0edff;color:#1d4ed8;font-size:12px;text-decoration:none;">' + esc(p.title) + '</a>').join('');
     const postWrap = postLinks ? '<div style="margin-top:6px;">' + postLinks + '</div>' : '';
     return '<div style="display:flex;gap:12px;align-items:flex-start;padding:12px 0;border-bottom:1px solid #e5e7eb;">' + avatar +
       '<div style="min-width:0;flex:1;"><a href="' + esc(l.url) + '" target="_blank" rel="noopener noreferrer" style="font-weight:600;font-size:14px;color:#111827;text-decoration:none;">' + esc(l.name) + '</a>' + desc + postWrap + '</div></div>';

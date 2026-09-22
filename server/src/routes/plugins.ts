@@ -3,6 +3,7 @@ import https from 'https';
 import http from 'http';
 import db from '../utils/db';
 import { listHooks } from '../utils/hooks';
+import { purgeAllCaches } from '../utils/cache';
 import { listPlugins, listMarket, installPlugin, installFromUrl, uninstallPlugin, setPluginActive, validatePluginSettings, PluginMeta } from '../plugins/manager';
 import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
 
@@ -71,6 +72,8 @@ router.put('/:name/settings', authenticate, authorize('admin'), (req: AuthReques
       if (f.type === 'password' && str === '') continue;
       upsert.run('plugin-' + plugin.name + '-' + f.key, f.key, str);
     }
+    // Plugin settings ride along in /api/settings, which is cached per host.
+    try { purgeAllCaches(); } catch { /* cache maintenance must not fail the write */ }
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

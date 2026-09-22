@@ -8,7 +8,9 @@ export default function Footer({ settings }: { settings: Record<string, string> 
   const [menuItems, setMenuItems] = useState<any[]>([]);
   useEffect(() => { api.get('/menus/location/footer').then(r => setMenuItems(r.data.items || [])).catch(() => {}); }, []);
   const topLevel = menuItems.filter((i: any) => !i.parentId);
-  const childrenOf = (pid: string) => menuItems.filter((i: any) => i.parentId === pid);
+  // the truthy check keeps an item without an id from matching every other
+  // parentless item (childrenOf(undefined) used to return them all)
+  const childrenOf = (pid: string) => menuItems.filter((i: any) => i.parentId && i.parentId === pid);
   return React.createElement('footer', { className: 'bg-gray-50 border-t border-gray-200 mt-16' },
     React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-8' },
       React.createElement('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-6 mb-6' },

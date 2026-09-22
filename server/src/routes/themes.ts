@@ -2,7 +2,8 @@ import { Router, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, authorize, resolveOptionalUser, AuthRequest } from '../middleware/auth';
+import { SiteRequest } from '../middleware/site';
 import { upload } from '../middleware/upload';
 import { purgeAllCaches } from '../utils/cache';
 import { execFileSync, execSync } from 'child_process';
@@ -14,7 +15,10 @@ const themesDir = path.join(__dirname, '..', '..', 'themes');
 export interface SettingField {
   key: string;
   label: string;
-  type: 'text' | 'textarea' | 'checkbox' | 'select' | 'color' | 'number';
+  // 'categories' renders a checkbox list of the site's categories and stores the
+  // picked slugs as a comma-separated string; 'category' is the single-choice
+  // variant (a dropdown of the site's categories). See the Appearance panel.
+  type: 'text' | 'textarea' | 'checkbox' | 'select' | 'color' | 'number' | 'categories' | 'category';
   options?: string[];
   default?: string;
 }
@@ -32,11 +36,17 @@ export interface ThemeMeta {
 
 function readTheme(name: string): ThemeMeta | null {
   try {
+    // The name is a directory component: refuse anything that is not a plain slug
+    // ("" / "../x" / encoded traversal) before it reaches the filesystem.
+    if (!THEME_NAME_RE.test(String(name || ''))) return null;
     const p = path.join(themesDir, name, 'theme.json');
     if (!fs.existsSync(p)) return null;
     const meta = JSON.parse(fs.readFileSync(p, 'utf8'));
+    // The directory name is the authority: paths (and the settings keys) are
+    // built from `name`, so a manifest whose name points elsewhere is ignored.
+    const declared = THEME_NAME_RE.test(String(meta.name || '')) ? String(meta.name) : name;
     return {
-      name: meta.name || name,
+      name: declared,
       version: meta.version || '0.0.0',
       description: meta.description || '',
       author: meta.author || '',
@@ -48,9 +58,33 @@ function readTheme(name: string): ThemeMeta | null {
   } catch { return null; }
 }
 
-function activeThemeName(): string {
+// Which theme a request should render with. `siteId` makes this per-site: the
+// site's own SiteSetting.theme_active wins, the global Setting.theme_active is
+// the default. A name that is not installed is ignored (a theme can be deleted
+// while a site — or the global row — still names it), so the caller always gets
+// a theme whose files exist.
+// Theme names are directory names, and they are also half of the settings
+// namespace: settings are stored as `theme_<name>_<key>`, so a name containing an
+// underscore would be ambiguous — "theme_a_b_x" could be theme "a" + key "b_x",
+// or theme "a_b" + key "x", and one theme's panel would read the other's rows.
+// Names are therefore restricted to [A-Za-z0-9-] (every shipped theme qualifies),
+// which also keeps a stored value from pointing outside themesDir.
+const THEME_NAME_RE = /^[A-Za-z0-9-]+$/;
+function themeExists(name: string): boolean {
+  try {
+    if (!name || !THEME_NAME_RE.test(name)) return false;
+    return fs.existsSync(path.join(themesDir, name, 'theme.json'));
+  } catch { return false; }
+}
+function activeThemeName(siteId?: string): string {
+  if (siteId) {
+    const over = db.prepare('SELECT value FROM SiteSetting WHERE siteId = ? AND key = ?').get(siteId, 'theme_active') as any;
+    const name = String(over?.value || '').trim();
+    if (themeExists(name)) return name;
+  }
   const row = db.prepare("SELECT value FROM Setting WHERE key = 'theme_active'").get() as any;
-  return row?.value || 'default';
+  const name = String(row?.value || '').trim();
+  return themeExists(name) ? name : (themeExists('default') ? 'default' : (name || 'default'));
 }
 
 // Theme override settings (editable in the admin Appearance panel) live under
@@ -58,49 +92,103 @@ function activeThemeName(): string {
 // The name is bound as a parameter and LIKE wildcards are escaped so a theme
 // name cannot widen the match to unrelated settings.
 function escapeLike(s: string): string { return s.replace(/[\\%_]/g, (c: string) => '\\' + c); }
-function themeOverrides(name: string): Record<string, string> {
-  const rows = db.prepare("SELECT key, value FROM Setting WHERE key LIKE ? ESCAPE '\\'").all('theme_' + escapeLike(name) + '_%') as any[];
+function themeOverrides(name: string, siteId?: string): Record<string, string> {
+  const prefix = 'theme_' + name + '_';
+  const like = 'theme_' + escapeLike(name) + '_%';
   const map: Record<string, string> = {};
-  for (const r of rows) map[r.key.replace('theme_' + name + '_', '')] = r.value;
+  // The LIKE is only a coarse filter: "theme_a_%" also matches "theme_a_b_x"
+  // (a theme named a_b). The exact prefix check below keeps the two apart.
+  const take = (rows: any[]) => {
+    for (const r of rows) {
+      const key = String(r.key);
+      if (!key.startsWith(prefix)) continue;
+      map[key.slice(prefix.length)] = r.value;
+    }
+  };
+  take(db.prepare("SELECT key, value FROM Setting WHERE key LIKE ? ESCAPE '\\'").all(like) as any[]);
+  // Store-wide first, then the site's own rows on top: a site can restyle a
+  // theme without changing what the other sites see.
+  if (siteId) {
+    take(db.prepare("SELECT key, value FROM SiteSetting WHERE siteId = ? AND key LIKE ? ESCAPE '\\'").all(siteId, like) as any[]);
+  }
   return map;
 }
 
-// Public: list all themes with active flag + full effective settings
-router.get('/', (_req: AuthRequest, res: Response) => {
+// Public: list all themes with active flag + full effective settings.
+// An admin may pass ?siteId= to see the list as that site sees it (which theme
+// is active for it, and its own overrides) — that is what the Appearance panel
+// shows when a site scope is selected.
+router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
-    const active = activeThemeName();
+    const role = resolveOptionalUser(req)?.role || '';
+    const asked = String((req.query as any).siteId || '').trim();
+    const siteId = role === 'admin' && asked ? asked : undefined;
+    const active = activeThemeName(siteId);
     const themes = fs.readdirSync(themesDir)
       .filter(d => fs.existsSync(path.join(themesDir, d, 'theme.json')))
       .map(d => {
         const t = readTheme(d)!;
         t.active = t.name === active;
-        t.settings = { ...t.settings, ...themeOverrides(t.name) };
+        t.settings = { ...t.settings, ...themeOverrides(t.name, siteId) };
         return t;
       });
-    res.json({ themes, active });
+    res.json({ themes, active, siteId: siteId || null });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Admin: activate a theme
+// Admin: activate a theme. With `siteId` it activates for that one site
+// (SiteSetting.theme_active), otherwise it becomes the install-wide default.
 router.post('/:name/activate', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const t = readTheme(req.params.name);
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
+    const siteId = String((req.body as any)?.siteId || (req.query as any).siteId || '').trim();
+    if (siteId) {
+      const site = db.prepare('SELECT id FROM Site WHERE id = ?').get(siteId) as any;
+      if (!site) { res.status(404).json({ error: 'Site not found' }); return; }
+      db.prepare('INSERT INTO SiteSetting (siteId, key, value) VALUES (?, ?, ?) ON CONFLICT(siteId, key) DO UPDATE SET value = excluded.value')
+        .run(siteId, 'theme_active', t.name);
+      // /api/settings is cached per host, and it is what tells the frontend which
+      // theme to load — without this the site keeps rendering the old one for the
+      // cache TTL.
+      purgeAllCaches();
+      res.json({ success: true, active: t.name, siteId });
+      return;
+    }
     db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, 'theme_active', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run('theme_active', t.name);
+    purgeAllCaches();
     res.json({ success: true, active: t.name });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Admin: save theme setting overrides
+// Admin: save theme setting overrides. `siteId` scopes the write to one site
+// (SiteSetting.theme_<name>_<key>), which is how a site restyles a theme the
+// other sites keep using as-is.
 router.put('/:name/settings', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const t = readTheme(req.params.name);
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
-    const entries = req.body as Record<string, string>;
-    const upsert = db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+    const body = req.body as Record<string, string>;
+    const siteId = String((req.query as any).siteId || '').trim();
+    const entries: Record<string, string> = siteId
+      ? Object.fromEntries(Object.entries(body).filter(([k]) => k !== 'siteId'))
+      : body;
+    if (siteId) {
+      const site = db.prepare('SELECT id FROM Site WHERE id = ?').get(siteId) as any;
+      if (!site) { res.status(404).json({ error: 'Site not found' }); return; }
+    }
+    const upsert = siteId
+      ? db.prepare('INSERT INTO SiteSetting (siteId, key, value) VALUES (?, ?, ?) ON CONFLICT(siteId, key) DO UPDATE SET value = excluded.value')
+      : db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
     withTransaction(() => {
-      for (const [k, v] of Object.entries(entries)) upsert.run(cuid(), 'theme_' + t.name + '_' + k, String(v));
+      for (const [k, v] of Object.entries(entries)) {
+        const key = 'theme_' + t.name + '_' + k;
+        if (siteId) upsert.run(siteId, key, String(v));
+        else upsert.run(cuid(), key, String(v));
+      }
     });
+    // The frontend reads the theme's colours/CSS from the cached /api/settings.
+    purgeAllCaches();
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -140,7 +228,10 @@ router.post('/install', authenticate, authorize('admin'), upload.single('file'),
     const name = meta.name;
     // The name is used as a directory component: it must be a plain slug so a
     // crafted theme.json can never escape the themes directory (../ traversal).
-    if (!name || !/^[a-z0-9][a-z0-9-_]*$/i.test(name)) { res.status(400).json({ error: 'theme.json name must be a plain alphanumeric slug' }); return; }
+    // Underscores are refused as well: the settings namespace is
+    // `theme_<name>_<key>`, where an underscore in the name makes two themes'
+    // rows indistinguishable (see THEME_NAME_RE).
+    if (!name || !THEME_NAME_RE.test(name)) { res.status(400).json({ error: 'theme.json name must be an alphanumeric slug (letters, digits and dashes)' }); return; }
     const dest = path.join(themesDir, name);
     if (!dest.startsWith(path.join(themesDir, '')) || fs.existsSync(dest)) {
       res.status(400).json({ error: 'Theme already exists: ' + name }); return;
@@ -161,7 +252,10 @@ router.post('/rebuild', authenticate, authorize('admin'), (req: AuthRequest, res
       res.status(400).json({ error: 'Frontend source not found on this server (' + frontendDir + ')' });
       return;
     }
-    const builtin = ['default', 'magazine', 'aurora', 'twentytwentyfour', 'twentytwentyone', 'twentynineteen', 'twentyseventeen'];
+    // Every theme whose source ships in frontend/src/themes. softstore was
+    // missing, so its bundle could not be rebuilt from the panel at all — edits
+    // to its source silently had no effect.
+    const builtin = ['default', 'magazine', 'aurora', 'softstore', 'twentytwentyfour', 'twentytwentyone', 'twentynineteen', 'twentyseventeen'];
     const results: string[] = [];
     for (const t of builtin) {
       // Skip themes that aren't installed on this server (user may have deleted them)
@@ -193,13 +287,30 @@ router.post('/rebuild', authenticate, authorize('admin'), (req: AuthRequest, res
 router.delete('/:name', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
     const name = req.params.name;
+    // fs.rmSync is recursive: an unvalidated name ("../../uploads") would delete a
+    // directory outside themesDir. Express hands over the decoded segment.
+    if (!THEME_NAME_RE.test(name)) { res.status(400).json({ error: 'Invalid theme name' }); return; }
     if (name === 'default') { res.status(400).json({ error: 'Cannot delete the default theme' }); return; }
     if (activeThemeName() === name) { res.status(400).json({ error: 'Activate another theme before deleting this one' }); return; }
+    // A site may be running it even when the install-wide theme is another one.
+    const siteUsing = db.prepare('SELECT siteId FROM SiteSetting WHERE key = ? AND value = ? LIMIT 1').get('theme_active', name) as any;
+    if (siteUsing) { res.status(400).json({ error: 'This theme is in use by a site — switch that site to another theme first' }); return; }
     const dest = path.join(themesDir, name);
     if (!fs.existsSync(dest)) { res.status(404).json({ error: 'Theme not found' }); return; }
     fs.rmSync(dest, { recursive: true, force: true });
-    // Clean overrides
-    db.prepare("DELETE FROM Setting WHERE key LIKE ? ESCAPE '\\'").run('theme_' + escapeLike(name) + '_%');
+    // Clean overrides — install-wide and every site's, or they would resurface if
+    // a theme with the same name is installed again.
+    const prefix = 'theme_' + name + '_';
+    for (const r of db.prepare("SELECT key FROM Setting WHERE key LIKE ? ESCAPE '\\'").all('theme_' + escapeLike(name) + '_%') as any[]) {
+      if (String(r.key).startsWith(prefix)) db.prepare('DELETE FROM Setting WHERE key = ?').run(r.key);
+    }
+    for (const r of db.prepare("SELECT siteId, key FROM SiteSetting WHERE key LIKE ? ESCAPE '\\'").all('theme_' + escapeLike(name) + '_%') as any[]) {
+      if (String(r.key).startsWith(prefix)) db.prepare('DELETE FROM SiteSetting WHERE siteId = ? AND key = ?').run(r.siteId, r.key);
+    }
+    // The theme's snapshots go with it: reinstalling a theme of the same name
+    // must not resurrect the old one's settings.
+    for (const b of getAllBackups().filter((x: any) => x.theme === name)) deleteThemeBackup(b.id);
+    purgeAllCaches();
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -207,6 +318,7 @@ router.delete('/:name', authenticate, authorize('admin'), (req: AuthRequest, res
 // Admin: list theme files (safelisted extensions only, no traversal)
 const SAFE_THEME_EXTS = ['.css', '.json', '.tsx', '.js'];
 function safeThemePath(themeName: string, rel: string): string | null {
+  if (!THEME_NAME_RE.test(String(themeName || ''))) return null;
   if (!rel || rel.includes('..') || rel.startsWith('/')) return null;
   const full = path.resolve(path.join(themesDir, themeName), rel);
   if (!full.startsWith(path.resolve(path.join(themesDir, themeName)) + path.sep)) return null;
@@ -214,6 +326,7 @@ function safeThemePath(themeName: string, rel: string): string | null {
 }
 router.get('/:name/files', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
   try {
+    if (!readTheme(req.params.name)) { res.status(404).json({ error: 'Theme not found' }); return; }
     const dir = path.join(themesDir, req.params.name);
     if (!fs.existsSync(dir)) { res.status(404).json({ error: 'Theme not found' }); return; }
     const walk = (d: string, base = ''): any[] => {
@@ -274,9 +387,22 @@ router.put('/sections/:location', authenticate, authorize('admin'), (req: AuthRe
     }
     const key = 'theme_section_' + location;
     const value = JSON.stringify({ html: html || '', css: css || '' });
-    db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
-      .run(cuid(), key, value);
-    res.json({ success: true, location });
+    // Sections are read from the same merged /api/settings payload as the theme
+    // colours, so they follow the same scope: with ?siteId= only that site shows
+    // the section (the Appearance panel writes scoped sections while a site is
+    // selected — the frontend picks them up through /api/settings either way).
+    const siteId = String((req.query as any).siteId || '').trim();
+    if (siteId) {
+      const site = db.prepare('SELECT id FROM Site WHERE id = ?').get(siteId) as any;
+      if (!site) { res.status(404).json({ error: 'Site not found' }); return; }
+      db.prepare('INSERT INTO SiteSetting (siteId, key, value) VALUES (?, ?, ?) ON CONFLICT(siteId, key) DO UPDATE SET value = excluded.value')
+        .run(siteId, key, value);
+    } else {
+      db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+        .run(cuid(), key, value);
+    }
+    purgeAllCaches();
+    res.json({ success: true, location, siteId: siteId || null });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -389,5 +515,5 @@ router.delete('/:name/backups/:id', authenticate, authorize('admin'), (req: Auth
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-export { readTheme, activeThemeName, themeOverrides };
+export { readTheme, activeThemeName, themeOverrides, themeExists };
 export default router;

@@ -153,7 +153,9 @@ app.use((req, res, next) => {
         const ip = (req.ip || req.socket.remoteAddress || 'unknown').replace(/^::ffff:/, '');
         const today = new Date().toISOString().slice(0, 10);
         const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
-        db.prepare('INSERT INTO Visit (id, date, ip, path) VALUES (?, ?, ?, ?)').run(id, today, ip || 'unknown', p.slice(0, 200));
+        // The resolved site, so per-site dashboards can be scoped (resolveSite
+        // runs above this middleware).
+        db.prepare('INSERT INTO Visit (id, date, ip, path, siteId) VALUES (?, ?, ?, ?, ?)').run(id, today, ip || 'unknown', p.slice(0, 200), (req as any).siteId || null);
       }
     }
   } catch {}
@@ -258,9 +260,13 @@ app.use('/admin/assets', cacheControl('31536000', true), express.static(path.joi
 // uploaded SVG directly); loading a theme's CSS/JS as a subresource is unaffected
 // because a subresource's own CSP is not enforced against the parent page.
 const STATIC_CSP = "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'";
-// Theme bundles: served for runtime loading of theme layout components
-app.use('/themes', (_req: any, res: any, next: any) => {
-  res.setHeader('Cache-Control', 'public, max-age=300');
+// Theme bundles: served for runtime loading of theme layout components.
+// The JS bundle must be revalidated on every load — it is rewritten whenever
+// theme source changes (admin "rebuild", or a deploy), and a max-age let the
+// browser keep rendering the previous layout for minutes after a rebuild, which
+// read as "the fix did not work". With no-cache + ETag the reload is a cheap 304.
+app.use('/themes', (req: any, res: any, next: any) => {
+  res.setHeader('Cache-Control', req.path.endsWith('.js') ? 'no-cache' : 'public, max-age=300');
   res.setHeader('Content-Security-Policy', STATIC_CSP);
   next();
 }, express.static(path.join(__dirname, '..', 'themes')));

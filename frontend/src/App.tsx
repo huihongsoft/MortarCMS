@@ -11,6 +11,7 @@ import { sanitizeCss } from './lib/safeCss';
 import { headingCss } from './lib/typography';
 import api from './lib/api';
 import { initLightbox } from './lib/lightbox';
+import { setPermalinkPrefix, postRoutePath, permalinkFromShell } from './lib/permalink';
 
 // lazyWithRetry: a lazy() wrapper whose failure falls through to the app
 // ErrorBoundary (React.lazy rejects once and caches the failure — retrying
@@ -70,7 +71,12 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
         React.createElement(Routes, null,
           React.createElement(Route, { path: '/install', element: React.createElement(Install) }),
           React.createElement(Route, { path: '/', element: React.createElement(Home, { settings }) }),
+          // Legacy shape, kept so existing links and bookmarks keep resolving.
           React.createElement(Route, { path: '/post/:slug', element: React.createElement(PostPage, { settings }) }),
+          // …and the configured prefix, when it is not the legacy one.
+          postRoutePath() !== '/post/:slug'
+            ? React.createElement(Route, { path: postRoutePath(), element: React.createElement(PostPage, { settings }) })
+            : null,
           React.createElement(Route, { path: '/page/:slug', element: React.createElement(PageView, { settings }) }),
           React.createElement(Route, { path: '/archive/:year/:month', element: React.createElement(ArchivePage, { settings }) }),
           React.createElement(Route, { path: '/links', element: React.createElement(LinksPage, { settings }) }),
@@ -97,7 +103,9 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
         React.createElement(ThemeSection, { settings, location: 'after_content' }),
       ),
       React.createElement(ThemeSection, { settings, location: 'before_footer' }),
-      React.createElement(ScrollToTop),
+      // A theme may bring its own back-to-top button; only fall back to the
+      // app-wide one, otherwise both render in the same corner.
+      theme.BackToTop ? React.createElement(theme.BackToTop, { settings }) : React.createElement(ScrollToTop),
       React.createElement(CookieConsent, { settings }),
       React.createElement(theme.Footer, { settings }),
       React.createElement(ThemeSection, { settings, location: 'after_footer' })
@@ -109,13 +117,27 @@ export default function App() {
 
   useEffect(() => {
     initLightbox();
-    // Serve cached settings for the first paint, then refresh in the background
+    // Serve cached settings for the first paint, then refresh in the background.
+    // Not for the permalink though: the shell already told lib/permalink the
+    // structure for this very request, and re-applying a snapshot from an earlier
+    // visit would undo it (the cache is only a first-paint shortcut for copy,
+    // never for routing).
     try {
       const cached = sessionStorage.getItem('mortar_settings');
-      if (cached) setSettings(JSON.parse(cached));
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setSettings(parsed);
+        if (!permalinkFromShell()) setPermalinkPrefix(parsed?.permalink_structure);
+      }
     } catch {}
     api.get('/settings').then(r => {
       setSettings(r.data);
+      // Post URLs are built from this (lib/permalink): every theme and widget
+      // reads it through postPath(), so one assignment moves all of them.
+      // Skipped when the shell already carried the structure: this response may
+      // come from the public page cache and be older than the HTML we are
+      // looking at, which would flip the route table mid-session.
+      if (!permalinkFromShell()) setPermalinkPrefix(r.data?.permalink_structure);
       try { sessionStorage.setItem('mortar_settings', JSON.stringify(r.data)); } catch {}
       // Apply active theme: CSS variables + custom CSS
       const fontStacks: Record<string, string> = {

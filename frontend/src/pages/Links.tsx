@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import useSEO from '../hooks/useSEO';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
+import { postPath } from '../lib/permalink';
 
 // Navigation-site page: links grouped by category, each card showing the
 // site's icon, name, description and any associated posts (e.g. an official
@@ -86,7 +87,7 @@ export default function LinksPage({ settings }: { settings: Record<string, strin
               // Associated posts (e.g. the site's tutorials)
               (l.posts || []).length > 0 && React.createElement('div', { className: 'mt-2.5 flex flex-wrap gap-1' },
                 l.posts.slice(0, 3).map((p: any) => (
-                  React.createElement(Link, { key: p.id, to: '/post/' + p.slug, className: 'px-2 py-0.5 text-[11px] rounded-full bg-primary-50 text-primary-600 hover:bg-primary-100 transition-colors' }, p.title)
+                  React.createElement(Link, { key: p.id, to: postPath(p.slug), className: 'px-2 py-0.5 text-[11px] rounded-full bg-primary-50 text-primary-600 hover:bg-primary-100 transition-colors' }, p.title)
                 )),
                 (l.posts || []).length > 3 && React.createElement('span', { className: 'text-[11px] text-gray-400' }, '+' + ((l.posts || []).length - 3))
               )

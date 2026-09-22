@@ -9,11 +9,15 @@ import RevisionsPanel from '../components/RevisionsPanel';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 import Select from '../components/Select';
+import { postPath, permalinkPrefix, usePermalinkPrefix } from '../lib/permalink';
 
 export default function PostEditor() {
   const { id } = useParams();
   const navigate = useNavigate();
   const [slug, setSlug] = useState('');
+  // Post URLs depend on this setting; the permalink previews below must not
+  // advertise a different path than the site actually serves.
+  const permalink = usePermalinkPrefix();
   const [title, setTitle] = useState('');
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [content, setContent] = useState('');
@@ -128,6 +132,11 @@ export default function PostEditor() {
   // builder): keep editing in place, like WordPress. silent=true skips the
   // toast (used by autosave so background saves never interrupt the user).
   async function handleSave(s: string, stay = false, silent = false) {
+    // The visual editor's header saves without going through the buttons above
+    // (which are disabled on !title), and the API requires a title: without this
+    // the request came back as a raw validation error. A silent (background) save
+    // just returns.
+    if (!title.trim()) { if (!silent) toast.toast(t('please enter a title first', getLang()), 'error'); return; }
     setSaving(true);
     setSaveState('saving');
     try {
@@ -322,8 +331,8 @@ export default function PostEditor() {
       // Permalink (matches the visual editor sidebar)
       React.createElement('div', { className: 'card p-4' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('permalink', getLang())),
-        React.createElement('p', { className: 'text-xs text-gray-500 break-all' }, window.location.origin + '/post/' + (slug || t('untitled', getLang()))),
-        slug && React.createElement('button', { onClick: () => window.open(window.location.origin + '/post/' + slug, '_blank'), className: 'text-xs text-primary-600 hover:text-primary-700 mt-1' }, t('view post', getLang()))
+        React.createElement('p', { className: 'text-xs text-gray-500 break-all' }, postPath(permalink, slug || t('untitled', getLang()), true)),
+        slug && React.createElement('button', { onClick: () => window.open(postPath(permalink, slug, true), '_blank'), className: 'text-xs text-primary-600 hover:text-primary-700 mt-1' }, t('view post', getLang()))
       ),
       // Discussion (matches the visual editor sidebar)
       React.createElement('div', { className: 'card p-4' },
@@ -352,7 +361,7 @@ export default function PostEditor() {
         ),
         React.createElement('div', { className: 'mb-3' },
           React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('canonical url (optional)', getLang())),
-          React.createElement('input', { value: seoCanonical, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSeoCanonical(e.target.value), placeholder: 'https://example.com/post/' + (slug || 'post-slug'), className: 'input-field text-xs' })
+          React.createElement('input', { value: seoCanonical, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSeoCanonical(e.target.value), placeholder: postPath(permalink, slug || 'post-slug', true), className: 'input-field text-xs' })
         ),
         React.createElement('div', { className: 'mb-3' },
           React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('og image url (optional)', getLang())),
@@ -371,7 +380,7 @@ export default function PostEditor() {
         // Google-style search preview
         React.createElement('div', { className: 'rounded-lg border border-gray-200 bg-white p-3' },
           React.createElement('p', { className: 'text-sm text-blue-700 hover:underline truncate' }, seoTitle || title || 'Post title'),
-          React.createElement('p', { className: 'text-xs text-green-700 truncate' }, window.location.origin + '/post/' + (slug || 'post-slug')),
+          React.createElement('p', { className: 'text-xs text-green-700 truncate' }, postPath(permalink, slug || 'post-slug', true)),
           React.createElement('p', { className: 'text-xs text-gray-600 line-clamp-2 mt-0.5' }, seoDesc || excerpt || 'Post description appears here...')
         )
       ),
@@ -497,7 +506,8 @@ export default function PostEditor() {
             status,
             onStatusChange: (v: string) => { setStatus(v); setSaveState('dirty'); },
             slug,
-            showPreview: () => { if (slug) window.open(window.location.origin + '/post/' + slug, '_blank'); },
+            permalinkPrefix: permalinkPrefix(permalink),
+            showPreview: () => { if (slug) window.open(postPath(permalink, slug, true), '_blank'); },
             featuredImage: featured || undefined,
             onFeaturedImageChange: (url: string) => { setFeatured(url); setSaveState('dirty'); },
             showMediaPicker: () => setShowMediaPicker(true),

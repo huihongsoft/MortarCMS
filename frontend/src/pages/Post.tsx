@@ -7,6 +7,7 @@ import api from '../lib/api';
 import { t } from '../lib/i18n';
 import { ContentSkeleton } from '../components/Skeleton';
 import { useTheme } from '../themes';
+import { postPath } from '../lib/permalink';
 
 // WordPress-style password form: POST the password, server sets an httpOnly
 // cookie, then reload so the cookie unlocks the content.
@@ -97,7 +98,7 @@ export default function PostPage({ settings }: { settings: Record<string, string
     title: seoTitle,
     description: seoDesc,
     image: cdnUrl(ogImage, settings),
-    url: (settings.site_url || window.location.origin) + '/post/' + post.slug,
+    url: (settings.site_url || window.location.origin) + postPath(post.slug),
     type: 'article',
     noindex: post.meta?._seo_noindex === '1',
     canonical: post.meta?._seo_canonical || undefined,
@@ -111,14 +112,14 @@ export default function PostPage({ settings }: { settings: Record<string, string
         datePublished: post.publishedAt || post.createdAt,
         dateModified: post.updatedAt || post.createdAt,
         author: { '@type': 'Person', name: post.author?.username || 'Anonymous' },
-        mainEntityOfPage: (settings.site_url || window.location.origin) + '/post/' + post.slug,
+        mainEntityOfPage: (settings.site_url || window.location.origin) + postPath(post.slug),
       },
       {
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
         itemListElement: [
           { '@type': 'ListItem', position: 1, name: 'Home', item: settings.site_url || window.location.origin },
-          { '@type': 'ListItem', position: 2, name: post.title, item: (settings.site_url || window.location.origin) + '/post/' + post.slug },
+          { '@type': 'ListItem', position: 2, name: post.title, item: (settings.site_url || window.location.origin) + postPath(post.slug) },
         ],
       },
     ],

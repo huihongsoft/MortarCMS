@@ -4,6 +4,7 @@ import { Calendar, User } from 'lucide-react';
 import { cdnUrl } from '../../lib/cdn';
 import { timeAgo } from '../../lib/time';
 import { t } from '../../lib/i18n';
+import { postPath } from '../../lib/permalink';
 
 // Twenty Nineteen homepage: bold headlines, single centered column, no sidebar
 export default function TN19HomeLayout(props: any) {
@@ -25,17 +26,17 @@ export default function TN19HomeLayout(props: any) {
         : React.createElement('div', { className: 'space-y-16' },
             posts.map((p: any) =>
               React.createElement('article', { key: p.id },
-                p.featured && React.createElement(Link, { to: '/post/' + p.slug },
+                p.featured && React.createElement(Link, { to: postPath(p.slug) },
                   React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full max-h-96 object-cover mb-8', loading: 'lazy' })),
                 React.createElement('div', { className: 'flex items-center gap-4 text-xs uppercase tracking-widest text-gray-500 mb-4' },
                   React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Calendar, { size: 12 }), timeAgo(p.publishedAt || p.createdAt)),
                   React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(User, { size: 12 }), p.author?.username),
                   p.categories?.[0] && React.createElement('span', { className: 'text-primary-600' }, p.categories[0].name),
                 ),
-                React.createElement(Link, { to: '/post/' + p.slug },
+                React.createElement(Link, { to: postPath(p.slug) },
                   React.createElement('h2', { className: 'text-3xl font-extrabold tracking-tight text-gray-900 hover:text-gray-600 mb-4' }, p.title)),
                 p.excerpt && React.createElement('p', { className: 'text-gray-600 leading-relaxed text-lg mb-6' }, p.excerpt),
-                React.createElement(Link, { to: '/post/' + p.slug, className: 'text-sm font-bold uppercase tracking-widest text-primary-600 hover:text-primary-700' }, t('read more', settings), ' \u2192'),
+                React.createElement(Link, { to: postPath(p.slug), className: 'text-sm font-bold uppercase tracking-widest text-primary-600 hover:text-primary-700' }, t('read more', settings), ' \u2192'),
               )
             )
           ),

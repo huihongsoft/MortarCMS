@@ -1,6 +1,7 @@
 import db from './db';
 import { effectiveSetting } from './siteSettings';
 import { PUBLIC_POST_CONDITIONS } from './publicPosts';
+import { postUrl, getPermalinkPrefix, getPermalinkStructure } from './slug';
 
 // Server-side SEO meta for the SPA shell.
 //
@@ -34,6 +35,12 @@ export interface SeoMeta {
   locale?: string;
   // @handle for twitter:site (Setting: seo_twitter_handle).
   twitterSite?: string;
+  // The normalized permalink structure ('/blog/%slug%'), carried into the shell
+  // as <meta name="mortar-permalink">. The client reads it at module load to
+  // build its route table, so a direct visit to a custom-prefix post URL
+  // resolves on the first render instead of showing the 404 page until the
+  // settings request comes back.
+  permalinkStructure?: string;
   // The path had a valid shape (e.g. /post/<slug>) but no content behind it —
   // a deleted or renamed post. The caller answers 404 instead of 200 so search
   // engines drop the URL rather than indexing an empty shell.
@@ -72,7 +79,25 @@ const ROUTE_PATTERNS: RegExp[] = [
 
 export function isKnownRoute(pathname: string): boolean {
   const path = pathname && pathname !== '' ? pathname : '/';
-  return ROUTE_PATTERNS.some((re) => re.test(path));
+  if (ROUTE_PATTERNS.some((re) => re.test(path))) return true;
+  // The configured permalink prefix is a post route too. /post/ is already in the
+  // table above, so this only adds the custom ones.
+  const prefix = getPermalinkPrefix();
+  return prefix !== '/post/' && path.startsWith(prefix) && /^[^/]+\/?$/.test(path.slice(prefix.length));
+}
+
+// Resolve a request path to the content behind it. The stored /post/<slug> shape
+// is always accepted (old links, bookmarks, and the API's own URLs), plus the
+// configured permalink prefix for posts.
+function contentFromPath(path: string): { type: 'post' | 'page'; slug: string } | null {
+  const legacy = path.match(/^\/(post|page)\/([^/]+)\/?$/);
+  if (legacy) return { type: legacy[1] as 'post' | 'page', slug: decodeURIComponent(legacy[2]) };
+  const prefix = getPermalinkPrefix();
+  if (prefix !== '/post/' && path.startsWith(prefix)) {
+    const rest = path.slice(prefix.length).replace(/\/$/, '');
+    if (rest && !rest.includes('/')) return { type: 'post', slug: decodeURIComponent(rest) };
+  }
+  return null;
 }
 
 // Dimensions/alt for the media behind an og:image, so the card can be rendered in
@@ -215,6 +240,7 @@ export function buildSeoMeta(pathname: string, opts: { siteId?: string; origin: 
     noindex: false,
     // Every branch spreads `base`, so the handle reaches every page.
     twitterSite: twitterHandleFor(siteId),
+    permalinkStructure: getPermalinkStructure() || undefined,
   };
 
   // Pages that exist only as UI state and must never be indexed.
@@ -222,9 +248,9 @@ export function buildSeoMeta(pathname: string, opts: { siteId?: string; origin: 
     return { ...base, noindex: true };
   }
 
-  const postMatch = path.match(/^\/post\/([^/]+)$/);
-  if (postMatch) {
-    const post = findPublished('post', decodeURIComponent(postMatch[1]), siteId);
+  const postRoute = contentFromPath(path);
+  if (postRoute?.type === 'post') {
+    const post = findPublished('post', postRoute.slug, siteId);
     if (!post) return { ...base, noindex: true, notFound: true };
     const meta = readSeoMeta(post.id);
     // A password-protected post is reachable but its body is not public, so keep
@@ -236,7 +262,12 @@ export function buildSeoMeta(pathname: string, opts: { siteId?: string; origin: 
       title: (meta._seo_title || post.title) + ' - ' + siteName,
       description: meta._seo_desc || post.excerpt || '',
       ogImage: absoluteUrl(imageSource, siteUrl, setting('cdn_url')),
-      canonical: meta._seo_canonical || siteUrl + path,
+      // Built from the slug, not from the requested path: the stored
+      // /post/<slug> shape stays reachable for old links, but it is an alias —
+      // pointing the canonical at it would ask search engines to index the same
+      // post twice once a custom prefix is configured. Both shapes now
+      // canonicalize to the configured one.
+      canonical: meta._seo_canonical || siteUrl + postUrl(post.slug),
       ogType: 'article',
       noindex: meta._seo_noindex === '1',
       imageMeta: imageMetaFor(imageSource, post.title),
@@ -308,9 +339,9 @@ export function buildCrawlerFallback(pathname: string, siteId: string | undefine
   const path = pathname && pathname !== '' ? pathname : '/';
   const siteName = effectiveSetting(siteId, 'site_title') || 'Mortar CMS';
 
-  const contentMatch = path.match(/^\/(post|page)\/([^/]+)$/);
+  const contentMatch = contentFromPath(path);
   if (contentMatch) {
-    const post = findPublished(contentMatch[1] as 'post' | 'page', decodeURIComponent(contentMatch[2]), siteId);
+    const post = findPublished(contentMatch.type, contentMatch.slug, siteId);
     // Gated or missing content gets no fallback: the page is noindex/404 anyway.
     if (!post || post.password) return null;
     const body = toPlainText(post.content).slice(0, 1500);
@@ -326,8 +357,9 @@ export function buildCrawlerFallback(pathname: string, siteId: string | undefine
   const listing = listingFor(path, siteId, siteName);
   if (!listing) return null;
   if (!listing.posts.length) return null;
+  const prefix = getPermalinkPrefix();
   return '<main><h1>' + esc(listing.title) + '</h1><ul>'
-    + listing.posts.map((p) => '<li><a href="/post/' + esc(p.slug) + '">' + esc(p.title) + '</a>'
+    + listing.posts.map((p) => '<li><a href="' + esc(postUrl(p.slug, prefix)) + '">' + esc(p.title) + '</a>'
         + (p.excerpt ? '<p>' + esc(toPlainText(p.excerpt).slice(0, 200)) + '</p>' : '')
         + '</li>').join('')
     + '</ul></main>';
@@ -452,6 +484,10 @@ export function injectSeoMeta(html: string, m: SeoMeta, fallback?: string | null
   if (m.article?.section) tags.push(metaTag('property', 'article:section', m.article.section));
   if (m.locale) tags.push(metaTag('property', 'og:locale', m.locale));
   if (m.twitterSite) tags.push(metaTag('name', 'twitter:site', m.twitterSite));
+  // Not an SEO tag: the client's lib/permalink reads it synchronously (see the
+  // field's comment). Kept out of the crawler fallback on purpose — the fallback
+  // markup already links with the real prefix.
+  if (m.permalinkStructure) tags.push(metaTag('name', 'mortar-permalink', m.permalinkStructure));
   if (m.canonical) {
     tags.push(metaTag('property', 'og:url', m.canonical));
     tags.push(`<link rel="canonical" href="${esc(m.canonical)}" />`);

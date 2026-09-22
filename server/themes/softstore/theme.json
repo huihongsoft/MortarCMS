@@ -5,23 +5,47 @@
   "author": "Mortar Team",
   "settings": {
     "primary_color": "#5066e1",
-    "background": "#f5f5f5",
-    "text_color": "#333333",
+    "background": "#ffffff",
+    "text_color": "#666666",
     "link_color": "#5066e1",
     "heading_font": "system",
     "body_font": "system",
     "sidebar_position": "right",
     "posts_per_row": "1",
     "heading_cap": "2",
-    "heading_max": "26"
+    "heading_max": "24"
   },
   "custom_css": ".theme-section { border-radius: 8px; overflow: hidden; }",
   "settingsSchema": [
     {
       "key": "show_breadcrumb",
-      "label": "显示面包屑",
+      "label": "Show breadcrumbs",
       "type": "checkbox",
       "default": "1"
+    },
+    {
+      "key": "home_tabs_categories",
+      "label": "Home category tabs (pick which categories appear)",
+      "type": "categories",
+      "default": ""
+    },
+    {
+      "key": "home_section_category",
+      "label": "Home category block (which category to show)",
+      "type": "category",
+      "default": ""
+    },
+    {
+      "key": "header_btn_label",
+      "label": "Header button label",
+      "type": "text",
+      "default": "加入"
+    },
+    {
+      "key": "header_btn_url",
+      "label": "Header button link",
+      "type": "text",
+      "default": "/"
     }
   ]
 }

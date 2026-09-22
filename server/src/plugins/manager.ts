@@ -60,6 +60,20 @@ export function validatePluginSettings(schema: PluginSettingField[] | undefined,
 
 const pluginsDir = path.join(__dirname, '..', '..', 'plugins');
 const marketDir = path.join(__dirname, '..', '..', 'market');
+
+// A plugin name is a directory component (uninstall does fs.rmSync recursively,
+// load requires index.ts from it). Express decodes route params, so an
+// unvalidated name like "../../uploads" would resolve outside pluginsDir — the
+// same class of bug as the theme routes. Names are plain slugs, like the shipping
+// plugins (comment-email-notify, event-webhook, ...).
+// Underscores are allowed (the installer accepts them, and unlike theme settings
+// plugin settings are not namespaced by name); dots and slashes are not.
+const PLUGIN_NAME_RE = /^[A-Za-z0-9_-]+$/;
+function safePluginDir(name: unknown): string | null {
+  const n = String(name || '');
+  if (!PLUGIN_NAME_RE.test(n)) return null;
+  return path.join(pluginsDir, n);
+}
 const loaded: Record<string, { meta: PluginMeta; register?: () => void }> = {};
 
 function activePlugins(): string[] {
@@ -106,7 +120,8 @@ export function listPlugins(): PluginMeta[] {
 // Dynamically load a plugin's register() and execute it
 export async function loadPlugin(name: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    const dir = path.join(pluginsDir, name);
+    const dir = safePluginDir(name);
+    if (!dir) return { ok: false, error: 'Invalid plugin name' };
     const entry = path.join(dir, 'index.ts');
     if (!fs.existsSync(entry)) return { ok: false, error: 'Plugin entry not found' };
     const mod = require(entry) as any;
@@ -122,7 +137,8 @@ export async function loadPlugin(name: string): Promise<{ ok: boolean; error?: s
 // activate() / deactivate() / uninstall() functions
 async function runLifecycle(name: string, hook: 'activate' | 'deactivate' | 'uninstall'): Promise<void> {
   try {
-    const dir = path.join(pluginsDir, name);
+    const dir = safePluginDir(name);
+    if (!dir) return;
     const entry = path.join(dir, 'index.ts');
     if (!fs.existsSync(entry)) return;
     const mod = require(entry) as any;
@@ -264,7 +280,8 @@ export async function installFromUrl(url: string): Promise<{ ok: boolean; error?
     // The name becomes a directory inside plugins/: it must be a plain slug so
     // a crafted plugin.json can never escape the plugins directory (../ traversal).
     if (!name || !/^[a-z0-9][a-z0-9-_]*$/i.test(name)) return { ok: false, error: 'plugin.json name must be a plain alphanumeric slug' };
-    const dest = path.join(pluginsDir, name);
+    const dest = safePluginDir(name);
+    if (!dest) return { ok: false, error: 'Invalid plugin name' };
     if (fs.existsSync(dest)) return { ok: false, error: 'Plugin already installed: ' + name };
     fs.cpSync(pluginRoot, dest, { recursive: true });
     return { ok: true, name };
@@ -278,8 +295,10 @@ export async function installFromUrl(url: string): Promise<{ ok: boolean; error?
 // Install: copy a market package into the plugins directory
 export async function installPlugin(name: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    const src = path.join(marketDir, name);
-    const dest = path.join(pluginsDir, name);
+    const safeName = safePluginDir(name);
+    if (!safeName) return { ok: false, error: 'Invalid plugin name' };
+    const src = path.join(marketDir, path.basename(safeName));
+    const dest = safeName;
     if (!fs.existsSync(path.join(src, 'plugin.json'))) return { ok: false, error: 'Package not found in market' };
     if (fs.existsSync(dest)) return { ok: false, error: 'Plugin already installed' };
     fs.cpSync(src, dest, { recursive: true });
@@ -292,7 +311,8 @@ export async function installPlugin(name: string): Promise<{ ok: boolean; error?
 // Uninstall: remove a plugin directory (must be inactive first)
 export async function uninstallPlugin(name: string): Promise<{ ok: boolean; error?: string }> {
   try {
-    const dest = path.join(pluginsDir, name);
+    const dest = safePluginDir(name);
+    if (!dest) return { ok: false, error: 'Invalid plugin name' };
     if (!fs.existsSync(dest)) return { ok: false, error: 'Plugin not installed' };
     const active = activePlugins();
     if (active.includes(name)) return { ok: false, error: 'Deactivate the plugin before uninstalling' };

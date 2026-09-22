@@ -4,8 +4,9 @@ import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson,
 import { useNavigate, useLocation } from 'react-router-dom';
 import Select from '../components/Select';
 import api, { downloadFile } from '../lib/api';
-import { t, getLang } from '../lib/i18n';
+import { t, getLang, serverMessage } from '../lib/i18n';
 import { dialog } from '../lib/dialog';
+import { invalidatePermalinkCache } from '../lib/permalink';
 
 type TabKey = 'general' | 'reading' | 'discussion' | 'privacy' | 'smtp' | 'storage' | 'maintenance' | 'tools';
 
@@ -120,12 +121,18 @@ export default function Settings() {
       baselineRef.current = { ...baselineRef.current, ...payload };
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      // Post URLs are built from this setting (lib/permalink keeps a one-shot
+      // cache of it), so a changed structure has to invalidate that cache or the
+      // "view" links keep pointing at the old prefix.
+      if (payload.permalink_structure !== undefined) invalidatePermalinkCache();
       // Let the sidebar re-read dev_mode so the developer-mode menu entries
       // appear/disappear immediately
       window.dispatchEvent(new CustomEvent('mortar-settings-saved'));
       return true;
     } catch (e: any) {
-      dialog.alert(e.response?.data?.error || t('save failed', getLang()));
+      // The server's own wording (a rejected permalink structure explains why),
+      // translated when the UI is in English.
+      dialog.alert(serverMessage(e.response?.data?.error) || t('save failed', getLang()));
       return false;
     }
   }
@@ -241,7 +248,12 @@ export default function Settings() {
             React.createElement('option', { value: 'wide' }, t('wide', getLang())),
             React.createElement('option', { value: 'full' }, t('full width', getLang()))),
           React.createElement('p', { className: 'text-xs text-gray-400 mt-1.5' }, t('nav width hint', getLang()))),
-        field('permalink_structure', t('permalink structure (/post/%slug%)', getLang())),
+        // Field + hint share one grid cell: as bare siblings the hint was placed
+        // in the *next* cell, so it rendered in the right-hand column (next to the
+        // field, under the neighbouring control) instead of below its own input.
+        React.createElement('div', null,
+          field('permalink_structure', t('Permalink structure (/post/%slug%)', getLang())),
+          React.createElement('p', { className: 'text-xs text-gray-400 mt-1.5' }, t('Prefix only: %slug% must appear once, at the end (e.g. /post/%slug%, /blog/%slug%, /p/%slug%). Root paths and category/date placeholders are not supported — a root path collides with the site\'s own routes. New links use the prefix immediately and old /post/<slug> links keep working, but a prefix used before this change stops resolving, so pick one deliberately.', getLang()))),
         React.createElement('div', null,
           React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('default user role', getLang())),
           React.createElement(Select, { value: settings.default_role || 'subscriber', onChange: (v: string) => setSettings({ ...settings, default_role: v }), className: 'input-field' },

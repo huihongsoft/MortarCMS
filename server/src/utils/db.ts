@@ -716,6 +716,19 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
     },
   },
   {
+    version: 13,
+    name: 'analytics-form-brokenlink-site',
+    up: () => {
+      // These four tables carried no site, so their admin views (visit stats, hot
+      // searches, form submissions, broken-link report) always mixed every site
+      // together — nothing could be scoped to the sites a user is assigned to.
+      addColumn('Visit', 'siteId', 'TEXT');
+      addColumn('SearchLog', 'siteId', 'TEXT');
+      addColumn('Form', 'siteId', 'TEXT');
+      addColumn('BrokenLink', 'siteId', 'TEXT');
+    },
+  },
+  {
     version: 12,
     name: 'ai-task-site',
     up: () => {

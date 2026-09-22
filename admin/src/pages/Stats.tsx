@@ -3,6 +3,7 @@ import { BarChart3, TrendingUp, Eye, Users } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
+import { postPath, usePermalinkPrefix } from '../lib/permalink';
 
 // Full visit statistics page: PV/UV series with common time ranges
 // (7d / 14d / 30d / this month / this year), totals and top posts.
@@ -11,6 +12,7 @@ const RANGES = ['7d', '14d', '30d', 'month', 'year'];
 const RANGE_KEYS: Record<string, string> = { '7d': 'last 7 days', '14d': 'last 14 days', '30d': 'last 30 days', month: 'this month', year: 'this year' };
 
 export default function Stats() {
+  const permalink = usePermalinkPrefix();
   const navigate = useNavigate();
   const [range, setRange] = useState('14d');
   const [data, setData] = useState<any>(null);
@@ -115,7 +117,7 @@ export default function Stats() {
         : React.createElement('div', { className: 'space-y-2' }, (data?.top || []).map((p: any, i: number) =>
             React.createElement('button', {
               key: p.slug,
-              onClick: () => window.open('/post/' + p.slug, '_blank'),
+              onClick: () => window.open(postPath(permalink, p.slug, true), '_blank'),
               className: 'w-full flex items-center gap-2 p-2 rounded-lg hover:bg-gray-50 text-left',
             },
               React.createElement('span', { className: 'text-xs text-gray-400 w-4' }, i + 1),

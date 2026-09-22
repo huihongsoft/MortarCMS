@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { Search, FileText, File } from 'lucide-react';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
+import { postPath } from '../lib/permalink';
 
 // Search box with live suggestions (debounced) and full-text search submit
 export default function SearchWidget() {
@@ -43,7 +44,9 @@ export default function SearchWidget() {
 
   const goTo = (s: any) => {
     setOpen(false);
-    navigate('/' + s.type + '/' + s.slug);
+    // Pages live at /page/<slug>; posts follow the configured permalink prefix,
+    // so they must go through postPath() rather than being spelled out here.
+    navigate(s.type === 'page' ? '/page/' + s.slug : postPath(s.slug));
   };
 
   return React.createElement('div', { ref: boxRef, className: 'rounded-lg border border-gray-200 p-4 relative' },

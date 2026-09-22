@@ -5,11 +5,13 @@ import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import Select from '../components/Select';
 import { dialog } from '../lib/dialog';
+import { postPath, usePermalinkPrefix } from '../lib/permalink';
 
 // Navigation-site link model: categorized links with descriptions, sub-site
 // ownership, an optional linked page, and associated posts (e.g. the
 // OpenClaw official site linking its install/usage tutorials).
 export default function Links() {
+  const permalink = usePermalinkPrefix();
   const [links, setLinks] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
   const [sites, setSites] = useState<any[]>([]);
@@ -257,7 +259,7 @@ export default function Links() {
                   ),
                   React.createElement('td', { className: 'px-4 py-3 hidden md:table-cell' },
                     (l.posts || []).length > 0
-                      ? React.createElement('div', { className: 'flex flex-wrap gap-1' }, l.posts.slice(0, 2).map((p: any) => React.createElement('a', { key: p.id, href: '/post/' + p.slug, target: '_blank', className: 'px-1.5 py-0.5 text-[10px] rounded bg-primary-50 text-primary-700 hover:bg-primary-100 truncate block max-w-[130px]' }, p.title)),
+                      ? React.createElement('div', { className: 'flex flex-wrap gap-1' }, l.posts.slice(0, 2).map((p: any) => React.createElement('a', { key: p.id, href: postPath(permalink, p.slug), target: '_blank', className: 'px-1.5 py-0.5 text-[10px] rounded bg-primary-50 text-primary-700 hover:bg-primary-100 truncate block max-w-[130px]' }, p.title)),
                         (l.posts || []).length > 2 && React.createElement('span', { className: 'text-[10px] text-gray-400' }, '+' + ((l.posts || []).length - 2)))
                       : React.createElement('span', { className: 'text-xs text-gray-300' }, '—')
                   ),

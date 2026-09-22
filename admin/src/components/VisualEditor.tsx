@@ -113,6 +113,9 @@ interface VisualEditorProps {
     menuOrder?: number;
     onMenuOrderChange?: (v: number) => void;
     slug?: string;
+    // Normalized post prefix ('/blog/') for the permalink display; pages are not
+    // affected by the setting and stay at /page/.
+    permalinkPrefix?: string;
     showPreview?: () => void;
     featuredImage?: string;
     onFeaturedImageChange?: (url: string) => void;
@@ -229,6 +232,15 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
   pageSettingsRef.current = pageSettings;
   const modeRef = useRef(mode || 'page');
   modeRef.current = mode || 'page';
+
+  // The Post panel is injected once, but the permalink prefix only arrives with
+  // the settings fetch — without this the panel kept showing /post/ for the rest
+  // of the session when the fetch resolved after the injection.
+  const permalinkPrefixValue = pageSettings?.permalinkPrefix;
+  React.useEffect(() => {
+    const el = containerRef.current?.querySelector('#ve-permalink-prefix');
+    if (el && permalinkPrefixValue) el.textContent = permalinkPrefixValue;
+  }, [permalinkPrefixValue]);
 
   // i18n helper
   const lang = getLang();
@@ -1502,7 +1514,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         <div class="components-panel__body is-opened">
           <h2 class="components-panel__body-title"><button>${__('permalink')}</button></h2>
           <div class="ve-guten-field">
-            <span class="ve-guten-slug">/${isPost ? 'post' : 'page'}/<strong id="ve-slug-val">${escAttr(ps?.slug || '—')}</strong></span>
+            <span class="ve-guten-slug"><span id="ve-permalink-prefix">${escAttr(isPost ? (ps?.permalinkPrefix || '/post/') : '/page/')}</span><strong id="ve-slug-val">${escAttr(ps?.slug || '—')}</strong></span>
             ${ps?.slug ? '<a class="ve-guten-link" id="ve-preview-link" href="#">' + (isPost ? __('view post') : __('view page')) + '</a>' : ''}
           </div>
         </div>`;

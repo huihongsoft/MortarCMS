@@ -5,15 +5,27 @@ import React, { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
+import { getPermalinkPrefix } from '../lib/permalink';
 
 const ADMIN_ROLES = ['admin', 'editor', 'author', 'contributor'];
+
+// The slug behind a post permalink, under whichever prefix is configured. The
+// legacy /post/<slug> shape counts too — old links still resolve, and the admin
+// bar has to keep offering "edit this post" on them.
+function postSlugFromPath(pathname: string): string | null {
+  const legacy = pathname.match(/^\/post\/([^/?#]+)/);
+  if (legacy) return legacy[1];
+  const prefix = getPermalinkPrefix();
+  if (prefix === '/post/' || !pathname.startsWith(prefix)) return null;
+  const rest = pathname.slice(prefix.length).split(/[/?#]/)[0];
+  return rest || null;
+}
 
 export default function AdminBar() {
   const [user, setUser] = useState<any>(null);
   const [postId, setPostId] = useState<string | null>(null);
   const location = useLocation();
-  const m = location.pathname.match(/^\/post\/([^/]+)/);
-  const slug = m ? m[1] : null;
+  const slug = postSlugFromPath(location.pathname);
 
   useEffect(() => {
     api.get('/auth/me').then(r => setUser(r.data)).catch(() => setUser(null));

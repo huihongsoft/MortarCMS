@@ -4,6 +4,7 @@ import { Calendar, User, Folder } from 'lucide-react';
 import { cdnUrl } from '../../lib/cdn';
 import { timeAgo, readingTime, useTimeTick } from '../../lib/time';
 import { t } from '../../lib/i18n';
+import { postPath } from '../../lib/permalink';
 
 // Aurora archive list (shared by category/tag/archive pages): centered,
 // hairline separators, editorial spacing
@@ -20,9 +21,9 @@ export function AuroraList(props: any) {
 
   return React.createElement('div', null,
     posts.map((p: any, idx: number) => React.createElement('article', { key: p.id, className: 'pb-12 ' + (idx > 0 ? 'pt-12 border-t border-gray-900/[0.06]' : '') },
-      p.featured && React.createElement(Link, { to: '/post/' + p.slug, className: 'block overflow-hidden rounded-2xl mb-8' },
+      p.featured && React.createElement(Link, { to: postPath(p.slug), className: 'block overflow-hidden rounded-2xl mb-8' },
         React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full aspect-[16/9] object-cover transition-transform duration-500 hover:scale-[1.02]', loading: 'lazy', decoding: 'async' })),
-      React.createElement(Link, { to: '/post/' + p.slug },
+      React.createElement(Link, { to: postPath(p.slug) },
         React.createElement('h2', { className: 'font-bold tracking-tight text-gray-900 hover:text-indigo-600 transition-colors mb-4', style: { fontSize: 'var(--heading-max-size, 30px)' } }, p.title)),
       React.createElement('div', { className: 'flex items-center gap-4 text-xs text-gray-500 mb-4' },
         React.createElement('span', { className: 'flex items-center gap-1.5' }, React.createElement(Calendar, { size: 13 }), timeAgo(p.publishedAt || p.createdAt)),
@@ -30,7 +31,7 @@ export function AuroraList(props: any) {
         p.categories?.[0] && React.createElement('span', { className: 'flex items-center gap-1.5' }, React.createElement(Folder, { size: 13 }), p.categories[0].name)
       ),
       p.excerpt && React.createElement('p', { className: 'text-gray-600 leading-relaxed' }, p.excerpt),
-      React.createElement('div', { className: 'mt-5' }, React.createElement(Link, { to: '/post/' + p.slug, className: 'inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors' }, t('read more', settings), React.createElement('span', null, '\u2192'))),
+      React.createElement('div', { className: 'mt-5' }, React.createElement(Link, { to: postPath(p.slug), className: 'inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors' }, t('read more', settings), React.createElement('span', null, '\u2192'))),
     )),
     total > perPage && React.createElement('div', { className: 'flex items-center justify-center gap-4 pt-12' },
       React.createElement('button', { onClick: () => setPage(Math.max(1, page - 1)), disabled: page === 1, className: 'px-5 py-2.5 rounded-full border border-gray-200 text-sm hover:border-gray-400 disabled:opacity-40 transition-colors' }, '\u2190 ' + t('previous', settings)),

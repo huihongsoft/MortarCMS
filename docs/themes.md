@@ -62,6 +62,15 @@ Admins edit a theme's settings in **Appearance**. Overrides are stored per
 theme (`theme_<name>_<key>` in the settings table), so switching themes
 restores each theme's own values.
 
+**Per-site layer.** On a multi-site install the Appearance panel has an
+"apply to" selector. With a site selected, the theme, its colours/fonts/CSS and
+its declared settings are read from and written to that site's own rows
+(`SiteSetting.theme_active` and `SiteSetting.theme_<name>_<key>`), which win over
+the install-wide ones. Theme names are restricted to `[A-Za-z0-9-]`: the settings
+namespace is `theme_<name>_<key>`, so an underscore in a name would make two
+themes' settings indistinguishable. Theme *backups* stay install-wide, and the
+panel hides them while a site scope is selected.
+
 ## Custom CSS
 
 `custom_css` is injected into the page head as a `<style>` tag. Use it for

@@ -29,6 +29,8 @@ router.put('/system/cache', authenticate, requireCap('manage_options'), (req: Au
     const upsert = db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
     upsert.run('cache_enabled', 'cache_enabled', enabled ? '1' : '0');
     upsert.run('cache_ttl', 'cache_ttl', String(ttl));
+    // cache_enabled/cache_ttl are served by /api/settings too: drop the cached copies.
+    purgeAllCaches();
     res.json(cacheStats());
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

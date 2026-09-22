@@ -50,6 +50,18 @@ describe('importDemoData', () => {
     expect(carousel?.value).toContain('/uploads/demo-');
   });
 
+  it('centres the placeholder label in the cover image', () => {
+    importDemoData();
+    const dir = process.env.UPLOADS_DIR as string;
+    const svg = fs.readFileSync(dir + '/demo-obs.svg', 'utf8');
+    const font = Number(/font-size="(\d+)"/.exec(svg)?.[1]);
+    const y = Number(/<text[^>]*y="(\d+)"/.exec(svg)?.[1]);
+    // `y` is the baseline, so the caps' visual centre is baseline - capHeight/2.
+    // The canvas is 300 tall; the label must land on its middle.
+    const capHeight = font * 0.72; // all-caps acronym, Arial/Helvetica/DejaVu
+    expect(Math.abs((y - capHeight / 2) - 150)).toBeLessThanOrEqual(1.5);
+  });
+
   it('creates comment replies', () => {
     expect(count('Comment WHERE parentId IS NOT NULL')).toBeGreaterThan(0);
   });
@@ -125,7 +137,9 @@ describe('POST /db/reset-demo', () => {
     // importer alone — importDemoData leaves files behind
     expect(fsMod.existsSync(stray)).toBe(false);
     expect(fsMod.readdirSync(dir).some((f: string) => f.startsWith('demo-'))).toBe(true);
-    expect(fsMod.existsSync(pathMod.join(dir, '.gitkeep')) || true).toBe(true);
+    // The uploads directory itself survives the reset (only its contents are
+    // cleared). This used to read `existsSync(...) || true`, which can never fail.
+    expect(fsMod.existsSync(dir)).toBe(true);
   });
 
   it('replaces the content with the demo set', async () => {
@@ -143,5 +157,48 @@ describe('POST /db/reset-demo', () => {
     // accounts and site structure survive, as with the plain reset
     expect(count('User')).toBeGreaterThan(0);
     expect(count('Site')).toBeGreaterThan(0);
+  });
+});
+
+// Menu items are rendered into a tree by matching `child.parentId === parent.id`,
+// so an item without an id makes every parentless entry look like a child of
+// every other one — the demo menu listed all of its items under each top-level
+// entry. The shape is now part of the data.
+describe('demo menu items', () => {
+  it('carry stable ids and an explicit parentId', () => {
+    importDemoData();
+    const menu = db.prepare("SELECT items FROM Menu WHERE location = 'primary'").get() as any;
+    const items = JSON.parse(menu.items || '[]');
+    expect(items.length).toBeGreaterThan(0);
+    for (const it of items) {
+      expect(typeof it.id).toBe('string');
+      expect(it.id.length).toBeGreaterThan(0);
+      expect(it.parentId).toBeNull();
+    }
+    expect(new Set(items.map((i: any) => i.id)).size).toBe(items.length); // ids are unique
+  });
+
+  it('heals a menu stored without ids when it is read back', async () => {
+    const menuRoutes = (await import('../src/routes/menus')).default;
+    const expressMod = (await import('express')).default;
+    const app = expressMod();
+    app.use(expressMod.json());
+    app.use('/api/menus', menuRoutes);
+    const srv = app.listen(0);
+    await new Promise(r => srv.on('listening', r));
+    const url = 'http://127.0.0.1:' + (srv.address() as any).port + '/api/menus';
+
+    // an install that imported the demo menu before the fix: items with no id
+    db.prepare("INSERT INTO Menu (id, name, location, items) VALUES ('legacy-menu','Legacy','secondary', ?)")
+      .run(JSON.stringify([{ label: '首页', url: '/' }, { label: '关于', url: '/page/about' }]));
+
+    const first = await (await fetch(url + '/location/secondary')).json();
+    expect(first.items.every((i: any) => typeof i.id === 'string' && i.id)).toBe(true);
+    expect(first.items.every((i: any) => i.parentId === null)).toBe(true);
+
+    // and it is persisted, so ids do not change between loads
+    const second = await (await fetch(url + '/location/secondary')).json();
+    expect(second.items.map((i: any) => i.id)).toEqual(first.items.map((i: any) => i.id));
+    srv.close();
   });
 });

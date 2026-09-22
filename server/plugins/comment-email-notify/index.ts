@@ -1,5 +1,6 @@
 import { addAction } from '../../src/utils/hooks';
 import db from '../../src/utils/db';
+import { postUrl } from '../../src/utils/slug';
 import { sendEmail } from '../../src/utils/mailer';
 
 // Email the admin when a comment is submitted (best-effort; requires SMTP).
@@ -27,7 +28,7 @@ export function register() {
         '<ul>' +
         '<li>作者：<strong>' + escapeHtml(c.author || '匿名') + '</strong></li>' +
         '<li>状态：' + (c.status === 'pending' ? '待审核' : c.status) + '</li>' +
-        (post ? '<li>文章：<a href="' + base + '/post/' + post.slug + '">' + escapeHtml(post.title) + '</a></li>' : '') +
+        (post ? '<li>文章：<a href="' + base + postUrl(post.slug) + '">' + escapeHtml(post.title) + '</a></li>' : '') +
         '<li>内容：<br>' + escapeHtml(String(c.content || '').slice(0, 500)) + '</li>' +
         '</ul>' +
         '<p><a href="' + adminLink + '">前往后台管理评论</a></p>';

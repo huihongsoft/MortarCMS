@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { effectiveSetting } from '../utils/siteSettings';
 import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
+import { postUrl, getPermalinkPrefix } from '../utils/slug';
 
 const router = Router();
 
@@ -52,7 +53,10 @@ router.get('/sitemap.xml', (req: AuthRequest & SiteRequest, res: Response) => {
 
     let xml = '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
     xml += '<url><loc>' + siteUrl + '</loc><changefreq>daily</changefreq><priority>1.0</priority></url>';
-    for (const p of posts) xml += '<url><loc>' + siteUrl + '/post/' + esc(p.slug) + '</loc><lastmod>' + p.date + '</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>';
+    // One prefix read for the whole loop: this walks every post, and postUrl
+    // would otherwise re-read the Setting row per post.
+    const prefix = getPermalinkPrefix();
+    for (const p of posts) xml += '<url><loc>' + esc(siteUrl + postUrl(p.slug, prefix)) + '</loc><lastmod>' + p.date + '</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>';
     for (const p of pages) xml += '<url><loc>' + siteUrl + '/page/' + esc(p.slug) + '</loc><lastmod>' + p.date + '</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>';
     for (const c of categories) xml += '<url><loc>' + siteUrl + '/category/' + esc(c.slug) + '</loc><changefreq>weekly</changefreq><priority>0.5</priority></url>';
     for (const t of tags) xml += '<url><loc>' + siteUrl + '/tag/' + esc(t.slug) + '</loc><changefreq>weekly</changefreq><priority>0.4</priority></url>';

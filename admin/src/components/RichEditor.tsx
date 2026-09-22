@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useEditor, EditorContent, NodeViewWrapper, ReactNodeViewRenderer } from '@tiptap/react';
 import { Node, mergeAttributes } from '@tiptap/core';
 import StarterKit from '@tiptap/starter-kit';
-import Link from '@tiptap/extension-link';
 import Image from '@tiptap/extension-image';
 import MarkdownIt from 'markdown-it';
 import TurndownService from 'turndown';
@@ -131,7 +130,10 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
   const lastEmitted = useRef<string>(value || '');
 
   const editor = useEditor({
-    extensions: [StarterKit, Link.configure({ openOnClick: false }), Image, CustomHtml],
+    // Tiptap 3's StarterKit already includes the Link extension, so it is
+    // configured here rather than registered a second time (a duplicate produced
+    // "Duplicate extension names found: ['link']" and unpredictable link behaviour).
+    extensions: [StarterKit.configure({ link: { openOnClick: false } }), Image, CustomHtml],
     content: value || '',
     onUpdate: ({ editor }) => {
       lastEmitted.current = editor.getHTML();

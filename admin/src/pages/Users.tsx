@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Trash2, UserPlus, UserCircle2, Shield, ShieldCheck, Copy, Check } from 'lucide-react';
+import { Trash2, UserPlus, UserCircle2, Shield, ShieldCheck, Copy, Check, ChevronDown } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useAuth } from '../lib/auth';
 import { t, getLang } from '../lib/i18n';
@@ -237,9 +237,11 @@ export default function Users() {
                   React.createElement('td', { className: 'px-4 py-3' },
                     React.createElement('div', { className: 'flex items-center gap-2' },
                       React.createElement('div', { className: 'w-8 h-8 rounded-full bg-primary-600 flex items-center justify-center text-white text-xs font-medium shadow-sm' }, (u.username || '?')[0].toUpperCase()),
-                      React.createElement('div', null,
+                      React.createElement('div', { className: 'flex items-center gap-1.5' },
                         React.createElement('p', { className: 'font-medium text-sm text-gray-900 dark:text-gray-100' }, u.username),
-                        u.id === currentUser?.id && React.createElement('p', { className: 'text-[10px] text-primary-500' }, t('you', getLang()))
+                        // Inline, not a second line: it used to stack under the name
+                        // and made the row look broken.
+                        u.id === currentUser?.id && React.createElement('span', { className: 'px-1.5 py-0.5 rounded bg-primary-50 text-primary-600 text-[10px] leading-none dark:bg-primary-900/40 dark:text-primary-300' }, t('you', getLang()))
                       )
                     )
                   ),
@@ -255,16 +257,33 @@ export default function Users() {
                   ),
                   React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500 dark:text-gray-400' }, u._count?.posts || 0),
                   sites.length > 0 && React.createElement('td', { className: 'px-4 py-3 hidden lg:table-cell' },
-                    u.role === 'admin'
-                      ? React.createElement('span', { className: 'text-[10px] text-gray-400' }, t('all sites (no scope)', getLang()))
-                      : React.createElement('select', {
-                          multiple: true,
-                          value: u.siteIds || [],
-                          onChange: (e: any) => updateSites(u.id, Array.from(e.target.selectedOptions).map((o: any) => o.value)),
-                          className: 'input-field text-xs',
-                          style: { width: 150, minHeight: 54 },
+                    (() => {
+                      // Admins are never scoped, and neither is a user with no
+                      // assignment — both read as "all sites".
+                      if (u.role === 'admin') return React.createElement('span', { className: 'text-[10px] text-gray-400' }, t('all sites (no scope)', getLang()));
+                      const selected: string[] = u.siteIds || [];
+                      const names = sites.filter((s: any) => selected.includes(s.id)).map((s: any) => s.name);
+                      return React.createElement('details', { className: 'text-xs relative' },
+                        React.createElement('summary', {
+                          className: 'cursor-pointer list-none flex items-center gap-1 flex-wrap hover:text-primary-600',
                           title: t('site access hint', getLang()),
-                        }, sites.map((s: any) => React.createElement('option', { key: s.id, value: s.id }, s.name)))),
+                        },
+                          names.length
+                            ? names.map((n: string) => React.createElement('span', { key: n, className: 'px-1.5 py-0.5 rounded bg-gray-100 dark:bg-gray-700 text-[10px] text-gray-600 dark:text-gray-300 whitespace-nowrap' }, n))
+                            : React.createElement('span', { className: 'text-[10px] text-gray-400 whitespace-nowrap' }, t('all sites (no scope)', getLang())),
+                          React.createElement(ChevronDown, { size: 12, className: 'text-gray-400 shrink-0' })),
+                        React.createElement('div', { className: 'mt-1.5 space-y-1 border border-gray-200 dark:border-gray-600 rounded-lg p-2 bg-white dark:bg-gray-800 shadow-sm' },
+                          sites.map((s: any) => React.createElement('label', { key: s.id, className: 'flex items-center gap-1.5 whitespace-nowrap cursor-pointer' },
+                            React.createElement('input', {
+                              type: 'checkbox',
+                              checked: selected.includes(s.id),
+                              onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+                                updateSites(u.id, e.target.checked ? [...selected, s.id] : selected.filter(x => x !== s.id)),
+                              className: 'rounded border-gray-300 text-primary-600 shrink-0',
+                            }),
+                            React.createElement('span', { className: 'text-[11px] text-gray-700 dark:text-gray-200' }, s.name))),
+                          React.createElement('p', { className: 'text-[10px] text-gray-400 pt-1' }, t('site access hint', getLang()))));
+                    })()),
                   React.createElement('td', { className: 'px-4 py-3 hidden md:table-cell' },
                     React.createElement('span', { className: 'px-2 py-0.5 text-[11px] rounded-full font-medium ' + (u.two_factor_enabled ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400') },
                       u.two_factor_enabled ? t('2fa enabled', getLang()) : t('2fa disabled', getLang()))),

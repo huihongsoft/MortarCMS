@@ -425,7 +425,8 @@ const zh: Record<string, string> = {
   'this page is private': '此页面为私密',
   'paste any html snippet...': '粘贴任意 HTML 片段...',
   'permalink structure': '固定链接结构',
-  'permalink structure (/post/%slug%)': '固定链接结构(/post/%slug%)',
+  'Permalink structure (/post/%slug%)': '固定链接结构(/post/%slug%)',
+  'Prefix only: %slug% must appear once, at the end (e.g. /post/%slug%, /blog/%slug%, /p/%slug%). Root paths and category/date placeholders are not supported — a root path collides with the site\'s own routes. New links use the prefix immediately and old /post/<slug> links keep working, but a prefix used before this change stops resolving, so pick one deliberately.': '只支持修改前缀：必须包含一次 %slug% 并以其结尾，例如 /post/%slug%、/blog/%slug%、/p/%slug%。不支持根路径（会与应用自身路由冲突）与分类/日期等占位符。修改后新链接立即生效，/post/<slug> 旧链接仍然可用；但修改前用过的其他前缀会失效，请谨慎选择。',
   'pin': '置顶',
   'please select a .xml (wordpress wxr) file': '请选择 .xml(WordPress WXR)文件',
   'plugin market': '插件市场',
@@ -736,6 +737,24 @@ const zh: Record<string, string> = {
 'add slide': '添加一页',
 'image url': '图片地址',
 'carousel hint': '在首页顶部展示轮播横幅（最多 5 张）。图片支持媒体库地址或完整 URL；标题与链接可选。',
+// Theme settings declared in a theme.json settingsSchema — the label written
+// there is the dictionary key (see the schema renderer in pages/Appearance).
+'apply to': '应用范围',
+'all sites (install-wide)': '所有站点（全站默认）',
+'editing this site only: its theme, colours, fonts and theme settings. other sites keep the install-wide values.': '正在编辑该站点自己的主题、配色、字体与主题设置；其它站点仍使用全站默认值。',
+'editing the install-wide default that every site inherits unless it was given its own theme.': '正在编辑全站默认值：没有单独设置主题的站点都会继承它。',
+'default theme': '默认（全站主题）',
+'the saved theme is no longer installed — saving switches this site to the install-wide theme': '该站点原先设置的主题已不存在，保存后将改为跟随全站主题',
+'theme': '主题',
+'Show breadcrumbs': '显示面包屑',
+'Home category tabs (pick which categories appear)': '首页分类 Tab（勾选要显示的分类）',
+'Home category block (which category to show)': '首页分类区块（选择要展示的分类，留空显示最新软件）',
+'default: latest software': '默认：最新软件',
+'only categories with 2 or more posts are listed': '只列出有 2 篇及以上文章的分类（少于 2 篇会只剩一行一篇）',
+'Header button label': '头部按钮文字',
+'Header button link': '头部按钮链接',
+'no categories yet': '暂无分类',
+'leave empty to show the theme default; extra tabs are dropped when they do not fit': '留空则按主题默认显示；放不下的分类会自动不显示',
 'homepage carousel': '首页轮播图',
 'rss feed': 'RSS 订阅',
 'calendar': '日历',
@@ -1779,9 +1798,10 @@ export function getLang(): string {
 //
 // Task failures, tool errors and AI route errors are Chinese literals written by
 // the backend, so they cannot be dictionary keys the usual way round (the keys
-// above are English). Only the AI task/chat chain is covered here: the messages
-// a user reads in a toast, on a task, or in a notification. Anything absent
-// passes through untouched, so an unmapped message degrades to today's behaviour
+// above are English). Covered here: the AI task/chat chain, plus the settings
+// form's own rejections (the permalink structure reasons below — the Settings
+// page runs its save error through serverMessage). Anything absent passes
+// through untouched, so an unmapped message degrades to today's behaviour
 // instead of disappearing. Tool *outputs* are deliberately left alone — those
 // are data dumps (titles, JSON, counts), not copy.
 const serverMsgEn: Record<string, string> = {
@@ -1852,6 +1872,15 @@ const serverMsgEn: Record<string, string> = {
   '无法访问该 Webhook（地址被拒绝或超时）': 'Cannot reach that webhook (refused or timed out)',
   '当前服务商未开启图片生成能力（需支持 /images/generations 的接口，如 gpt-image-1 / dall-e-3）。请在 AI 设置中为该服务商启用「图片生成」': 'This provider has no image generation enabled (it needs /images/generations, e.g. gpt-image-1). Turn on "image generation" for it in AI settings.',
   '当前服务商未开启视觉能力（需支持图片输入的模型，如 gpt-4o）。请在 AI 设置中为该服务商启用「视觉」': 'This provider has no vision enabled (it needs an image-capable model such as gpt-4o). Turn on "vision" for it in AI settings.',
+  // Permalink structure reasons (server/src/utils/slug.ts, shown by the Settings
+  // page when a save is refused).
+  '必须且只能包含一次 %slug%，并以其结尾（例如 /post/%slug%）': 'It must contain %slug% exactly once, at the end (e.g. /post/%slug%)',
+  '必须以 / 开头，且不能包含连续的 / 或 ..': 'It must start with / and contain no double slashes or ..',
+  '只能使用小写字母、数字、- 和 /': 'Only lowercase letters, digits, - and / are allowed',
+  '前缀必须以 / 结尾（例如 /blog/%slug%）': 'The prefix must end with / (e.g. /blog/%slug%)',
+  '不支持把文章放在根路径（会与应用自身路由冲突），请使用 /post/%slug% 这样的前缀': 'Posts cannot live at the root path (it collides with the app routes) — use a prefix such as /post/%slug%',
+  '固定链接结构过长（最多 120 个字符）': 'The permalink structure is too long (120 characters max)',
+  '固定链接结构无效': 'That permalink structure is not valid',
 };
 
 // Messages that carry a status code, a count or a name, matched by shape so the
@@ -1897,6 +1926,9 @@ const serverMsgPatterns: [RegExp, string][] = [
   [/^有 (\d+) 项待确认操作体积过大.*$/, '$1 action(s) are too large to fit in a confirmation card — split them up and ask again'],
   // outcome of an approval, and the schedule it produced
   [/^文章已排期，将于 (.*) 自动发布$/, 'Post scheduled to publish at $1'],
+  // permalink structure: the reserved-prefix and global-only rejections name a value
+  [/^前缀「(.+)」会与应用自身路由冲突，请换一个$/, 'The prefix "$1" collides with one of the app routes — pick another'],
+  [/^「(.+)」是全局设置，不能按站点覆盖$/, '"$1" is a global setting and cannot be overridden per site'],
 ];
 
 // Rules that rewrite the END of a line. They only run on lines carrying a status

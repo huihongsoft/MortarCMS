@@ -1,13 +1,13 @@
 import fs from 'fs';
 import path from 'path';
 import db, { cuid, withTransaction } from './db';
-import { slugify, uniqueSlug } from './slug';
+import { slugify, uniqueSlug, postUrl } from './slug';
 import { mdToHtml, parseFrontmatter } from './markdown';
 import { getDefaultProvider, userFacingAiError, logAiDetail } from './ai';
 import { riskyReason, setPluginRiskResolver } from './aiApproval';
 import { userCan } from '../middleware/auth';
 import { logActivity } from '../routes/activity';
-import { activeThemeName, createThemeBackup } from '../routes/themes';
+import { activeThemeName, createThemeBackup, readTheme, themeOverrides } from '../routes/themes';
 import { purgeAllCaches, purgeContentCaches } from './cache';
 import { sanitizeHtml } from './sanitize';
 import { isHiddenSettingKey } from './settingsVisibility';
@@ -294,9 +294,9 @@ register('get_post_analytics', '获取内容数据（只读）：阅读量排行
       avgViewsPerPost: totals?.posts ? Math.round((totals.views || 0) / totals.posts) : 0,
       comments: { approved: commentCounts?.approved || 0, pending: commentCounts?.pending || 0 },
     },
-    topByViews: topByViews.map(p => ({ title: p.title, url: '/post/' + p.slug, views: p.views })),
+    topByViews: topByViews.map(p => ({ title: p.title, url: postUrl(p.slug), views: p.views })),
     monthlyPublishing: publishing.map(m => ({ month: m.month, posts: m.posts })),
-    mostCommented: mostCommented.map(p => ({ title: p.title, url: '/post/' + p.slug, comments: p.comments })),
+    mostCommented: mostCommented.map(p => ({ title: p.title, url: postUrl(p.slug), comments: p.comments })),
     zeroViews: { count: zeroViews, samples: zeroSamples.map(p => p.title) },
     unavailable: '系统只保存每篇文章的累计阅读量，没有按天记录，因此无法提供阅读量趋势曲线（发文节奏是真实数据，可用）。',
   };
@@ -371,7 +371,7 @@ register('search_site_content', '在全站文章中检索内容，返回匹配�
     } else {
       snippet = (p.excerpt || '').slice(0, 200);
     }
-    return { title: p.title, url: '/post/' + p.slug, status: p.status, relevance: score, snippet: snippet + (snippet.length >= 180 ? '…' : '') };
+    return { title: p.title, url: postUrl(p.slug), status: p.status, relevance: score, snippet: snippet + (snippet.length >= 180 ? '…' : '') };
   });
 });
 
@@ -666,33 +666,51 @@ register('apply_theme_style', '把配色、字体等主题样式应用到当前�
     body_font: { type: 'string', enum: ['system', 'serif', 'mono'], description: '正文字体' },
     custom_css: { type: 'string', description: '额外自定义 CSS（可选，如圆角、间距、深色背景等）' },
   },
-}, async (args) => {
-  const upsert = db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
-  const tname = activeThemeName();
+}, async (args, ctx) => {
+  // Theme settings are per theme name, and both the theme choice and its settings
+  // have a per-site layer (routes/themes.ts). A site-scoped request must write
+  // the site's layer, or it would restyle every other site instead — the same
+  // trap update_site_settings documents below.
+  const siteId = ctx?.siteId;
+  const upsertGlobal = db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+  const upsertSite = db.prepare('INSERT INTO SiteSetting (siteId, key, value) VALUES (?, ?, ?) ON CONFLICT(siteId, key) DO UPDATE SET value = excluded.value');
+  // Never fall back to the global row for a site-scoped write: that would restyle
+  // every other site because one insert failed.
+  const write = (key: string, value: string) => {
+    if (siteId) { upsertSite.run(siteId, key, value); return; }
+    upsertGlobal.run(cuid(), key, value);
+  };
+  const tname = activeThemeName(siteId);
   // Snapshot the current style first so the change is always reversible from
-  // the Appearance panel (theme backups).
-  createThemeBackup(tname, 'AI 修改前自动备份', 'apply_theme_style 自动创建，可随时恢复', true);
+  // the Appearance panel (theme backups). Backups hold the install-wide values;
+  // per-site overrides are not part of them.
+  if (!siteId) createThemeBackup(tname, 'AI 修改前自动备份', 'apply_theme_style 自动创建，可随时恢复', true);
   const applied: string[] = [];
   for (const k of ['primary_color', 'background', 'text_color', 'link_color']) {
     const v = String(args[k] || '').trim();
     if (!v) continue;
     if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(v)) return { error: k + ' 必须是十六进制颜色（如 #3b82f6）' };
-    upsert.run(cuid(), 'theme_' + tname + '_' + k, v);
+    write('theme_' + tname + '_' + k, v);
     applied.push(k);
   }
   for (const k of ['heading_font', 'body_font']) {
     const v = String(args[k] || '').trim();
     if (!['system', 'serif', 'mono'].includes(v)) continue;
-    upsert.run(cuid(), 'theme_' + tname + '_' + k, v);
+    write('theme_' + tname + '_' + k, v);
     applied.push(k);
   }
   if (args.custom_css !== undefined) {
-    upsert.run(cuid(), 'theme_' + tname + '_custom_css', String(args.custom_css || '').slice(0, 20000));
+    write('theme_' + tname + '_custom_css', String(args.custom_css || '').slice(0, 20000));
     applied.push('custom_css');
   }
   if (!applied.length) return { error: '没有可应用的样式（至少提供颜色、字体或 custom_css 之一）' };
   purgeAllCaches();
-  return { applied, theme: tname, message: '已应用到当前主题「' + tname + '」，刷新页面即可看到效果' };
+  return {
+    applied,
+    theme: tname,
+    scope: siteId ? '站点「' + siteId + '」' : '全站默认',
+    message: '已应用到当前主题「' + tname + '」' + (siteId ? '（仅本站点）' : '') + '，刷新页面即可看到效果',
+  };
 });
 
 // True when both URLs share a scheme+host+port, i.e. the asset is served by the
@@ -1110,9 +1128,14 @@ register('list_tags', '获取全部标签列表', { type: 'object', properties: 
 });
 
 // --- Site settings (admin only) ---
-register('get_site_settings', '获取站点配置（标题、描述、URL、每页文章数等）', { type: 'object', properties: {} }, async () => {
-  const rows = db.prepare('SELECT key, value FROM Setting').all() as any[];
+register('get_site_settings', '获取站点配置（标题、描述、URL、每页文章数等）；站点范围内读取的是该站点实际生效的值', { type: 'object', properties: {} }, async (_args, ctx) => {
+  // Site-scoped reads must show what that site actually serves: the install-wide
+  // rows first, then the site's own overrides, then its theme's settings. Reading
+  // only the global rows made the assistant report (and then "fix") values that
+  // belong to another site.
+  const siteId = ctx?.siteId;
   const map: Record<string, string> = {};
+  const rows = db.prepare('SELECT key, value FROM Setting').all() as any[];
   rows.forEach((r: any) => {
     // Reuse the shared visibility rules with isAdmin=false, so this tool can
     // never hand out what an anonymous settings read would not: the previous
@@ -1120,6 +1143,23 @@ register('get_site_settings', '获取站点配置（标题、描述、URL、每�
     if (isHiddenSettingKey(r.key, false)) return;
     map[r.key] = r.value;
   });
+  // `theme_name` in the settings table is just a stored key; the theme actually
+  // in use is theme_active (or the site's own choice).
+  map.theme_name = activeThemeName(siteId);
+  if (siteId) {
+    const overrides = db.prepare('SELECT key, value FROM SiteSetting WHERE siteId = ?').all(siteId) as any[];
+    overrides.forEach((r: any) => { if (!isHiddenSettingKey(r.key, false)) map[r.key] = r.value; });
+    const tname = activeThemeName(siteId);
+    const theme = readTheme(tname);
+    if (theme) {
+      const effective = { ...theme.settings, ...themeOverrides(tname, siteId) };
+      for (const [k, v] of Object.entries(effective)) {
+        if (k === 'custom_css') continue;
+        map['theme_' + k] = v;
+      }
+      map.theme_custom_css = themeOverrides(tname, siteId)['custom_css'] || theme.custom_css || '';
+    }
+  }
   return map;
 });
 
@@ -1157,12 +1197,16 @@ register('update_site_settings', '更新站点配置（如 site_title、site_des
     try {
       if (siteId) setSite.run(siteId, k, v);
       else upsertGlobal.run(cuid(), k, v);
-    } catch {
-      // No Site table on this install: fall back to the global value.
+    } catch (err: any) {
+      // Never fall back to a global write for a site-scoped request: that would
+      // change every other site because one insert failed.
+      if (siteId) { logAiDetail('site setting write failed', String(err?.message || err), { siteId, key: k }); skipped.push(k); continue; }
       upsertGlobal.run(cuid(), k, v);
     }
     updated.push(k);
   }
+  // /api/settings is cached per host, and these are exactly the keys it serves.
+  purgeAllCaches();
   return {
     message: '配置已更新',
     scope: siteId ? '站点「' + siteId + '」' : '全站默认',
@@ -1371,7 +1415,7 @@ register('complete_post', '完善一篇文章：自动生成摘要、SEO 标题/
       // post titled with markup breaks the block (and would be stored into this
       // post's body verbatim).
       const esc = (s: any) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-      const links = related.map((r: any) => '<li><a href="/post/' + esc(r.slug) + '">' + esc(r.title) + '</a></li>').join('');
+      const links = related.map((r: any) => '<li><a href="' + esc(postUrl(r.slug)) + '">' + esc(r.title) + '</a></li>').join('');
       const block = '<div class="related-reading" style="margin-top:32px;padding-top:24px;border-top:1px solid #e5e7eb;"><h3 style="font-size:18px;font-weight:600;margin:0 0 12px;">相关阅读</h3><ul style="margin:0;padding-left:20px;line-height:1.9;">' + links + '</ul></div>';
       db.prepare('UPDATE Post SET content = ?, updatedAt = ? WHERE id = ?').run((post.content || '') + block, new Date().toISOString(), post.id);
     }

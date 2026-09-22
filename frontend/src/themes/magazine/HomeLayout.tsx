@@ -10,6 +10,7 @@ import LinksWidget from '../../components/LinksWidget';
 import { cdnUrl } from '../../lib/cdn';
 import { timeAgo } from '../../lib/time';
 import { t } from '../../lib/i18n';
+import { postPath } from '../../lib/permalink';
 
 // Magazine homepage template: serif headline for the first post + left sidebar
 export default function MagazineHomeLayout(props: any) {
@@ -62,15 +63,15 @@ export default function MagazineHomeLayout(props: any) {
                       React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(User, { size: 12 }), lead.author?.username),
                       lead.categories?.[0] && React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Folder, { size: 12 }), lead.categories[0].name)
                     ),
-                    React.createElement(Link, { to: '/post/' + lead.slug },
+                    React.createElement(Link, { to: postPath(lead.slug) },
                       React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 hover:text-red-700 mb-2', style: serif }, lead.title)),
                     lead.excerpt && React.createElement('p', { className: 'text-gray-600 text-sm leading-relaxed' }, lead.excerpt),
-                    React.createElement(Link, { to: '/post/' + lead.slug, className: 'inline-block mt-3 text-sm font-medium text-red-700 hover:text-red-800' }, t('read more', settings)),
+                    React.createElement(Link, { to: postPath(lead.slug), className: 'inline-block mt-3 text-sm font-medium text-red-700 hover:text-red-800' }, t('read more', settings)),
                   )
                 ),
                 // Rest of posts: list with left border
                 rest.map((p: any) => React.createElement('article', { key: p.id, className: 'border-l-4 border-red-700 pl-4 py-2' },
-                  React.createElement(Link, { to: '/post/' + p.slug },
+                  React.createElement(Link, { to: postPath(p.slug) },
                     React.createElement('h3', { className: 'text-lg font-bold text-gray-900 hover:text-red-700', style: serif }, p.title)),
                   React.createElement('div', { className: 'flex items-center gap-4 text-xs text-gray-500 mt-1' },
                     React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Calendar, { size: 12 }), timeAgo(p.publishedAt || p.createdAt)),

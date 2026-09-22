@@ -110,7 +110,10 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
                 // matching so e.g. the post editor still highlights Posts
                 end: link.to === '/' || link.to === '/ai',
                 className: ({ isActive }: { isActive: boolean }) => `sidebar-link ${isActive ? 'active' : ''}`,
-              }, React.createElement(link.icon, { size: 18 }), link.label)
+              // capitalize, like the page title and role in Layout: the dictionary
+              // keys ARE the English copy and they are lowercase ("broken links"),
+              // which read as broken labels in English mode. No effect on Chinese.
+              }, React.createElement(link.icon, { size: 18 }), React.createElement('span', { className: 'capitalize' }, link.label))
             )
           )
         )

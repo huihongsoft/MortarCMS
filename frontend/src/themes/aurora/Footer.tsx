@@ -9,7 +9,9 @@ export default function Footer({ settings }: { settings: Record<string, string> 
   const [menuItems, setMenuItems] = useState<any[]>([]);
   useEffect(() => { api.get('/menus/location/footer').then(r => setMenuItems(r.data.items || [])).catch(() => {}); }, []);
   const topLevel = menuItems.filter((i: any) => !i.parentId);
-  const childrenOf = (pid: string) => menuItems.filter((i: any) => i.parentId === pid);
+  // the truthy check keeps an item without an id from matching every other
+  // parentless item (childrenOf(undefined) used to return them all)
+  const childrenOf = (pid: string) => menuItems.filter((i: any) => i.parentId && i.parentId === pid);
   return React.createElement('footer', { className: 'border-t border-gray-900/[0.06] mt-24' },
     React.createElement('div', { className: 'max-w-5xl mx-auto px-6 py-12 flex flex-col sm:flex-row items-center justify-between gap-6' },
       React.createElement('div', { className: 'flex items-center gap-2' },

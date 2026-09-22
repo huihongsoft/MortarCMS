@@ -4,6 +4,7 @@ import { User, KeyRound, MessageSquare } from 'lucide-react';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
 import useSEO from '../hooks/useSEO';
+import { postPath } from '../lib/permalink';
 
 interface MyComment { id: string; content: string; createdAt: string; postTitle: string; postSlug: string }
 
@@ -110,7 +111,7 @@ export default function Profile() {
                 React.createElement('p', { className: 'text-sm text-gray-800' }, c.content),
                 React.createElement('p', { className: 'text-xs text-gray-400 mt-1' },
                   new Date(c.createdAt).toLocaleDateString() + ' · ',
-                  React.createElement(Link, { to: '/post/' + c.postSlug, className: 'text-primary-600 hover:text-primary-700' }, c.postTitle || t('post')))))),
+                  React.createElement(Link, { to: postPath(c.postSlug), className: 'text-primary-600 hover:text-primary-700' }, c.postTitle || t('post')))))),
     ),
   );
 }

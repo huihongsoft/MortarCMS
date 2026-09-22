@@ -5,6 +5,7 @@ import sharp from 'sharp';
 import rateLimit from 'express-rate-limit';
 import db, { cuid } from '../utils/db';
 import { authenticate, authorize, resolveOptionalUser, AuthRequest } from '../middleware/auth';
+import { siteScopeForFilter, mayWriteSite, userMayAccessSite } from '../utils/userSites';
 import { doAction } from '../utils/hooks';
 import { upload } from '../middleware/upload';
 import { uploadPath, resolveUploadUrl } from '../utils/paths';
@@ -58,19 +59,38 @@ function parseSrcsetList(media: any[]): any[] {
   });
 }
 
+// May this user change (or delete) this media row? A shared file (siteId NULL) is
+// open to whoever has the media capability, exactly like site-less posts.
+function mayEditMedia(req: AuthRequest, media: any): boolean {
+  return userMayAccessSite(req.user!.userId, req.user!.role, media?.siteId || undefined);
+}
+
+// 'missing' (a stale id from an old list) is not an authorization failure: the
+// bulk routes skip it instead of refusing the whole batch.
+function mediaScope(req: AuthRequest, id: unknown): 'ok' | 'denied' | 'missing' {
+  const media = db.prepare('SELECT id, siteId FROM Media WHERE id = ?').get(String(id)) as any;
+  if (!media) return 'missing';
+  return mayEditMedia(req, media) ? 'ok' : 'denied';
+}
+
 router.get('/', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     // Clamped: media rows are expensive (each one triggers ensureResponsiveVariants).
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const search = (req.query.search as string) || '';
-    let sql = 'SELECT m.*, u.username FROM Media m LEFT JOIN User u ON u.id = m.userId';
+    // Site isolation, like posts/pages: a user assigned to specific sites does not
+    // browse the files another site owns ('?siteId=' narrows further, and naming a
+    // site outside their set is refused).
+    const sf = siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId, 'm.siteId');
+    if (sf.denied) { res.status(403).json({ error: '无权访问该站点' }); return; }
+    let where = ' WHERE 1=1';
     const params: any[] = [];
-    if (search) { sql += ' WHERE m.original LIKE ? OR m.filename LIKE ?'; params.push('%' + search + '%', '%' + search + '%'); }
-    sql += ' ORDER BY m.createdAt DESC LIMIT ? OFFSET ?';
-    params.push(limit, (page - 1) * limit);
-    const media = db.prepare(sql).all(...params) as any[];
-    const total = (db.prepare('SELECT COUNT(*) as cnt FROM Media' + (search ? ' WHERE original LIKE ? OR filename LIKE ?' : '')).get(...(search ? ['%' + search + '%', '%' + search + '%'] : [])) as any)?.cnt || 0;
+    if (search) { where += ' AND (m.original LIKE ? OR m.filename LIKE ?)'; params.push('%' + search + '%', '%' + search + '%'); }
+    where += sf.clause; params.push(...sf.params);
+    const sql = 'SELECT m.*, u.username FROM Media m LEFT JOIN User u ON u.id = m.userId' + where + ' ORDER BY m.createdAt DESC LIMIT ? OFFSET ?';
+    const media = db.prepare(sql).all(...params, limit, (page - 1) * limit) as any[];
+    const total = (db.prepare('SELECT COUNT(*) as cnt FROM Media m' + where).get(...params) as any)?.cnt || 0;
     media.forEach(ensureResponsiveVariants);
     res.json({ media: parseSrcsetList(media), total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -80,8 +100,10 @@ router.get('/search', authenticate, authorize('admin', 'editor', 'author'), (req
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
-    const media = db.prepare('SELECT m.*, u.username FROM Media m LEFT JOIN User u ON u.id = m.userId ORDER BY m.createdAt DESC LIMIT ? OFFSET ?').all(limit, (page - 1) * limit) as any[];
-    const total = (db.prepare('SELECT COUNT(*) as cnt FROM Media').get() as any)?.cnt || 0;
+    const sf = siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId, 'm.siteId');
+    if (sf.denied) { res.status(403).json({ error: '无权访问该站点' }); return; }
+    const media = db.prepare('SELECT m.*, u.username FROM Media m LEFT JOIN User u ON u.id = m.userId WHERE 1=1' + sf.clause + ' ORDER BY m.createdAt DESC LIMIT ? OFFSET ?').all(...sf.params, limit, (page - 1) * limit) as any[];
+    const total = (db.prepare('SELECT COUNT(*) as cnt FROM Media m WHERE 1=1' + sf.clause).get(...sf.params) as any)?.cnt || 0;
     media.forEach(ensureResponsiveVariants);
     res.json({ media: parseSrcsetList(media), total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -176,7 +198,20 @@ router.post('/upload', authenticate, authorize('admin', 'editor', 'author'), upl
         srcsetField = JSON.stringify(srcset);
       } catch (e: any) { console.log('[Media] thumbnail gen failed:', e.message); }
     }
-    db.prepare('INSERT INTO Media (id, filename, original, mimeType, size, url, alt, title, userId, width, height, thumbnail, srcset) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, '/uploads/' + req.file.filename, req.body.alt || '', req.body.title || '', req.user!.userId, width, height, thumbnail, srcsetField);
+    // A file can be attached to a site on upload (the Media page may pass one); an
+    // omitted/empty value keeps the previous behaviour — a shared file.
+    const uploadSite = String(req.body.siteId || '').trim() || null;
+    if (uploadSite && !mayWriteSite(req.user!.userId, req.user!.role, uploadSite)) {
+      // Multer already wrote the original and the thumbnail pass generated its
+      // variants: dropping them here, or a repeated 403 fills the uploads dir.
+      try { fs.unlinkSync(srcPath); } catch { /* already gone */ }
+      try {
+        const tdir = uploadPath('thumbs');
+        for (const f of fs.readdirSync(tdir)) if (f.startsWith(id + '-')) fs.unlinkSync(path.join(tdir, f));
+      } catch { /* nothing generated */ }
+      res.status(403).json({ error: '无权上传到该站点' }); return;
+    }
+    db.prepare('INSERT INTO Media (id, filename, original, mimeType, size, url, alt, title, userId, width, height, thumbnail, srcset, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, req.file.filename, req.file.originalname, req.file.mimetype, req.file.size, '/uploads/' + req.file.filename, req.body.alt || '', req.body.title || '', req.user!.userId, width, height, thumbnail, srcsetField, uploadSite);
     // Object storage: push the original + derived variants to the remote store
     // and rewrite the URLs; local scratch files are removed afterwards.
     try {
@@ -226,10 +261,14 @@ router.get('/:id/download', (req: AuthRequest, res: Response) => {
 });
 
 // Public: single media item detail (for attachment pages / preview)
-router.get('/:id', (req: AuthRequest, res: Response) => {
+router.get('/:id', authenticate, (req: AuthRequest, res: Response) => {
   try {
     const media = db.prepare('SELECT m.*, u.username FROM Media m LEFT JOIN User u ON u.id = m.userId WHERE m.id = ?').get(req.params.id) as any;
     if (!media) { res.status(404).json({ error: 'Media not found' }); return; }
+    // A site-scoped user must not read another site's file metadata by guessing an
+    // id (this route used to be public; the bytes themselves stay public under
+    // /uploads, which is by design).
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, media.siteId || undefined)) { res.status(403).json({ error: '无权访问该站点的媒体' }); return; }
     // Don't hand an anonymous caller the uploader's identity (user-enumeration
     // class — CVE-2023-45809 in Wagtail). Staff still see it via the auth'd list.
     const viewer = resolveOptionalUser(req);
@@ -283,6 +322,7 @@ router.post('/bulk-edit', authenticate, authorize('admin', 'editor'), (req: Auth
     if (title !== undefined && String(title).trim() !== '') { sets.push('title = ?'); vals.push(String(title).slice(0, 255)); }
     if (alt !== undefined && String(alt).trim() !== '') { sets.push('alt = ?'); vals.push(String(alt).slice(0, 255)); }
     if (sets.length === 0) { res.status(400).json({ error: 'title or alt required' }); return; }
+    for (const id of ids) { if (mediaScope(req, id) === 'denied') { res.status(403).json({ error: '无权操作该站点的媒体' }); return; } }
     vals.push(...ids);
     const result = db.prepare(`UPDATE Media SET ${sets.join(', ')} WHERE id IN (${ids.map(() => '?').join(',')})`).run(...vals);
     res.json({ success: true, updated: result.changes });
@@ -294,6 +334,7 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest
   try {
     const media = db.prepare('SELECT * FROM Media WHERE id = ?').get(req.params.id) as any;
     if (!media) { res.status(404).json({ error: 'Media not found' }); return; }
+    if (!mayEditMedia(req, media)) { res.status(403).json({ error: '无权操作该站点的媒体' }); return; }
     const { title, alt } = req.body || {};
     const sets: string[] = []; const vals: any[] = [];
     if (title !== undefined) { sets.push('title = ?'); vals.push(String(title).slice(0, 255)); }
@@ -340,6 +381,7 @@ router.delete('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequ
   try {
     const media = db.prepare('SELECT * FROM Media WHERE id = ?').get(req.params.id) as any;
     if (!media) { res.status(404).json({ error: 'Media not found' }); return; }
+    if (!mayEditMedia(req, media)) { res.status(403).json({ error: '无权操作该站点的媒体' }); return; }
     removeMediaFiles(media);
     db.prepare('DELETE FROM Media WHERE id = ?').run(req.params.id);
     res.json({ success: true });
@@ -351,6 +393,7 @@ router.post('/bulk-delete', authenticate, authorize('admin', 'editor'), (req: Au
   try {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids)) { res.status(400).json({ error: 'ids array required' }); return; }
+    for (const id of ids) { if (mediaScope(req, id) === 'denied') { res.status(403).json({ error: '无权操作该站点的媒体' }); return; } }
     for (const id of ids) {
       const m = db.prepare('SELECT * FROM Media WHERE id = ?').get(id) as any;
       if (m) {

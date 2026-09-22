@@ -180,6 +180,16 @@ const zh: Record<string, string> = {
   'hot ranking': '热门排行',
   'latest posts': '最新发布',
   'latest software': '最新软件',
+  'more apps': '更多应用',
+  'Newsletter': '邮件订阅',
+  'recent updates': '最近更新',
+  'hot posts': '热门文章',
+  'hot tags': '热门标签',
+  'your email': '你的邮箱',
+  'close': '关闭',
+  'sending': '发送中',
+  'check your inbox to confirm': '请查收确认邮件',
+  'subscription failed': '订阅失败，请稍后重试',
 
   // Members-only posts
   'members only': '仅会员可见',

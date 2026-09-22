@@ -33,6 +33,10 @@ GET    /api/posts/suggest         search autocomplete
 GET    /api/posts/slug/:slug      public single (password-protected flow)
 POST   /api/posts/slug/:slug/password   unlock a protected post (cookie)
 GET    /api/posts/popular         top by views (site-isolated)
+                                  ?category=<slug> scopes the ranking; gated,
+                                  password-protected and noindex posts are
+                                  excluded for anonymous callers (same rule as
+                                  the public list)
 GET    /api/posts/archives        monthly archive counts
 GET    /api/posts/author/:username
 GET    /api/posts/archive/:year/:month
@@ -56,7 +60,12 @@ GET    /api/tags | POST/PUT/DELETE | /bulk-delete
 
 ```
 GET    /api/comments/post/:postId   public (approved only, no emails)
-GET    /api/comments/admin          admin moderation queue
+GET    /api/comments/admin          admin moderation queue (?siteId=<id>, and a
+                                    user assigned to specific sites only sees
+                                    those sites' comments + the shared ones).
+                                    A comment's site is its own when set (the
+                                    per-site content screen can assign one),
+                                    otherwise its post's
 POST   /api/comments                submit (rate-limited, honeypot)
 PUT    /api/comments/:id            moderate (approve/spam/trash)
 DELETE /api/comments/:id
@@ -70,9 +79,13 @@ PUT    /api/users/:id | DELETE /api/users/:id
 ## Media
 
 ```
-POST  /api/media/upload            multipart (allowlist + content verify)
-GET   /api/media                   list/search
-GET   /api/media/:id/img?w=&fmt=   responsive resize (jpeg/webp/avif, cached)
+POST  /api/media/upload            multipart (allowlist + content verify); optional siteId
+GET   /api/media                   list/search (?siteId=<id>; a user assigned to
+                                    specific sites only sees those + shared files)
+GET   /api/media/:id               metadata (auth; scoped to the caller's sites)
+GET   /api/media/:id/img?w=&fmt=   responsive resize (jpeg/webp/avif, cached; public —
+                                    serves the same bytes as /uploads)
+GET   /api/media/:id/download      public, same reasoning
 DELETE /api/media/:id | /bulk-delete
 ```
 
@@ -80,10 +93,12 @@ DELETE /api/media/:id | /bulk-delete
 
 ```
 GET    /api/themes                  list + active + effective settings
-POST   /api/themes/:name/activate
-PUT    /api/themes/:name/settings   per-theme overrides
+                                    (?siteId=<id>, admin: as that site sees it)
+POST   /api/themes/:name/activate   { siteId? } — activate for one site
+PUT    /api/themes/:name/settings   per-theme overrides (?siteId=<id> = that
+                                    site's own layer; theme_<name>_<key> keys)
 GET    /api/themes/sections         visual theme sections (hook locations)
-PUT    /api/themes/sections/:location   save a section (html + css)
+PUT    /api/themes/sections/:location   save a section (html + css, ?siteId=<id>)
 POST   /api/themes/rebuild          one-click rebuild theme bundles
 
 GET    /api/plugins                 installed plugins
@@ -95,13 +110,16 @@ POST   /api/plugins/market/install-url   install from zip/tar.gz URL
 DELETE /api/plugins/:name           uninstall (runs uninstall hook)
 
 GET    /api/sites | POST/PUT/DELETE         multi-site management
-PUT    /api/sites/:id/primary | /settings
+PUT    /api/sites/:id/primary | /settings   (per-site overrides; theme_active
+                                    picks the site's theme, '' = follow global)
 GET    /api/links | POST/PUT/DELETE         friend links
 GET    /api/editor/templates | POST/DELETE  custom block templates
        /api/editor/templates/export | /import
 GET    /api/editor/canvas-css       built frontend CSS for the builder canvas
 GET    /api/editor/preview-cms/:type live preview HTML for CMS data blocks
-GET    /api/stats?days=N            PV/UV analytics + top posts
+GET    /api/stats?days=N            PV/UV analytics + top posts (visit rows carry
+                                    the resolved site; scoped to the caller's sites)
+GET    /api/stats/dashboard         dashboard counts + recents (same scoping)
 GET    /api/security/audit          security diagnostics (Site Health style)
 ```
 
@@ -184,6 +202,14 @@ DELETE /api/roles/:slug             delete custom role (system/in-use protected)
 
 ```
 GET    /api/settings                public (sensitive keys filtered) + theme merge
+PUT    /api/settings                admin
+GET    /api/settings/info           admin: system info (driver-aware)
+GET    /api/settings/health         public: minimal health (no stats)
+```
+
+`GET /api/settings` resolves everything for the site serving the request (its
+Host), and an **admin** may add `?siteId=<id>` to read another site's effective
+values — that is how the Appearance panel edits a site's theme.
 
 ## Post content pipeline
 

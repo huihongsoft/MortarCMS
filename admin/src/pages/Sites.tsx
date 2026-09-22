@@ -4,11 +4,15 @@ import { useToast } from '../lib/toast';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 import { dialog } from '../lib/dialog';
+import Select from '../components/Select';
 
 type ContentType = 'posts' | 'pages' | 'media' | 'comments';
 
 export default function Sites() {
   const [sites, setSites] = useState<any[]>([]);
+  // Theme choice is per site: empty means "use the install-wide theme".
+  const [themeList, setThemeList] = useState<any[]>([]);
+  const [globalTheme, setGlobalTheme] = useState('');
   const [global, setGlobal] = useState<Record<string, number>>({});
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<any>(null);
@@ -23,6 +27,9 @@ export default function Sites() {
   const toast = useToast();
 
   useEffect(() => { fetchSites(); }, []);
+  useEffect(() => {
+    api.get('/themes').then(r => { setThemeList(r.data?.themes || []); setGlobalTheme(r.data?.active || ''); }).catch(() => {});
+  }, []);
   async function fetchSites() {
     api.get('/sites').then(r => {
       setSites(r.data?.sites || []);
@@ -79,6 +86,20 @@ export default function Sites() {
     } catch (e: any) { toast.toast(e.response?.data?.error || t('duplicate failed', getLang()), 'error'); }
   }
 
+  // A site may still name a theme that was deleted in the meantime: keep it
+  // visible in the dropdown (so the admin sees what is configured) but treat it
+  // as "follow the install-wide theme" when saving, instead of sending a name the
+  // server refuses.
+  const themeValue = (s: any) => {
+    const v = (settingsMap[s.id] || {}).theme_active || '';
+    if (!v) return '';
+    return themeList.some((th: any) => th.name === v) ? v : '';
+  };
+  const missingTheme = (s: any) => {
+    const v = (settingsMap[s.id] || {}).theme_active || '';
+    return v && !themeList.some((th: any) => th.name === v) ? v : '';
+  };
+
   async function saveSettings(s: any) {
     try {
       const st = settingsMap[s.id] || {};
@@ -89,9 +110,11 @@ export default function Sites() {
         // links read this override through /api/settings).
         site_url: window.location.protocol + '//' + s.domain,
         site_description: st.site_description || '',
+        // Empty = follow the install-wide theme (the server ignores the row).
+        theme_active: themeValue(s),
       });
       toast.toast(t('site settings saved', getLang()));
-    } catch (e: any) { toast.toast(t('save failed', getLang()), 'error'); }
+    } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
   }
 
   // ---- Content management modal ----
@@ -214,7 +237,7 @@ export default function Sites() {
                   React.createElement('button', { onClick: () => remove(s), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 })),
                 )
               ),
-              React.createElement('div', { className: 'mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-3 items-end' },
+              React.createElement('div', { className: 'mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-4 gap-3 items-end' },
                 React.createElement('div', null,
                   React.createElement('label', { className: 'block text-[10px] text-gray-400 mb-1' }, t('site title (overrides global)', getLang())),
                   React.createElement('input', { value: (settingsMap[s.id] || {}).site_title || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettingsMap({ ...settingsMap, [s.id]: { ...(settingsMap[s.id] || {}), site_title: e.target.value } }), placeholder: s.name, className: 'input-field text-xs' }),
@@ -223,6 +246,19 @@ export default function Sites() {
                   React.createElement('label', { className: 'block text-[10px] text-gray-400 mb-1' }, t('site description', getLang())),
                   React.createElement('input', { value: (settingsMap[s.id] || {}).site_description || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettingsMap({ ...settingsMap, [s.id]: { ...(settingsMap[s.id] || {}), site_description: e.target.value } }), placeholder: t('optional', getLang()), className: 'input-field text-xs' }),
                 ),
+                React.createElement('div', null,
+                  React.createElement('label', { className: 'block text-[10px] text-gray-400 mb-1' }, t('theme', getLang())),
+                  React.createElement(Select, {
+                    value: themeValue(s),
+                    onChange: (v: string) => setSettingsMap({ ...settingsMap, [s.id]: { ...(settingsMap[s.id] || {}), theme_active: v } }),
+                    className: 'input-field text-xs',
+                  },
+                    React.createElement('option', { value: '' }, t('default theme', getLang()) + (globalTheme ? ' (' + globalTheme + ')' : '')),
+                    themeList.map((th: any) => React.createElement('option', { key: th.name, value: th.name }, th.name))),
+                  // The stored value can name a theme that was deleted: the dropdown
+                  // falls back to "default" and saving makes that real, so say so.
+                  missingTheme(s) && React.createElement('p', { className: 'text-[10px] text-amber-600 mt-1' },
+                    t('the saved theme is no longer installed — saving switches this site to the install-wide theme', getLang()) + ' (' + missingTheme(s) + ')')),
                 React.createElement('button', { onClick: () => saveSettings(s), className: 'btn-secondary text-xs' }, t('save site settings', getLang())),
               )
             )

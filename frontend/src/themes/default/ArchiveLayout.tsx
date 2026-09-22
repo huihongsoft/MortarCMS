@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Calendar, ArrowLeft } from 'lucide-react';
 import { timeAgo } from '../../lib/time';
 import { t } from '../../lib/i18n';
+import { postPath } from '../../lib/permalink';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -18,7 +19,7 @@ export default function ArchiveLayout(props: any) {
       ? React.createElement('p', { className: 'text-gray-500' }, t('no posts in this month'))
       : React.createElement('div', { className: 'space-y-6' },
           data.posts.map((p: any) => React.createElement('article', { key: p.id, className: 'pb-6 border-b border-gray-100 last:border-0' },
-            React.createElement(Link, { to: '/post/' + p.slug }, React.createElement('h2', { className: 'text-lg font-bold text-gray-900 hover:text-primary-600 mb-2' }, p.title)),
+            React.createElement(Link, { to: postPath(p.slug) }, React.createElement('h2', { className: 'text-lg font-bold text-gray-900 hover:text-primary-600 mb-2' }, p.title)),
             React.createElement('div', { className: 'flex items-center gap-3 text-xs text-gray-500' },
               React.createElement('span', { className: 'flex items-center gap-1' }, React.createElement(Calendar, { size: 12 }), timeAgo(p.publishedAt || p.createdAt))
             ),

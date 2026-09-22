@@ -30,6 +30,10 @@ export interface Theme {
   AuthorLayout: React.ComponentType<any>;
   PostLayout: React.ComponentType<any>;
   PageLayout: React.ComponentType<any>;
+  // Optional override for the global back-to-top button (components/ScrollToTop).
+  // A theme that draws its own replaces it — without this the page showed both
+  // buttons at once.
+  BackToTop?: React.ComponentType<any>;
 }
 
 export const defaultTheme: Theme = {
@@ -63,6 +67,8 @@ function mergeTheme(name: string, mod: any): Theme {
     AuthorLayout: t.AuthorLayout || defaultTheme.AuthorLayout,
     PostLayout: t.PostLayout || defaultTheme.PostLayout,
     PageLayout: t.PageLayout || defaultTheme.PageLayout,
+    // No default: absent means "use the app's own button" (see SiteLayout).
+    ...(t.BackToTop ? { BackToTop: t.BackToTop } : {}),
   };
 }
 

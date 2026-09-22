@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import db, { cuid } from '../utils/db';
 import { authenticate, authorize, AuthRequest } from '../middleware/auth';
 import { renderTemplate, sendEmail, getMailSettings } from '../utils/mailer';
+import { postUrl } from '../utils/slug';
 
 const router = Router();
 
@@ -143,7 +144,7 @@ router.post('/admin/newsletter/send', ...adminGuard, async (req: AuthRequest, re
     ).all(...((req as any).siteId ? [nlNow, (req as any).siteId] : [nlNow])) as any[];
     if (recent.length === 0 && !to) { res.status(400).json({ error: 'No published posts to send' }); return; }
     const items = recent.map(p =>
-      '<div style="margin-bottom:16px;"><a href="' + base + '/post/' + p.slug + '" style="font-size:16px;font-weight:600;color:#2563eb;text-decoration:none;">' + String(p.title).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</a>' +
+      '<div style="margin-bottom:16px;"><a href="' + base + postUrl(p.slug) + '" style="font-size:16px;font-weight:600;color:#2563eb;text-decoration:none;">' + String(p.title).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</a>' +
       (p.excerpt ? '<p style="margin:4px 0 0;font-size:13px;color:#4b5563;">' + String(p.excerpt).substring(0, 200).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>' : '') + '</div>').join('');
     const buildTpl = (unsubLink: string) => renderTemplate('newsletter_digest', {
       site_title: info.title,

@@ -53,7 +53,11 @@ export function riskyReason(name: string, args: any, ctx?: { siteId?: string }):
     }
     return null; // a draft edit: reversible, and a revision is snapshotted
   }
-  if (name === 'apply_theme_style') return '修改全站主题样式（会覆盖现有自定义 CSS）';
+  if (name === 'apply_theme_style') {
+    // The card is what the admin approves on, so it has to match the write: a
+    // site-scoped run only touches that site (the tool writes SiteSetting).
+    return ctx?.siteId ? '修改本站点（' + ctx.siteId + '）的主题样式（会覆盖其现有自定义 CSS）' : '修改全站主题样式（会覆盖现有自定义 CSS）';
+  }
   if (name === 'update_site_settings') return '修改站点配置';
   // Tools contributed by plugins (registerTool) may declare their own risk; the
   // assistant cannot guess what a third-party tool does, so without a declaration

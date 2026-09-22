@@ -10,6 +10,7 @@ import LinksWidget from '../../components/LinksWidget';
 import { cdnUrl } from '../../lib/cdn';
 import { timeAgo, readingTime, useTimeTick } from '../../lib/time';
 import { t } from '../../lib/i18n';
+import { postPath } from '../../lib/permalink';
 
 function formatIcon(f: string) {
   const icons: Record<string, string> = { gallery: '\u{1F5BC}', video: '\u{1F3AC}', audio: '\u{1F3B5}', quote: '\u{1F4AC}', link: '\u{1F517}' };
@@ -36,7 +37,7 @@ export default function TagLayout(props: any) {
             : React.createElement('div', { className: 'space-y-12' },
                 posts.map((p: any) => React.createElement('article', { key: p.id, className: 'pb-12 border-b border-gray-100 last:border-0' },
                   p.featured && React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full h-48 object-cover rounded-lg mb-5', loading: 'lazy' }),
-                  React.createElement(Link, { to: '/post/' + p.slug },
+                  React.createElement(Link, { to: postPath(p.slug) },
                     React.createElement('h2', { className: 'font-bold text-gray-900 hover:text-primary-600 mb-3', style: { fontSize: 'var(--heading-max-size, 24px)' } }, p.format && p.format !== 'standard' ? React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 mr-2 text-xs font-medium bg-gray-100 text-gray-500 rounded' }, formatIcon(p.format), p.format.charAt(0).toUpperCase() + p.format.slice(1)) : null, p.sticky ? React.createElement('span', { className: 'inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium bg-orange-100 text-orange-700 rounded mr-2 align-middle' }, '\u2605 ' + t('featured', settings)) : null, p.title)
                   ),
                   React.createElement('div', { className: 'flex items-center gap-4 text-xs text-gray-500 mb-4' },
@@ -50,7 +51,7 @@ export default function TagLayout(props: any) {
                       React.createElement('span', { className: 'inline-flex items-center gap-1' }, readingTime(p.content)),
                       (p.commentCount > 0) && React.createElement('span', { className: 'inline-flex items-center gap-1' }, React.createElement(MessageSquare, { size: 12 }), '' + p.commentCount)
                     ),
-                    React.createElement(Link, { to: '/post/' + p.slug, className: 'inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700' }, t('read more', settings))
+                    React.createElement(Link, { to: postPath(p.slug), className: 'inline-flex items-center gap-1 text-sm font-medium text-primary-600 hover:text-primary-700' }, t('read more', settings))
                   ),
                 ))
               ),

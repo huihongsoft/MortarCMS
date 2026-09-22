@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { MessageSquare } from 'lucide-react';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
+import { postPath } from '../lib/permalink';
 
 // Recent comments across the site (WordPress-style widget)
 export default function RecentCommentsWidget() {
@@ -15,7 +16,7 @@ export default function RecentCommentsWidget() {
       comments.map((c: any) => React.createElement('li', { key: c.id, className: 'text-xs text-gray-600 leading-snug' },
         React.createElement('span', { className: 'font-medium text-gray-800' }, c.author || t('anonymous')),
         ' ' + t('on') + ' ',
-        React.createElement(Link, { to: '/post/' + c.postSlug + '#comments', className: 'text-primary-600 hover:underline' }, c.postTitle),
+        React.createElement(Link, { to: postPath(c.postSlug) + '#comments', className: 'text-primary-600 hover:underline' }, c.postTitle),
         React.createElement('p', { className: 'text-gray-500 mt-0.5 line-clamp-2' }, c.content)
       ))
     )

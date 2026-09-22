@@ -4,6 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { effectiveSetting } from '../utils/siteSettings';
 import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
+import { postUrl, getPermalinkPrefix } from '../utils/slug';
 
 const router = Router();
 
@@ -27,8 +28,11 @@ router.get('/rss', (req: AuthRequest & SiteRequest, res: Response) => {
       ? db.prepare('SELECT p.*, u.username as authorName FROM Post p JOIN User u ON u.id = p.authorId WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND (p.siteId IS NULL OR p.siteId = ?)' + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC LIMIT 20').all('post', 'published', now, req.siteId)
       : db.prepare('SELECT p.*, u.username as authorName FROM Post p JOIN User u ON u.id = p.authorId WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC LIMIT 20').all('post', 'published', now)) as any[];
 
+    // Read once for the whole item list rather than per post (postUrl would
+    // re-read the Setting row each time).
+    const prefix = getPermalinkPrefix();
     const items = posts.map((p: any) => {
-      const link = siteUrl + '/post/' + esc(p.slug);
+      const link = esc(siteUrl + postUrl(p.slug, prefix));
       const desc = esc(p.excerpt || p.content.substring(0, 200));
       const date = new Date(p.publishedAt || p.createdAt).toUTCString();
       const author = esc(p.authorName || '');
@@ -59,11 +63,12 @@ router.get('/comments', (req: AuthRequest & SiteRequest, res: Response) => {
     // the newest approved comments from every site on a multi-site install. Also
     // skips comments on posts a visitor cannot read, which would link to a 403.
     const comments = (req.siteId
-      ? db.prepare("SELECT c.*, p.title as postTitle, p.slug as postSlug FROM Comment c JOIN Post p ON p.id = c.postId WHERE c.status = 'approved' AND (p.siteId IS NULL OR p.siteId = ?)" + PUBLIC_POST_CONDITIONS + ' ORDER BY c.createdAt DESC LIMIT 20').all(req.siteId)
+      ? db.prepare("SELECT c.*, p.title as postTitle, p.slug as postSlug FROM Comment c JOIN Post p ON p.id = c.postId WHERE c.status = 'approved' AND (COALESCE(c.siteId, p.siteId) IS NULL OR COALESCE(c.siteId, p.siteId) = ?)" + PUBLIC_POST_CONDITIONS + ' ORDER BY c.createdAt DESC LIMIT 20').all(req.siteId)
       : db.prepare("SELECT c.*, p.title as postTitle, p.slug as postSlug FROM Comment c JOIN Post p ON p.id = c.postId WHERE c.status = 'approved'" + PUBLIC_POST_CONDITIONS + ' ORDER BY c.createdAt DESC LIMIT 20').all()) as any[];
 
+    const prefix = getPermalinkPrefix();
     const items = comments.map((c: any) => {
-      const link = siteUrl + '/post/' + esc(c.postSlug) + '#comment-' + c.id;
+      const link = esc(siteUrl + postUrl(c.postSlug, prefix)) + '#comment-' + c.id;
       // Escape ]]> so a comment can never terminate the CDATA block and inject XML
       const cdata = (s: string) => esc(s).replace(/\]\]>/g, ']]&gt;');
       const desc = '<![CDATA[' + cdata(c.author || 'Anonymous') + ' 评论于 《' + cdata(c.postTitle) + '》：<br>' + cdata(c.content || '') + ']]>';

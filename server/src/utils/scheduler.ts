@@ -5,7 +5,8 @@ import fs from 'fs';
 import path from 'path';
 import db, { cuid, DB_PATH } from './db';
 import { doAction } from './hooks';
-import { purgeContentCaches } from './cache';
+import { purgeContentCaches, purgeAllCaches } from './cache';
+import { postUrl } from './slug';
 
 export interface TaskDef {
   id: string;
@@ -359,7 +360,7 @@ export function registerBuiltinTasks(): void {
         };
         const base = info.url || 'http://localhost:3001';
         const items = posts.map(p =>
-          '<div style="margin-bottom:16px;"><a href="' + base + '/post/' + p.slug + '" style="font-size:16px;font-weight:600;color:#2563eb;text-decoration:none;">' + String(p.title).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</a>' +
+          '<div style="margin-bottom:16px;"><a href="' + base + postUrl(p.slug) + '" style="font-size:16px;font-weight:600;color:#2563eb;text-decoration:none;">' + String(p.title).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</a>' +
           (p.excerpt ? '<p style="margin:4px 0 0;font-size:13px;color:#4b5563;">' + String(p.excerpt).substring(0, 200).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>' : '') + '</div>').join('');
         let sent = 0;
         for (const s of subs) {
@@ -377,6 +378,8 @@ export function registerBuiltinTasks(): void {
           } catch {}
         }
         db.prepare("INSERT INTO Setting (id, key, value) VALUES ('newsletter_last_sent_at', 'newsletter_last_sent_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date(nowMs).toISOString());
+        // Served by the cached /api/settings.
+        try { purgeAllCaches(); } catch { /* cache maintenance must not fail the task */ }
         if (sent > 0) console.log('[Task] Newsletter digest sent to ' + sent + ' subscriber(s)');
       } catch {}
     },
@@ -446,12 +449,12 @@ export function registerBuiltinTasks(): void {
     fn: async () => {
       try {
         const { fetchUrlGuarded } = await import('./ssrf');
-        const posts = db.prepare("SELECT id, title, content FROM Post WHERE status = 'published' AND type IN ('post','page') ORDER BY updatedAt DESC LIMIT 100").all() as any[];
+        const posts = db.prepare("SELECT id, title, content, siteId FROM Post WHERE status = 'published' AND type IN ('post','page') ORDER BY updatedAt DESC LIMIT 100").all() as any[];
         // Own-domain links never count as broken (site_url host is skipped)
         let ownHost = '';
         try { ownHost = new URL((db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || '').host; } catch {}
         const hrefRe = /<a[^>]+href="(https?:\/\/[^"]+)"/gi;
-        const toCheck: { postId: string; postTitle: string; url: string; anchor: string }[] = [];
+        const toCheck: { postId: string; postTitle: string; url: string; anchor: string; siteId: string | null }[] = [];
         const seen = new Set<string>();
         const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000).toISOString();
         for (const p of posts) {
@@ -469,7 +472,7 @@ export function registerBuiltinTasks(): void {
             const recent = db.prepare('SELECT 1 FROM BrokenLink WHERE url = ? AND checkedAt > ? LIMIT 1').get(url, sevenDaysAgo);
             if (recent) continue;
             const anchor = (mm[0].match(/>([^<]{0,60})</)?.[1] || '').trim();
-            toCheck.push({ postId: p.id, postTitle: p.title, url, anchor: anchor.slice(0, 100) });
+            toCheck.push({ postId: p.id, postTitle: p.title, url, anchor: anchor.slice(0, 100), siteId: p.siteId || null });
           }
           if (toCheck.length >= 50) break;
         }
@@ -487,8 +490,8 @@ export function registerBuiltinTasks(): void {
             // Replace the previous entry for this URL so a fixed link leaves
             // the report instead of piling up stale 'broken' rows forever
             db.prepare('DELETE FROM BrokenLink WHERE url = ?').run(c.url);
-            db.prepare('INSERT INTO BrokenLink (id, postId, postTitle, url, anchor, status, statusCode, checkedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-              .run(cuid(), c.postId, c.postTitle, c.url, c.anchor, st, status === 0 ? null : status, now);
+            db.prepare('INSERT INTO BrokenLink (id, postId, postTitle, url, anchor, status, statusCode, checkedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+              .run(cuid(), c.postId, c.postTitle, c.url, c.anchor, st, status === 0 ? null : status, now, c.siteId);
             checked++;
           } catch {}
         }

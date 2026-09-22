@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
@@ -236,7 +237,16 @@ router.post('/restore-full', authenticate, authorize('admin'), upload.single('fi
 // Admin: reset the site to a fresh empty state — wipes all content
 // (posts/categories/tags/media/comments/menus/links/AI data/activity/stats)
 // but keeps user accounts, roles, system settings and site structure.
-router.post('/reset-content', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+// Both reset routes wipe every table synchronously; the global /api cap (600/min)
+// is far too generous for something this destructive, so they get their own.
+const resetLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 6,
+  standardHeaders: true,
+  message: { error: 'Too many reset requests, try again later' },
+});
+
+router.post('/reset-content', resetLimiter, authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
     const stats = resetSite();
     res.json({ success: true, message: 'Site content reset', stats });
@@ -250,7 +260,7 @@ router.post('/reset-content', authenticate, authorize('admin'), (_req: AuthReque
 // the content tables itself but leaves uploaded files behind, while resetSite()
 // removes those files and the demo-owned settings too. Both are destructive, so
 // this is admin-only and the UI asks twice.
-router.post('/reset-demo', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.post('/reset-demo', resetLimiter, authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
   try {
     resetSite();
     try {

@@ -16,6 +16,7 @@ import { cdnUrl } from '../../lib/cdn';
 import { timeAgo, readingTime, useTimeTick } from '../../lib/time';
 import { t } from '../../lib/i18n';
 import Carousel from '../../components/Carousel';
+import { postPath } from '../../lib/permalink';
 
 // Aurora home: centered editorial list, no cards, generous whitespace
 export default function HomeLayout(props: any) {
@@ -42,9 +43,9 @@ export default function HomeLayout(props: any) {
               : React.createElement('div', { className: 'text-center py-24' }, React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-2' }, t('no posts yet', settings)), React.createElement('p', { className: 'text-sm text-gray-500' }, t('check back later for new content', settings)))
             : React.createElement('div', null,
                 posts.map((p: any, idx: number) => React.createElement('article', { key: p.id, className: 'pb-12 ' + (idx > 0 ? 'pt-12 border-t border-gray-900/[0.06]' : '') },
-                  p.featured && React.createElement(Link, { to: '/post/' + p.slug, className: 'block overflow-hidden rounded-2xl mb-8' },
+                  p.featured && React.createElement(Link, { to: postPath(p.slug), className: 'block overflow-hidden rounded-2xl mb-8' },
                     React.createElement('img', { src: cdnUrl(p.featured, settings), alt: p.title, className: 'w-full aspect-[16/9] object-cover transition-transform duration-500 hover:scale-[1.02]', loading: 'lazy', decoding: 'async' })),
-                  React.createElement(Link, { to: '/post/' + p.slug },
+                  React.createElement(Link, { to: postPath(p.slug) },
                     React.createElement('h2', { className: 'font-bold tracking-tight text-gray-900 hover:text-indigo-600 transition-colors mb-4', style: { fontSize: 'var(--heading-max-size, 30px)' } }, p.title)),
                   React.createElement('div', { className: 'flex items-center gap-4 text-xs text-gray-500 mb-4' },
                     React.createElement('span', { className: 'flex items-center gap-1.5' }, React.createElement(Calendar, { size: 13 }), timeAgo(p.publishedAt || p.createdAt)),
@@ -54,7 +55,7 @@ export default function HomeLayout(props: any) {
                   p.excerpt && React.createElement('p', { className: 'text-gray-600 leading-relaxed mb-6' }, p.excerpt),
                   React.createElement('div', { className: 'flex items-center justify-between' },
                     React.createElement('span', { className: 'text-xs text-gray-400' }, readingTime(p.content)),
-                    React.createElement(Link, { to: '/post/' + p.slug, className: 'inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors' }, t('read more', settings), React.createElement('span', null, '\u2192')),
+                    React.createElement(Link, { to: postPath(p.slug), className: 'inline-flex items-center gap-1 text-sm font-medium text-indigo-600 hover:text-indigo-700 transition-colors' }, t('read more', settings), React.createElement('span', null, '\u2192')),
                   ),
                 )),
                 total > parseInt(settings.posts_per_page || '10') && React.createElement('div', { className: 'flex items-center justify-center gap-4 pt-12' },

@@ -1,5 +1,6 @@
 import { addAction } from '../../src/utils/hooks';
 import db from '../../src/utils/db';
+import { purgeAllCaches } from '../../src/utils/cache';
 import fs from 'fs';
 import path from 'path';
 
@@ -24,6 +25,8 @@ function setting(key: string): string {
 
 function save(key: string, value: string): void {
   db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run('media-cleanup-' + key, key, value);
+  // media_cleanup_report is part of /api/settings, which is cached per host.
+  try { purgeAllCaches(); } catch { /* cache maintenance must not fail the run */ }
 }
 
 export function runCleanup(): { orphaned: number; deleted: number } {

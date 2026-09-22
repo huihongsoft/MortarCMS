@@ -2,8 +2,11 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, authorize, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
+import { SiteRequest } from '../middleware/site';
+import { siteScopeForFilter, userMayAccessSite } from '../utils/userSites';
 import { applyFilters, doAction } from '../utils/hooks';
 import { renderTemplate, sendEmail } from '../utils/mailer';
+import { postUrl } from '../utils/slug';
 
 const router = Router();
 // Every user-supplied value entering an email body must go through this. Kept at
@@ -23,12 +26,37 @@ const commentSchema = z.object({
 });
 
 // Public: latest approved comments across posts (for the Recent Comments widget)
+// Which site a comment belongs to. Comments inherit their post's site (nothing
+// sets Comment.siteId on submission); the per-site content screen can override it
+// for a comment that belongs somewhere else.
+const COMMENT_SITE = 'COALESCE(c.siteId, p.siteId)';
+
+// May this user moderate/delete this comment? Shared (site-less) comments stay
+// open to anyone who can moderate, like site-less posts.
+// 'missing' = a stale id (the comment was already deleted): the caller skips it
+// rather than refusing the whole request.
+function commentScope(req: AuthRequest, commentId: string): 'ok' | 'denied' | 'missing' {
+  try {
+    const row = db.prepare(
+      'SELECT ' + COMMENT_SITE + ' AS siteId FROM Comment c LEFT JOIN Post p ON p.id = c.postId WHERE c.id = ?'
+    ).get(commentId) as any;
+    if (!row) return 'missing';
+    return userMayAccessSite(req.user!.userId, req.user!.role, row.siteId || undefined) ? 'ok' : 'denied';
+  } catch { return 'denied'; }
+}
+
+function mayModerateComment(req: AuthRequest, commentId: string): boolean {
+  return commentScope(req, commentId) === 'ok';
+}
+
 router.get('/recent', (req: AuthRequest, res: Response) => {
   try {
     const limit = Math.min(parseInt(req.query.limit as string) || 5, 20);
+    // Site-scoped like every other public list: the resolved site's comments plus
+    // the shared ones (a multi-site install must not show another site's).
     const rows = db.prepare(
-      "SELECT c.id, c.author, c.content, c.createdAt, p.title as postTitle, p.slug as postSlug FROM Comment c JOIN Post p ON p.id = c.postId WHERE c.status = 'approved' ORDER BY c.createdAt DESC LIMIT ?"
-    ).all(limit) as any[];
+      "SELECT c.id, c.author, c.content, c.createdAt, p.title as postTitle, p.slug as postSlug FROM Comment c JOIN Post p ON p.id = c.postId WHERE c.status = 'approved' AND (" + COMMENT_SITE + " IS NULL OR " + COMMENT_SITE + " = ?) ORDER BY c.createdAt DESC LIMIT ?"
+    ).all((req as AuthRequest & SiteRequest).siteId || '', limit) as any[];
     res.json(rows);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -106,7 +134,7 @@ router.post('/', (req: AuthRequest, res: Response) => {
             '<strong style="color:#111827;">' + esc(parent.author || '') + '</strong>：' + esc(String(parent.content || '').slice(0, 200)) + '</div>' +
             '<div style="border-left:3px solid #2563eb;padding:8px 16px;margin:12px 0;color:#111827;">' +
             '<strong>' + esc(data.author || 'Anonymous') + '</strong>：' + esc(String(data.content || '').slice(0, 200)) + '</div>' +
-            '<p style="color:#9ca3af;font-size:12px;">前往 <a href="' + esc(siteUrl) + '/post/' + esc(post.slug) + '#comments">' + esc(siteTitle) + '</a> 查看完整讨论</p></div>';
+            '<p style="color:#9ca3af;font-size:12px;">前往 <a href="' + esc(siteUrl + postUrl(post.slug)) + '#comments">' + esc(siteTitle) + '</a> 查看完整讨论</p></div>';
           void sendEmail(parent.email, '有人在《' + post.title + '》回复了你的评论', replyHtml);
         } catch {}
       }
@@ -130,11 +158,17 @@ router.get('/admin', authenticate, requireCap('moderate_comments'), (req: AuthRe
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const status = req.query.status as string;
-    let where = ''; const params: any[] = [];
-    if (status) { where = ' WHERE c.status = ?'; params.push(status); }
+    // Same site rule as the post/page lists: an assigned moderator only sees their
+    // own sites' comments (plus the shared ones), and naming someone else's site
+    // is refused instead of quietly returning everything.
+    const sf = siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId, COMMENT_SITE);
+    if (sf.denied) { res.status(403).json({ error: '无权访问该站点' }); return; }
+    let where = ' WHERE 1=1'; const params: any[] = [];
+    if (status) { where += ' AND c.status = ?'; params.push(status); }
+    where += sf.clause; params.push(...sf.params);
     const comments = db.prepare('SELECT c.*, p.title as postTitle FROM Comment c LEFT JOIN Post p ON p.id = c.postId' + where + ' ORDER BY c.createdAt DESC LIMIT ? OFFSET ?').all(...params, limit, (page - 1) * limit) as any[];
     for (const c of comments) { c.post = { id: c.postId, title: c.postTitle }; }
-    const total = (db.prepare('SELECT COUNT(*) as cnt FROM Comment c' + where).get(...params) as any)?.cnt || 0;
+    const total = (db.prepare('SELECT COUNT(*) as cnt FROM Comment c LEFT JOIN Post p ON p.id = c.postId' + where).get(...params) as any)?.cnt || 0;
     res.json({ comments, total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -143,6 +177,8 @@ router.put('/:id', authenticate, requireCap('moderate_comments'), (req: AuthRequ
   try {
     const existing = db.prepare('SELECT * FROM Comment WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Comment not found' }); return; }
+    // Capability says "may moderate"; site membership says "may moderate *here*".
+    if (!mayModerateComment(req, req.params.id)) { res.status(403).json({ error: '无权操作该站点的评论' }); return; }
     const sets: string[] = []; const vals: any[] = [];
     // WordPress-style: moderators can edit the content and the author name
     if (req.body.content !== undefined) { sets.push('content = ?'); vals.push(String(req.body.content).slice(0, 2000)); }
@@ -177,13 +213,16 @@ function notifyThreadSubscribers(postId: string, comment: any): void {
       '<p style="color:#374151;">你订阅的《' + esc(post.title) + '》有了新评论：</p>' +
       '<div style="border-left:3px solid #2563eb;padding:8px 16px;margin:12px 0;color:#111827;">' +
       '<strong>' + esc(comment.author || 'Anonymous') + '</strong>：' + esc(String(comment.content || '').slice(0, 300)) + '</div>' +
-      '<p style="color:#9ca3af;font-size:12px;">前往 <a href="' + esc(siteUrl) + '/post/' + esc(post.slug) + '#comments">' + esc(siteTitle) + '</a> 查看讨论</p></div>';
+      '<p style="color:#9ca3af;font-size:12px;">前往 <a href="' + esc(siteUrl + postUrl(post.slug)) + '#comments">' + esc(siteTitle) + '</a> 查看讨论</p></div>';
     for (const s of subs) void sendEmail(s.email, '《' + post.title + '》有新评论', html);
   } catch {}
 }
 
 router.delete('/:id', authenticate, requireCap('moderate_comments'), (req: AuthRequest, res: Response) => {
-  try { doAction('delete_comment', req.params.id); db.prepare('DELETE FROM Comment WHERE id = ?').run(req.params.id); res.json({ success: true }); } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try {
+    if (!mayModerateComment(req, req.params.id)) { res.status(403).json({ error: '无权操作该站点的评论' }); return; }
+    doAction('delete_comment', req.params.id); db.prepare('DELETE FROM Comment WHERE id = ?').run(req.params.id); res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: bulk action on comments
@@ -197,6 +236,11 @@ router.post('/bulk-action', authenticate, requireCap('moderate_comments'), (req:
     if (!validActions.includes(action)) { res.status(400).json({ error: 'Invalid action' }); return; }
     // Cap the batch so a single request can't hold the write lock for minutes.
     const batch = ids.slice(0, 1000);
+    // All-or-nothing: a batch that reaches outside this user's sites is refused
+    // rather than applied to the part it can reach.
+    for (const id of batch) {
+      if (commentScope(req, String(id)) === 'denied') { res.status(403).json({ error: '无权操作该站点的评论' }); return; }
+    }
     const notify: string[] = [];
     withTransaction(() => {
       for (const id of batch) {

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { TrendingUp } from 'lucide-react';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
+import { postPath } from '../lib/permalink';
 
 export default function PopularPostsWidget() {
   const [posts, setPosts] = useState<any[]>([]);
@@ -19,7 +20,7 @@ export default function PopularPostsWidget() {
       posts.map((p: any, i: number) =>
         React.createElement('li', { key: p.id, className: 'flex items-start gap-2' },
           React.createElement('span', { className: 'text-xs font-bold text-gray-300 mt-0.5 w-4' }, i + 1),
-          React.createElement(Link, { to: '/post/' + p.slug, className: 'text-sm text-gray-600 hover:text-primary-600 line-clamp-1' }, p.title),
+          React.createElement(Link, { to: postPath(p.slug), className: 'text-sm text-gray-600 hover:text-primary-600 line-clamp-1' }, p.title),
           p.views > 0 && React.createElement('span', { className: 'text-xs text-gray-400 ml-auto shrink-0' }, p.views + ' ' + t('views'))
         )
       )

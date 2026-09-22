@@ -188,7 +188,9 @@ export default function MenuEditor() {
               },
             }, (() => {
               const topItems = items.filter((it: any) => !it.parentId);
-              const childrenOf = (pid: string) => items.filter((it: any) => it.parentId === pid);
+              // `it.parentId &&` matters: an item without an id would otherwise make
+              // childrenOf(undefined) match every other parentless item.
+              const childrenOf = (pid: string) => items.filter((it: any) => it.parentId && it.parentId === pid);
               const rows: React.ReactNode[] = [];
               const renderRow = (item: any, idx: number, isChild: boolean) => {
                 const itemIdx = items.findIndex((x: any) => x.id === item.id);

@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { assignedSites, mayWriteSite, userMayAccessSite } from '../utils/userSites';
 import { slugify, uniqueSlug } from '../utils/slug';
 import { renderTemplate, sendEmail } from '../utils/mailer';
 import { doAction } from '../utils/hooks';
@@ -71,6 +72,18 @@ router.post('/forms/:slug/submit', async (req: AuthRequest, res: Response) => {
 
 const adminGuard = [authenticate, requireCap('manage_forms')];
 
+// A form carries the site it belongs to, and its submissions inherit it — the
+// admin views used to list every site's forms and submissions (names, emails,
+// IPs) regardless of who was asking.
+function mayTouchForm(req: AuthRequest, form: any): boolean {
+  return !!form && userMayAccessSite(req.user!.userId, req.user!.role, form.siteId || undefined);
+}
+function formScopeFor(req: AuthRequest): { clause: string; params: string[] } {
+  const assigned = assignedSites(req.user!.userId, req.user!.role);
+  if (!assigned) return { clause: '', params: [] };
+  return { clause: ' AND (siteId IS NULL OR siteId IN (' + assigned.map(() => '?').join(',') + '))', params: assigned };
+}
+
 function parseFormBody(req: AuthRequest): { name: string; fields: any[]; successMessage: string; emailTo: string; emailSubject: string; enabled: boolean } | { error: string } {
   const name = String(req.body?.name || '').trim();
   if (!name) return { error: 'A form name is required' };
@@ -96,10 +109,13 @@ function parseFormBody(req: AuthRequest): { name: string; fields: any[]; success
 }
 
 // List forms with unread submission counts
-router.get('/admin/forms', ...adminGuard, (_req: AuthRequest, res: Response) => {
+router.get('/admin/forms', ...adminGuard, (req: AuthRequest, res: Response) => {
   try {
-    const forms = db.prepare('SELECT * FROM Form ORDER BY createdAt DESC').all() as any[];
-    const counts = db.prepare("SELECT formId, SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END) as unread, COUNT(*) as total FROM FormSubmission GROUP BY formId").all() as any[];
+    const scope = formScopeFor(req);
+    const forms = db.prepare('SELECT * FROM Form WHERE 1=1' + scope.clause + ' ORDER BY createdAt DESC').all(...scope.params) as any[];
+    const allowed = new Set(forms.map((f: any) => f.id));
+    const counts = (db.prepare("SELECT formId, SUM(CASE WHEN status = 'new' THEN 1 ELSE 0 END) as unread, COUNT(*) as total FROM FormSubmission GROUP BY formId").all() as any[])
+      .filter((c: any) => allowed.has(c.formId));
     const byForm = new Map(counts.map((c: any) => [c.formId, c]));
     res.json({
       forms: forms.map((f: any) => ({
@@ -119,8 +135,11 @@ router.post('/admin/forms', ...adminGuard, (req: AuthRequest, res: Response) => 
     const existing = (db.prepare('SELECT slug FROM Form').all() as any[]).map((r: any) => r.slug);
     const slug = uniqueSlug(slugify(parsed.name) || 'form', existing);
     const id = cuid();
-    db.prepare('INSERT INTO Form (id, name, slug, fields, successMessage, emailTo, emailSubject, enabled) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, parsed.name, slug, JSON.stringify(parsed.fields), parsed.successMessage, parsed.emailTo, parsed.emailSubject, parsed.enabled ? 1 : 0);
+    // Owned by a site when the caller names one (validated); otherwise shared.
+    const formSite = String((req.body as any)?.siteId || '').trim() || null;
+    if (formSite && !mayWriteSite(req.user!.userId, req.user!.role, formSite)) { res.status(403).json({ error: '无权在该站点创建表单' }); return; }
+    db.prepare('INSERT INTO Form (id, name, slug, fields, successMessage, emailTo, emailSubject, enabled, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, parsed.name, slug, JSON.stringify(parsed.fields), parsed.successMessage, parsed.emailTo, parsed.emailSubject, parsed.enabled ? 1 : 0, formSite);
     res.status(201).json({ id, slug });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -128,6 +147,7 @@ router.post('/admin/forms', ...adminGuard, (req: AuthRequest, res: Response) => 
 router.get('/admin/forms/:id', ...adminGuard, (req: AuthRequest, res: Response) => {
   try {
     const form = db.prepare('SELECT * FROM Form WHERE id = ?').get(req.params.id) as any;
+    if (form && !mayTouchForm(req, form)) { res.status(403).json({ error: '无权操作该站点的表单' }); return; }
     if (!form) { res.status(404).json({ error: 'Form not found' }); return; }
     form.fields = JSON.parse(form.fields || '[]');
     res.json(form);
@@ -138,6 +158,7 @@ router.put('/admin/forms/:id', ...adminGuard, (req: AuthRequest, res: Response) 
   try {
     const existing = db.prepare('SELECT * FROM Form WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Form not found' }); return; }
+    if (!mayTouchForm(req, existing)) { res.status(403).json({ error: '无权操作该站点的表单' }); return; }
     const parsed = parseFormBody(req);
     if ('error' in parsed) { res.status(400).json({ error: parsed.error }); return; }
     db.prepare('UPDATE Form SET name = ?, fields = ?, successMessage = ?, emailTo = ?, emailSubject = ?, enabled = ?, updatedAt = ? WHERE id = ?')
@@ -148,6 +169,9 @@ router.put('/admin/forms/:id', ...adminGuard, (req: AuthRequest, res: Response) 
 
 router.delete('/admin/forms/:id', ...adminGuard, (req: AuthRequest, res: Response) => {
   try {
+    const form = db.prepare('SELECT * FROM Form WHERE id = ?').get(req.params.id) as any;
+    if (!form) { res.status(404).json({ error: 'Form not found' }); return; }
+    if (!mayTouchForm(req, form)) { res.status(403).json({ error: '无权操作该站点的表单' }); return; }
     const r = db.prepare('DELETE FROM Form WHERE id = ?').run(req.params.id);
     if (r.changes === 0) { res.status(404).json({ error: 'Form not found' }); return; }
     res.json({ success: true });
@@ -159,6 +183,7 @@ router.delete('/admin/forms/:id', ...adminGuard, (req: AuthRequest, res: Respons
 router.get('/admin/forms/:id/submissions', ...adminGuard, (req: AuthRequest, res: Response) => {
   try {
     const form = db.prepare('SELECT * FROM Form WHERE id = ?').get(req.params.id) as any;
+    if (form && !mayTouchForm(req, form)) { res.status(403).json({ error: '无权操作该站点的表单' }); return; }
     if (!form) { res.status(404).json({ error: 'Form not found' }); return; }
     const page = Math.max(1, parseInt(String(req.query.page || '1')) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit || '15')) || 15));
@@ -185,6 +210,9 @@ router.get('/admin/forms/:id/submissions', ...adminGuard, (req: AuthRequest, res
 // Mark all submissions (optionally one) as read
 router.post('/admin/forms/:id/submissions/read', ...adminGuard, (req: AuthRequest, res: Response) => {
   try {
+    const form = db.prepare('SELECT * FROM Form WHERE id = ?').get(req.params.id) as any;
+    if (!form) { res.status(404).json({ error: 'Form not found' }); return; }
+    if (!mayTouchForm(req, form)) { res.status(403).json({ error: '无权操作该站点的表单' }); return; }
     const sid = req.body?.submissionId;
     if (sid) {
       db.prepare("UPDATE FormSubmission SET status = 'read' WHERE id = ? AND formId = ?").run(sid, req.params.id);
@@ -197,6 +225,9 @@ router.post('/admin/forms/:id/submissions/read', ...adminGuard, (req: AuthReques
 
 router.delete('/admin/forms/:id/submissions/:sid', ...adminGuard, (req: AuthRequest, res: Response) => {
   try {
+    const form = db.prepare('SELECT * FROM Form WHERE id = ?').get(req.params.id) as any;
+    if (!form) { res.status(404).json({ error: 'Form not found' }); return; }
+    if (!mayTouchForm(req, form)) { res.status(403).json({ error: '无权操作该站点的表单' }); return; }
     const r = db.prepare('DELETE FROM FormSubmission WHERE id = ? AND formId = ?').run(req.params.sid, req.params.id);
     if (r.changes === 0) { res.status(404).json({ error: 'Submission not found' }); return; }
     res.json({ success: true });
@@ -207,6 +238,7 @@ router.delete('/admin/forms/:id/submissions/:sid', ...adminGuard, (req: AuthRequ
 router.get('/admin/forms/:id/submissions/export', ...adminGuard, (req: AuthRequest, res: Response) => {
   try {
     const form = db.prepare('SELECT * FROM Form WHERE id = ?').get(req.params.id) as any;
+    if (form && !mayTouchForm(req, form)) { res.status(403).json({ error: '无权操作该站点的表单' }); return; }
     if (!form) { res.status(404).json({ error: 'Form not found' }); return; }
     const fields: any[] = (() => { try { return JSON.parse(form.fields || '[]'); } catch { return []; } })();
     const rows = db.prepare('SELECT data, ip, spam, status, createdAt FROM FormSubmission WHERE formId = ? ORDER BY createdAt DESC').all(req.params.id) as any[];

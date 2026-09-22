@@ -1,5 +1,6 @@
 import { addAction } from '../../src/utils/hooks';
 import db from '../../src/utils/db';
+import { postUrl } from '../../src/utils/slug';
 import crypto from 'crypto';
 
 // Push site events to an external webhook (DingTalk group robot, enterprise
@@ -41,7 +42,7 @@ async function push(event: string, data: Record<string, unknown>): Promise<void>
 export function register() {
   addAction('post_published', async (postId: string) => {
     const p = db.prepare('SELECT id, title, slug FROM Post WHERE id = ?').get(postId) as any;
-    if (p) await push('post_published', { postId, title: p.title, url: siteUrl() + '/post/' + p.slug });
+    if (p) await push('post_published', { postId, title: p.title, url: siteUrl() + postUrl(p.slug) });
   }, 10, 'event-webhook');
 
   addAction('comment_added', async (commentId: string) => {

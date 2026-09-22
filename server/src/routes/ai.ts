@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import db, { cuid, withTransaction } from '../utils/db';
-import { uniqueSlug } from '../utils/slug';
+import { uniqueSlug, postUrl } from '../utils/slug';
 import { authenticate, authorize, requireCap, userCan, AuthRequest } from '../middleware/auth';
 import {
   AIProvider, PROVIDER_PRESETS, getProviders, saveProviders, getDefaultProvider,
@@ -13,7 +13,7 @@ import {
   executeToolUnattended,
 } from '../utils/aiTools';
 import { riskyReason, describeCall, signApproval, verifyApproval, claimApproval, oneLine, MAX_APPROVAL_CALLS } from '../utils/aiApproval';
-import { userMayAccessSite } from '../utils/userSites';
+import { userMayAccessSite, clampResolvedSite, assignedSites } from '../utils/userSites';
 import { effectiveSetting } from '../utils/siteSettings';
 import { mdToHtml } from '../utils/markdown';
 import { purgeContentCaches } from '../utils/cache';
@@ -26,9 +26,10 @@ const router = Router();
 // assistant can answer site-specific questions without extra tool calls
 function buildSiteContext(siteId?: string): string {
   try {
-    const settings = db.prepare("SELECT key, value FROM Setting WHERE key IN ('site_title','site_description','site_url')").all() as any[];
+    // effectiveSetting applies the site's own override: reading the global rows
+    // here told a site-scoped assistant another site's title/URL.
     const cfg: Record<string, string> = {};
-    settings.forEach((s: any) => { cfg[s.key] = s.value; });
+    for (const k of ['site_title', 'site_description', 'site_url']) cfg[k] = effectiveSetting(siteId, k);
     // Only what the caller could read anyway: this goes into the system prompt of
     // every request, and an unfiltered query leaked other authors' draft titles
     // (get_post refuses those) and other sites' posts on a multi-site install.
@@ -50,7 +51,7 @@ function buildSiteContext(siteId?: string): string {
     // unfiltered total would contradict both this line and the prompt's rule of
     // showing only what the caller can read.
     ctx += '已发布文章数: ' + postCnt + '，分类: ' + catCnt + '，标签: ' + tagCnt + '\n';
-    if (recent.length) ctx += '最近文章:\n' + recent.map((p: any, i: number) => (i + 1) + '. 《' + p.title + '》 /post/' + p.slug + ' (' + p.status + ')').join('\n') + '\n';
+    if (recent.length) ctx += '最近文章:\n' + recent.map((p: any, i: number) => (i + 1) + '. 《' + p.title + '》 ' + postUrl(p.slug) + ' (' + p.status + ')').join('\n') + '\n';
     if (pages.length) ctx += '页面: ' + pages.map((p: any) => p.title).join('、') + '\n';
     ctx += '【上下文结束】用户问及站内内容时优先参考以上信息。';
     return ctx;
@@ -791,9 +792,14 @@ router.get('/tasks', authenticate, (req: AuthRequest, res: Response) => {
     // "See every task" is the ai_tasks capability (admins always have it) —
     // otherwise this endpoint only ever returned the caller's own tasks.
     const canSeeAll = userCan(req.user, 'ai_tasks');
-    const rows = canSeeAll
-      ? db.prepare('SELECT id, username, prompt, status, error, steps, createdAt, finishedAt FROM AiTask ORDER BY createdAt DESC LIMIT 50').all()
-      : db.prepare('SELECT id, username, prompt, status, error, steps, createdAt, finishedAt FROM AiTask WHERE userId = ? ORDER BY createdAt DESC LIMIT 50').all(req.user!.userId);
+    // AiTask carries the site it was started from: "see every task" is still
+    // confined to this user's sites (shared/site-less tasks included).
+    const assigned = assignedSites(req.user!.userId, req.user!.role);
+    const cols = 'id, username, prompt, status, error, steps, createdAt, finishedAt';
+    const siteClause = assigned ? ' AND (siteId IS NULL OR siteId IN (' + assigned.map(() => '?').join(',') + '))' : '';
+    const rows = (canSeeAll
+      ? db.prepare('SELECT ' + cols + ' FROM AiTask WHERE 1=1' + siteClause + ' ORDER BY createdAt DESC LIMIT 50').all(...(assigned || []))
+      : db.prepare('SELECT ' + cols + ' FROM AiTask WHERE userId = ?' + siteClause + ' ORDER BY createdAt DESC LIMIT 50').all(req.user!.userId, ...(assigned || [])));
     const tasks = (rows as any[]).map((t: any) => {
       let steps: any[] = [];
       try { steps = JSON.parse(t.steps || '[]'); } catch {}
@@ -982,7 +988,12 @@ router.post('/review-comments', authenticate, enforceUsageLimit, async (req: Aut
     if (!userCan(req.user, 'ai_review')) { res.status(403).json({ error: 'Insufficient permissions' }); return; }
     const provider = getDefaultProvider();
     if (!provider) { res.status(400).json({ error: '尚未配置 AI 服务商' }); return; }
-    const comments = db.prepare("SELECT id, author, content FROM Comment WHERE status = 'pending' ORDER BY createdAt DESC LIMIT 10").all() as any[];
+    // Site-scoped like the moderation queue: an editor assigned to one site must
+    // not ship another site's pending comments to the provider (or see them back).
+    const reviewSite = actingSiteId(req);
+    const comments = (reviewSite
+      ? db.prepare("SELECT c.id, c.author, c.content FROM Comment c LEFT JOIN Post p ON p.id = c.postId WHERE c.status = 'pending' AND (COALESCE(c.siteId, p.siteId) IS NULL OR COALESCE(c.siteId, p.siteId) = ?) ORDER BY c.createdAt DESC LIMIT 10").all(reviewSite)
+      : db.prepare("SELECT id, author, content FROM Comment WHERE status = 'pending' ORDER BY createdAt DESC LIMIT 10").all()) as any[];
     if (!comments.length) { res.json({ verdicts: [] }); return; }
 
     const list = comments.map((c: any) => c.id + '|' + c.author + '|' + c.content.slice(0, 200)).join('\n');
@@ -1036,7 +1047,10 @@ router.post('/batch-translate', authenticate, enforceUsageLimit, async (req: Aut
     // editors/admins may translate anyone's. Otherwise an author could read
     // another user's draft/private content through the generated translation.
     const canEditOthers = userCan(req.user, 'edit_others_posts');
-    const siteId = req.siteId || null;
+    // clampResolvedSite, not raw req.siteId: the Host is client-controlled, so an
+    // editor could otherwise translate another site's posts and write the drafts
+    // into it (every sibling route already clamps).
+    const siteId = clampResolvedSite(req, req.user!.userId, req.user!.role) || null;
     const posts = ids
       .map((id: string) => db.prepare("SELECT * FROM Post WHERE id = ? AND type = 'post'" + (siteId ? ' AND (siteId IS NULL OR siteId = ?)' : '')).get(...(siteId ? [id, siteId] : [id])) as any)
       .filter((p: any) => p && p.status !== 'trash' && (canEditOthers || p.authorId === req.user!.userId));

@@ -7,6 +7,7 @@ import useSEO from '../hooks/useSEO';
 import { useTheme } from '../themes';
 import { sanitizeCss } from '../lib/safeCss';
 import { t } from '../lib/i18n';
+import { postPath } from '../lib/permalink';
 
 export default function Home({ settings }: { settings: Record<string, string> }) {
   const { slug: catSlug } = useParams();
@@ -66,7 +67,7 @@ export default function Home({ settings }: { settings: Record<string, string> })
       ...(catSlug && posts.length > 0 ? [{
         '@context': 'https://schema.org',
         '@type': 'ItemList',
-        itemListElement: posts.map((p: any, i: number) => ({ '@type': 'ListItem', position: i + 1, name: p.title, url: siteOrigin + '/post/' + p.slug })),
+        itemListElement: posts.map((p: any, i: number) => ({ '@type': 'ListItem', position: i + 1, name: p.title, url: siteOrigin + postPath(p.slug) })),
       }] : []),
     ],
   });
@@ -97,5 +98,5 @@ export default function Home({ settings }: { settings: Record<string, string> })
   if (loading && posts.length === 0 && !loadError && !catSlug) {
     return React.createElement(ListSkeleton, null);
   }
-  return React.createElement(Layout, { settings, posts, total, page, setPage, loadError, catSlug, isTagPage, categories });
+  return React.createElement(Layout, { settings, posts, total, page, setPage, loadError, loading, catSlug, isTagPage, categories });
 }

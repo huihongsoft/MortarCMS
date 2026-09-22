@@ -8,7 +8,7 @@ import { uniqueSlug } from '../utils/slug';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 import { sanitizeCssText } from '../utils/sanitize';
 import { normalizeSeoField } from '../utils/seoFields';
-import { siteScopeForFilter, mayWriteSite } from '../utils/userSites';
+import { siteScopeForFilter, mayWriteSite, userMayAccessSite } from '../utils/userSites';
 import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
 
 const router = Router();
@@ -177,6 +177,8 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), async (req: AuthR
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ? AND type = ?').get(req.params.id, 'page') as any;
     if (!existing) { res.status(404).json({ error: 'Page not found' }); return; }
+    // Same as posts: the page must belong to one of this user's sites.
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, existing.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的内容' }); return; }
     const data = pageSchema.partial().parse(req.body);
     const sets: string[] = []; const vals: any[] = [];
     if (data.title !== undefined) { sets.push('title = ?'); vals.push(data.title); }
@@ -236,6 +238,7 @@ router.put('/:id/revisions/:revId/restore', authenticate, authorize('admin', 'ed
     const existing = db.prepare('SELECT * FROM Post WHERE id = ? AND type = ?').get(req.params.id, 'page') as any;
     const rev = db.prepare('SELECT * FROM Revision WHERE id = ? AND postId = ?').get(req.params.revId, req.params.id) as any;
     if (!existing || !rev) { res.status(404).json({ error: 'Not found' }); return; }
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, existing.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的内容' }); return; }
     withTransaction(() => {
       db.prepare('INSERT INTO Revision (id, postId, title, content, excerpt, createdAt) VALUES (?, ?, ?, ?, ?, ?)').run(
         cuid(), req.params.id, existing.title, existing.content || '', existing.excerpt || '', new Date().toISOString());
@@ -247,6 +250,11 @@ router.put('/:id/revisions/:revId/restore', authenticate, authorize('admin', 'ed
 
 router.delete('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
   try {
+    // Deleting a page is a write on its site, so the row has to be in this user's
+    // sites (this handler did not even load it before).
+    const page = db.prepare('SELECT * FROM Post WHERE id = ? AND type = ?').get(req.params.id, 'page') as any;
+    if (!page) { res.status(404).json({ error: 'Page not found' }); return; }
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, page.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的内容' }); return; }
     withTransaction(() => {
       db.prepare('DELETE FROM Post WHERE id = ? AND type = ?').run(req.params.id, 'page');
       // Categories may point at this page as their landing page — clear the

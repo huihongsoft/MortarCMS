@@ -7,11 +7,12 @@ import { verifyToken } from '../utils/jwt';
 import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
 import { SiteRequest } from '../middleware/site';
 import { slugify, uniqueSlug } from '../utils/slug';
+import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
 import { applyFilters, doAction } from '../utils/hooks';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 import { sanitizeCssText } from '../utils/sanitize';
 import { normalizeSeoField } from '../utils/seoFields';
-import { siteScopeForFilter, mayWriteSite } from '../utils/userSites';
+import { siteScopeForFilter, mayWriteSite, userMayAccessSite, assignedSites } from '../utils/userSites';
 import { trackView } from '../utils/views';
 
 const router = Router();
@@ -196,10 +197,11 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
 // Search suggestions for the search widget autocomplete (lightweight, no content)
 // Search logging: anonymous visitors' search terms feed the admin hot-search
 // report. No visitor identity is stored, only the query text.
-router.post('/search-log', (req: AuthRequest, res: Response) => {
+router.post('/search-log', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     const q = String(req.body?.q || '').trim().slice(0, 100);
-    if (q) db.prepare('INSERT INTO SearchLog (id, query, createdAt) VALUES (?, ?, ?)').run(cuid(), q.toLowerCase(), new Date().toISOString());
+    // Recorded with the site the search ran on: the hot-search report is scoped.
+    if (q) db.prepare('INSERT INTO SearchLog (id, query, createdAt, siteId) VALUES (?, ?, ?, ?)').run(cuid(), q.toLowerCase(), new Date().toISOString(), req.siteId || null);
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -208,21 +210,33 @@ router.post('/search-log', (req: AuthRequest, res: Response) => {
 router.get('/search-stats', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
     const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
-    const rows = db.prepare("SELECT query, COUNT(*) as cnt FROM SearchLog WHERE createdAt >= ? GROUP BY query ORDER BY cnt DESC LIMIT 20").all(since) as any[];
-    const total = (db.prepare("SELECT COUNT(*) as c FROM SearchLog WHERE createdAt >= ?").get(since) as any).c || 0;
+    // Site-scoped: the log records the site a search ran on (migration 13).
+    const assigned = assignedSites(req.user!.userId, req.user!.role);
+    const siteClause = assigned ? ' AND (siteId IS NULL OR siteId IN (' + assigned.map(() => '?').join(',') + '))' : '';
+    const siteArgs = assigned || [];
+    const rows = db.prepare('SELECT query, COUNT(*) as cnt FROM SearchLog WHERE createdAt >= ?' + siteClause + ' GROUP BY query ORDER BY cnt DESC LIMIT 20').all(since, ...siteArgs) as any[];
+    const total = (db.prepare('SELECT COUNT(*) as c FROM SearchLog WHERE createdAt >= ?' + siteClause).get(since, ...siteArgs) as any).c || 0;
     res.json({ terms: rows, total });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/suggest', (req: AuthRequest, res: Response) => {
+router.get('/suggest', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     const q = String(req.query.q || '').trim().slice(0, 60);
     if (!q) { res.json({ suggestions: [] }); return; }
     const escLike = (s: string) => s.replace(/[\\%_]/g, (m) => '\\' + m);
     const like = '%' + escLike(q) + '%';
     const now = new Date().toISOString();
-    // Same visibility as the public list: never suggest scheduled posts
-    const rows = db.prepare("SELECT id, title, slug, type, publishedAt FROM Post WHERE type IN ('post','page') AND status = 'published' AND (publishedAt IS NULL OR publishedAt <= ?) AND (title LIKE ? ESCAPE '\\' OR slug LIKE ? ESCAPE '\\') ORDER BY CASE WHEN title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END, publishedAt DESC LIMIT 6").all(now, like, like, like) as any[];
+    // Same visibility as the public list: never suggest scheduled posts, and no
+    // titles of gated/unlisted ones (this dropdown is a plain public list too).
+    // PUBLIC_POST_CONDITIONS expects the Post table aliased as `p`.
+    // Site-scoped like the public lists it mirrors: the dropdown must not offer a
+    // title that belongs to another site.
+    const siteClause = req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '';
+    const args: any[] = [now, like, like];
+    if (req.siteId) args.push(req.siteId);
+    args.push(like);
+    const rows = db.prepare("SELECT p.id, p.title, p.slug, p.type, p.publishedAt FROM Post p WHERE p.type IN ('post','page') AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND (p.title LIKE ? ESCAPE '\\' OR p.slug LIKE ? ESCAPE '\\')" + siteClause + (isLoggedIn(req) ? '' : PUBLIC_POST_CONDITIONS) + " ORDER BY CASE WHEN p.title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END, p.publishedAt DESC LIMIT 6").all(...args) as any[];
     res.json({ suggestions: rows.map((p: any) => ({ id: p.id, title: p.title, slug: p.slug, type: p.type, date: p.publishedAt })) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -301,13 +315,29 @@ router.post('/slug/:slug/password', passwordLimiter, async (req: AuthRequest, re
 });
 
 
-// Public: popular posts by views
+// Public: popular posts by views. `category` scopes the ranking to one
+// category, which is what a theme's per-category "hot" rail needs — ranking the
+// ten newest posts of the category instead would not be a popularity ranking at
+// all.
 router.get('/popular', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     // Clamped: an unbounded limit lets an anonymous caller ask for the whole table.
     const limit = Math.min(50, Math.max(1, parseInt(req.query.limit as string) || 5));
+    const category = String(req.query.category || '').trim();
     const now = new Date().toISOString();
-    const posts = db.prepare('SELECT * FROM Post WHERE type = ? AND status = ? AND (publishedAt IS NULL OR publishedAt <= ?)' + (req.siteId ? ' AND (siteId IS NULL OR siteId = ?)' : '') + ' ORDER BY views DESC, publishedAt DESC LIMIT ?').all(...(req.siteId ? ['post', 'published', now, req.siteId, limit] : ['post', 'published', now, limit])) as any[];
+    let sql = 'SELECT DISTINCT p.* FROM Post p';
+    const params: any[] = ['post', 'published', now];
+    if (category) { sql += ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId'; }
+    sql += ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)';
+    if (category) { sql += ' AND c.slug = ?'; params.push(category); }
+    if (req.siteId) { sql += ' AND (p.siteId IS NULL OR p.siteId = ?)'; params.push(req.siteId); }
+    // Same visibility rule as the public list: an anonymous visitor must not be
+    // shown gated or unlisted posts here either (the route only stripped their
+    // bodies, so their titles and excerpts were still advertised).
+    if (!isLoggedIn(req)) sql += PUBLIC_POST_CONDITIONS;
+    sql += ' ORDER BY p.views DESC, p.publishedAt DESC LIMIT ?';
+    params.push(limit);
+    const posts = db.prepare(sql).all(...params) as any[];
     res.json(publicShape(enrichPosts(posts), mayBypassProtection(req)));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -315,7 +345,7 @@ router.get('/popular', (req: AuthRequest & SiteRequest, res: Response) => {
 // Public: posts by author
 
 // Public: monthly archive
-router.get('/archive/:year/:month', (req: AuthRequest, res: Response) => {
+router.get('/archive/:year/:month', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
@@ -325,31 +355,39 @@ router.get('/archive/:year/:month', (req: AuthRequest, res: Response) => {
     // Single quotes: this build reports DQS=0, so a double-quoted "%Y-%m" is
     // parsed as an identifier and the whole (public) archive month route 500s
     // with "no such column". It was the only double-quoted literal in the repo.
-    const where = "p.type = ? AND p.status = ? AND strftime('%Y-%m', p.publishedAt) = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)";
+    let where = "p.type = ? AND p.status = ? AND strftime('%Y-%m', p.publishedAt) = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)";
     const ym = y + '-' + m;
-    const posts = db.prepare('SELECT DISTINCT p.* FROM Post p WHERE ' + where + ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?').all('post', 'published', ym, now, limit, (page - 1) * limit) as any[];
-    const total = (db.prepare('SELECT COUNT(DISTINCT p.id) as cnt FROM Post p WHERE ' + where).get('post', 'published', ym, now) as any)?.cnt || 0;
+    // Site-scoped: a monthly archive on one site must not list another site's posts.
+    const scopeArgs: any[] = [];
+    if (req.siteId) { where += ' AND (p.siteId IS NULL OR p.siteId = ?)'; scopeArgs.push(req.siteId); }
+    const posts = db.prepare('SELECT DISTINCT p.* FROM Post p WHERE ' + where + ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?').all('post', 'published', ym, now, ...scopeArgs, limit, (page - 1) * limit) as any[];
+    const total = (db.prepare('SELECT COUNT(DISTINCT p.id) as cnt FROM Post p WHERE ' + where).get('post', 'published', ym, now, ...scopeArgs) as any)?.cnt || 0;
     res.json({ posts: publicShape(enrichPosts(posts), mayBypassProtection(req)), total, page, totalPages: Math.ceil(total / limit), archive: { year: y, month: m } });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Public: archive months list
-router.get('/archives', (_req: AuthRequest, res: Response) => {
+router.get('/archives', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
-    const months = db.prepare("SELECT strftime('%Y-%m', publishedAt) as month, COUNT(*) as count FROM Post WHERE type = 'post' AND status = 'published' AND publishedAt IS NOT NULL AND publishedAt <= ? GROUP BY month ORDER BY month DESC LIMIT 24").all(new Date().toISOString()) as any[];
+    const args: any[] = [new Date().toISOString()];
+    let sql = "SELECT strftime('%Y-%m', publishedAt) as month, COUNT(*) as count FROM Post WHERE type = 'post' AND status = 'published' AND publishedAt IS NOT NULL AND publishedAt <= ?";
+    if (req.siteId) { sql += ' AND (siteId IS NULL OR siteId = ?)'; args.push(req.siteId); }
+    const months = db.prepare(sql + ' GROUP BY month ORDER BY month DESC LIMIT 24').all(...args) as any[];
     res.json(months);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/author/:username', (req: AuthRequest, res: Response) => {
+router.get('/author/:username', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
     const author = db.prepare('SELECT id FROM User WHERE username = ?').get(req.params.username) as any;
     if (!author) { res.status(404).json({ error: 'Author not found' }); return; }
-    const where = 'p.type = ? AND p.status = ? AND p.authorId = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)';
-    const posts = db.prepare('SELECT DISTINCT p.* FROM Post p WHERE ' + where + ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?').all('post', 'published', author.id, new Date().toISOString(), limit, (page - 1) * limit) as any[];
-    const total = (db.prepare('SELECT COUNT(DISTINCT p.id) as cnt FROM Post p WHERE ' + where).get('post', 'published', author.id, new Date().toISOString()) as any)?.cnt || 0;
+    let where = 'p.type = ? AND p.status = ? AND p.authorId = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)';
+    const scopeArgs: any[] = [];
+    if (req.siteId) { where += ' AND (p.siteId IS NULL OR p.siteId = ?)'; scopeArgs.push(req.siteId); }
+    const posts = db.prepare('SELECT DISTINCT p.* FROM Post p WHERE ' + where + ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?').all('post', 'published', author.id, new Date().toISOString(), ...scopeArgs, limit, (page - 1) * limit) as any[];
+    const total = (db.prepare('SELECT COUNT(DISTINCT p.id) as cnt FROM Post p WHERE ' + where).get('post', 'published', author.id, new Date().toISOString(), ...scopeArgs) as any)?.cnt || 0;
     res.json({ posts: publicShape(enrichPosts(posts), mayBypassProtection(req)), total, page, totalPages: Math.ceil(total / limit), author: { username: req.params.username } });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -444,6 +482,9 @@ router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contrib
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
+    // The row itself must be in this user's sites: validating only the *new*
+    // siteId let an editor assigned to site A rewrite a site B post.
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, existing.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的内容' }); return; }
     if ((req.user!.role === 'author' || req.user!.role === 'contributor') && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot edit another user\'s post' }); return; }
     const data = postSchema.partial().parse(req.body);
     // Contributors may never publish (or unpublish) their drafts
@@ -515,6 +556,7 @@ router.delete('/:id', authenticate, authorize('admin', 'editor', 'author'), (req
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, existing.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的内容' }); return; }
     if (req.user!.role === 'author' && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot delete another author\'s post' }); return; }
     doAction('delete_post', req.params.id);
     db.prepare('UPDATE Post SET status = ?, updatedAt = ? WHERE id = ?').run('trash', new Date().toISOString(), req.params.id);
@@ -628,15 +670,18 @@ router.put('/:id/revisions/:revId/restore', authenticate, authorize('admin', 'ed
 });
 
 // Public: related posts (same category)
-router.get('/:id/related', (req: AuthRequest, res: Response) => {
+router.get('/:id/related', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     const catIds = (db.prepare('SELECT categoryId FROM PostCategory WHERE postId = ?').all(req.params.id) as any[]).map((r: any) => r.categoryId);
     if (catIds.length === 0) { res.json([]); return; }
     const placeholders = catIds.map(() => '?').join(',');
     const now = new Date().toISOString();
+    // Categories are shared, so without this a site A post listed site B's posts.
+    const scopeClause = req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '';
+    const scopeArgs: any[] = req.siteId ? [req.siteId] : [];
     const posts = db.prepare(
-      'SELECT DISTINCT p.* FROM Post p JOIN PostCategory pc ON pc.postId = p.id WHERE pc.categoryId IN (' + placeholders + ') AND p.id != ? AND p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?) ORDER BY p.publishedAt DESC LIMIT 4'
-    ).all(...catIds, req.params.id, 'post', 'published', now) as any[];
+      'SELECT DISTINCT p.* FROM Post p JOIN PostCategory pc ON pc.postId = p.id WHERE pc.categoryId IN (' + placeholders + ') AND p.id != ? AND p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + scopeClause + ' ORDER BY p.publishedAt DESC LIMIT 4'
+    ).all(...catIds, req.params.id, 'post', 'published', now, ...scopeArgs) as any[];
     res.json(publicShape(enrichPosts(posts), mayBypassProtection(req)));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

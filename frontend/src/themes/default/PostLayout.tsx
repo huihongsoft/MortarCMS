@@ -14,6 +14,7 @@ import { timeAgo, readingTime, useTimeTick } from '../../lib/time';
 import { t } from '../../lib/i18n';
 import { useContentImageEnhancer } from '../../lib/imageEnhance';
 import DOMPurify from 'dompurify';
+import { postPath } from '../../lib/permalink';
 
 
 
@@ -28,9 +29,9 @@ export default function PostLayout(props: any) {
   const curPage = Math.max(1, Math.min(pageCount, parseInt(searchParams.get('page') || '1', 10) || 1));
   const pageContent = parts[curPage - 1] || '';
   const pageNav = pageCount > 1 && React.createElement('nav', { className: 'flex items-center justify-center gap-3 mt-8 pt-6 border-t border-gray-100' },
-    curPage > 1 && React.createElement(Link, { to: '/post/' + slug + (curPage - 1 > 1 ? '?page=' + (curPage - 1) : ''), className: 'text-sm text-gray-500 hover:text-primary-600' }, '← ' + t('previous', settings)),
+    curPage > 1 && React.createElement(Link, { to: postPath(slug) + (curPage - 1 > 1 ? '?page=' + (curPage - 1) : ''), className: 'text-sm text-gray-500 hover:text-primary-600' }, '← ' + t('previous', settings)),
     React.createElement('span', { className: 'text-sm text-gray-500' }, t('page', settings) + ' ' + curPage + ' / ' + pageCount),
-    curPage < pageCount && React.createElement(Link, { to: '/post/' + slug + '?page=' + (curPage + 1), className: 'text-sm text-gray-500 hover:text-primary-600' }, t('next', settings) + ' →')
+    curPage < pageCount && React.createElement(Link, { to: postPath(slug) + '?page=' + (curPage + 1), className: 'text-sm text-gray-500 hover:text-primary-600' }, t('next', settings) + ' →')
   );
 
   const contentRef = useRef<HTMLDivElement>(null);
@@ -127,7 +128,7 @@ export default function PostLayout(props: any) {
     // Share + back row (share buttons toggleable in theme settings)
     React.createElement('div', { className: 'flex items-center justify-between py-6 border-t border-gray-100 mb-10' },
       React.createElement(Link, { to: '/', className: 'text-sm text-gray-500 hover:text-primary-600 flex items-center gap-1' }, React.createElement(ChevronLeft, { size: 15 }), t('all posts', settings)),
-      settings.theme_show_share_buttons !== '0' && React.createElement(SocialShare, { title: post.title, url: '/post/' + post.slug, siteUrl: settings.site_url })
+      settings.theme_show_share_buttons !== '0' && React.createElement(SocialShare, { title: post.title, url: postPath(post.slug), siteUrl: settings.site_url })
     ),
 
     // Author box

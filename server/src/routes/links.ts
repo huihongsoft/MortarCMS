@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import { mayWriteSite } from '../utils/userSites';
+import { mayWriteSite, userMayAccessSite } from '../utils/userSites';
 import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, requireCap, resolveOptionalUser, getRoleCapabilities, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
@@ -78,6 +78,7 @@ router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, 
     const id = cuid();
     const postIds = Array.isArray(req.body?.postIds) ? req.body.postIds : [];
     withTransaction(() => {
+      if (categoryId && !belongsInCategory(req, categoryId)) { res.status(403).json({ error: '无权操作该站点的链接' }); return; }
       db.prepare('INSERT INTO Link (id, name, url, description, avatar, icon, categoryId, menuOrder, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
         .run(id, name, url, description || '', avatar || '', icon || '', categoryId || null, menuOrder || 0, active === false ? 0 : 1);
       // Link-post associations
@@ -87,10 +88,37 @@ router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, 
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// A link's site belongs to its CATEGORY: migration 7 dropped Link.siteId and
+// moved ownership to LinkCategory ("ownership lives on the category now"), which
+// is also what the public list filters on. A link without a category is shared.
+function linkSiteId(link: { categoryId?: string | null } | undefined): string | undefined {
+  if (!link?.categoryId) return undefined;
+  try {
+    const cat = db.prepare('SELECT siteId FROM LinkCategory WHERE id = ?').get(link.categoryId) as any;
+    return cat?.siteId || undefined;
+  } catch { return undefined; }
+}
+function belongsInCategory(req: AuthRequest, categoryId: unknown): boolean {
+  try {
+    const cat = db.prepare('SELECT siteId FROM LinkCategory WHERE id = ?').get(String(categoryId)) as any;
+    if (!cat) return false;                       // unknown category
+    return userMayAccessSite(req.user!.userId, req.user!.role, cat.siteId || undefined);
+  } catch { return false; }
+}
+
 // Admin: update link
 router.put('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
+    const current = db.prepare('SELECT * FROM Link WHERE id = ?').get(req.params.id) as any;
+    if (!current) { res.status(404).json({ error: 'Link not found' }); return; }
+    // Capability is not enough on a multi-site install: the link's category must
+    // be in this user's sites (the link itself has no site — see linkSiteId).
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, linkSiteId(current))) { res.status(403).json({ error: '无权操作该站点的链接' }); return; }
     const { name, url, description, avatar, icon, categoryId, menuOrder, active } = req.body || {};
+    // Moving a link into another site's category is a write into that site.
+    if (categoryId !== undefined && categoryId !== null && categoryId !== '' && !belongsInCategory(req, categoryId)) {
+      res.status(403).json({ error: '无权操作该站点的链接' }); return;
+    }
     const sets: string[] = []; const vals: any[] = [];
     if (name !== undefined) { sets.push('name = ?'); vals.push(name); }
     if (url !== undefined) { sets.push('url = ?'); vals.push(url); }
@@ -114,7 +142,13 @@ router.put('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest
 
 // Admin: delete link
 router.delete('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
-  try { db.prepare('DELETE FROM Link WHERE id = ?').run(req.params.id); res.json({ success: true }); } catch (err: any) { res.status(500).json({ error: err.message }); }
+  try {
+    const current = db.prepare('SELECT * FROM Link WHERE id = ?').get(req.params.id) as any;
+    if (!current) { res.status(404).json({ error: 'Link not found' }); return; }
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, linkSiteId(current))) { res.status(403).json({ error: '无权操作该站点的链接' }); return; }
+    db.prepare('DELETE FROM Link WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Public: count a click on a link (navigation-site usage)
@@ -189,7 +223,9 @@ router.post('/categories', authenticate, requireCap('manage_options'), (req: Aut
 router.put('/categories/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
     const { name, description, menuOrder, siteId, pageId } = req.body || {};
-    const existing = db.prepare('SELECT slug FROM LinkCategory WHERE id = ?').get(req.params.id) as any;
+    const existing = db.prepare('SELECT slug, siteId FROM LinkCategory WHERE id = ?').get(req.params.id) as any;
+    if (!existing) { res.status(404).json({ error: 'Category not found' }); return; }
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, existing.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的链接' }); return; }
     const sets: string[] = []; const vals: any[] = [];
     if (name !== undefined) { sets.push('name = ?'); vals.push(name); sets.push('slug = ?'); vals.push(slugify(name)); }
     if (description !== undefined) { sets.push('description = ?'); vals.push(description); }
@@ -220,7 +256,9 @@ router.put('/categories/:id', authenticate, requireCap('manage_options'), (req: 
 // items pointing at the category fall back to the links page)
 router.delete('/categories/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
   try {
-    const existing = db.prepare('SELECT slug FROM LinkCategory WHERE id = ?').get(req.params.id) as any;
+    const existing = db.prepare('SELECT slug, siteId FROM LinkCategory WHERE id = ?').get(req.params.id) as any;
+    if (!existing) { res.status(404).json({ error: 'Category not found' }); return; }
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, existing.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的链接' }); return; }
     withTransaction(() => {
       db.prepare('UPDATE Link SET categoryId = NULL WHERE categoryId = ?').run(req.params.id);
       db.prepare('DELETE FROM LinkCategory WHERE id = ?').run(req.params.id);

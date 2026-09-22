@@ -1,5 +1,6 @@
 import { addAction } from '../../src/utils/hooks';
 import db from '../../src/utils/db';
+import { postUrl } from '../../src/utils/slug';
 import { isPrivateIp } from '../../src/utils/ssrf';
 
 // Notify search engines about newly published posts:
@@ -70,7 +71,7 @@ export function register() {
       // sitemap and Baidu push the exact URL. The sitemap route lives under
       // /api (see index.ts), not at the root.
       await pingGoogleBing(base + '/api/sitemap.xml');
-      await pingBaidu(base + '/post/' + post.slug);
+      await pingBaidu(base + postUrl(post.slug));
     } catch { /* never break publishing on ping failures */ }
   }, 10, 'search-engine-ping');
 }

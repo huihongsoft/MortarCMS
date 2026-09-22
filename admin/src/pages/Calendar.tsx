@@ -20,6 +20,17 @@ export default function Calendar() {
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState(() => { const d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; });
 
+  // Step one month, carrying into the year. `m` is a raw 0-based month, so
+  // incrementing it alone let it run past 11 (the header read "2026 / 14") while
+  // the grid, built with new Date(y, m, 1), silently rolled over to 2027 — and
+  // the per-day lookup key (y + '-' + m + '-' + day) then matched no post at all.
+  // Going backwards it stopped at "…/ 00" for the same reason. Let Date normalize
+  // instead of doing the arithmetic by hand.
+  const shiftMonth = (delta: number) => setView(v => {
+    const d = new Date(v.y, v.m + delta, 1);
+    return { y: d.getFullYear(), m: d.getMonth() };
+  });
+
   useEffect(() => {
     setLoading(true);
     api.get('/posts/admin?limit=300').then(r => { setPosts(r.data.posts || []); setLoading(false); })
@@ -59,9 +70,9 @@ export default function Calendar() {
       React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2' },
         React.createElement(CalendarDays, { size: 22, className: 'text-primary-600' }), t('calendar', getLang())),
       React.createElement('div', { className: 'flex items-center gap-2' },
-        React.createElement('button', { onClick: () => setView({ y: view.y, m: view.m - 1 }), className: 'btn-secondary text-sm px-2.5' }, React.createElement(ChevronLeft, { size: 15 })),
+        React.createElement('button', { onClick: () => shiftMonth(-1), className: 'btn-secondary text-sm px-2.5' }, React.createElement(ChevronLeft, { size: 15 })),
         React.createElement('span', { className: 'text-sm font-semibold text-gray-700 dark:text-gray-200 min-w-28 text-center' }, view.y + ' / ' + String(view.m + 1).padStart(2, '0')),
-        React.createElement('button', { onClick: () => setView({ y: view.y, m: view.m + 1 }), className: 'btn-secondary text-sm px-2.5' }, React.createElement(ChevronRight, { size: 15 })),
+        React.createElement('button', { onClick: () => shiftMonth(1), className: 'btn-secondary text-sm px-2.5' }, React.createElement(ChevronRight, { size: 15 })),
         React.createElement('button', { onClick: () => { const d = new Date(); setView({ y: d.getFullYear(), m: d.getMonth() }); }, className: 'btn-secondary text-sm' }, t('today', getLang()))),
     ),
 

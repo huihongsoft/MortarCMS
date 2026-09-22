@@ -105,20 +105,20 @@ router.post('/import', authenticate, authorize('admin'), (req: AuthRequest, res:
       // have been tampered with after export)
       const content = sanitizeHtml(p.content || '');
       const excerpt = sanitizeHtml(p.excerpt || '');
-      try { db.prepare('INSERT OR IGNORE INTO Post (id, title, slug, content, excerpt, status, type, featured, authorId, parentId, menuOrder, sticky, password, publishedAt, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(p.id||cuid_import(), p.title, p.slug, content, excerpt, p.status||'draft', p.type||'post', p.featured||null, p.authorId, p.parentId||null, p.menuOrder||0, p.sticky||0, p.password||'', p.publishedAt||null, p.createdAt||new Date().toISOString(), p.updatedAt||new Date().toISOString()); count++; } catch {}
+      try { db.prepare('INSERT OR IGNORE INTO Post (id, title, slug, content, excerpt, status, type, featured, authorId, parentId, menuOrder, sticky, password, publishedAt, createdAt, updatedAt, siteId) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)').run(p.id||cuid_import(), p.title, p.slug, content, excerpt, p.status||'draft', p.type||'post', p.featured||null, p.authorId, p.parentId||null, p.menuOrder||0, p.sticky||0, p.password||'', p.publishedAt||null, p.createdAt||new Date().toISOString(), p.updatedAt||new Date().toISOString(), p.siteId||null); count++; } catch {}
     }
     if (data.menus) for (const m of data.menus) {
       try { db.prepare('INSERT OR IGNORE INTO Menu (id, name, location, items, siteId) VALUES (?,?,?,?,?)').run(m.id||cuid_import(), m.name, m.location||'primary', JSON.stringify(m.items||[]), m.siteId||null); count++; } catch {}
     }
     if (data.comments) for (const cm of data.comments) {
-      try { db.prepare('INSERT OR IGNORE INTO Comment (id, content, author, email, website, postId, parentId, status, createdAt) VALUES (?,?,?,?,?,?,?,?,?)').run(cm.id||cuid_import(), sanitizeHtml(cm.content||''), cm.author||'Anonymous', cm.email||'', cm.website||'', cm.postId, cm.parentId||null, cm.status||'pending', cm.createdAt||new Date().toISOString()); count++; } catch {}
+      try { db.prepare('INSERT OR IGNORE INTO Comment (id, content, author, email, website, postId, parentId, status, createdAt, siteId) VALUES (?,?,?,?,?,?,?,?,?,?)').run(cm.id||cuid_import(), sanitizeHtml(cm.content||''), cm.author||'Anonymous', cm.email||'', cm.website||'', cm.postId, cm.parentId||null, cm.status||'pending', cm.createdAt||new Date().toISOString(), cm.siteId||null); count++; } catch {}
     }
     if (data.media) for (const md of data.media) {
       try {
         const url = safeMediaUrl(md.url);
         if (!url) continue; // drop rows with a non-site URL rather than store junk
         const thumb = md.thumbnail ? safeMediaUrl(md.thumbnail) : null;
-        db.prepare('INSERT OR IGNORE INTO Media (id, filename, original, mimeType, size, url, thumbnail, title, alt, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)').run(md.id||cuid_import(), md.filename, md.original, md.mimeType, md.size||0, url, thumb, md.title||'', md.alt||'', md.createdAt||new Date().toISOString());
+        db.prepare('INSERT OR IGNORE INTO Media (id, filename, original, mimeType, size, url, thumbnail, title, alt, createdAt, siteId) VALUES (?,?,?,?,?,?,?,?,?,?,?)').run(md.id||cuid_import(), md.filename, md.original, md.mimeType, md.size||0, url, thumb, md.title||'', md.alt||'', md.createdAt||new Date().toISOString(), md.siteId||null);
         count++;
       } catch {}
     }

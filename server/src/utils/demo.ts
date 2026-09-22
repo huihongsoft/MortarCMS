@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import db, { cuid, withTransaction } from './db';
-import { slugify } from './slug';
+import { slugify, postUrl } from './slug';
 import { purgeAllCaches } from './cache';
 import { doAction } from './hooks';
 
@@ -31,13 +31,21 @@ function clearTable(t: string): number {
 }
 
 // Generate a small gradient SVG placeholder (no external dependencies) so
-// demo posts have real cover images on disk
+// demo posts have real cover images on disk.
+//
+// Text placement: `y` is the BASELINE, not the middle of the glyph box, so the
+// label has to be pushed down by half its cap height to look centred. The canvas
+// is 300 tall (centre 150) and every label is an all-caps acronym at 72px, whose
+// caps measure ~0.72em (~52px) in Arial/Helvetica/DejaVu — hence 150 + 26 = 176.
+// The literal was 165 for a while, which sat the text ~11px above the middle and
+// read as misaligned once the card cropped the image to a wide band
+// (themes render featured images with object-cover).
 function demoImage(name: string, color: string, label: string): string {
   const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">' +
     '<defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">' +
     '<stop offset="0" stop-color="' + color + '"/><stop offset="1" stop-color="#1e293b"/></linearGradient></defs>' +
     '<rect width="400" height="300" fill="url(#g)"/>' +
-    '<text x="200" y="165" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="rgba(255,255,255,0.92)" text-anchor="middle">' + label + '</text>' +
+    '<text x="200" y="176" font-family="Arial, sans-serif" font-size="72" font-weight="bold" fill="rgba(255,255,255,0.92)" text-anchor="middle">' + label + '</text>' +
     '</svg>';
   const file = 'demo-' + name + '.svg';
   if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
@@ -203,10 +211,13 @@ export function importDemoData(): { posts: number; categories: number; tags: num
   }
 
   // Primary menu: home + categories + one post
+  // Each item needs an id: the renderers build the tree by matching
+  // `child.parentId === parent.id`, and an item without one made every parentless
+  // entry look like the child of every other one.
   const menuItems = [
-    { label: '首页', url: '/' },
-    ...DEMO_CATEGORIES.slice(0, 4).map(([slug, name]) => ({ label: name, url: '/category/' + slug })),
-    { label: DEMO_POSTS[0].title.slice(0, 12) + '…', url: '/post/' + DEMO_POSTS[0].slug },
+    { id: cuid(), label: '首页', url: '/', parentId: null },
+    ...DEMO_CATEGORIES.slice(0, 4).map(([slug, name]) => ({ id: cuid(), label: name, url: '/category/' + slug, parentId: null })),
+    { id: cuid(), label: DEMO_POSTS[0].title.slice(0, 12) + '…', url: postUrl(DEMO_POSTS[0].slug), parentId: null },
   ];
   run('INSERT INTO Menu (id, name, location, items) VALUES (?, ?, ?, ?)', cuid(), '主菜单', 'primary', JSON.stringify(menuItems));
 
@@ -221,7 +232,7 @@ export function importDemoData(): { posts: number; categories: number; tags: num
   upsert.run(cuid(), 'demo_imported', '1');
   const carousel = DEMO_POSTS.slice(0, 4).map(p => {
     const img = fs.existsSync(path.join(uploadsDir, 'demo-' + p.image[0] + '.svg')) ? '/uploads/demo-' + p.image[0] + '.svg' : '';
-    return { image: img, title: p.title, link: '/post/' + p.slug };
+    return { image: img, title: p.title, link: postUrl(p.slug) };
   });
   upsert.run(cuid(), 'carousel_items', JSON.stringify(carousel));
 
@@ -236,13 +247,14 @@ export function resetSite(): Record<string, number> {
   // Content wipe + demo-setting cleanup are one unit; files/caches follow after.
   withTransaction(() => {
     for (const t of CONTENT_TABLES) stats[t] = clearTable(t);
-    // Drop settings written by the demo data — global and per-site. A per-site
-    // override of e.g. carousel_items still points at images this reset deletes,
-    // so leaving it would render broken images on that site's front page.
+    // Drop the settings the demo import wrote (install-wide).
     for (const key of DEMO_SETTING_KEYS) {
       db.prepare('DELETE FROM Setting WHERE key = ?').run(key);
-      try { db.prepare('DELETE FROM SiteSetting WHERE key = ?').run(key); } catch { /* no SiteSetting table on very old installs */ }
     }
+    // Only the per-site carousel has to go: it holds links to files this reset
+    // deletes. A site's own theme_active / widgets_active are its own choices and
+    // survive a content reset (they used to be wiped for *every* site).
+    try { db.prepare('DELETE FROM SiteSetting WHERE key = ?').run('carousel_items'); } catch { /* no SiteSetting table on very old installs */ }
   });
   // Clear uploaded media files (keep the directory + .gitkeep). The thumbs/
   // dir holds generated thumbnail caches keyed by media id — orphaned once

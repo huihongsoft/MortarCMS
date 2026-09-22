@@ -68,9 +68,46 @@ describe('public list payloads hide protected bodies and the password hash', () 
   });
 
   it('omits them from the popular list too', async () => {
-    const raw = JSON.stringify(await (await fetch(base + '/posts/popular')).json());
+    const popular = await (await fetch(base + '/posts/popular')).json();
+    const raw = JSON.stringify(popular);
     expect(raw).not.toContain('TOP-SECRET-BODY');
     expect(raw).not.toContain('storedhash');
+    // The row itself must not be advertised either: stripping the body still
+    // published the title and excerpt of a gated/unlisted post.
+    expect(popular.some((p: any) => p.slug === 'protected-post')).toBe(false);
+    expect(popular.some((p: any) => p.slug === 'members-post')).toBe(false);
+    // …and the search dropdown is a public list as well
+    const suggest = await (await fetch(base + '/posts/suggest?q=members')).json();
+    expect(suggest.suggestions.some((s: any) => s.slug === 'members-post')).toBe(false);
+  });
+});
+
+// The per-category "hot" rail a theme renders inside a category block needs a
+// ranking scoped to that category, not the site-wide one.
+describe('the popular list can be scoped to a category', () => {
+  beforeAll(() => {
+    db.prepare("INSERT INTO Category (id, name, slug) VALUES ('cat-a','Alpha','alpha')").run();
+    db.prepare("INSERT INTO Category (id, name, slug) VALUES ('cat-b','Beta','beta')").run();
+    const ins = (id: string, views: number) =>
+      db.prepare("INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt, views) VALUES (?, ?, ?, '<p>b</p>', 'e', 'published', 'post', 'u1', ?, ?)")
+        .run(id, id, id, new Date().toISOString(), views);
+    ins('a-hot', 50); ins('a-cold', 10); ins('b-hot', 99);
+    const link = (postId: string, categoryId: string) => db.prepare('INSERT INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(postId, categoryId);
+    link('a-hot', 'cat-a'); link('a-cold', 'cat-a'); link('b-hot', 'cat-b');
+  });
+
+  it('ranks by views within the category', async () => {
+    const all = await (await fetch(base + '/posts/popular?limit=10')).json();
+    expect(all.map((p: any) => p.slug)).toEqual(['b-hot', 'a-hot', 'a-cold']);
+    const alpha = await (await fetch(base + '/posts/popular?limit=10&category=alpha')).json();
+    expect(alpha.map((p: any) => p.slug)).toEqual(['a-hot', 'a-cold']);
+    const beta = await (await fetch(base + '/posts/popular?limit=10&category=beta')).json();
+    expect(beta.map((p: any) => p.slug)).toEqual(['b-hot']);
+  });
+
+  it('returns nothing for a category that does not exist', async () => {
+    const none = await (await fetch(base + '/posts/popular?category=nope')).json();
+    expect(none).toEqual([]);
   });
 
   it('still lets an editor read the body, but never the hash', async () => {

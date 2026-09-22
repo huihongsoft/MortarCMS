@@ -28,5 +28,5 @@ export default function SearchPage({ settings }: { settings: Record<string, stri
   useSEO({ siteTitle: settings.site_title, title: query ? t('search') + ': ' + query : t('search'), url: window.location.origin + '/search?q=' + encodeURIComponent(query), noindex: true });
 
   const Layout = useTheme().SearchLayout;
-  return React.createElement(Layout, { query, posts, loading, error });
+  return React.createElement(Layout, { settings, query, posts, loading, error });
 }

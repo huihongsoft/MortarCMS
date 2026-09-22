@@ -7,8 +7,10 @@ import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 import Select from '../components/Select';
 import { dialog } from '../lib/dialog';
+import { postPath, usePermalinkPrefix } from '../lib/permalink';
 
 export default function Posts() {
+  const permalink = usePermalinkPrefix();
   const navigate = useNavigate();
   const [posts, setPosts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -264,7 +266,7 @@ export default function Posts() {
                     React.createElement('button', { onClick: () => reviewPost(p.id, 'approve'), className: 'px-2 py-1 text-xs rounded-lg bg-green-100 text-green-700 hover:bg-green-200', title: t('approve', getLang()) }, t('approve', getLang())),
                     React.createElement('button', { onClick: () => reviewPost(p.id, 'reject'), className: 'px-2 py-1 text-xs rounded-lg bg-red-100 text-red-700 hover:bg-red-200', title: t('reject', getLang()) }, t('reject', getLang())),
                   ),
-                  p.status === 'published' && React.createElement('a', { href: '/post/' + p.slug, target: '_blank', className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('view post', getLang()) }, React.createElement(Eye, { size: 16 })),
+                  p.status === 'published' && React.createElement('a', { href: postPath(permalink, p.slug), target: '_blank', className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('view post', getLang()) }, React.createElement(Eye, { size: 16 })),
                   React.createElement(Link, { to: `/posts/${p.id}/edit`, className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Edit2, { size: 16 })),
                   p.status === 'trash' ? React.createElement('button', { onClick: () => restorePost(p.id), className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('restore', getLang()) }, React.createElement('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, className: 'lucide' }, React.createElement('polyline', { points: '1 4 1 10 7 10' }), React.createElement('path', { d: 'M3.51 15a9 9 0 1 0 2.13-9.36L1 10' }))) : React.createElement('button', { onClick: () => toggleSticky(p.id), className: `p-1.5 ${p.sticky ? 'text-orange-500' : 'text-gray-400 hover:text-orange-500'}`, title: p.sticky ? t('unpin', getLang()) : t('pin', getLang()) }, React.createElement(Pin, { size: 16 })),
                   React.createElement('button', { onClick: () => deletePost(p.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 16 }))
