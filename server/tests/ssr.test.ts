@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 import { pathToFileURL } from 'url';
@@ -172,5 +172,31 @@ describe('the CSP nonce on inline scripts', () => {
     const out = applyNonce(stampInlineScripts(doc, NONCE_PLACEHOLDER), 'n-1');
     expect(out).toContain('nonce="n-1"');
     expect(out).not.toContain('nonce="' + NONCE_PLACEHOLDER + '"');
+  });
+});
+
+describe('the renderer staleness guard', () => {
+  it('treats a renderer older than the client build as unavailable', async () => {
+    // Simulated by mtime, which is exactly how the guard decides: rather than
+    // render markup the client bundle disagrees with (React #418/#422 — a page
+    // that looks fine until you open the console), the server serves the
+    // client-rendered shell.
+    const bundle = path.join(__dirname, '../../frontend/dist-ssr/entry-server.js');
+    const shell = path.join(__dirname, '../../frontend/dist/index.html');
+    if (!fs.existsSync(bundle) || !fs.existsSync(shell)) return; // not built here
+
+    const shellMtime = fs.statSync(shell).mtimeMs;
+    try {
+      const future = new Date(Date.now() + 60_000);
+      fs.utimesSync(shell, future, future);
+      // A fresh module instance: the renderer is cached after the first load, so
+      // a stale verdict has to be asked for before anything has loaded it.
+      vi.resetModules();
+      const mod = await import('../src/utils/ssr');
+      expect(await mod.ssrAvailable()).toBe(false);
+    } finally {
+      fs.utimesSync(shell, new Date(shellMtime), new Date(shellMtime));
+      vi.resetModules();
+    }
   });
 });

@@ -26,6 +26,10 @@ function collectUserData(userId: string): any {
 // Content they authored stays but is anonymized; media files are deleted.
 function eraseUserData(userId: string): { mediaDeleted: number } {
   const media = db.prepare('SELECT id, url FROM Media WHERE userId = ?').all(userId) as any[];
+  // The address the person signed up with, read *before* anything touches the
+  // row: the anonymizing update below rewrites User.email, and a subscription is
+  // keyed by the original address.
+  const originalEmail = (String(((db.prepare('SELECT email FROM User WHERE id = ?').get(userId) as any)?.email) || ''));
   // Every anonymization/erasure write is one unit: a failure part-way must not
   // leave the account half-erased (some tables cleared, some not).
   withTransaction(() => {
@@ -46,9 +50,11 @@ function eraseUserData(userId: string): { mediaDeleted: number } {
     // account association is removed — same anonymization policy as comments.
     db.prepare('UPDATE FormSubmission SET userId = NULL WHERE userId = ?').run(userId);
     // Newsletter subscriptions are keyed by email — erase them when the erased
-    // user's email matches (their consent ends with the account)
-    const userEmail = db.prepare('SELECT email FROM User WHERE id = ?').get(userId) as any;
-    if (userEmail?.email) db.prepare('DELETE FROM Subscriber WHERE email = ?').run(userEmail.email);
+    // user's email matches (their consent ends with the account). `originalEmail`
+    // was read before the anonymizing update above rewrote the address; reading
+    // it here instead meant the subscription outlived the account on any install
+    // with a single admin.
+    if (originalEmail) db.prepare('DELETE FROM Subscriber WHERE email = ?').run(originalEmail);
     db.prepare('DELETE FROM AiMemory WHERE userId = ?').run(userId);
     db.prepare('DELETE FROM AiUsage WHERE userId = ?').run(userId);
     db.prepare('DELETE FROM Notification WHERE userId = ?').run(userId);

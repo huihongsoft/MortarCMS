@@ -167,6 +167,14 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
   `npm run check:bundle` enforces gzip budgets per app plus per-file ceilings for
   the block editor's vendor bundle.
 
+### Fixed
+
+- GDPR erasure left the newsletter subscription behind on any install with a
+  single admin: the row's email is anonymized as part of the erasure, and the
+  subscription lookup ran *after* that, so it matched nothing. The address is now
+  read before anything touches the row. (A test written for the erasure policy is
+  what found it.)
+
 ### Security
 
 - The CSP now carries a **per-response nonce**, and the server stamps it onto the

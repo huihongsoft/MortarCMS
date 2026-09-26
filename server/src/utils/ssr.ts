@@ -46,11 +46,36 @@ let loading: Promise<RendererModule | null> | null = null;
 // One DOM for the process: DOMPurify builds its instance once per window.
 const domWindow = new JSDOM('<!doctype html><html><body></body></html>').window;
 
+/**
+ * Is the renderer older than the client bundle it is supposed to match?
+ *
+ * Both are produced by the same `npm run build`, in that order — so a renderer
+ * that predates `frontend/dist/index.html` means someone rebuilt only the client
+ * (`npx vite build`), and the two now disagree about the markup. Rendering with
+ * it produces a page that hydrates into React errors (#418/#422) rather than a
+ * visibly broken page, which is a bad thing to debug. Refusing to render is the
+ * honest answer: the client-rendered shell always works.
+ */
+function rendererIsStale(rendererFile: string): boolean {
+  try {
+    const fs = require('fs');
+    const shell = require('path').join(__dirname, '../../../frontend/dist/index.html');
+    return fs.statSync(rendererFile).mtimeMs < fs.statSync(shell).mtimeMs;
+  } catch {
+    return false; // no shell to compare against: not a staleness signal
+  }
+}
+
 /** Load the renderer bundle. Cached; a failure is remembered as "unavailable". */
 async function loadRenderer(): Promise<RendererModule | null> {
   if (renderer !== undefined) return renderer;
   if (!loading) {
     const file = require('path').join(__dirname, '../../../frontend/dist-ssr/entry-server.js');
+    if (rendererIsStale(file)) {
+      logger.warn({ file }, 'SSR renderer is older than the frontend build; rebuild with `npm run build`. Serving the client-rendered shell');
+      renderer = null;
+      return null;
+    }
     loading = import(require('url').pathToFileURL(file).href)
       .then((mod: any) => {
         const fn = mod?.render || mod?.default?.render;

@@ -118,3 +118,6 @@ works in a browser, but a crawler sees an empty `<div id="root">`).
 `npx vite build` alone leaves `dist-ssr` stale, and a stale renderer produces
 markup the client bundle disagrees with — which shows up in the browser console as
 React hydration errors (#418/#422/#425) rather than as an obviously broken page.
+The server checks this itself: a renderer older than `frontend/dist/index.html` is
+refused (with a line in the log) and the request falls back to the shell, because
+a working page beats a subtly mismatched one.
