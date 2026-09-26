@@ -1,11 +1,33 @@
 import React, { useEffect, useState } from 'react';
-import { Save, CheckCircle2, Upload, Trash2, Palette, X } from 'lucide-react';
+import { Save, CheckCircle2, Upload, Trash2, Palette, X, ChevronDown } from 'lucide-react';
 import VisualEditor from '../components/VisualEditor';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 import Select from '../components/Select';
 import { dialog } from '../lib/dialog';
 import { postPath, usePermalinkPrefix } from '../lib/permalink';
+
+// Collapsible section of the Appearance page.
+//
+// The five panels used to repeat the same details/summary markup with
+// `card p-6`: a collapsed header was ~76px tall for a single line of text, the
+// title and the 18px `▾` glyph sat at opposite ends of a full-width card, and
+// nothing changed on open except the arrow — so a collapsed panel read as an
+// empty white bar. Now the header carries the section's hint text (it was in the
+// body, leaving the header blank), the padding lives on the header/body instead
+// of the card so the hover tint covers the whole row, and opening a panel tints
+// and rules off its header.
+function Section({ title, hint, children }: { title: string; hint?: string; children?: React.ReactNode }) {
+  return React.createElement('details', { className: 'card mb-6 group overflow-hidden' },
+    React.createElement('summary', { className: 'flex items-center gap-3 px-5 py-3.5 cursor-pointer select-none list-none transition-colors hover:bg-gray-50 dark:hover:bg-gray-700/40 group-open:bg-gray-50 dark:group-open:bg-gray-700/30 group-open:border-b group-open:border-gray-200 dark:group-open:border-gray-700' },
+      React.createElement('div', { className: 'flex-1 min-w-0' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wider' }, title),
+        hint && React.createElement('p', { className: 'text-xs text-gray-500 mt-0.5' }, hint)),
+      React.createElement('span', { className: 'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-gray-400 transition-transform duration-200 group-open:rotate-180 group-open:text-gray-600 dark:group-open:text-gray-300', 'aria-hidden': 'true' },
+        React.createElement(ChevronDown, { size: 16 }))),
+    React.createElement('div', { className: 'px-5 pb-5' }, children),
+  );
+}
 
 export default function Appearance() {
   // Carousel slides hold a free-text link. The example in the placeholder used
@@ -316,10 +338,7 @@ export default function Appearance() {
       const activeMeta = themes.find((x: any) => x.name === activeTheme);
       const schema = activeMeta?.settingsSchema || [];
       if (schema.length === 0) return null;
-      return React.createElement('details', { className: 'card p-6 mb-6' },
-        React.createElement('summary', { className: 'cursor-pointer select-none list-none flex items-center justify-between py-0.5 -my-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 px-2 -mx-2 transition-colors' },
-          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('theme custom settings', getLang())),
-          React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),
+      return React.createElement(Section, { title: t('theme custom settings', getLang()) },
         React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4' },
           schema.map((f: any) => {
             // Labels come from theme.json; the dictionary keys are English, so a
@@ -436,11 +455,7 @@ export default function Appearance() {
       ),
 
       // Homepage carousel (hero banner)
-      React.createElement('details', { className: 'card p-6 mb-6' },
-        React.createElement('summary', { className: 'cursor-pointer select-none list-none flex items-center justify-between py-0.5 -my-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 px-2 -mx-2 transition-colors' },
-          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('homepage carousel', getLang())),
-          React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),
-        React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t('carousel hint', getLang())),
+      React.createElement(Section, { title: t('homepage carousel', getLang()), hint: t('carousel hint', getLang()) },
         carouselItems.map((c, i) => React.createElement('div', { key: i, className: 'border border-gray-200 rounded-lg p-3 mb-3 space-y-2 bg-gray-50/50' },
           React.createElement('div', { className: 'flex items-center gap-2' },
             React.createElement('span', { className: 'text-xs text-gray-400 w-6' }, i + 1 + '.'),
@@ -456,11 +471,7 @@ export default function Appearance() {
       ),
 
       // Custom CSS
-      React.createElement('details', { className: 'card p-6 mb-6' },
-        React.createElement('summary', { className: 'cursor-pointer select-none list-none flex items-center justify-between py-0.5 -my-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 px-2 -mx-2 transition-colors' },
-          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('custom css', getLang())),
-          React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),
-        React.createElement('p', { className: 'text-xs text-gray-400 mb-2' }, t('custom css hint', getLang())),
+      React.createElement(Section, { title: t('custom css', getLang()), hint: t('custom css hint', getLang()) },
         React.createElement('textarea', {
           value: customCss,
           onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setCustomCss(e.target.value),
@@ -481,11 +492,7 @@ export default function Appearance() {
       // values, so restoring one from here would rewrite every site's settings
       // and still leave the selected site untouched — destructive and useless at
       // the same time.
-      !scopeSite && React.createElement('details', { className: 'card p-6 mb-6' },
-        React.createElement('summary', { className: 'cursor-pointer select-none list-none flex items-center justify-between py-0.5 -my-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 px-2 -mx-2 transition-colors' },
-          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('theme backups', getLang())),
-          React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),
-        React.createElement('p', { className: 'text-xs text-gray-400 mb-3' }, t('theme backups hint', getLang())),
+      !scopeSite && React.createElement(Section, { title: t('theme backups', getLang()), hint: t('theme backups hint', getLang()) },
         React.createElement('div', { className: 'flex gap-2 mb-4' },
           React.createElement('input', { value: backupName, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setBackupName(e.target.value), placeholder: t('backup name placeholder', getLang()), className: 'input-field flex-1' }),
           React.createElement('button', { onClick: createBackup, disabled: backupBusy, className: 'btn-primary text-sm whitespace-nowrap' }, t('create backup', getLang()))
@@ -506,11 +513,7 @@ export default function Appearance() {
             )
       ),
       // Theme Sections (visual hook editor)
-      React.createElement('details', { className: 'card p-6 mb-6' },
-        React.createElement('summary', { className: 'cursor-pointer select-none list-none flex items-center justify-between py-0.5 -my-0.5 rounded hover:bg-gray-50 dark:hover:bg-gray-700/40 px-2 -mx-2 transition-colors' },
-          React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 uppercase tracking-wider' }, t('theme sections', getLang())),
-          React.createElement('span', { className: 'text-gray-500 text-lg leading-none transition-transform ve-arrow', 'aria-hidden': 'true' }, '\u25BE')),
-        React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t('theme sections hint', getLang())),
+      React.createElement(Section, { title: t('theme sections', getLang()), hint: t('theme sections hint', getLang()) },
         React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3' },
           HOOK_LOCATIONS.map(loc => {
             const hasContent = (() => {
