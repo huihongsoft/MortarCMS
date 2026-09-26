@@ -69,6 +69,15 @@ function mayEditMedia(req: AuthRequest, media: any): boolean {
   return userMayAccessSite(req.user!.userId, req.user!.role, media?.siteId || undefined);
 }
 
+// The same rule for a folder, and it has to be asked separately: renaming,
+// deleting or filing *into* a folder are all writes to a row that carries a
+// siteId. Without this an editor assigned to one site could rename or delete
+// another site's folders, or file their own uploads into them — the media rows
+// were scoped (mayEditMedia) but the folder they were filed under was not.
+function mayUseFolder(req: AuthRequest, folder: any): boolean {
+  return userMayAccessSite(req.user!.userId, req.user!.role, folder?.siteId || undefined);
+}
+
 // 'missing' (a stale id from an old list) is not an authorization failure: the
 // bulk routes skip it instead of refusing the whole batch.
 function mediaScope(req: AuthRequest, id: unknown): 'ok' | 'denied' | 'missing' {
@@ -135,9 +144,16 @@ router.post('/folders', authenticate, requireCap('upload_files'), (req: AuthRequ
     if (!name) { res.status(400).json({ error: '文件夹名称必填' }); return; }
     const siteId = req.body?.siteId ? String(req.body.siteId) : null;
     if (siteId && !mayWriteSite(req.user!.userId, req.user!.role, siteId)) { res.status(403).json({ error: '无权在该站点创建文件夹' }); return; }
+    // A parent folder is a write to another row: nesting under a site you cannot
+    // reach would put your folder inside someone else's tree.
+    const parentId = req.body?.parentId ? String(req.body.parentId) : null;
+    if (parentId) {
+      const parent = db.prepare('SELECT id, siteId FROM MediaFolder WHERE id = ?').get(parentId) as any;
+      if (!parent || !mayUseFolder(req, parent)) { res.status(403).json({ error: '无权访问该文件夹' }); return; }
+    }
     const id = cuid();
     db.prepare('INSERT INTO MediaFolder (id, name, parentId, siteId, createdAt) VALUES (?, ?, ?, ?, ?)')
-      .run(id, name, req.body?.parentId ? String(req.body.parentId) : null, siteId, new Date().toISOString());
+      .run(id, name, parentId, siteId, new Date().toISOString());
     res.status(201).json(db.prepare('SELECT * FROM MediaFolder WHERE id = ?').get(id));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -145,7 +161,9 @@ router.post('/folders', authenticate, requireCap('upload_files'), (req: AuthRequ
 router.put('/folders/:id', authenticate, requireCap('upload_files'), (req: AuthRequest, res: Response) => {
   try {
     const folder = db.prepare('SELECT * FROM MediaFolder WHERE id = ?').get(req.params.id) as any;
-    if (!folder) { res.status(404).json({ error: '文件夹不存在' }); return; }
+    // 404 rather than 403 for a folder in a site the caller cannot reach: the
+    // existence of another site's folders is not theirs to learn.
+    if (!folder || !mayUseFolder(req, folder)) { res.status(404).json({ error: '文件夹不存在' }); return; }
     const name = String(req.body?.name || '').trim().slice(0, 60);
     if (!name) { res.status(400).json({ error: '文件夹名称必填' }); return; }
     db.prepare('UPDATE MediaFolder SET name = ? WHERE id = ?').run(name, req.params.id);
@@ -159,7 +177,7 @@ router.put('/folders/:id', authenticate, requireCap('upload_files'), (req: AuthR
 router.delete('/folders/:id', authenticate, requireCap('upload_files'), (req: AuthRequest, res: Response) => {
   try {
     const folder = db.prepare('SELECT * FROM MediaFolder WHERE id = ?').get(req.params.id) as any;
-    if (!folder) { res.status(404).json({ error: '文件夹不存在' }); return; }
+    if (!folder || !mayUseFolder(req, folder)) { res.status(404).json({ error: '文件夹不存在' }); return; }
     const count = (db.prepare('SELECT COUNT(*) as c FROM Media WHERE folderId = ?').get(req.params.id) as any)?.c || 0;
     if (count > 0) { res.status(400).json({ error: '该文件夹还有 ' + count + ' 个文件，请先移动或删除' }); return; }
     db.prepare('DELETE FROM MediaFolder WHERE id = ?').run(req.params.id);
@@ -174,8 +192,11 @@ router.post('/bulk-move', authenticate, requireCap('upload_files'), (req: AuthRe
     if (ids.length === 0) { res.status(400).json({ error: 'ids array required' }); return; }
     const folderId = req.body?.folderId ? String(req.body.folderId) : null;
     if (folderId) {
-      const folder = db.prepare('SELECT id FROM MediaFolder WHERE id = ?').get(folderId) as any;
-      if (!folder) { res.status(404).json({ error: '文件夹不存在' }); return; }
+      // The destination is a write to that folder, so it needs the same check as
+      // the media rows below — otherwise an editor files their own uploads into
+      // another site's folder.
+      const folder = db.prepare('SELECT id, siteId FROM MediaFolder WHERE id = ?').get(folderId) as any;
+      if (!folder || !mayUseFolder(req, folder)) { res.status(404).json({ error: '文件夹不存在' }); return; }
     }
     let moved = 0;
     withTransaction(() => {

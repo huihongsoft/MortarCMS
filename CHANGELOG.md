@@ -169,6 +169,14 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 
 ### Fixed
 
+- **Media folders ignored the site boundary.** Renaming, deleting, nesting under,
+  or filing uploads *into* a folder are all writes to a row that carries a
+  `siteId`, but only the media rows were scoped — an editor assigned to one site
+  could rename or delete another site's folders and file their own uploads into
+  them. The folder checks now use the same rule as the media rows (a folder with
+  no site is shared, exactly like site-less posts), and a folder in a site the
+  caller cannot reach answers 404 rather than 403 so its existence is not leaked.
+  Found by an automated security review of the folder endpoints.
 - GDPR erasure left the newsletter subscription behind on any install with a
   single admin: the row's email is anonymized as part of the erasure, and the
   subscription lookup ran *after* that, so it matched nothing. The address is now
