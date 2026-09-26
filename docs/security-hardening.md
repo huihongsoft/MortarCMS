@@ -75,6 +75,14 @@ site on the public internet.
 - **Headers**: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
   `Referrer-Policy`, `Permissions-Policy`; HSTS in production; a restrictive CSP
   on the uploads and theme static trees.
+- **Content-Security-Policy** on the app's own documents and API responses,
+  shipped **report-only** (`Content-Security-Policy-Report-Only`) so violations
+  appear in the browser console without a wrong policy taking the admin down.
+  Watch a session — especially the block editor and any plugin screen — then set
+  `CSP_ENFORCE=1` to enforce it. The policy is in
+  `server/src/middleware/securityHeaders.ts` with a comment per directive
+  (`script-src 'self'`, `style-src 'self' 'unsafe-inline'` for the editor's
+  inline style blocks, `frame-src` for the visual editor canvas).
 - **Secrets**: AI provider keys and similar settings are encrypted at rest
   (AES-256-GCM), redacted from API responses, and stripped from exports.
 - **Destructive actions**: DB reset/restore require the superuser capability and
@@ -84,13 +92,8 @@ site on the public internet.
 
 ## Known gaps (as of 0.1.3)
 
-- No application-wide CSP on HTML/API responses; the uploads/themes CSP is the
-  only one.
-- Two-factor secrets are stored in plaintext in the database (unlike AI keys).
-- No recovery codes for 2FA — losing the authenticator needs an admin-side reset.
-- Failed logins are not persisted in the activity log (only the `login_failed`
-  hook fires), and there is no dedicated login-audit screen — the activity log,
-  which does record successful logins, is only exposed in developer mode.
+- The app-wide CSP is report-only until you set `CSP_ENFORCE=1`; a plugin
+  screen's inline scripts are the thing to check before flipping it.
 - Rate limits and the login lockout are in-process, so they reset on restart and
   are not shared across instances.
 - No CAPTCHA on public forms (comments and form submissions rely on a honeypot

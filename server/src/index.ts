@@ -12,6 +12,7 @@ import { logger } from './utils/logger';
 import { flushViews } from './utils/views';
 import { buildSeoMeta, injectSeoMeta, isKnownRoute, buildRobotsTxt, buildCrawlerFallback } from './utils/seoMeta';
 import { appPasswordAuth, resolveOptionalUser } from './middleware/auth';
+import { securityHeaders } from './middleware/securityHeaders';
 import pluginExtRoutes from './routes/pluginExt';
 import { doAction } from './utils/hooks';
 import authRoutes from './routes/auth';
@@ -92,18 +93,8 @@ app.use(cors({
 // Trust the X-Forwarded-For header only when explicitly enabled (e.g. running
 // behind nginx). req.ip is then reliable for rate limits / visit tracking.
 app.set('trust proxy', config.trustProxy);
-// Security headers
-app.use((_req: any, res: any, next: any) => {
-  res.setHeader('X-Frame-Options', 'DENY');
-  res.setHeader('X-Content-Type-Options', 'nosniff');
-  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
-  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  // HSTS on HTTPS deployments (browsers ignore it over plain HTTP)
-  if (process.env.NODE_ENV === 'production') {
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-  }
-  next();
-});
+
+app.use(securityHeaders());
 
 // Request logging with a correlation id (honours an inbound X-Request-Id so a
 // reverse proxy / client can tie logs together; echoes it back on the response).
