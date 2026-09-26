@@ -33,9 +33,9 @@ function CustomHtmlView({ node, updateAttributes, deleteNode }: any) {
 
   return React.createElement(NodeViewWrapper, { className: 'custom-html-block relative group my-2' },
     React.createElement('div', { className: 'absolute top-1 right-1 z-10 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity' },
-      React.createElement('button', { onClick: () => { setEditing(!editing); setDraft(node.attrs.html || ''); }, className: 'p-1 bg-white border border-gray-200 rounded text-gray-500 hover:text-primary-600 shadow-sm', title: editing ? t('done', getLang()) : t('edit html', getLang()) },
+      React.createElement('button', { onClick: () => { setEditing(!editing); setDraft(node.attrs.html || ''); }, className: 'p-1 bg-white border border-gray-200 rounded text-gray-500 hover:text-primary-600 shadow-sm', title: editing ? t('done', getLang()) : t('edit html', getLang()), 'aria-label': editing ? t('done', getLang()) : t('edit html', getLang())},
         editing ? React.createElement(CheckIcon, { size: 12 }) : React.createElement(Braces, { size: 12 })),
-      React.createElement('button', { onClick: () => deleteNode(), className: 'p-1 bg-white border border-gray-200 rounded text-gray-500 hover:text-red-600 shadow-sm', title: t('delete block', getLang()) },
+      React.createElement('button', { onClick: () => deleteNode(), className: 'p-1 bg-white border border-gray-200 rounded text-gray-500 hover:text-red-600 shadow-sm', title: t('delete block', getLang()), 'aria-label': t('delete block', getLang())},
         React.createElement(TrashIcon, { size: 12 })),
     ),
     editing
@@ -470,7 +470,7 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
       React.createElement('div', { className: 'bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full' },
         React.createElement('div', { className: 'flex items-center justify-between px-4 py-3 border-b border-gray-200 dark:border-gray-700' },
           React.createElement('h3', { className: 'font-semibold text-gray-900 dark:text-gray-100' }, t('insert shortcode', getLang())),
-          React.createElement('button', { onClick: () => setShowShortcodes(false), className: 'p-1 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 18 })),
+          React.createElement('button', { onClick: () => setShowShortcodes(false), className: 'p-1 text-gray-400 hover:text-gray-600', 'aria-label': t('close', getLang())}, React.createElement(X, { size: 18 })),
         ),
         React.createElement('div', { className: 'p-3 space-y-1 max-h-72 overflow-auto' },
           // Static shortcodes
@@ -503,7 +503,7 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
       React.createElement('div', { className: 'bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[80vh] flex flex-col' },
         React.createElement('div', { className: 'flex items-center justify-between px-4 py-3 border-b border-gray-200' },
           React.createElement('h3', { className: 'font-semibold text-gray-900' }, t('insert media', getLang())),
-          React.createElement('button', { onClick: () => setShowMedia(false), className: 'p-1 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 18 })),
+          React.createElement('button', { onClick: () => setShowMedia(false), className: 'p-1 text-gray-400 hover:text-gray-600', 'aria-label': t('close', getLang())}, React.createElement(X, { size: 18 })),
         ),
         // Type filter tabs (all / images / videos / audio / documents)
         React.createElement('div', { className: 'flex items-center gap-1.5 px-4 pt-3 flex-wrap' },
@@ -551,7 +551,7 @@ export default function RichEditor({ value, onChange, placeholder }: RichEditorP
               t('import', getLang()),
               React.createElement('input', { type: 'file', accept: '.json', className: 'hidden', onChange: (e: React.ChangeEvent<HTMLInputElement>) => importTemplates(e.target.files?.[0]) }),
             ),
-            React.createElement('button', { onClick: () => setShowTemplates(false), className: 'p-1 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 18 })),
+            React.createElement('button', { onClick: () => setShowTemplates(false), className: 'p-1 text-gray-400 hover:text-gray-600', 'aria-label': t('close', getLang())}, React.createElement(X, { size: 18 })),
           ),
         ),
         React.createElement('div', { className: 'p-4 overflow-auto' },

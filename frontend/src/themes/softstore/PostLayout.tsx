@@ -9,7 +9,7 @@ import { embedContent } from '../../lib/embed';
 import { sanitizeCss } from '../../lib/safeCss';
 import { readingTime } from '../../lib/time';
 import { t } from '../../lib/i18n';
-import DOMPurify from 'dompurify';
+import { purify } from '../../lib/purify';
 import { SideTabs, NoticeBar, TagPill, formatDate } from './Shared';
 
 // Software detail page in huirj style: white content block on a light-gray
@@ -104,7 +104,7 @@ export default function SoftstorePostLayout(props: any) {
           // Body copy follows the reference's base type: 15px / 26px / #666
           // (prose-lg rendered 18px). The utilities win over .prose's own
           // font-size because Tailwind emits them after the plugin layer.
-          React.createElement('div', { ref: contentRef, className: 'prose prose-gray max-w-none text-[15px] leading-[26px] text-[#666]', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(post.content || '')), settings) } }),
+          React.createElement('div', { ref: contentRef, className: 'prose prose-gray max-w-none text-[15px] leading-[26px] text-[#666]', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(purify(post.content || '')), settings) } }),
           // inline flow (like the tag bar) so the label and the pills share a
           // baseline — a flex row would centre the pills' 10px bottom margin box
           // and float them off the label

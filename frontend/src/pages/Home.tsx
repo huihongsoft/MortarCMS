@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import DOMPurify from 'dompurify';
+import { purify } from '../lib/purify';
 import { ListSkeleton } from '../components/Skeleton';
 import { useParams, useLocation } from 'react-router-dom';
 import api from '../lib/api';
@@ -8,20 +8,24 @@ import { useTheme } from '../themes';
 import { sanitizeCss } from '../lib/safeCss';
 import { t } from '../lib/i18n';
 import { postPath } from '../lib/permalink';
+import { siteOrigin as resolveSiteOrigin, ssrData } from '../lib/ssr';
 
 export default function Home({ settings }: { settings: Record<string, string> }) {
   const { slug: catSlug } = useParams();
   const location = useLocation();
   const isTagPage = location.pathname.startsWith('/tag/');
   const isTypePage = location.pathname.startsWith('/type/');
-  const [posts, setPosts] = useState<any[]>([]);
-  const [total, setTotal] = useState(0);
+  // Content the server already rendered for this URL, so the first paint is the
+  // real list rather than a skeleton. The effect below still refreshes it.
+  const seed: any = ssrData('home') || {};
+  const [posts, setPosts] = useState<any[]>(seed.posts || []);
+  const [total, setTotal] = useState(seed.total || 0);
   const [page, setPage] = useState(1);
-  const [categories, setCategories] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>(seed.categories || []);
   const [loadError, setLoadError] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!seed.posts);
   // WordPress "static front page" — show a page instead of the post list
-  const [frontPage, setFrontPage] = useState<any>(null);
+  const [frontPage, setFrontPage] = useState<any>(seed.frontPage || null);
   const showStatic = !catSlug && settings.show_on_front === 'page' && !!settings.page_on_front;
   // "Custom homepage" — HTML built in the admin visual editor
   const showCustom = !catSlug && settings.show_on_front === 'custom';
@@ -35,7 +39,7 @@ export default function Home({ settings }: { settings: Record<string, string> })
     }
     // Custom homepage has no post list — skip the /posts fetch entirely
     if (showCustom) return;
-    setFrontPage(null);
+    if (!seed.posts) setFrontPage(null);
     const p = new URLSearchParams();
     p.set('page', String(page));
     p.set('limit', settings.posts_per_page || '10');
@@ -44,7 +48,7 @@ export default function Home({ settings }: { settings: Record<string, string> })
     api.get('/categories').then(r => setCategories(r.data)).catch(() => {});
   }, [page, catSlug, settings.posts_per_page, settings.show_on_front, settings.page_on_front]);
 
-  const siteOrigin = settings.site_url || window.location.origin;
+  const siteOrigin = resolveSiteOrigin(settings);
   useSEO({
     siteTitle: settings.site_title,
     // No title on the plain homepage: useSEO already appends the site name, so
@@ -78,7 +82,7 @@ export default function Home({ settings }: { settings: Record<string, string> })
     const css = settings.homepage_css || '';
     return React.createElement('div', null,
       css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(css) } }),
-      React.createElement('div', { className: 'prose prose-gray prose-lg max-w-none', dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(html) } }),
+      React.createElement('div', { className: 'prose prose-gray prose-lg max-w-none', dangerouslySetInnerHTML: { __html: purify(html) } }),
     );
   }
 

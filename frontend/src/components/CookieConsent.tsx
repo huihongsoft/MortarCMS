@@ -1,11 +1,18 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { t } from '../lib/i18n';
 
 // Cookie consent banner — hidden when the site disables it, text configurable
 export default function CookieConsent({ settings }: { settings?: Record<string, string> }) {
-  // Both accept ('1') and decline ('0') dismiss the banner persistently
-  const [hidden, setHidden] = useState(localStorage.getItem('cookie_consent') !== null);
-  if (hidden || settings?.cookie_consent_enabled === '0') return null;
+  // Both accept ('1') and decline ('0') dismiss the banner persistently.
+  // `null` = not known yet: localStorage is browser-only, so the answer is read
+  // after mount. Rendering nothing until then keeps the server render and the
+  // client's first render identical — and a visitor who already answered never
+  // sees the banner flash back.
+  const [decided, setDecided] = useState<boolean | null>(null);
+  useEffect(() => {
+    try { setDecided(localStorage.getItem('cookie_consent') !== null); } catch { setDecided(true); }
+  }, []);
+  if (decided !== false || settings?.cookie_consent_enabled === '0') return null;
 
   const text = settings?.cookie_consent_text || t('this site uses cookies to improve your experience');
   const policySlug = settings?.privacy_policy_slug || 'privacy-policy';
@@ -13,11 +20,11 @@ export default function CookieConsent({ settings }: { settings?: Record<string, 
   return React.createElement('div', { className: 'fixed bottom-0 left-0 right-0 bg-gray-900 text-white p-4 z-50 flex flex-col sm:flex-row items-center justify-center gap-3 text-sm' },
     React.createElement('p', { className: 'text-center' }, text),
     React.createElement('button', {
-      onClick: () => { localStorage.setItem('cookie_consent', '1'); setHidden(true); },
+      onClick: () => { localStorage.setItem('cookie_consent', '1'); setDecided(true); },
       className: 'px-4 py-1.5 bg-primary-600 hover:bg-primary-700 rounded-lg text-white font-medium whitespace-nowrap'
     }, t('accept')),
     React.createElement('button', {
-      onClick: () => { localStorage.setItem('cookie_consent', '0'); setHidden(true); },
+      onClick: () => { localStorage.setItem('cookie_consent', '0'); setDecided(true); },
       className: 'px-4 py-1.5 border border-gray-600 hover:border-gray-400 rounded-lg text-gray-300 hover:text-white whitespace-nowrap'
     }, t('decline')),
     React.createElement('a', { href: '/page/' + policySlug, className: 'text-gray-300 hover:text-white underline whitespace-nowrap' }, t('privacy policy'))

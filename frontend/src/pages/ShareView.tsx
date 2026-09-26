@@ -5,6 +5,8 @@ import api from '../lib/api';
 import useSEO from '../hooks/useSEO';
 import Markdown from '../components/Markdown';
 import { t } from '../lib/i18n';
+import { formatDateTime } from '../lib/time';
+import { siteOrigin } from '../lib/ssr';
 
 export default function ShareView({ settings }: { settings: Record<string, string> }) {
   const { token } = useParams();
@@ -17,7 +19,7 @@ export default function ShareView({ settings }: { settings: Record<string, strin
 
   // A shared conversation is public but not meant to be discovered: keep it out
   // of the index (the server sends the same signal via X-Robots-Tag).
-  useSEO({ siteTitle: settings.site_title, title: error ? t('share not found') : (data ? (data.username || 'AI') + t("'s AI conversation") : t('share') + ' AI'), url: window.location.origin + '/share/ai/' + token, noindex: true });
+  useSEO({ siteTitle: settings.site_title, title: error ? t('share not found') : (data ? (data.username || 'AI') + t("'s AI conversation") : t('share') + ' AI'), url: siteOrigin(settings) + '/share/ai/' + token, noindex: true });
 
   if (error) return React.createElement('div', { className: 'max-w-2xl mx-auto px-4 py-20 text-center' },
     React.createElement('h1', { className: 'text-2xl font-bold text-gray-900 mb-2' }, t('share not found')),
@@ -35,7 +37,7 @@ export default function ShareView({ settings }: { settings: Record<string, strin
       ),
       React.createElement(Link, { to: '/', className: 'text-sm text-gray-400 hover:text-gray-600' }, '← ' + t('back to home')),
     ),
-    React.createElement('p', { className: 'text-xs text-gray-400 mb-6' }, t('shared on') + ' ' + new Date(data.createdAt).toLocaleString()),
+    React.createElement('p', { className: 'text-xs text-gray-400 mb-6' }, t('shared on') + ' ' + formatDateTime(data.createdAt)),
     React.createElement('div', { className: 'space-y-4' },
       (data.messages || []).map((m: any, i: number) => React.createElement('div', { key: i, className: 'flex gap-3 ' + (m.role === 'user' ? 'justify-end' : '') },
         m.role === 'assistant' && React.createElement('div', { className: 'w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0' },

@@ -175,7 +175,7 @@ export default function Roles() {
             React.createElement('span', { className: 'text-xs text-gray-400 font-mono' }, activeRole.slug),
           ),
           React.createElement('div', { className: 'flex items-center gap-2' },
-            !activeRole.isSystem && React.createElement('button', { onClick: () => deleteRole(activeRole.slug), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 15 })),
+            !activeRole.isSystem && React.createElement('button', { onClick: () => deleteRole(activeRole.slug), className: 'p-1.5 text-gray-400 hover:text-red-600', 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 15 })),
             React.createElement('button', { onClick: () => save(activeRole.slug), className: 'btn-primary text-xs' }, React.createElement(Save, { size: 14 }), t('save', getLang())),
           ),
         ),

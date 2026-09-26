@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import { Plus, Pencil, Trash2, Send, KeyRound, Copy, CheckCircle2, XCircle, Info } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
@@ -127,7 +128,7 @@ export default function Webhooks() {
   const listEl = webhooks.map((w) => React.createElement('div', { key: w.id, className: 'card p-5' },
     React.createElement('div', { className: 'flex items-start gap-3' },
       React.createElement('button', {
-        onClick: () => toggleActive(w), title: t('active', getLang()), role: 'switch', 'aria-checked': !!w.active,
+        onClick: () => toggleActive(w), title: t('active', getLang()), 'aria-label': t('active', getLang()), role: 'switch', 'aria-checked': !!w.active,
         className: 'mt-0.5 relative w-9 h-5 rounded-full transition-colors shrink-0 ' + (w.active ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-700'),
       }, React.createElement('span', { style: { position: 'absolute', top: 2, left: w.active ? 18 : 2, width: 16, height: 16 }, className: 'rounded-full bg-white shadow transition-all' })),
       React.createElement('div', { className: 'flex-1 min-w-0' },
@@ -140,14 +141,14 @@ export default function Webhooks() {
         React.createElement('div', { className: 'flex flex-wrap gap-1.5 mt-2' },
           (Array.isArray(w.events) ? w.events : []).map((ev, i) => React.createElement('span', { key: ev, className: 'text-[10px] px-2 py-0.5 rounded-full font-medium ' + chipCls(i) }, t('event ' + ev, getLang())))),
         typeof w.lastError === 'string' && w.lastError !== '' && React.createElement('p', { className: 'text-xs text-red-500 dark:text-red-400 mt-2' }, t('last error', getLang()) + ': ' + w.lastError),
-        w.lastSentAt && !isNaN(Date.parse(w.lastSentAt)) && React.createElement('p', { className: 'text-[11px] text-gray-400 mt-1' }, t('last delivery', getLang()) + ': ' + new Date(w.lastSentAt).toLocaleString()),
+        w.lastSentAt && !isNaN(Date.parse(w.lastSentAt)) && React.createElement('p', { className: 'text-[11px] text-gray-400 mt-1' }, t('last delivery', getLang()) + ': ' + formatDateTime(w.lastSentAt)),
       ),
       React.createElement('div', { className: 'flex flex-col gap-1.5 shrink-0' },
         React.createElement('button', { onClick: () => testWebhook(w), title: t('test webhook', getLang()), className: 'btn-secondary text-xs px-2.5 py-1' }, React.createElement(Send, { size: 12 }), t('test webhook', getLang())),
         React.createElement('div', { className: 'flex gap-1.5' },
-          React.createElement('button', { onClick: () => openEdit(w), title: t('edit', getLang()), className: 'btn-secondary text-xs px-2.5 py-1' }, React.createElement(Pencil, { size: 12 })),
-          React.createElement('button', { onClick: () => resetSecret(w), title: t('reset secret', getLang()), className: 'btn-secondary text-xs px-2.5 py-1' }, React.createElement(KeyRound, { size: 12 })),
-          React.createElement('button', { onClick: () => remove(w), title: t('delete', getLang()), className: 'btn-danger text-xs px-2.5 py-1' }, React.createElement(Trash2, { size: 12 })),
+          React.createElement('button', { onClick: () => openEdit(w), title: t('edit', getLang()), 'aria-label': t('edit', getLang()), className: 'btn-secondary text-xs px-2.5 py-1' }, React.createElement(Pencil, { size: 12 })),
+          React.createElement('button', { onClick: () => resetSecret(w), title: t('reset secret', getLang()), 'aria-label': t('reset secret', getLang()), className: 'btn-secondary text-xs px-2.5 py-1' }, React.createElement(KeyRound, { size: 12 })),
+          React.createElement('button', { onClick: () => remove(w), title: t('delete', getLang()), 'aria-label': t('delete', getLang()), className: 'btn-danger text-xs px-2.5 py-1' }, React.createElement(Trash2, { size: 12 })),
         ),
       ),
     ),

@@ -34,8 +34,8 @@ the maintainer, not a code change. Everything else below is in scope.
 | B6 | No taxonomy bulk merge/rename | **done in 0.1.3** |
 | B7 | No media folders, no EXIF, no video transcoding | **done in 0.1.3** for folders + image metadata; EXIF fields and transcoding are still out |
 | B8 | Scheduler has a backend but no admin screen | **done in 0.1.3** |
-| B9 | Client-rendered SPA only (crawler fallback, no SSR) | planned, batch 6 |
-| B10 | Accessibility: no focus trap, sparse `aria-label`, no RTL | planned, batch 6 |
+| B9 | Client-rendered SPA only (crawler fallback, no SSR) | **done in 0.1.3** — prerender + hydration for the built-in themes; an installed custom theme still falls back to the shell |
+| B10 | Accessibility: no focus trap, sparse `aria-label`, no RTL | **partly done in 0.1.3** — dialog focus trap, icon-button names, locale-stable Intl formatting; RTL is not implemented |
 | B11 | `siteId` columns had no index; admin `limit` unclamped; LIKE unescaped | **done in 0.1.3** |
 | C | 2FA secret plaintext, no recovery codes, no failed-login audit, no app-wide CSP, process-local limits, unsigned plugins | **done in 0.1.3** (CSP ships report-only; see the known gaps) |
 | D | Operator docs (troubleshooting, hardening, upgrade/rollback, monitoring) | **done in 0.1.3** |
@@ -122,6 +122,25 @@ the maintainer, not a code change. Everything else below is in scope.
   editor can start a translation as a draft that already carries the source's
   content and categories. `content_langs` decides which languages exist, so a
   site that never fills it in has no prefixed URLs at all.
+- **Server rendering**: the frontend builds a second bundle
+  (`frontend/dist-ssr/entry-server.js`) that the server loads and calls per
+  request. Public pages arrive as real HTML — title, body, list of posts, links —
+  and the client hydrates that markup instead of rendering from scratch. It stays
+  best-effort by construction: no bundle, an installed theme the renderer does not
+  have, a content fetch that fails or a path we answer 404 for all fall back to
+  the previous client-rendered shell, and the whole document is cached like any
+  other content response (`/api/health/ready` reports whether it is active).
+  Two guards make it safe: content is sanitized on the server with the *same*
+  DOMPurify the browser uses (jsdom supplies the DOM — a lighter DOM silently
+  disables DOMPurify, so a render without a working sanitizer is refused rather
+  than served), and the render payload is `<`-escaped so content containing
+  `</script>` cannot break out of its script element.
+- **Accessibility**: the admin dialog now traps Tab, restores focus to whatever
+  opened it, and carries `aria-describedby`; every icon-only button in the admin
+  has an accessible name (104 of them had only a hover tooltip); dates and
+  counters are formatted through one locale-aware helper instead of the
+  environment's locale. RTL is **not** done — it needs a logical-property sweep
+  (`ms-`/`me-`/`ps-`/`pe-`) across both SPAs, tracked below.
 - **Docs**: [troubleshooting.md](troubleshooting.md),
   [security-hardening.md](security-hardening.md),
   [upgrade-rollback.md](upgrade-rollback.md),
@@ -141,12 +160,30 @@ Each batch ends with the full test suite, all three builds and lint green.
   301s, local anti-spam, SQLite full-text search, the notification table and
   review queue, taxonomy merge, media folders with per-image metadata, and
   content languages (translation groups, language URLs, hreflang).
-- **Batch 6 — frontend**: server-side rendering with hydration across the
-  themes; dialog focus trap, `aria-label` sweep, RTL, `Intl` formatting.
+- ~~**Batch 6 — frontend**~~ **done in 0.1.3** except RTL: server rendering with
+  hydration (built-in themes), dialog focus trap, the `aria-label` sweep, and
+  locale-stable `Intl` formatting.
 - **Batch 7 — quality**: Playwright smoke tests over the critical path
   (login → post → publish → slug change → redirect → revision restore → logout),
   coverage thresholds raised to the real baseline, lint warnings ratcheted,
   bundle-size budget.
+
+## Known gaps after 0.1.3
+
+- **RTL**: neither SPA is RTL-aware. Doing it properly means moving every
+  physical utility (`ml-`, `mr-`, `pl-`, `pr-`, `left-`, `right-`, `text-left`,
+  `text-right`) to Tailwind's logical equivalents and letting the site language
+  set `dir` — a mechanical sweep of both codebases, not a patch.
+- **SSR and custom themes**: only the themes that ship in the repository source
+  (`frontend/src/themes/*`) can be rendered by the server, because the installed
+  theme bundles load bare `react` specifiers that Node cannot resolve. An install
+  running a theme from elsewhere serves the client-rendered shell instead — no
+  error, just no prerender.
+- **CSP enforcement**: the nonce now covers the frontend's inline scripts (the
+  importmap and the render payload), but before setting `CSP_ENFORCE=1` the admin
+  still needs attention — its shell has an inline dark-mode script, the block
+  editor loads Font Awesome from cdnjs (blocked by `style-src 'self'`), and a
+  plugin screen injects inline scripts. `docs/security-hardening.md` lists them.
 
 ## Deliberately out of scope
 

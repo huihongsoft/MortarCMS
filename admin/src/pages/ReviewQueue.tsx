@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import { ClipboardCheck, Check, X, RefreshCw, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
@@ -65,7 +66,7 @@ export default function ReviewQueue() {
                   React.createElement('p', { className: 'text-sm font-medium text-gray-800 dark:text-gray-100 truncate' }, post.title || t('(no title)', getLang())),
                   React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' },
                     (post.author?.username || post.authorId || '—') + ' · ' +
-                    (post.createdAt ? new Date(post.createdAt).toLocaleString() : '') +
+                    (post.createdAt ? formatDateTime(post.createdAt) : '') +
                     (post.excerpt ? ' · ' + String(post.excerpt).slice(0, 80) : '')),
                   React.createElement('div', { className: 'flex items-center gap-3 mt-1' },
                     React.createElement(Link, { to: '/posts/' + post.id + '/edit', className: 'text-xs text-primary-600 hover:text-primary-700 inline-flex items-center gap-1' },

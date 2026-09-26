@@ -145,7 +145,7 @@ export default function PageEditor() {
   return React.createElement('div', null,
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
       React.createElement('div', { className: 'flex items-center gap-3' },
-        React.createElement('button', { onClick: goBack, className: 'p-2 text-gray-400 hover:text-gray-600', title: t('back', getLang()) }, React.createElement(ArrowLeft, { size: 20 })),
+        React.createElement('button', { onClick: goBack, className: 'p-2 text-gray-400 hover:text-gray-600', title: t('back', getLang()), 'aria-label': t('back', getLang())}, React.createElement(ArrowLeft, { size: 20 })),
         React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, id ? t('edit page', getLang()) : t('new page', getLang()))
       ),
       React.createElement('div', { className: 'flex items-center gap-2' },

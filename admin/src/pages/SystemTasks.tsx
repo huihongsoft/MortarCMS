@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import { Workflow, Play, RefreshCw } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
@@ -76,10 +77,10 @@ export default function SystemTasks() {
                     task.lastStatus === 'error' && React.createElement('p', { className: 'text-[11px] text-red-500 mt-1 break-all' }, task.lastError)),
                   React.createElement('td', { className: 'px-4 py-3 text-xs text-gray-500 whitespace-nowrap' }, humanInterval(task.intervalMs)),
                   React.createElement('td', { className: 'px-4 py-3 text-xs text-gray-500 whitespace-nowrap' },
-                    task.lastRun ? new Date(task.lastRun).toLocaleString() : t('never', getLang()),
+                    task.lastRun ? formatDateTime(task.lastRun) : t('never', getLang()),
                     task.lastDurationMs != null && React.createElement('span', { className: 'text-gray-400' }, ' · ' + task.lastDurationMs + 'ms')),
                   React.createElement('td', { className: 'px-4 py-3 text-xs whitespace-nowrap ' + (task.due ? 'text-amber-600' : 'text-gray-500') },
-                    task.enabled ? (task.nextRun ? new Date(task.nextRun).toLocaleString() : t('as soon as possible', getLang())) : t('disabled', getLang())),
+                    task.enabled ? (task.nextRun ? formatDateTime(task.nextRun) : t('as soon as possible', getLang())) : t('disabled', getLang())),
                   React.createElement('td', { className: 'px-4 py-3 text-right whitespace-nowrap' },
                     React.createElement('button', {
                       onClick: () => runNow(task), disabled: busy === task.id,

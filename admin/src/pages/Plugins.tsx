@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import { Puzzle, Zap, Filter, Link2, PlusCircle, RefreshCw, ToggleLeft, ToggleRight, Package, Store, Download, Trash2, Info, X, Settings, Eye } from 'lucide-react';
 import { useToast } from '../lib/toast';
 import api from '../lib/api';
@@ -191,7 +192,7 @@ export default function Plugins() {
         React.createElement('div', { className: 'flex items-center justify-between mb-3' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900' }, detail.name + ' '),
           React.createElement('span', { className: 'text-xs text-gray-400' }, 'v' + detail.version),
-          React.createElement('button', { onClick: () => setDetail(null), className: 'p-1 text-gray-400 hover:text-gray-700 ml-auto', title: t('close', getLang()) }, React.createElement(X, { size: 16 }))
+          React.createElement('button', { onClick: () => setDetail(null), className: 'p-1 text-gray-400 hover:text-gray-700 ml-auto', title: t('close', getLang()), 'aria-label': t('close', getLang())}, React.createElement(X, { size: 16 }))
         ),
         React.createElement('p', { className: 'text-sm text-gray-500 mb-2' }, t(detail.description, getLang())),
         detail.author && React.createElement('p', { className: 'text-[10px] text-gray-400 mb-2' }, t('by', getLang()) + ' ' + detail.author),
@@ -216,7 +217,7 @@ export default function Plugins() {
       React.createElement('div', { className: 'card w-full max-w-md p-6 max-h-[85vh] overflow-y-auto' },
         React.createElement('div', { className: 'flex items-center justify-between mb-1' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 flex items-center gap-2' }, React.createElement(Settings, { size: 15, className: 'text-primary-500' }), settingsFor.name + ' ' + t('settings', getLang())),
-          React.createElement('button', { onClick: () => setSettingsFor(null), className: 'p-1 text-gray-400 hover:text-gray-700', title: t('close', getLang()) }, React.createElement(X, { size: 16 }))
+          React.createElement('button', { onClick: () => setSettingsFor(null), className: 'p-1 text-gray-400 hover:text-gray-700', title: t('close', getLang()), 'aria-label': t('close', getLang())}, React.createElement(X, { size: 16 }))
         ),
         React.createElement('p', { className: 'text-xs text-gray-400 mb-4' }, t(settingsFor.description, getLang())),
         React.createElement('div', { className: 'space-y-4' },
@@ -246,7 +247,7 @@ export default function Plugins() {
             return React.createElement('div', { key: key, className: 'bg-gray-50 rounded-lg p-3 text-[11px] text-gray-500' },
               parsed
                 ? React.createElement(React.Fragment, null,
-                    React.createElement('p', { className: 'mb-1' }, new Date(parsed.at || Date.now()).toLocaleString() + (parsed.checked !== undefined ? ' · ' + t('checked', getLang()) + ': ' + parsed.checked + ' · ' + t('broken', getLang()) + ': ' + parsed.broken : '') + (parsed.orphaned !== undefined ? ' · ' + t('orphaned', getLang()) + ': ' + parsed.orphaned + ' · ' + t('deleted', getLang()) + ': ' + parsed.deleted : '')),
+                    React.createElement('p', { className: 'mb-1' }, formatDateTime(parsed.at || Date.now()) + (parsed.checked !== undefined ? ' · ' + t('checked', getLang()) + ': ' + parsed.checked + ' · ' + t('broken', getLang()) + ': ' + parsed.broken : '') + (parsed.orphaned !== undefined ? ' · ' + t('orphaned', getLang()) + ': ' + parsed.orphaned + ' · ' + t('deleted', getLang()) + ': ' + parsed.deleted : '')),
                     Array.isArray(parsed.items) && parsed.items.length > 0
                       ? React.createElement('ul', { className: 'space-y-0.5 max-h-32 overflow-y-auto' }, parsed.items.slice(0, 20).map((it: any, i: number) =>
                           React.createElement('li', { key: i, className: 'truncate ' + (it.ok === false ? 'text-red-500' : '') }, it.name || it.url || it.original)))

@@ -5,6 +5,7 @@ import api from '../lib/api';
 import { t } from '../lib/i18n';
 import { useTheme } from '../themes';
 import Pagination from '../components/Pagination';
+import { siteOrigin } from '../lib/ssr';
 
 export default function SearchPage({ settings }: { settings: Record<string, string> }) {
   const [sp] = useSearchParams();
@@ -39,7 +40,7 @@ export default function SearchPage({ settings }: { settings: Record<string, stri
 
   // Search result pages are thin, query-specific duplicates: keep them out of the
   // index (the server sends the same signal via X-Robots-Tag).
-  useSEO({ siteTitle: settings.site_title, title: query ? t('search') + ': ' + query : t('search'), url: window.location.origin + '/search?q=' + encodeURIComponent(query), noindex: true });
+  useSEO({ siteTitle: settings.site_title, title: query ? t('search') + ': ' + query : t('search'), url: siteOrigin(settings) + '/search?q=' + encodeURIComponent(query), noindex: true });
 
   const Layout = useTheme().SearchLayout;
   const pagination = React.createElement(Pagination, {

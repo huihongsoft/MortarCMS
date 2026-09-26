@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { formatDateTime, formatDate } from '../lib/format';
 import DOMPurify from 'dompurify';
 import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson, Trash2, Edit, HardDrive, Sparkles } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -561,7 +562,7 @@ export default function Settings() {
                     ),
                     React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' }, t(tk.desc, getLang())),
                     React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' },
-                      t('interval', getLang()) + ': ' + fmtInterval(tk.intervalMs) + ' · ' + t('last run', getLang()) + ': ' + (tk.lastRun ? new Date(tk.lastRun).toLocaleString() : t('never', getLang())) + ' · ' + t('run count', getLang()) + ': ' + tk.runCount + (tk.lastDurationMs != null ? ' · ' + tk.lastDurationMs + 'ms' : ''))
+                      t('interval', getLang()) + ': ' + fmtInterval(tk.intervalMs) + ' · ' + t('last run', getLang()) + ': ' + (tk.lastRun ? formatDateTime(tk.lastRun) : t('never', getLang())) + ' · ' + t('run count', getLang()) + ': ' + tk.runCount + (tk.lastDurationMs != null ? ' · ' + tk.lastDurationMs + 'ms' : ''))
                   ),
                   React.createElement('button', { onClick: () => runTask(tk.id), disabled: tk.running, className: 'btn-secondary text-xs disabled:opacity-40' }, t('run now', getLang())),
                   React.createElement('label', { className: 'flex items-center gap-1.5 cursor-pointer text-xs text-gray-500' },
@@ -657,8 +658,8 @@ export default function Settings() {
         ),
         // Last maintenance info
         React.createElement('div', { className: 'text-xs text-gray-400 mb-4' },
-          t('last optimized', getLang()) + ': ' + (dbStatus.lastOptimized ? new Date(dbStatus.lastOptimized).toLocaleString() : t('never', getLang())) +
-          ' · ' + t('last backup', getLang()) + ': ' + (dbStatus.lastBackup ? new Date(dbStatus.lastBackup).toLocaleString() : t('never', getLang()))
+          t('last optimized', getLang()) + ': ' + (dbStatus.lastOptimized ? formatDateTime(dbStatus.lastOptimized) : t('never', getLang())) +
+          ' · ' + t('last backup', getLang()) + ': ' + (dbStatus.lastBackup ? formatDateTime(dbStatus.lastBackup) : t('never', getLang()))
         ),
         // Table sizes
         dbStatus.tables && React.createElement('div', { className: 'mb-4 max-h-40 overflow-y-auto rounded-lg border border-gray-100 dark:border-gray-700' },
@@ -700,7 +701,7 @@ export default function Settings() {
                   React.createElement('div', { key: b.name, className: 'flex items-center gap-2 text-xs text-gray-600 dark:text-gray-300' },
                     React.createElement('span', { className: 'flex-1 truncate font-mono' }, b.name),
                     React.createElement('span', { className: 'text-gray-400' }, b.sizeKB + ' KB'),
-                    React.createElement('span', { className: 'text-gray-400' }, new Date(b.at).toLocaleDateString()),
+                    React.createElement('span', { className: 'text-gray-400' }, formatDate(b.at)),
                     React.createElement('button', { onClick: () => { if (!downloadFile('/db/backups/' + encodeURIComponent(b.name), b.name)) dialog.alert(t('download failed', getLang())); }, className: 'text-primary-600 hover:text-primary-700' }, t('download', getLang())),
                     React.createElement('button', { onClick: async () => { if (!(await dialog.confirm(t('delete this backup?', getLang()), { danger: true }))) return; await api.delete('/db/backups/' + encodeURIComponent(b.name)); loadBackups(); }, className: 'text-red-500 hover:text-red-700' }, t('delete', getLang()))
                   )

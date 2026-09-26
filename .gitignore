@@ -1,5 +1,8 @@
 node_modules/
 dist/
+# The server-render bundle (frontend/vite.ssr.config.ts). Built by install.sh, the
+# Dockerfile and CI; the server falls back to the client-rendered shell without it.
+dist-ssr/
 .env
 *.db
 *.db-journal

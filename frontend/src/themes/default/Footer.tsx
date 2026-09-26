@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../lib/api';
 import { t, getSiteLang, setLang } from '../../lib/i18n';
+import { currentYear } from '../../lib/time';
 
 export default function Footer({ settings }: { settings: Record<string, string> }) {
   const currentLang = getSiteLang(settings);
@@ -97,7 +98,7 @@ export default function Footer({ settings }: { settings: Record<string, string> 
       ),
       React.createElement('div', { className: 'pt-6 border-t border-gray-200 flex items-center justify-center gap-4 flex-wrap' },
         React.createElement('p', { className: 'text-sm text-gray-500' },
-          '\u00a9 ' + new Date().getFullYear() + ' ' + (settings.site_title || 'Mortar CMS') + '. ' + t('powered by', settings) + ' Mortar. ',
+          '\u00a9 ' + currentYear(settings?.timezone) + ' ' + (settings.site_title || 'Mortar CMS') + '. ' + t('powered by', settings) + ' Mortar. ',
           React.createElement('a', { href: '/api/feed/rss', className: 'text-primary-600 hover:text-primary-700', target: '_blank' }, t('rss feed', settings))
         ),
         React.createElement('button', {

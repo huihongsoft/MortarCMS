@@ -61,7 +61,14 @@ jobs:
         run: cd admin && npx tsc -b && npx vite build
 
       - name: Build frontend
-        run: cd frontend && npx tsc -b && npx vite build
+        # Includes the SSR bundle (entry-server) the server loads to prerender;
+        # the smoke test below is what verifies it actually renders.
+        run: cd frontend && npx tsc -b && npx vite build && npx vite build --config vite.ssr.config.ts
+
+      - name: SSR smoke test
+        # Runs after the bundle exists. The same file in the main suite skips these
+        # cases, because that run happens before the frontend is built.
+        run: cd server && npx vitest run tests/ssr.test.ts
 
       - name: Compile server (production build)
         run: cd server && npx tsc

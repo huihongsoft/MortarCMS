@@ -78,7 +78,7 @@ export default function Pages() {
                     className: 'p-1.5 text-gray-400 hover:text-blue-600',
                   }, React.createElement(Eye, { size: 16 })) : null,
                   React.createElement(Link, { to: `/pages/${p.id}/edit`, className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Edit2, { size: 16 })),
-                  canDeletePages && React.createElement('button', { onClick: () => del(p.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 16 }))
+                  canDeletePages && React.createElement('button', { onClick: () => del(p.id), className: 'p-1.5 text-gray-400 hover:text-red-600', 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 16 }))
                 )
               )
             )

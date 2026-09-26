@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime, formatDate } from '../lib/format';
 import { UserCircle2, Shield, ShieldCheck, Copy, Check, KeyRound, Trash2, LogOut } from 'lucide-react';
 import QRCode from 'qrcode';
 import { useAuth } from '../lib/auth';
@@ -161,7 +162,7 @@ export default function Profile() {
     catch (e: any) { dialog.alert(e.response?.data?.error || t('delete failed', getLang())); }
   }
 
-  const fmt = (v: any) => (v ? new Date(v).toLocaleString() : '—');
+  const fmt = (v: any) => (v ? formatDateTime(v) : '—');
 
   return React.createElement('div', null,
     React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6' }, t('my profile', getLang())),
@@ -174,7 +175,7 @@ export default function Profile() {
             React.createElement('div', { className: 'flex justify-between gap-3' }, React.createElement('span', { className: 'text-gray-500' }, t('username', getLang())), React.createElement('span', { className: 'font-medium text-gray-900 dark:text-gray-100 break-all text-right' }, currentUser?.username || '—')),
             React.createElement('div', { className: 'flex justify-between gap-3' }, React.createElement('span', { className: 'text-gray-500' }, t('email', getLang())), React.createElement('span', { className: 'font-medium text-gray-900 dark:text-gray-100 break-all text-right' }, currentUser?.email || '—')),
             React.createElement('div', { className: 'flex justify-between gap-3' }, React.createElement('span', { className: 'text-gray-500' }, t('role', getLang())), React.createElement('span', { className: 'font-medium text-gray-900 dark:text-gray-100' }, t(currentUser?.role || '', getLang()))),
-            currentUser?.createdAt && React.createElement('div', { className: 'flex justify-between gap-3' }, React.createElement('span', { className: 'text-gray-500' }, t('registered', getLang())), React.createElement('span', { className: 'text-gray-600 dark:text-gray-300' }, new Date(currentUser.createdAt).toLocaleDateString()))
+            currentUser?.createdAt && React.createElement('div', { className: 'flex justify-between gap-3' }, React.createElement('span', { className: 'text-gray-500' }, t('registered', getLang())), React.createElement('span', { className: 'text-gray-600 dark:text-gray-300' }, formatDate(currentUser.createdAt)))
           )
         ),
         // Profile (bio + avatar)

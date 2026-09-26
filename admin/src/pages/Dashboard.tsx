@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDate, formatNumber } from '../lib/format';
 import { FileText, Files, MessageSquare, Users, Image, Tag as TagIcon, PenLine, Sparkles, Clock, AlertCircle, Trash2, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { t, getLang } from '../lib/i18n';
@@ -163,7 +164,7 @@ export default function Dashboard() {
               React.createElement('div', { key: p.id, className: 'p-3 rounded-lg bg-gray-50 flex items-center justify-between gap-3' },
                 React.createElement('div', { className: 'min-w-0' },
                   React.createElement('p', { className: 'font-medium text-gray-900 truncate' }, p.title),
-                  React.createElement('p', { className: 'text-xs text-gray-500' }, `${t('by', getLang())} ${p.author?.username} · ${new Date(p.createdAt).toLocaleDateString()}`)
+                  React.createElement('p', { className: 'text-xs text-gray-500' }, `${t('by', getLang())} ${p.author?.username} · ${formatDate(p.createdAt)}`)
                 ),
                 React.createElement('span', { className: `px-2 py-1 text-xs rounded-full font-medium shrink-0 ${p.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}` }, t(p.status, getLang()))
               )
@@ -176,7 +177,7 @@ export default function Dashboard() {
           : React.createElement('div', { className: 'space-y-2' }, recentComments.map((c: any) =>
               React.createElement('div', { key: c.id, className: 'p-3 rounded-lg bg-gray-50' },
                 React.createElement('p', { className: 'text-sm text-gray-700 line-clamp-2' }, c.content),
-                React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, `${c.author} · ${new Date(c.createdAt).toLocaleDateString()}`)
+                React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, `${c.author} · ${formatDate(c.createdAt)}`)
               )
             ))
       )
@@ -190,8 +191,8 @@ export default function Dashboard() {
             key: tg.id,
             onClick: () => navigate('/tags'),
             className: 'px-2.5 py-1 text-xs rounded-full border ' + (i < 3 ? 'bg-primary-50 border-primary-200 text-primary-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-primary-300'),
-            title: (tg._count?.views || 0).toLocaleString() + ' ' + t('views', getLang()),
-          }, `#${i + 1} ${tg.name} · ${(tg._count?.views || 0).toLocaleString()}`)
+            title: formatNumber(tg._count?.views || 0) + ' ' + t('views', getLang()),
+          }, `#${i + 1} ${tg.name} · ${formatNumber(tg._count?.views || 0)}`)
         )
       )
     )

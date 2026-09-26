@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell, Download, Settings2, Share2, Mic, BookOpen, X, Upload, Menu, Rocket, MoreHorizontal, LayoutTemplate, Bookmark } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang, serverMessage, serverCallSummary } from '../lib/i18n';
@@ -140,7 +141,7 @@ function renderMd(text: string): React.ReactNode[] {
       nodes.push(React.createElement('div', { key: key++, className: 'relative group my-2' },
         React.createElement('button', {
           onClick: () => { navigator.clipboard.writeText(code).catch(() => {}); },
-          title: t('copy', getLang()),
+          title: t('copy', getLang()), 'aria-label': t('copy', getLang()),
           className: 'absolute top-1.5 right-1.5 p-1 rounded bg-gray-700 text-gray-300 opacity-0 group-hover:opacity-100 hover:bg-gray-600 transition-opacity',
         }, React.createElement(Copy, { size: 12 })),
         React.createElement('pre', { className: 'bg-gray-900 text-gray-100 text-xs rounded-lg p-3 overflow-x-auto' },
@@ -702,7 +703,7 @@ export default function AIChat() {
   }
 
   function exportTask(task: any) {
-    let md = '# AI 任务: ' + task.prompt + '\n\n- 状态: ' + task.status + '\n- 用户: ' + task.username + '\n- 创建: ' + new Date(task.createdAt).toLocaleString() + '\n\n';
+    let md = '# AI 任务: ' + task.prompt + '\n\n- 状态: ' + task.status + '\n- 用户: ' + task.username + '\n- 创建: ' + formatDateTime(task.createdAt) + '\n\n';
     if (task.steps) {
       md += '## 执行步骤\n\n' + task.steps.map((st: any, i: number) =>
         '### 步骤 ' + (i + 1) + '\n' + (st.type === 'think' ? st.content : '工具 `' + st.name + '`\n```json\n' + JSON.stringify(st.output, null, 1) + '\n```')
@@ -986,7 +987,7 @@ export default function AIChat() {
           React.createElement('button', { onClick: () => { newSession(); setSidebarOpen(false); }, className: 'flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-medium min-w-0' },
             React.createElement(Plus, { size: 13 }), t('new chat', getLang())),
           React.createElement('div', { className: 'relative border-l border-primary-200/60 flex-shrink-0' },
-            React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); setMoreOpen(!moreOpen); }, className: 'px-1.5 py-2 text-primary-400 hover:text-primary-600', title: t('more actions', getLang()) },
+            React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); setMoreOpen(!moreOpen); }, className: 'px-1.5 py-2 text-primary-400 hover:text-primary-600', title: t('more actions', getLang()), 'aria-label': t('more actions', getLang())},
               React.createElement(MoreHorizontal, { size: 13 })),
             moreOpen && React.createElement('div', { className: 'absolute right-0 top-full mt-1 w-44 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1' },
               sessions.length > 1 && React.createElement('button', {
@@ -1069,7 +1070,7 @@ export default function AIChat() {
                   ),
                   React.createElement('div', { className: 'flex items-center gap-2 mt-1 pl-3.5' },
                     React.createElement('span', { className: 'text-[9px] text-gray-400' }, t(tk.status, getLang())),
-                    React.createElement('span', { className: 'text-[9px] text-gray-400' }, new Date(tk.createdAt).toLocaleString()),
+                    React.createElement('span', { className: 'text-[9px] text-gray-400' }, formatDateTime(tk.createdAt)),
                     tk.status === 'failed' && React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); retryTask(tk.id); }, className: 'shrink-0 whitespace-nowrap text-[9px] text-primary-600 hover:underline flex items-center gap-0.5' }, React.createElement(RotateCcw, { size: 9 }), t('retry', getLang())),
                     tk.status === 'running' && React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); cancelTask(tk.id); }, className: 'text-[9px] text-gray-400 hover:text-red-500' }, t('cancel', getLang())),
                     React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); deleteTask(tk.id); }, className: 'text-[9px] text-gray-300 hover:text-red-500' }, t('delete', getLang()))
@@ -1117,7 +1118,7 @@ export default function AIChat() {
           React.createElement('button', {
             onClick: (e: React.MouseEvent) => { e.stopPropagation(); deleteSession(sess.id); },
             className: 'opacity-0 group-hover:opacity-100 p-0.5 text-gray-300 hover:text-red-500 flex-shrink-0',
-          }, React.createElement(Trash2, { size: 12 }))
+          'aria-label': t('delete', getLang()),}, React.createElement(Trash2, { size: 12 }))
         ))
               )
             )
@@ -1136,7 +1137,7 @@ export default function AIChat() {
     // ---- Chat column ----
     React.createElement('div', { className: 'flex-1 flex flex-col min-w-0' },
     // (Chat/Tasks switcher lives at the top of the left sidebar)
-    React.createElement('button', { onClick: () => setSidebarOpen(true), className: 'md:hidden self-start p-1.5 mb-2 text-gray-400 hover:text-primary-600 rounded-lg border border-gray-200 dark:border-gray-700' }, React.createElement(Menu, { size: 14 })),
+    React.createElement('button', { onClick: () => setSidebarOpen(true), className: 'md:hidden self-start p-1.5 mb-2 text-gray-400 hover:text-primary-600 rounded-lg border border-gray-200 dark:border-gray-700', 'aria-label': t('open menu', getLang())}, React.createElement(Menu, { size: 14 })),
     React.createElement('div', { className: 'flex items-center justify-between mb-4' },
       React.createElement('div', { className: 'flex items-center gap-2' },
         React.createElement('div', { className: 'w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center' },
@@ -1186,7 +1187,7 @@ export default function AIChat() {
           className: 'text-[11px] px-2 py-1 rounded-lg border ' + (includeContext ? 'border-primary-300 bg-primary-50 text-primary-600' : 'border-gray-200 dark:border-gray-700 text-gray-400'),
         }, includeContext ? '🧠 ' + t('context on', getLang()) : t('context off', getLang())),
         React.createElement('div', { ref: paramsRef, className: 'relative' },
-          React.createElement('button', { onClick: () => setParamsOpen(!paramsOpen), className: 'p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700', title: t('generation params', getLang()) },
+          React.createElement('button', { onClick: () => setParamsOpen(!paramsOpen), className: 'p-1.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700', title: t('generation params', getLang()), 'aria-label': t('generation params', getLang())},
             React.createElement(Settings2, { size: 16 })),
           paramsOpen && React.createElement('div', { className: 'absolute right-0 top-full mt-1 w-56 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 p-3 space-y-3' },
             React.createElement('div', null,
@@ -1212,7 +1213,7 @@ export default function AIChat() {
                 className: 'w-full text-left px-3 py-2.5 border-b border-gray-50 dark:border-gray-700/50 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors',
               },
                 React.createElement('p', { className: 'text-xs text-gray-700 dark:text-gray-200 whitespace-pre-line' + (n.read ? ' opacity-60' : ' font-medium') }, serverMessage(n.message, getLang())),
-                React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, new Date(n.createdAt).toLocaleString())))),
+                React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, formatDateTime(n.createdAt))))),
           ),
         ),
       ),
@@ -1227,7 +1228,7 @@ export default function AIChat() {
           ? React.createElement('div', { className: 'rounded-xl border border-gray-200 dark:border-gray-600 p-4 bg-gray-50 dark:bg-gray-800' },
               React.createElement('div', { className: 'flex items-center justify-between mb-2' },
                 React.createElement('p', { className: 'text-sm font-semibold text-gray-800 dark:text-gray-100 break-words' }, taskDetail.prompt),
-                React.createElement('button', { onClick: () => setTaskDetail(null), className: 'p-1 text-gray-400 hover:text-gray-700' }, React.createElement(X, { size: 14 }))
+                React.createElement('button', { onClick: () => setTaskDetail(null), className: 'p-1 text-gray-400 hover:text-gray-700', 'aria-label': t('close', getLang())}, React.createElement(X, { size: 14 }))
               ),
               React.createElement('div', { className: 'flex items-center gap-2 mb-3' },
                 React.createElement('span', { className: 'px-1.5 py-0.5 text-[10px] rounded-full font-medium ' + (taskDetail.status === 'done' ? 'bg-green-100 text-green-700' : taskDetail.status === 'failed' ? 'bg-red-100 text-red-700' : taskDetail.status === 'cancelled' ? 'bg-gray-100 text-gray-500' : 'bg-blue-100 text-blue-700 animate-pulse') }, t(taskDetail.status, getLang())),
@@ -1284,7 +1285,7 @@ export default function AIChat() {
         React.createElement('div', { ref: tplRef, className: 'relative flex gap-2 items-stretch' },
           React.createElement('button', {
             onClick: () => setTplOpen(!tplOpen),
-            title: t('task templates', getLang()),
+            title: t('task templates', getLang()), 'aria-label': t('task templates', getLang()),
             className: 'w-10 px-0 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-primary-600 hover:bg-gray-50 dark:hover:bg-gray-700 flex-shrink-0',
           }, React.createElement(LayoutTemplate, { size: 16 })),
           React.createElement('textarea', {
@@ -1300,7 +1301,7 @@ export default function AIChat() {
           React.createElement('button', {
             onClick: openTplModal,
             disabled: !input.trim() || myTemplates.length >= 8,
-            title: t('save input as template', getLang()),
+            title: t('save input as template', getLang()), 'aria-label': t('save input as template', getLang()),
             className: 'w-10 px-0 flex items-center justify-center rounded-lg border border-gray-200 dark:border-gray-700 text-gray-400 hover:text-primary-600 hover:bg-gray-50 dark:hover:bg-gray-700 flex-shrink-0 disabled:opacity-40',
           }, React.createElement(Bookmark, { size: 14 })),
           React.createElement('button', { onClick: startTask, disabled: !input.trim() || busy, className: 'btn-primary w-28 justify-center flex-shrink-0' }, React.createElement(Rocket, { size: 14 }), t('run task', getLang())),
@@ -1450,9 +1451,9 @@ export default function AIChat() {
                   })()),
             // Actions
             m.role === 'assistant' && m.content && React.createElement('div', { className: 'flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity' },
-              React.createElement('button', { onClick: () => copy(m.content), title: t('copy', getLang()), className: 'p-1 text-gray-400 hover:text-primary-600' },
+              React.createElement('button', { onClick: () => copy(m.content), title: t('copy', getLang()), 'aria-label': t('copy', getLang()), className: 'p-1 text-gray-400 hover:text-primary-600' },
                 copied === m.content.slice(0, 20) ? React.createElement(Check, { size: 13 }) : React.createElement(Copy, { size: 13 })),
-              canRegen && React.createElement('button', { onClick: () => regenerate(messages[lastUserIdx]?.content || ''), title: t('regenerate', getLang()), className: 'p-1 text-gray-400 hover:text-primary-600' },
+              canRegen && React.createElement('button', { onClick: () => regenerate(messages[lastUserIdx]?.content || ''), title: t('regenerate', getLang()), 'aria-label': t('regenerate', getLang()), className: 'p-1 text-gray-400 hover:text-primary-600' },
                 React.createElement(RotateCcw, { size: 13 })),
             ),
             m.ts && React.createElement('p', { className: 'text-[10px] text-gray-300 dark:text-gray-600 mt-1' }, new Date(m.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })),
@@ -1473,7 +1474,7 @@ export default function AIChat() {
       React.createElement('div', { ref: promptsRef, className: 'relative flex gap-2 items-stretch' },
         React.createElement('button', {
           onClick: () => setPromptsOpen(!promptsOpen),
-          title: t('prompt library', getLang()),
+          title: t('prompt library', getLang()), 'aria-label': t('prompt library', getLang()),
           className: 'w-10 px-0 flex items-center justify-center flex-shrink-0 text-gray-400 hover:text-primary-600 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700',
         }, React.createElement(BookOpen, { size: 16 })),
         promptsOpen && React.createElement('div', { className: 'absolute bottom-full left-0 mb-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-xl z-50 py-1 max-h-72 overflow-y-auto' },
@@ -1517,7 +1518,7 @@ export default function AIChat() {
         ),
         React.createElement('button', {
           onClick: toggleVoice,
-          title: t('voice input', getLang()),
+          title: t('voice input', getLang()), 'aria-label': t('voice input', getLang()),
           className: 'w-10 px-0 flex items-center justify-center flex-shrink-0 rounded-lg border ' + (listening ? 'border-red-400 bg-red-50 text-red-600 animate-pulse' : 'border-gray-200 dark:border-gray-700 text-gray-400 hover:text-primary-600 hover:bg-gray-50 dark:hover:bg-gray-700'),
         }, React.createElement(Mic, { size: 16 })),
         busy

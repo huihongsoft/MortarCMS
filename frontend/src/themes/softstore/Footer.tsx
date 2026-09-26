@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { ArrowRight } from 'lucide-react';
 import api from '../../lib/api';
 import { t } from '../../lib/i18n';
+import { currentYear } from '../../lib/time';
 
 // huirj.cn style footer: light band (grey2-bg #F9F9FB) with three columns —
 // about / navigation / newsletter — then a centred copyright bar. The floating
@@ -67,7 +68,7 @@ export default function SoftstoreFooter({ settings = {} }: { settings?: Record<s
       // ---- copyright bar (reference .footer-copyright) ----
       React.createElement('div', { className: 'border-t border-[#f1f1f1] pt-[20px] pb-[15px]' },
         React.createElement('p', { className: 'max-w-6xl mx-auto px-4 text-center text-[16px] text-[#666]' },
-          settings.footer_text || ('© ' + new Date().getFullYear() + ' ' + (settings.site_title || 'Mortar') + ' — ' + t('all rights reserved', settings)))
+          settings.footer_text || ('© ' + currentYear(settings?.timezone) + ' ' + (settings.site_title || 'Mortar') + ' — ' + t('all rights reserved', settings)))
       )
     )
   );

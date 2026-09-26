@@ -10,6 +10,8 @@
 // load is what makes a direct visit to /en/post/<slug> resolve on the first
 // render, and what makes the API calls that page fires carry ?lang=en.
 
+import { ssrPayload } from './ssr';
+
 // Same list as the server: first segments that are the app's own routes, so
 // '/author/ann' is never mistaken for a language prefix.
 const RESERVED = new Set([
@@ -33,32 +35,40 @@ function fromShell(): string[] | null {
   return list.length ? list : null;
 }
 
-const injected = fromShell();
-// Default first, exactly as the server orders them.
-let langs: string[] = injected ?? [];
+// Resolved lazily, not at module load: the server renderer seeds the languages
+// through lib/ssr.ts *after* this module has been imported (static imports run
+// first), so a module-level read would always see nothing on the server and
+// disagree with the browser.
+let langs: string[] | null = null;
 
-/**
- * The languages this site publishes. Empty until the setting is known, which is
- * only possible when the shell carried no meta tag (a cached HTML shell, or a
- * request that never went through the shell).
- */
+function resolve(): string[] {
+  if (langs) return langs;
+  const shell = fromShell();
+  if (shell) { langs = shell; return langs; }
+  const seeded = String(ssrPayload().contentLangs || '')
+    .split(/[,\s]+/).map(normalizeLang).filter(Boolean) as string[];
+  if (seeded.length) { langs = seeded; return langs; }
+  return [];
+}
+
+/** The languages this site publishes, default first. Empty until resolved. */
 export function contentLangs(): string[] {
-  return langs;
+  return resolve();
 }
 
 /** The site's own language — the one served unprefixed. */
 export function defaultLang(): string {
-  return langs[0] || 'zh';
+  return resolve()[0] || 'zh';
 }
 
 /**
- * Feed the languages in from the settings response, which is the fallback when
- * the shell did not carry them. Skipped once the shell has spoken: that describes
- * the very response being rendered, whereas this one may come from the public
- * page cache.
+ * Feed the languages in from the settings response, the fallback when neither the
+ * shell nor the render payload carried them. A no-op once they are known: the
+ * shell describes the very response being rendered, whereas this one may come
+ * from the public page cache.
  */
 export function setContentLangs(siteLang: unknown, list: unknown): void {
-  if (injected) return;
+  if (resolve().length) return;
   const def = normalizeLang(siteLang) || 'zh';
   const parsed = String(list ?? '').split(/[,\s]+/).map(normalizeLang).filter(Boolean) as string[];
   langs = [def, ...parsed.filter((l) => l !== def)];
@@ -67,7 +77,8 @@ export function setContentLangs(siteLang: unknown, list: unknown): void {
 /** True when this site actually publishes that language with a prefix. */
 export function isEnabledLang(lang: unknown): boolean {
   const l = normalizeLang(lang);
-  return !!l && l !== defaultLang() && (langs.length === 0 || langs.includes(l));
+  const list = resolve();
+  return !!l && l !== defaultLang() && (list.length === 0 || list.includes(l));
 }
 
 /**
@@ -88,8 +99,21 @@ export function parseLangFromPath(rawPath: string): { lang: string; rest: string
 
 /** The language the address bar is currently asking for ('' = default). */
 export function currentLang(): string {
-  if (typeof window === 'undefined') return '';
-  return parseLangFromPath(window.location.pathname).lang;
+  return currentLangFrom(locationPath());
+}
+
+// The path being rendered. On the client that is the address bar; on the server
+// there is none, so the renderer seeds the request's path (lib/ssr.ts) — and
+// since it is the same path the browser is hydrating, both sides agree.
+function locationPath(): string {
+  if (typeof window !== 'undefined') return window.location.pathname;
+  const seeded = String(ssrPayload().path || '');
+  return seeded || '/';
+}
+
+/** Same as currentLang() but for an explicit path (used by the renderer's tests). */
+export function currentLangFrom(path: string): string {
+  return parseLangFromPath(path).lang;
 }
 
 /** `/<lang>` for the current page's language, '' for the default one. */

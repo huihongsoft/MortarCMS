@@ -157,7 +157,7 @@ export default function MenuEditor() {
   return React.createElement('div', null,
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
       React.createElement('div', { className: 'flex items-center gap-3' },
-        React.createElement('button', { onClick: () => navigate('/menus'), className: 'p-2 text-gray-400 hover:text-gray-600' }, React.createElement(ArrowLeft, { size: 20 })),
+        React.createElement('button', { onClick: () => navigate('/menus'), className: 'p-2 text-gray-400 hover:text-gray-600', 'aria-label': t('back', getLang())}, React.createElement(ArrowLeft, { size: 20 })),
         React.createElement('div', null,
           React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('edit menu', getLang()) + ': ' + menuName),
         ),
@@ -229,7 +229,7 @@ export default function MenuEditor() {
                   ),
                   React.createElement('button', { onClick: () => startEdit(itemIdx), className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Edit2, { size: 12 }), t('edit', getLang())),
                   !isChild && React.createElement('button', { onClick: startAddTop, className: 'inline-flex items-center gap-1 px-2 py-1 rounded text-xs border border-gray-200 text-gray-600 hover:border-primary-400 hover:text-primary-600 transition-colors' }, React.createElement(Plus, { size: 12 }), t('add item', getLang())),
-                  React.createElement('button', { onClick: () => removeItem(itemIdx), className: 'p-1 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 }))
+                  React.createElement('button', { onClick: () => removeItem(itemIdx), className: 'p-1 text-gray-400 hover:text-red-600', 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 14 }))
                 ));
               };
               topItems.forEach((parent: any) => {

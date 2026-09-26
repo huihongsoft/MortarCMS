@@ -118,12 +118,12 @@ export default function Categories() {
                                 React.createElement(Select, { value: mergeInto, onChange: (v: string) => setMergeInto(v), className: 'input-field text-xs w-40' },
                                   React.createElement('option', { value: '' }, t('merge into', getLang()) + '…'),
                                   cats.filter((x: any) => x.id !== c.id).map((x: any) => React.createElement('option', { key: x.id, value: x.id }, x.name))),
-                                React.createElement('button', { onClick: () => merge(c), disabled: !mergeInto, className: 'p-1.5 text-gray-400 hover:text-primary-600 disabled:opacity-40', title: t('merge', getLang()) }, React.createElement(Check, { size: 16 })),
-                                React.createElement('button', { onClick: () => { setMerging(''); setMergeInto(''); }, className: 'p-1.5 text-gray-400 hover:text-gray-700', title: t('cancel', getLang()) }, React.createElement(X, { size: 16 })))
+                                React.createElement('button', { onClick: () => merge(c), disabled: !mergeInto, className: 'p-1.5 text-gray-400 hover:text-primary-600 disabled:opacity-40', title: t('merge', getLang()), 'aria-label': t('merge', getLang())}, React.createElement(Check, { size: 16 })),
+                                React.createElement('button', { onClick: () => { setMerging(''); setMergeInto(''); }, className: 'p-1.5 text-gray-400 hover:text-gray-700', title: t('cancel', getLang()), 'aria-label': t('cancel', getLang())}, React.createElement(X, { size: 16 })))
                             : React.createElement(React.Fragment, null,
-                                React.createElement('button', { onClick: () => { setMerging(c.id); setMergeInto(''); }, className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('merge into', getLang()) }, React.createElement(Merge, { size: 16 })),
-                                React.createElement('button', { onClick: () => startEdit(c), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),
-                                React.createElement('button', { onClick: () => del(c), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 })))
+                                React.createElement('button', { onClick: () => { setMerging(c.id); setMergeInto(''); }, className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('merge into', getLang()), 'aria-label': t('merge into', getLang())}, React.createElement(Merge, { size: 16 })),
+                                React.createElement('button', { onClick: () => startEdit(c), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()), 'aria-label': t('edit', getLang())}, React.createElement(Pencil, { size: 16 })),
+                                React.createElement('button', { onClick: () => del(c), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()), 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 16 })))
                         )
                       )
                     ));

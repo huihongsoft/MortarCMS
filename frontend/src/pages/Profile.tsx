@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { User, KeyRound, MessageSquare } from 'lucide-react';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
+import { formatDate } from '../lib/time';
 import useSEO from '../hooks/useSEO';
 import { postPath } from '../lib/permalink';
 
@@ -10,7 +11,10 @@ interface MyComment { id: string; content: string; createdAt: string; postTitle:
 
 export default function Profile() {
   useSEO({ title: t('profile'), url: '/profile', noindex: true });
-  const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem('mortar_token'));
+  // A browser-only read, so it is guarded rather than moved into an effect:
+  // these pages are never server-rendered, and deferring it would show a
+  // signed-in visitor the signed-out screen for a frame.
+  const [loggedIn, setLoggedIn] = useState(() => typeof window !== 'undefined' && !!localStorage.getItem('mortar_token'));
   const [me, setMe] = useState<any>(null);
   const [bio, setBio] = useState('');
   const [avatar, setAvatar] = useState('');
@@ -18,6 +22,7 @@ export default function Profile() {
   const [comments, setComments] = useState<MyComment[]>([]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [loading, setLoading] = useState(true);
+
 
   useEffect(() => {
     if (!loggedIn) return;
@@ -110,7 +115,7 @@ export default function Profile() {
               React.createElement('div', { key: c.id, className: 'border-b border-gray-100 pb-3 last:border-0' },
                 React.createElement('p', { className: 'text-sm text-gray-800' }, c.content),
                 React.createElement('p', { className: 'text-xs text-gray-400 mt-1' },
-                  new Date(c.createdAt).toLocaleDateString() + ' · ',
+                  formatDate(c.createdAt) + ' · ',
                   React.createElement(Link, { to: postPath(c.postSlug), className: 'text-primary-600 hover:text-primary-700' }, c.postTitle || t('post')))))),
     ),
   );

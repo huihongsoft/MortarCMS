@@ -93,8 +93,8 @@ export default function CustomTypes() {
             ),
             React.createElement(Link, { to: '/posts?type=' + encodeURIComponent(tp.slug), title: t('view entries', getLang()), className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(List, { size: 14 })),
             !['post', 'page'].includes(tp.slug) && React.createElement(React.Fragment, null,
-              React.createElement('button', { onClick: () => setEditing({ slug: tp.slug, label: tp.label, supports: tp.supports || [] }), title: t('edit', getLang()), className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Pencil, { size: 14 })),
-              React.createElement('button', { onClick: () => removeType(tp.slug), className: 'p-1.5 text-gray-300 hover:text-red-500' }, React.createElement(Trash2, { size: 14 }))
+              React.createElement('button', { onClick: () => setEditing({ slug: tp.slug, label: tp.label, supports: tp.supports || [] }), title: t('edit', getLang()), 'aria-label': t('edit', getLang()), className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Pencil, { size: 14 })),
+              React.createElement('button', { onClick: () => removeType(tp.slug), className: 'p-1.5 text-gray-300 hover:text-red-500', 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 14 }))
             )
           )
         )

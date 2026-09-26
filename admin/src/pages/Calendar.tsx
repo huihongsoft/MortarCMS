@@ -70,9 +70,9 @@ export default function Calendar() {
       React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2' },
         React.createElement(CalendarDays, { size: 22, className: 'text-primary-600' }), t('calendar', getLang())),
       React.createElement('div', { className: 'flex items-center gap-2' },
-        React.createElement('button', { onClick: () => shiftMonth(-1), className: 'btn-secondary text-sm px-2.5' }, React.createElement(ChevronLeft, { size: 15 })),
+        React.createElement('button', { onClick: () => shiftMonth(-1), className: 'btn-secondary text-sm px-2.5', 'aria-label': t('previous', getLang())}, React.createElement(ChevronLeft, { size: 15 })),
         React.createElement('span', { className: 'text-sm font-semibold text-gray-700 dark:text-gray-200 min-w-28 text-center' }, view.y + ' / ' + String(view.m + 1).padStart(2, '0')),
-        React.createElement('button', { onClick: () => shiftMonth(1), className: 'btn-secondary text-sm px-2.5' }, React.createElement(ChevronRight, { size: 15 })),
+        React.createElement('button', { onClick: () => shiftMonth(1), className: 'btn-secondary text-sm px-2.5', 'aria-label': t('next', getLang())}, React.createElement(ChevronRight, { size: 15 })),
         React.createElement('button', { onClick: () => { const d = new Date(); setView({ y: d.getFullYear(), m: d.getMonth() }); }, className: 'btn-secondary text-sm' }, t('today', getLang()))),
     ),
 

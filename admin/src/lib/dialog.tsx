@@ -116,25 +116,67 @@ export function DialogHost(): React.ReactElement | null {
   const { req } = useDialogState();
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement | null>(null);
+  // The dialog box, so Tab can be kept inside it and focus can be placed on it
+  // when there is nothing to type in.
+  const boxRef = useRef<HTMLDivElement | null>(null);
+  // Whatever had focus when the dialog opened, so it goes back there on close —
+  // otherwise focus lands on <body> and a keyboard user restarts from the top of
+  // the page.
+  const restoreRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
-    if (req?.kind === 'prompt') {
+    if (!req) return;
+    restoreRef.current = (document.activeElement as HTMLElement) || null;
+    return () => { restoreRef.current?.focus?.(); };
+  }, [req]);
+
+  useEffect(() => {
+    if (!req) return;
+    if (req.kind === 'prompt') {
       setValue(req.defaultValue || '');
       // Focus after paint; select so the default can be replaced by typing.
       setTimeout(() => { inputRef.current?.focus(); inputRef.current?.select(); }, 0);
+      return;
     }
+    // A confirm/alert has no input: put focus on the dialog itself, so Tab moves
+    // through the dialog's buttons instead of the page behind it.
+    setTimeout(() => boxRef.current?.focus(), 0);
   }, [req]);
 
-  // Escape cancels, Enter submits — the keys the native dialogs honoured.
+  // Escape cancels, Enter submits — the keys the native dialogs honoured — and
+  // Tab cycles inside the dialog. `aria-modal` tells assistive technology the
+  // rest of the page is inert; without the trap, Tab still walks out of it, which
+  // is exactly what a modal is supposed to prevent.
   useEffect(() => {
     if (!req) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') { e.preventDefault(); settleIfCurrent(req, req.kind === 'prompt' ? null : req.kind === 'confirm' ? false : undefined); }
-      else if (e.key === 'Enter') { e.preventDefault(); submit(); }
+      // Enter submits — except when a button has focus, where Enter means "press
+      // that button" (otherwise Enter on Cancel would confirm the dialog).
+      else if (e.key === 'Enter' && !(e.target as HTMLElement | null)?.closest?.('button')) { e.preventDefault(); submit(); }
+      else if (e.key === 'Tab') trapTab(e);
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
   });
+
+  // Keep Tab (and Shift+Tab) within the dialog.
+  function trapTab(e: KeyboardEvent): void {
+    const box = boxRef.current;
+    if (!box) return;
+    const items = Array.from(
+      box.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled])')
+    );
+    if (items.length === 0) { e.preventDefault(); box.focus(); return; }
+    const first = items[0];
+    const last = items[items.length - 1];
+    const current = document.activeElement as HTMLElement | null;
+    // Focus escaped (a click on the backdrop, or the browser moved it): pull it
+    // back to the edge it should continue from rather than letting it wander.
+    if (!current || !box.contains(current)) { e.preventDefault(); (e.shiftKey ? last : first).focus(); return; }
+    if (e.shiftKey && current === first) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && current === last) { e.preventDefault(); first.focus(); }
+  }
 
   if (!req) return null;
   // Narrowed copy: the guards below live in closures, where TS cannot keep the
@@ -151,6 +193,7 @@ export function DialogHost(): React.ReactElement | null {
   }
 
   const titleId = 'dlg-title';
+  const messageId = 'dlg-message';
   const title = req.title || (req.kind === 'confirm' ? t('please confirm', getLang())
     : req.kind === 'prompt' ? t('input required', getLang()) : t('notice', getLang()));
 
@@ -159,12 +202,17 @@ export function DialogHost(): React.ReactElement | null {
     onClick: cancel,
   },
     React.createElement('div', {
-      className: 'bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-5 max-h-[80vh] overflow-y-auto',
+      ref: boxRef,
+      // Focusable as a fallback: a confirm/alert has no input, and focus has to
+      // land inside the dialog for Tab to be trapped in it.
+      tabIndex: -1,
+      className: 'bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-md p-5 max-h-[80vh] overflow-y-auto outline-none',
       onClick: (e: React.MouseEvent) => e.stopPropagation(),
       role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': titleId,
+      ...(req.message ? { 'aria-describedby': messageId } : {}),
     },
       React.createElement('h3', { id: titleId, className: 'text-sm font-semibold text-gray-900 dark:text-white mb-2 break-words' }, title),
-      req.message && React.createElement('p', { className: 'text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap break-words' }, req.message),
+      req.message && React.createElement('p', { id: messageId, className: 'text-sm text-gray-600 dark:text-gray-300 whitespace-pre-wrap break-words' }, req.message),
       req.kind === 'prompt' && React.createElement('div', { className: 'mt-3' },
         req.label && React.createElement('label', { className: 'block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1' }, req.label),
         React.createElement('input', {

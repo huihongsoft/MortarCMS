@@ -6,6 +6,7 @@ import { t } from '../lib/i18n';
 import { useTheme } from '../themes';
 import { postPath } from '../lib/permalink';
 import Pagination from '../components/Pagination';
+import { siteOrigin } from '../lib/ssr';
 
 export default function AuthorPage({ settings }: { settings: Record<string, string> }) {
   const { username } = useParams();
@@ -30,19 +31,19 @@ export default function AuthorPage({ settings }: { settings: Record<string, stri
   useSEO({
     siteTitle: settings.site_title,
     title: username || t('author'),
-    url: window.location.origin + '/author/' + username,
+    url: siteOrigin(settings) + '/author/' + username,
     jsonLd: [
       {
         '@context': 'https://schema.org',
         '@type': 'ProfilePage',
         name: username || t('author'),
-        url: window.location.origin + '/author/' + username,
+        url: siteOrigin(settings) + '/author/' + username,
         mainEntity: { '@type': 'Person', name: username || t('author') },
       },
       ...(posts.length ? [{
         '@context': 'https://schema.org',
         '@type': 'ItemList',
-        itemListElement: posts.map((p: any, i: number) => ({ '@type': 'ListItem', position: i + 1, name: p.title, url: window.location.origin + postPath(p.slug) })),
+        itemListElement: posts.map((p: any, i: number) => ({ '@type': 'ListItem', position: i + 1, name: p.title, url: siteOrigin(settings) + postPath(p.slug) })),
       }] : []),
     ],
   });

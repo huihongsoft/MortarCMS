@@ -6,11 +6,13 @@ import { t } from '../lib/i18n';
 import { ContentSkeleton } from '../components/Skeleton';
 import { useContentAlternates } from '../components/LanguageLinks';
 import { langPathFor } from '../lib/contentLang';
+import { siteOrigin, ssrData } from '../lib/ssr';
 import { useTheme } from '../themes';
 
 export default function PageView({ settings }: { settings: Record<string, string> }) {
   const { slug } = useParams();
-  const [page, setPage] = useState<any>(null);
+  // The page the server rendered for this URL, so its body is in the HTML.
+  const [page, setPage] = useState<any>(ssrData('page') || null);
   const [pwdError, setPwdError] = useState(false);
   const [pwdSubmitting, setPwdSubmitting] = useState(false);
   // Must run unconditionally: hooks cannot be called after an early return
@@ -34,21 +36,21 @@ export default function PageView({ settings }: { settings: Record<string, string
     image: page.featured || undefined,
     // The page's own language, not the URL's: a translated page is reachable
     // under a prefix but must advertise one canonical URL.
-    url: (settings.site_url || window.location.origin) + langPathFor(page.lang, '/page/' + page.slug),
+    url: siteOrigin(settings) + langPathFor(page.lang, '/page/' + page.slug),
     jsonLd: [
       {
         '@context': 'https://schema.org',
         '@type': 'WebPage',
         name: page.title,
         description: page.excerpt || undefined,
-        url: (settings.site_url || window.location.origin) + langPathFor(page.lang, '/page/' + page.slug),
+        url: siteOrigin(settings) + langPathFor(page.lang, '/page/' + page.slug),
       },
       {
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
         itemListElement: [
-          { '@type': 'ListItem', position: 1, name: t('home', settings), item: settings.site_url || window.location.origin },
-          { '@type': 'ListItem', position: 2, name: page.title, item: (settings.site_url || window.location.origin) + langPathFor(page.lang, '/page/' + page.slug) },
+          { '@type': 'ListItem', position: 1, name: t('home', settings), item: siteOrigin(settings) },
+          { '@type': 'ListItem', position: 2, name: page.title, item: siteOrigin(settings) + langPathFor(page.lang, '/page/' + page.slug) },
         ],
       },
     ],

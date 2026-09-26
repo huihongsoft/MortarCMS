@@ -14,13 +14,32 @@ import api from './lib/api';
 import { initLightbox } from './lib/lightbox';
 import { setPermalinkPrefix, postRoutePath, permalinkFromShell } from './lib/permalink';
 import { isEnabledLang, setContentLangs } from './lib/contentLang';
+import { ssrPayload } from './lib/ssr';
+import { applyStoredLang } from './lib/i18n';
 import { installCmsForms } from './lib/cmsForms';
+import { applyNonce } from './lib/nonce';
 
-// lazyWithRetry: a lazy() wrapper whose failure falls through to the app
-// ErrorBoundary (React.lazy rejects once and caches the failure — retrying
-// means reloading the chunk, so the boundary's reload action is the recovery).
-function lazyWithRetry(factory: () => Promise<{ default: React.ComponentType<any> }>) {
-  return lazy(factory);
+// Route components, code-split in the browser.
+//
+// The server renderer needs them synchronously: React.lazy suspends on a promise
+// and renderToString has nothing to wait with, so every route would come out as
+// the Suspense spinner. entry-server.tsx therefore registers the real components
+// under these names before rendering, and the proxy below picks the eager one
+// when it is there. In the browser the registry is empty and the lazy wrapper
+// runs, so code splitting is unchanged.
+const eagerRoutes: Record<string, React.ComponentType<any>> = {};
+
+/** Register route components that must render synchronously (server only). */
+export function registerEagerRoutes(components: Record<string, React.ComponentType<any>>): void {
+  Object.assign(eagerRoutes, components);
+}
+(globalThis as any).__eagerProbe = () => Object.keys(eagerRoutes).map(k => k + ':' + typeof (eagerRoutes as any)[k]);
+
+function routeComponent(name: string, factory: () => Promise<{ default: React.ComponentType<any> }>) {
+  const Lazy = lazy(() => { (globalThis as any).__lazyHit = ((globalThis as any).__lazyHit||[]).concat(name); return factory(); });
+  return function RouteComponent(props: any) {
+    return React.createElement(eagerRoutes[name] || Lazy, props);
+  };
 }
 
 // Menu items can point at /admin (or /admin/…). Inside the SPA that route
@@ -48,22 +67,22 @@ function langRoute(path: string, element: React.ReactElement) {
 }
 
 // Route-level code splitting: Home stays eager (first paint), the rest load on demand
-const Home = lazyWithRetry(() => import('./pages/Home'));
-const PostPage = lazyWithRetry(() => import('./pages/Post'));
-const PageView = lazyWithRetry(() => import('./pages/Page'));
-const SearchPage = lazyWithRetry(() => import('./pages/Search'));
-const ArchivePage = lazyWithRetry(() => import('./pages/Archive'));
-const LinksPage = lazyWithRetry(() => import('./pages/Links'));
-const AuthorPage = lazyWithRetry(() => import('./pages/Author'));
-const NotFound = lazyWithRetry(() => import('./pages/NotFound'));
-const ShareView = lazyWithRetry(() => import('./pages/ShareView'));
-const Register = lazyWithRetry(() => import('./pages/Register'));
-const Login = lazyWithRetry(() => import('./pages/Login'));
-const Install = lazyWithRetry(() => import('./pages/Install'));
-const SubmitPost = lazyWithRetry(() => import('./pages/SubmitPost'));
-const MyPosts = lazyWithRetry(() => import('./pages/MyPosts'));
-const Profile = lazyWithRetry(() => import('./pages/Profile'));
-const NewsletterConfirm = lazyWithRetry(() => import('./pages/NewsletterConfirm'));
+const Home = routeComponent('Home', () => import('./pages/Home'));
+const PostPage = routeComponent('PostPage', () => import('./pages/Post'));
+const PageView = routeComponent('PageView', () => import('./pages/Page'));
+const SearchPage = routeComponent('SearchPage', () => import('./pages/Search'));
+const ArchivePage = routeComponent('ArchivePage', () => import('./pages/Archive'));
+const LinksPage = routeComponent('LinksPage', () => import('./pages/Links'));
+const AuthorPage = routeComponent('AuthorPage', () => import('./pages/Author'));
+const NotFound = routeComponent('NotFound', () => import('./pages/NotFound'));
+const ShareView = routeComponent('ShareView', () => import('./pages/ShareView'));
+const Register = routeComponent('Register', () => import('./pages/Register'));
+const Login = routeComponent('Login', () => import('./pages/Login'));
+const Install = routeComponent('Install', () => import('./pages/Install'));
+const SubmitPost = routeComponent('SubmitPost', () => import('./pages/SubmitPost'));
+const MyPosts = routeComponent('MyPosts', () => import('./pages/MyPosts'));
+const Profile = routeComponent('Profile', () => import('./pages/Profile'));
+const NewsletterConfirm = routeComponent('NewsletterConfirm', () => import('./pages/NewsletterConfirm'));
 
 function SiteLayout({ settings }: { settings: Record<string, string> }) {
   const theme = useTheme();
@@ -160,9 +179,23 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
 }
 
 export default function App() {
-  const [settings, setSettings] = useState<Record<string, string>>({});
+  // Seeded from the server render when there is one: the first client render has
+  // to produce the same markup, and `{}` here would make every themed page differ.
+  const [settings, setSettings] = useState<Record<string, string>>(() => ssrPayload().settings || {});
+  // Live theme preview (?theme=…): filled from window.location.search after
+  // mount so the first render (server and client) does not read `window`.
+  const [previewTheme, setPreviewTheme] = useState('');
+  // Bumped when the visitor's stored UI language is applied, to re-render every
+  // string through t() with the right language.
+  const [, setLangVersion] = useState(0);
+
+  // The visitor's own UI language lives in localStorage, which the server cannot
+  // read — so it is applied here, after the first render has already matched the
+  // server's, rather than inside it.
+  useEffect(() => { if (applyStoredLang()) setLangVersion(v => v + 1); }, []);
 
   useEffect(() => {
+    setPreviewTheme(new URLSearchParams(window.location.search).get('theme') || '');
     initLightbox();
     // Serve cached settings for the first paint, then refresh in the background.
     // Not for the permalink though: the shell already told lib/permalink the
@@ -171,7 +204,9 @@ export default function App() {
     // never for routing).
     try {
       const cached = sessionStorage.getItem('mortar_settings');
-      if (cached) {
+      // Skipped when the server already rendered this page with the real
+      // settings: the snapshot is from an earlier visit and may be older.
+      if (cached && !ssrPayload().settings) {
         const parsed = JSON.parse(cached);
         setSettings(parsed);
         if (!permalinkFromShell()) setPermalinkPrefix(parsed?.permalink_structure);
@@ -258,6 +293,9 @@ export default function App() {
           const ns = document.createElement('script');
           ns.textContent = s.textContent;
           if (s.src) ns.src = s.src;
+          // Under an enforcing CSP an inline script needs the document's nonce,
+          // and re-creating the element drops it.
+          applyNonce(ns);
           s.replaceWith(ns);
         });
       };
@@ -267,6 +305,6 @@ export default function App() {
   }, []);
 
   return React.createElement(ErrorBoundary, null,
-    React.createElement(ThemeProvider, { themeName: (typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('theme')) || settings.theme_name, children: React.createElement(SiteLayout, { settings }) })
+    React.createElement(ThemeProvider, { themeName: previewTheme || settings.theme_name, children: React.createElement(SiteLayout, { settings }) })
   );
 }

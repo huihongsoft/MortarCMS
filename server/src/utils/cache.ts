@@ -63,10 +63,15 @@ export function cacheStats(): { enabled: boolean; ttlSeconds: number; entries: n
   return { enabled, ttlSeconds: ttlMs / 1000, entries: store.size, hits, misses };
 }
 
-// Prefixes of public content endpoints the frontend renders from
+// Prefixes of public content endpoints the frontend renders from.
+// '/ssr' is not an endpoint: a prerendered HTML document is derived from exactly
+// the same content, so it belongs in the same purge set (a publish must not leave
+// the old page in the prerender cache). The key carries it for that reason alone —
+// see utils/ssr.ts.
 const CONTENT_PREFIXES = [
   '/api/posts', '/api/pages', '/api/menus', '/api/categories', '/api/tags',
   '/api/links', '/api/comments', '/api/settings', '/api/feed', '/api/widgets',
+  ' /ssr',
 ];
 
 // Called after any content mutation (post/page/comment/media/menu/widget/taxonomy)

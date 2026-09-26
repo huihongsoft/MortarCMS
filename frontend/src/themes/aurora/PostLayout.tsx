@@ -12,7 +12,7 @@ import { sanitizeCss } from '../../lib/safeCss';
 import { timeAgo, readingTime, useTimeTick } from '../../lib/time';
 import { gravatarUrl } from '../../lib/gravatar';
 import { t } from '../../lib/i18n';
-import DOMPurify from 'dompurify';
+import { purify } from '../../lib/purify';
 import { postPath } from '../../lib/permalink';
 
 
@@ -70,7 +70,7 @@ export default function PostLayout(props: any) {
       post.featured && React.createElement('img', { src: cdnUrl(post.featured, settings), alt: post.title, className: 'w-full rounded-2xl mb-10 shadow-xl shadow-gray-900/5', loading: 'eager', fetchPriority: 'high', decoding: 'async' }),
       post.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(post.meta._visual_css) } }),
       React.createElement(Toc, { containerRef: contentRef, settings }),
-      React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none mb-14', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(pageContent)), settings) } }),
+      React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none mb-14', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(purify(pageContent)), settings) } }),
       post.tags?.length > 0 && React.createElement('div', { className: 'flex flex-wrap items-center gap-2 mb-12' },
         React.createElement(TagIcon, { size: 15, className: 'text-gray-400' }),
         post.tags.map((tg: any) => tg.slug ? React.createElement(Link, { key: tg.tagId, to: '/tag/' + tg.slug, className: 'px-3.5 py-1.5 rounded-full text-xs bg-gray-50 border border-gray-100 text-gray-600 hover:border-indigo-300 hover:text-indigo-600 transition-colors' }, tg.name) : null),

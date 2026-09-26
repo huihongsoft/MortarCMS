@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useCallback } from 'react';
+import { formatDateTime } from '../lib/format';
 import grapesjs, { Editor, EditorConfig } from 'grapesjs';
 import 'grapesjs/dist/css/grapes.min.css';
 import DOMPurify from 'dompurify';
@@ -1835,7 +1836,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
               row.className = 've-rev-row';
               const time = document.createElement('span');
               time.className = 've-rev-time';
-              time.textContent = new Date(rev.createdAt).toLocaleString();
+              time.textContent = formatDateTime(rev.createdAt);
               const btn = document.createElement('button');
               btn.textContent = __('restore');
               btn.className = 've-guten-cat-add-btn';

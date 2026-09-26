@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
 import { CheckCircle, XCircle, X } from 'lucide-react';
+import { t as i18nT, getLang } from './i18n';
 
 interface Toast { id: number; message: string; type: 'success' | 'error'; }
 
@@ -38,7 +39,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
         React.createElement('button', {
           onClick: () => setToasts(prev => prev.filter(x => x.id !== t.id)),
           className: 'ml-2 opacity-70 hover:opacity-100',
-        }, React.createElement(X, { size: 14 }))
+        'aria-label': i18nT('close', getLang()),}, React.createElement(X, { size: 14 }))
       ))
     )
   );

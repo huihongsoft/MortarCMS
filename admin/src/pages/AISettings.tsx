@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime, formatNumber } from '../lib/format';
 import { Save, Zap, Plus, Trash2, KeyRound, Server } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
@@ -164,7 +165,7 @@ export default function AISettings() {
               React.createElement('label', { className: 'flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer' },
                 React.createElement('input', { type: 'checkbox', checked: p.enabled, onChange: e => updateProvider(p.id, { enabled: e.target.checked }), className: 'rounded border-gray-300 text-primary-600' }),
                 t('enabled', getLang())),
-              React.createElement('button', { onClick: () => setProviders(providers.filter(x => x.id !== p.id)), className: 'p-1 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 })),
+              React.createElement('button', { onClick: () => setProviders(providers.filter(x => x.id !== p.id)), className: 'p-1 text-gray-400 hover:text-red-600', 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 14 })),
             )
           ),
           testResult[p.id] && React.createElement('p', { className: 'text-xs mb-3 ' + (testResult[p.id].ok ? 'text-green-600' : 'text-red-600') }, (testResult[p.id].ok ? '✓ ' : '✗ ') + testResult[p.id].message),
@@ -237,19 +238,19 @@ export default function AISettings() {
           React.createElement('p', { className: 'text-2xl font-bold text-gray-900 dark:text-white' }, usage.total?.c || 0),
           React.createElement('p', { className: 'text-xs text-gray-500' }, t('total requests', getLang()))),
         React.createElement('div', { className: 'p-3 rounded-lg bg-gray-50 dark:bg-gray-800' },
-          React.createElement('p', { className: 'text-2xl font-bold text-gray-900 dark:text-white' }, (usage.total?.t || 0).toLocaleString()),
+          React.createElement('p', { className: 'text-2xl font-bold text-gray-900 dark:text-white' }, formatNumber(usage.total?.t || 0)),
           React.createElement('p', { className: 'text-xs text-gray-500' }, t('total tokens', getLang()))),
         React.createElement('div', { className: 'p-3 rounded-lg bg-gray-50 dark:bg-gray-800' },
           React.createElement('p', { className: 'text-2xl font-bold text-gray-900 dark:text-white' }, usage.today?.c || 0),
           React.createElement('p', { className: 'text-xs text-gray-500' }, t('today requests', getLang()))),
         React.createElement('div', { className: 'p-3 rounded-lg bg-gray-50 dark:bg-gray-800' },
-          React.createElement('p', { className: 'text-2xl font-bold text-gray-900 dark:text-white' }, (usage.today?.t || 0).toLocaleString()),
+          React.createElement('p', { className: 'text-2xl font-bold text-gray-900 dark:text-white' }, formatNumber(usage.today?.t || 0)),
           React.createElement('p', { className: 'text-xs text-gray-500' }, t('today tokens', getLang()))),
       ),
       usage.byKind && usage.byKind.length > 0 && React.createElement('div', { className: 'flex flex-wrap gap-2 mb-4' },
         usage.byKind.map((k: any) =>
           React.createElement('span', { key: k.kind, className: 'px-2.5 py-1 text-xs rounded-full bg-primary-50 text-primary-700 dark:bg-primary-900/30 dark:text-primary-300' },
-            k.kind + ': ' + k.c + ' (' + (k.t || 0).toLocaleString() + ' tokens)'))
+            k.kind + ': ' + k.c + ' (' + formatNumber(k.t || 0) + ' tokens)'))
       ),
       usage.byDay && usage.byDay.length > 0 && React.createElement('div', { className: 'flex items-end gap-1 h-20' },
         usage.byDay.map((d: any) => {
@@ -267,7 +268,7 @@ export default function AISettings() {
             React.createElement('th', { className: 'py-1.5 text-[10px] uppercase text-gray-400 text-right' }, 'tokens'))),
           React.createElement('tbody', null, usage.recent.map((r: any, i: number) =>
             React.createElement('tr', { key: i, className: 'border-b border-gray-50' },
-              React.createElement('td', { className: 'py-1.5 text-xs text-gray-500' }, new Date(r.createdAt).toLocaleString()),
+              React.createElement('td', { className: 'py-1.5 text-xs text-gray-500' }, formatDateTime(r.createdAt)),
               React.createElement('td', { className: 'py-1.5 text-xs text-gray-700 dark:text-gray-200' }, r.username || '-'),
               React.createElement('td', { className: 'py-1.5 text-xs text-gray-500' }, r.kind),
               React.createElement('td', { className: 'py-1.5 text-xs text-gray-500 text-right' }, r.tokens))))))
@@ -290,7 +291,7 @@ export default function AISettings() {
                 React.createElement('th', { className: 'py-1.5 text-[10px] uppercase text-gray-400' }, t('arguments', getLang())))),
               React.createElement('tbody', null, audit.slice(0, 20).map((l: any, i: number) =>
                 React.createElement('tr', { key: i, className: 'border-b border-gray-50' },
-                  React.createElement('td', { className: 'py-1.5 text-xs text-gray-500 whitespace-nowrap' }, new Date(l.createdAt).toLocaleString()),
+                  React.createElement('td', { className: 'py-1.5 text-xs text-gray-500 whitespace-nowrap' }, formatDateTime(l.createdAt)),
                   React.createElement('td', { className: 'py-1.5 text-xs text-gray-700 dark:text-gray-200' }, l.userId || '-'),
                   React.createElement('td', { className: 'py-1.5 text-xs text-gray-700 dark:text-gray-200' }, describeActivity('ai:' + l.tool, getLang())),
                   React.createElement('td', { className: 'py-1.5 text-xs text-gray-400 truncate max-w-[240px]', title: String(l.args || '') }, String(l.args || '').slice(0, 120))))))) ),
@@ -311,7 +312,7 @@ export default function AISettings() {
               React.createElement('button', {
                 onClick: async () => { await api.delete('/ai/memories/' + encodeURIComponent(m.key)); setMemories(memories.filter(x => x.key !== m.key)); },
                 className: 'p-1 text-gray-300 hover:text-red-500',
-              }, React.createElement(Trash2, { size: 13 }))
+              'aria-label': t('delete', getLang()),}, React.createElement(Trash2, { size: 13 }))
             )))
     ),
 

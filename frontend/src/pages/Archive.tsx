@@ -7,6 +7,7 @@ import { ListSkeleton } from '../components/Skeleton';
 import { useTheme } from '../themes';
 import { postPath } from '../lib/permalink';
 import Pagination from '../components/Pagination';
+import { siteOrigin } from '../lib/ssr';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -30,20 +31,20 @@ export default function ArchivePage({ settings }: { settings: Record<string, str
   useSEO({
     siteTitle: settings.site_title,
     title: monthLabel + ' ' + t('archive'),
-    url: window.location.origin + '/archive/' + year + (month ? '/' + month : ''),
+    url: siteOrigin(settings) + '/archive/' + year + (month ? '/' + month : ''),
     jsonLd: [
       {
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
         itemListElement: [
-          { '@type': 'ListItem', position: 1, name: t('home'), item: window.location.origin + '/' },
-          { '@type': 'ListItem', position: 2, name: monthLabel, item: window.location.origin + '/archive/' + year + (month ? '/' + month : '') },
+          { '@type': 'ListItem', position: 1, name: t('home'), item: siteOrigin(settings) + '/' },
+          { '@type': 'ListItem', position: 2, name: monthLabel, item: siteOrigin(settings) + '/archive/' + year + (month ? '/' + month : '') },
         ],
       },
       ...(data?.posts?.length ? [{
         '@context': 'https://schema.org',
         '@type': 'ItemList',
-        itemListElement: data.posts.map((p: any, i: number) => ({ '@type': 'ListItem', position: i + 1, name: p.title, url: window.location.origin + postPath(p.slug) })),
+        itemListElement: data.posts.map((p: any, i: number) => ({ '@type': 'ListItem', position: i + 1, name: p.title, url: siteOrigin(settings) + postPath(p.slug) })),
       }] : []),
     ],
   });

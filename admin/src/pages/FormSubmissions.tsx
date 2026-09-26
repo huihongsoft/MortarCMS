@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import { ArrowLeft, Download, CheckCheck, Trash2, AlertTriangle } from 'lucide-react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../lib/api';
@@ -81,7 +82,7 @@ export default function FormSubmissions() {
             subs.map(s =>
               React.createElement('div', { key: s.id, className: 'card p-4' },
                 React.createElement('div', { className: 'flex items-center gap-2 mb-2 flex-wrap' },
-                  React.createElement('span', { className: 'text-xs text-gray-500 dark:text-gray-400' }, new Date(s.createdAt).toLocaleString()),
+                  React.createElement('span', { className: 'text-xs text-gray-500 dark:text-gray-400' }, formatDateTime(s.createdAt)),
                   s.spam
                     ? React.createElement('span', { className: 'text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300 flex items-center gap-1' }, React.createElement(AlertTriangle, { size: 10 }), t('spam', getLang()))
                     : s.status === 'new'
@@ -90,7 +91,7 @@ export default function FormSubmissions() {
                   React.createElement('span', { className: 'text-[11px] text-gray-400' }, t('ip address', getLang()) + ': ' + (s.ip || '-')),
                   React.createElement('button', {
                     onClick: () => remove(s),
-                    title: t('delete', getLang()),
+                    title: t('delete', getLang()), 'aria-label': t('delete', getLang()),
                     className: 'ml-auto text-gray-400 hover:text-red-500',
                   }, React.createElement(Trash2, { size: 14 })),
                 ),

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import { Plus, Trash2, MessageCircle, Bell, Copy, KeyRound, Send, Clock, CalendarClock } from 'lucide-react';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
@@ -176,23 +177,23 @@ export default function AIBindings() {
                   React.createElement('p', { className: 'text-[11px] text-gray-400 mt-0.5' },
                     t('site scope', getLang()) + ': ' + (b.siteId ? (sites.find((s: any) => s.id === b.siteId)?.name || b.siteId) : t('all sites (no scope)', getLang()))),
                   React.createElement('div', { className: 'flex items-center gap-1 text-[11px] text-gray-400 mt-1' },
-                    React.createElement(Clock, { size: 11 }), b.lastUsedAt ? t('last used', getLang()) + ': ' + new Date(b.lastUsedAt).toLocaleString() : t('never used', getLang())),
+                    React.createElement(Clock, { size: 11 }), b.lastUsedAt ? t('last used', getLang()) + ': ' + formatDateTime(b.lastUsedAt) : t('never used', getLang())),
                 )
               ),
-              React.createElement('button', { onClick: () => del(b.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 15 }))
+              React.createElement('button', { onClick: () => del(b.id), className: 'p-1.5 text-gray-400 hover:text-red-600', 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 15 }))
             ),
             // Webhook URL — each platform shows its own protocol endpoint:
             // generic JSON, WeChat MP or DingTalk enterprise-bot callback
             React.createElement('div', { className: 'mt-3 flex items-center gap-2' },
               React.createElement(KeyRound, { size: 13, className: 'text-gray-400 flex-shrink-0' }),
               React.createElement('code', { className: 'text-xs bg-gray-50 border border-gray-100 rounded px-2 py-1 truncate flex-1' }, window.location.origin + (b.platform === 'wechat' ? '/api/ai/webhook/wechat/' : b.platform === 'dingtalk' ? '/api/ai/webhook/dingtalk/' : '/api/ai/webhook/') + b.token),
-              React.createElement('button', { onClick: () => copy(window.location.origin + (b.platform === 'wechat' ? '/api/ai/webhook/wechat/' : b.platform === 'dingtalk' ? '/api/ai/webhook/dingtalk/' : '/api/ai/webhook/') + b.token), className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Copy, { size: 14 }))
+              React.createElement('button', { onClick: () => copy(window.location.origin + (b.platform === 'wechat' ? '/api/ai/webhook/wechat/' : b.platform === 'dingtalk' ? '/api/ai/webhook/dingtalk/' : '/api/ai/webhook/') + b.token), className: 'p-1.5 text-gray-400 hover:text-primary-600', 'aria-label': t('copy', getLang())}, React.createElement(Copy, { size: 14 }))
             ),
             b.platform === 'wechat' && b.wechatToken && React.createElement(React.Fragment, null,
               React.createElement('div', { className: 'mt-2 flex items-center gap-2' },
                 React.createElement(KeyRound, { size: 13, className: 'text-gray-400 flex-shrink-0' }),
                 React.createElement('code', { className: 'text-xs bg-gray-50 border border-gray-100 rounded px-2 py-1 truncate flex-1' }, b.wechatToken),
-                React.createElement('button', { onClick: () => copy(b.wechatToken || ''), className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Copy, { size: 14 }))
+                React.createElement('button', { onClick: () => copy(b.wechatToken || ''), className: 'p-1.5 text-gray-400 hover:text-primary-600', 'aria-label': t('copy', getLang())}, React.createElement(Copy, { size: 14 }))
               ),
               React.createElement('p', { className: 'text-[11px] text-gray-400 mt-2 leading-relaxed' }, t('wechat setup hint', getLang()))
             ),
@@ -248,8 +249,8 @@ export default function AIBindings() {
                   sch.type === 'interval' ? t('every n minutes', getLang()) + ': ' + sch.intervalMinutes
                     : sch.type === 'weekly' ? t('weekly on', getLang()) + ' ' + t(['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][sch.weekday] || 'sun', getLang()) + ' ' + sch.time
                     : t('daily at', getLang()) + ' ' + sch.time,
-                  sch.lastRun ? ' · ' + t('last run', getLang()) + ': ' + new Date(sch.lastRun).toLocaleString() : '')),
-              React.createElement('button', { onClick: () => delSchedule(sch.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 })))
+                  sch.lastRun ? ' · ' + t('last run', getLang()) + ': ' + formatDateTime(sch.lastRun) : '')),
+              React.createElement('button', { onClick: () => delSchedule(sch.id), className: 'p-1.5 text-gray-400 hover:text-red-600', 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 14 })))
             ))
     )
   );

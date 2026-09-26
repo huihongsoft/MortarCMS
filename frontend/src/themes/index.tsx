@@ -54,8 +54,9 @@ export const defaultTheme: Theme = {
   PageLayout: DefaultPageLayout,
 };
 
-// Merge partial remote themes over the defaults
-function mergeTheme(name: string, mod: any): Theme {
+// Merge partial remote themes over the defaults. Exported for the server-side
+// renderer's theme registry (themes/registry.ts).
+export function mergeTheme(name: string, mod: any): Theme {
   const t = mod?.default || mod || {};
   return {
     name: t.name || name,
@@ -102,11 +103,20 @@ export function loadTheme(name?: string): Promise<Theme> {
   return loading[key];
 }
 
+/** A theme that is already resolved, or null. No import is triggered. */
+export function loadedTheme(name?: string): Theme | null {
+  return cache[name || 'default'] || null;
+}
+
 // ---- Theme context (asynchronous, defaults to the default theme) ----
 const ThemeContext = createContext<Theme>(defaultTheme);
 
-export function ThemeProvider({ themeName, children }: { themeName?: string; children: React.ReactNode }) {
-  const [theme, setTheme] = useState<Theme>(defaultTheme);
+export function ThemeProvider({ themeName, initialTheme, children }: { themeName?: string; initialTheme?: Theme | null; children: React.ReactNode }) {
+  // The starting theme must be the one the HTML was rendered with, or the first
+  // client render disagrees with the server's. The renderer passes it directly;
+  // the browser finds it through loadedTheme() because main.tsx resolves the
+  // theme *before* hydrating.
+  const [theme, setTheme] = useState<Theme>(() => initialTheme || loadedTheme(themeName) || defaultTheme);
 
   useEffect(() => {
     let cancelled = false;

@@ -2,15 +2,18 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import { t, getSiteLang } from '../lib/i18n';
+import { renderNow } from '../lib/ssr';
 
-// Monthly calendar (WordPress-style): days link to the monthly archive
+// Monthly calendar (WordPress-style): days link to the monthly archive.
+// The clock is the render-time one (lib/ssr.ts): reading `new Date()` here would
+// stamp a different month/day on the client than the server rendered.
 export default function CalendarWidget() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth(); // 0-based
-  const firstDay = new Date(year, month, 1).getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = now.getDate();
+  const now = new Date(renderNow());
+  const year = now.getUTCFullYear();
+  const month = now.getUTCMonth(); // 0-based
+  const firstDay = new Date(Date.UTC(year, month, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
+  const today = now.getUTCDate();
   const weekdayNames = getSiteLang() === 'zh' ? ['日', '一', '二', '三', '四', '五', '六'] : ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
   const cells: React.ReactNode[] = [];
   for (let i = 0; i < firstDay; i++) cells.push(React.createElement('div', { key: 'b' + i }));

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { t } from '../../lib/i18n';
+import { currentYear } from '../../lib/time';
 
 // WordPress Twenty Twenty-Four style footer: big about block + minimal links
 export default function TTFooter({ settings }: { settings: Record<string, string> }) {
@@ -42,7 +43,7 @@ export default function TTFooter({ settings }: { settings: Record<string, string
           )
         ),
       ),
-      React.createElement('p', { className: 'text-sm text-gray-400 border-t border-gray-100 pt-8' }, '\u00A9 ' + new Date().getFullYear() + ' ' + (settings.site_title || 'Mortar') + ' \u00B7 ' + t('powered by', settings) + ' Mortar')
+      React.createElement('p', { className: 'text-sm text-gray-400 border-t border-gray-100 pt-8' }, '\u00A9 ' + currentYear(settings?.timezone) + ' ' + (settings.site_title || 'Mortar') + ' \u00B7 ' + t('powered by', settings) + ' Mortar')
     )
   );
 }

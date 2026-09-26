@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { formatDate } from '../lib/format';
 import { Upload, Trash2, Copy, FileText, FileImage, FileAudio, FileVideo, File, FileArchive, FileSpreadsheet, FileType, Trash, X, Download, Calendar, Hash, Sparkles, ScanSearch, Pencil } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import Select from '../components/Select';
@@ -291,8 +292,8 @@ export default function Media() {
           onClick: () => { setFolderFilter(f.id); loadMedia(f.id); },
           className: 'px-3 py-1.5 text-xs rounded-l-lg border ' + (folderFilter === f.id ? 'border-primary-400 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 text-gray-500 hover:text-gray-700'),
         }, f.name + ' (' + f.count + ')'),
-        React.createElement('button', { onClick: () => renameFolder(f), title: t('rename', getLang()), className: 'px-1.5 py-1.5 text-xs border border-l-0 border-gray-200 text-gray-400 hover:text-primary-600' }, React.createElement(Pencil, { size: 11 })),
-        React.createElement('button', { onClick: () => deleteFolder(f), title: t('delete', getLang()), className: 'px-1.5 py-1.5 text-xs border border-l-0 border-gray-200 rounded-r-lg text-gray-400 hover:text-red-600' }, React.createElement(X, { size: 11 })))),
+        React.createElement('button', { onClick: () => renameFolder(f), title: t('rename', getLang()), 'aria-label': t('rename', getLang()), className: 'px-1.5 py-1.5 text-xs border border-l-0 border-gray-200 text-gray-400 hover:text-primary-600' }, React.createElement(Pencil, { size: 11 })),
+        React.createElement('button', { onClick: () => deleteFolder(f), title: t('delete', getLang()), 'aria-label': t('delete', getLang()), className: 'px-1.5 py-1.5 text-xs border border-l-0 border-gray-200 rounded-r-lg text-gray-400 hover:text-red-600' }, React.createElement(X, { size: 11 })))),
       React.createElement('button', { onClick: createFolder, className: 'px-2.5 py-1.5 text-xs rounded-lg border border-dashed border-gray-300 text-gray-500 hover:text-primary-600 hover:border-primary-400 ml-1' }, '+ ' + t('new folder', getLang()))
     ),
     selected.size > 0 && React.createElement('div', { className: 'card p-3 mb-3 flex flex-wrap items-center gap-2' },
@@ -333,15 +334,15 @@ export default function Media() {
             onClick: (e: React.MouseEvent) => { e.stopPropagation(); analyzeImage(m); },
             disabled: aiAnalyzing === m.id,
             className: 'absolute top-2 right-2 z-10 p-1.5 rounded-lg bg-white/90 backdrop-blur text-gray-500 hover:text-primary-600 shadow opacity-0 group-hover:opacity-100 transition-opacity',
-            title: t('ai analyze image', getLang()),
+            title: t('ai analyze image', getLang()), 'aria-label': t('ai analyze image', getLang()),
           }, React.createElement(ScanSearch, { size: 14 })),
           aiAnalysis[m.id] && React.createElement('div', { className: 'p-2 text-[10px] text-gray-500 bg-purple-50 dark:bg-purple-500/10 max-h-16 overflow-y-auto', onClick: (e: React.MouseEvent) => e.stopPropagation() }, aiAnalysis[m.id]),
           React.createElement('div', { className: 'p-2' },
             React.createElement('p', { className: 'text-xs text-gray-600 truncate' }, m.original),
             React.createElement('p', { className: 'text-xs text-gray-400' }, formatSize(m.size) + (m.downloads ? ' · ' + m.downloads + ' ' + t('downloads', getLang()) : '')),
             React.createElement('div', { className: 'flex items-center gap-1 mt-1 opacity-0 group-hover:opacity-100 transition-opacity' },
-              React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); navigator.clipboard.writeText(fullMediaUrl(m.url)); }, className: 'p-1 text-gray-400 hover:text-primary-600' }, React.createElement(Copy, { size: 14 })),
-              React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); del(m.id); }, className: 'p-1 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 14 }))
+              React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); navigator.clipboard.writeText(fullMediaUrl(m.url)); }, className: 'p-1 text-gray-400 hover:text-primary-600', 'aria-label': t('copy', getLang())}, React.createElement(Copy, { size: 14 })),
+              React.createElement('button', { onClick: (e: React.MouseEvent) => { e.stopPropagation(); del(m.id); }, className: 'p-1 text-gray-400 hover:text-red-600', 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 14 }))
             )
           )
         ))
@@ -353,7 +354,7 @@ export default function Media() {
         // Header
         React.createElement('div', { className: 'flex items-center justify-between p-4 border-b border-gray-200' },
           React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 truncate' }, preview.original),
-          React.createElement('button', { onClick: closePreview, className: 'p-1 text-gray-400 hover:text-gray-600 rounded' }, React.createElement(X, { size: 20 }))
+          React.createElement('button', { onClick: closePreview, className: 'p-1 text-gray-400 hover:text-gray-600 rounded', 'aria-label': t('close', getLang())}, React.createElement(X, { size: 20 }))
         ),
         // Preview area
         React.createElement('div', { className: 'bg-gray-100 flex items-center justify-center p-4', style: { minHeight: '200px', maxHeight: '400px' } },
@@ -396,7 +397,7 @@ export default function Media() {
                  preview.meta.exifPresent ? 'EXIF' : ''].filter(Boolean).join(' · '))) : null,
             React.createElement('div', null,
               React.createElement('p', { className: 'text-xs text-gray-400 flex items-center gap-1' }, React.createElement(Calendar, { size: 12 }), t('uploaded', getLang())),
-              React.createElement('p', { className: 'text-gray-700' }, new Date(preview.createdAt).toLocaleDateString())),
+              React.createElement('p', { className: 'text-gray-700' }, formatDate(preview.createdAt))),
             preview.username && React.createElement('div', null,
               React.createElement('p', { className: 'text-xs text-gray-400' }, t('uploaded by', getLang())),
               React.createElement('p', { className: 'text-gray-700' }, preview.username))

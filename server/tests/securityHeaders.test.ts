@@ -29,17 +29,22 @@ function collect(env: NodeJS.ProcessEnv = {}): Promise<Record<string, any>> {
   });
 }
 
+// Every response carries its own nonce in script-src, so a header is compared
+// against the policy with the nonce stripped out.
+const stripNonce = (header: string): string => String(header).replace(/ 'nonce-[^']*'/, '');
+const nonceOf = (header: string): string => (/ 'nonce-([^']*)'/.exec(String(header)) || [])[1] || '';
+
 describe('security headers', () => {
   it('sends the policy report-only by default', async () => {
     const h = await collect();
-    expect(h['content-security-policy-report-only']).toBe(CSP_POLICY);
+    expect(stripNonce(h['content-security-policy-report-only'])).toBe(CSP_POLICY);
     expect(h['content-security-policy']).toBeUndefined();
   });
 
   it('enforces the policy when CSP_ENFORCE=1', async () => {
     expect(cspHeaderName({ CSP_ENFORCE: '1' } as any)).toBe('Content-Security-Policy');
     const h = await collect({ CSP_ENFORCE: '1' });
-    expect(h['content-security-policy']).toBe(CSP_POLICY);
+    expect(stripNonce(h['content-security-policy'])).toBe(CSP_POLICY);
     expect(h['content-security-policy-report-only']).toBeUndefined();
   });
 
@@ -59,5 +64,22 @@ describe('security headers', () => {
     expect(h['x-content-type-options']).toBe('nosniff');
     expect(h['referrer-policy']).toBe('strict-origin-when-cross-origin');
     expect(h['permissions-policy']).toContain('camera=()');
+  });
+});
+
+describe('the per-response nonce', () => {
+  it('issues a fresh nonce per response and allows it in script-src', async () => {
+    // The importmap and the render payload are inline scripts. Without a nonce
+    // that the header actually allows, an enforcing policy blocks them — and a
+    // blocked importmap means the frontend never boots at all.
+    const seen = new Set<string>();
+    for (let i = 0; i < 5; i++) {
+      const h = await collect();
+      const nonce = nonceOf(h['content-security-policy-report-only']);
+      expect(nonce, 'the policy must carry a nonce').toBeTruthy();
+      expect(nonce.length).toBeGreaterThanOrEqual(20);
+      expect(seen.has(nonce), 'a nonce must not be reused').toBe(false);
+      seen.add(nonce);
+    }
   });
 });

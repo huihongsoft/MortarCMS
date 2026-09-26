@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDate } from '../lib/format';
 import { Trash2, Download, Send, Search, Users } from 'lucide-react';
 import api from '../lib/api';
 import { downloadFile } from '../lib/api';
@@ -128,9 +129,9 @@ export default function Subscribers() {
                   React.createElement('td', { className: 'px-5 py-3' },
                     React.createElement('span', { className: 'text-[10px] px-2 py-0.5 rounded-full font-medium ' + (s.status === 'subscribed' ? (s.confirmed ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300') : 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400') },
                       t(s.status === 'subscribed' ? (s.confirmed ? 'subscribed' : 'pending confirm') : 'unsubscribed', getLang()))),
-                  React.createElement('td', { className: 'px-5 py-3 text-sm text-gray-500' }, new Date(s.createdAt).toLocaleDateString()),
+                  React.createElement('td', { className: 'px-5 py-3 text-sm text-gray-500' }, formatDate(s.createdAt)),
                   React.createElement('td', { className: 'px-5 py-3 text-right' },
-                    React.createElement('button', { onClick: () => remove(s), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 15 }))),
+                    React.createElement('button', { onClick: () => remove(s), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()), 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 15 }))),
                 )
               ))
             ),

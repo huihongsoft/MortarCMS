@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDate } from '../lib/format';
 import { RefreshCw, Trash2, ExternalLink, Link2, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
@@ -104,9 +105,9 @@ export default function BrokenLinks() {
                   React.createElement('td', { className: 'px-5 py-3' },
                     React.createElement('span', { className: 'text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 w-fit ' + meta.cls },
                       React.createElement(meta.icon, { size: 10 }), t(l.status, getLang()) + (l.statusCode ? ' · ' + l.statusCode : ''))),
-                  React.createElement('td', { className: 'px-5 py-3 text-xs text-gray-500' }, new Date(l.checkedAt).toLocaleDateString()),
+                  React.createElement('td', { className: 'px-5 py-3 text-xs text-gray-500' }, formatDate(l.checkedAt)),
                   React.createElement('td', { className: 'px-5 py-3 text-right' },
-                    React.createElement('button', { onClick: () => remove(l), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 15 }))),
+                    React.createElement('button', { onClick: () => remove(l), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()), 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 15 }))),
                 );
               }))
             ),

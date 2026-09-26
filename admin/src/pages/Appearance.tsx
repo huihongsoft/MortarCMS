@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import { Save, CheckCircle2, Upload, Trash2, Palette, X, ChevronDown } from 'lucide-react';
 import VisualEditor from '../components/VisualEditor';
 import api from '../lib/api';
@@ -299,7 +300,7 @@ export default function Appearance() {
                   },
                   disabled: th.name === 'default',
                   className: 'p-1.5 ' + (th.name === 'default' ? 'text-gray-300 cursor-not-allowed' : 'text-gray-400 hover:text-red-600'),
-                  title: th.name === 'default' ? t('default theme protected', getLang()) : t('delete', getLang()),
+                  title: th.name === 'default' ? t('default theme protected', getLang()) : t('delete', getLang()), 'aria-label': th.name === 'default' ? t('default theme protected', getLang()) : t('delete', getLang()),
                 }, React.createElement(Trash2, { size: 14 })),
               )
             )
@@ -504,7 +505,7 @@ export default function Appearance() {
                 React.createElement('div', { key: b.id, className: 'flex items-center gap-3 p-3 rounded-lg border border-gray-100 dark:border-gray-700' },
                   React.createElement('div', { className: 'flex-1 min-w-0' },
                     React.createElement('p', { className: 'text-sm text-gray-800 dark:text-gray-100 truncate' }, b.name, b.auto && React.createElement('span', { className: 'ml-2 text-[10px] px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700' }, t('auto', getLang()))),
-                    React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, new Date(b.createdAt).toLocaleString())
+                    React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, formatDateTime(b.createdAt))
                   ),
                   React.createElement('button', { onClick: () => restoreBackup(b.id, b.name), className: 'text-xs px-2.5 py-1 rounded-lg bg-primary-50 text-primary-700 hover:bg-primary-100' }, t('restore', getLang())),
                   React.createElement('button', { onClick: () => deleteBackup(b.id), className: 'text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-red-500 hover:bg-red-50' }, t('delete', getLang()))
@@ -533,7 +534,7 @@ export default function Appearance() {
       editingSection && React.createElement('div', { className: 'fixed inset-0 z-50 bg-white dark:bg-gray-900 flex flex-col' },
         React.createElement('div', { className: 'flex items-center justify-between px-4 py-2 border-b border-gray-200 bg-white shrink-0' },
           React.createElement('div', { className: 'flex items-center gap-2' },
-            React.createElement('button', { onClick: closeSectionEditor, className: 'p-1.5 text-gray-500 hover:text-gray-900 rounded-lg hover:bg-gray-100' }, React.createElement(X, { size: 18 })),
+            React.createElement('button', { onClick: closeSectionEditor, className: 'p-1.5 text-gray-500 hover:text-gray-900 rounded-lg hover:bg-gray-100', 'aria-label': t('close', getLang())}, React.createElement(X, { size: 18 })),
             React.createElement('h3', { className: 'text-base font-semibold text-gray-900' }, 'Design: ' + HOOK_LOCATIONS.find(l => l.id === editingSection)?.label),
           ),
           React.createElement('div', { className: 'flex items-center gap-2' },
@@ -559,7 +560,7 @@ export default function Appearance() {
         React.createElement('div', { className: 'bg-white rounded-xl shadow-2xl max-w-3xl w-full h-[80vh] flex flex-col', onClick: (e: React.MouseEvent) => e.stopPropagation() },
           React.createElement('div', { className: 'flex items-center justify-between px-5 py-3 border-b border-gray-200' },
             React.createElement('h3', { className: 'text-base font-semibold text-gray-900' }, t('theme files', getLang()) + ': ' + fileBrowser.theme),
-            React.createElement('button', { onClick: () => setFileBrowser(null), className: 'text-gray-400 hover:text-gray-600 p-1' }, React.createElement(X, { size: 18 }))),
+            React.createElement('button', { onClick: () => setFileBrowser(null), className: 'text-gray-400 hover:text-gray-600 p-1', 'aria-label': t('close', getLang())}, React.createElement(X, { size: 18 }))),
           React.createElement('div', { className: 'flex flex-1 min-h-0' },
             // File list
             React.createElement('div', { className: 'w-56 border-r border-gray-200 overflow-y-auto p-2 shrink-0' },
@@ -595,7 +596,7 @@ export default function Appearance() {
               React.createElement('div', null,
                 React.createElement('h3', { className: 'text-xl font-bold text-gray-900' }, themeDetail.name),
                 React.createElement('p', { className: 'text-sm text-gray-500 mt-1' }, t('version', getLang()) + ' ' + themeDetail.version + ' · ' + t('by', getLang()) + ' ' + themeDetail.author)),
-              React.createElement('button', { onClick: () => setThemeDetail(null), className: 'text-gray-400 hover:text-gray-600 p-1' }, React.createElement(X, { size: 20 }))),
+              React.createElement('button', { onClick: () => setThemeDetail(null), className: 'text-gray-400 hover:text-gray-600 p-1', 'aria-label': t('close', getLang())}, React.createElement(X, { size: 20 }))),
             themeDetail.active && React.createElement('div', { className: 'mb-4 flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-lg bg-green-100 text-green-700 w-fit' }, React.createElement(CheckCircle2, { size: 14 }), t('this theme is active', getLang())),
             React.createElement('div', { className: 'bg-gray-50 rounded-lg p-4 mb-4' },
               React.createElement('p', { className: 'text-sm text-gray-700 leading-relaxed' }, themeDetail.description || t('no description', getLang()))),

@@ -122,7 +122,7 @@ export default function Redirects() {
                     r.createdBy === 'slug-change' && React.createElement('span', { className: 'ml-2 text-[10px] text-gray-400' }, t('automatic', getLang()))),
                   React.createElement('td', { className: 'px-4 py-2.5 text-xs text-gray-500' }, String(r.hits || 0)),
                   React.createElement('td', { className: 'px-4 py-2.5 text-right' },
-                    React.createElement('button', { onClick: () => remove(r.id), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 14 }))))))),
+                    React.createElement('button', { onClick: () => remove(r.id), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()), 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 14 }))))))),
       total > 30 && React.createElement('div', { className: 'flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700' },
         React.createElement('span', { className: 'text-xs text-gray-400' }, total + ' ' + t('entries', getLang())),
         React.createElement('div', { className: 'flex items-center gap-2' },

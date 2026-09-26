@@ -30,6 +30,7 @@ RUN cd admin && npx vite build \
     && for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen softstore; do THEME_NAME=$t npx vite build --config vite.themes.config.ts; done \
     && for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen softstore; do cp dist/themes/$t.js ../server/themes/$t/theme.js; done \
     && npx vite build \
+    && npx vite build --config vite.ssr.config.ts \
  && cd ../server && npx tsc
 
 # Keep only production dependencies for the runtime image
@@ -53,6 +54,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends zip unzip \
 COPY --from=build --chown=node:node /app/server /app/server
 COPY --from=build --chown=node:node /app/admin/dist /app/admin/dist
 COPY --from=build --chown=node:node /app/frontend/dist /app/frontend/dist
+# The prerenderer the server loads per request (frontend/dist-ssr). Without it the
+# server falls back to the client-rendered shell, so this is what makes the image
+# serve rendered HTML — see docs/monitoring.md (/api/health/ready reports `ssr`).
+COPY --from=build --chown=node:node /app/frontend/dist-ssr /app/frontend/dist-ssr
 
 USER node
 EXPOSE 3001

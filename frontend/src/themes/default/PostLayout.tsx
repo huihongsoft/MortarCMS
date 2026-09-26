@@ -13,7 +13,7 @@ import { gravatarUrl } from '../../lib/gravatar';
 import { timeAgo, readingTime, useTimeTick } from '../../lib/time';
 import { t } from '../../lib/i18n';
 import { useContentImageEnhancer } from '../../lib/imageEnhance';
-import DOMPurify from 'dompurify';
+import { purify } from '../../lib/purify';
 import { postPath } from '../../lib/permalink';
 
 
@@ -114,7 +114,7 @@ export default function PostLayout(props: any) {
     // Content + table of contents
     post.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(post.meta._visual_css) } }),
     React.createElement(Toc, { containerRef: contentRef, settings }),
-    React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none mb-12', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(pageContent)), settings) } }),
+    React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none mb-12', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(purify(pageContent)), settings) } }),
     pageNav,
 
     // Tags

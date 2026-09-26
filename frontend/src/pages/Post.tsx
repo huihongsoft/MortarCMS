@@ -9,6 +9,7 @@ import { ContentSkeleton } from '../components/Skeleton';
 import { useContentAlternates } from '../components/LanguageLinks';
 import { useTheme } from '../themes';
 import { postPath } from '../lib/permalink';
+import { siteOrigin, ssrData } from '../lib/ssr';
 
 // WordPress-style password form: POST the password, server sets an httpOnly
 // cookie, then reload so the cookie unlocks the content.
@@ -35,7 +36,9 @@ function PasswordForm({ title, slug, settings }: { title?: string; slug?: string
 
 export default function PostPage({ settings }: { settings: Record<string, string> }) {
   const { slug } = useParams();
-  const [post, setPost] = useState<any>(null);
+  // The post the server rendered for this URL, so the article is in the HTML
+  // (and in the first paint) instead of appearing after the API call.
+  const [post, setPost] = useState<any>(ssrData('post') || null);
   const [comments, setComments] = useState<any[]>([]);
   const [commentForm, setCommentForm] = useState({ author: '', email: '', content: '', notifyMe: false });
   const [commentError, setCommentError] = useState('');
@@ -142,7 +145,7 @@ export default function PostPage({ settings }: { settings: Record<string, string
     title: seoTitle,
     description: seoDesc,
     image: cdnUrl(ogImage, settings),
-    url: (settings.site_url || window.location.origin) + postPath(post.slug),
+    url: siteOrigin(settings) + postPath(post.slug),
     type: 'article',
     noindex: post.meta?._seo_noindex === '1',
     canonical: post.meta?._seo_canonical || undefined,
@@ -156,14 +159,14 @@ export default function PostPage({ settings }: { settings: Record<string, string
         datePublished: post.publishedAt || post.createdAt,
         dateModified: post.updatedAt || post.createdAt,
         author: { '@type': 'Person', name: post.author?.username || 'Anonymous' },
-        mainEntityOfPage: (settings.site_url || window.location.origin) + postPath(post.slug),
+        mainEntityOfPage: siteOrigin(settings) + postPath(post.slug),
       },
       {
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
         itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'Home', item: settings.site_url || window.location.origin },
-          { '@type': 'ListItem', position: 2, name: post.title, item: (settings.site_url || window.location.origin) + postPath(post.slug) },
+          { '@type': 'ListItem', position: 1, name: 'Home', item: siteOrigin(settings) },
+          { '@type': 'ListItem', position: 2, name: post.title, item: siteOrigin(settings) + postPath(post.slug) },
         ],
       },
     ],

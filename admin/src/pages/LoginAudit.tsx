@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import { ShieldAlert, RefreshCw, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
@@ -80,7 +81,7 @@ export default function LoginAudit() {
                 React.createElement('th', { className: 'px-4 py-3 text-[11px] uppercase text-gray-400 font-medium' }, t('details', getLang())))),
               React.createElement('tbody', null, events.map((e: any) =>
                 React.createElement('tr', { key: e.id, className: 'border-b border-gray-50 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800' },
-                  React.createElement('td', { className: 'px-4 py-2.5 text-xs text-gray-400 whitespace-nowrap' }, new Date(e.createdAt).toLocaleString()),
+                  React.createElement('td', { className: 'px-4 py-2.5 text-xs text-gray-400 whitespace-nowrap' }, formatDateTime(e.createdAt)),
                   React.createElement('td', { className: 'px-4 py-2.5' },
                     React.createElement('span', { className: 'px-1.5 py-0.5 text-[10px] rounded font-medium whitespace-nowrap ' + kindStyle(e.action) }, t('auth event ' + e.action, getLang()))),
                   React.createElement('td', { className: 'px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200' }, e.username || '—'),
@@ -89,8 +90,8 @@ export default function LoginAudit() {
       total > 30 && React.createElement('div', { className: 'flex items-center justify-between px-4 py-3 border-t border-gray-100 dark:border-gray-700' },
         React.createElement('span', { className: 'text-xs text-gray-400' }, total + ' ' + t('entries', getLang())),
         React.createElement('div', { className: 'flex items-center gap-2' },
-          React.createElement('button', { onClick: () => setPage(Math.max(1, page - 1)), disabled: page <= 1, className: 'btn-secondary text-xs disabled:opacity-40' }, React.createElement(ChevronLeft, { size: 13 })),
+          React.createElement('button', { onClick: () => setPage(Math.max(1, page - 1)), disabled: page <= 1, className: 'btn-secondary text-xs disabled:opacity-40', 'aria-label': t('previous', getLang())}, React.createElement(ChevronLeft, { size: 13 })),
           React.createElement('span', { className: 'text-xs text-gray-500' }, page + ' / ' + totalPages),
-          React.createElement('button', { onClick: () => setPage(Math.min(totalPages, page + 1)), disabled: page >= totalPages, className: 'btn-secondary text-xs disabled:opacity-40' }, React.createElement(ChevronRight, { size: 13 })))))
+          React.createElement('button', { onClick: () => setPage(Math.min(totalPages, page + 1)), disabled: page >= totalPages, className: 'btn-secondary text-xs disabled:opacity-40', 'aria-label': t('next', getLang())}, React.createElement(ChevronRight, { size: 13 })))))
   );
 }

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { t } from '../lib/i18n';
+import { currentYear } from '../lib/time';
 
 export default function Footer({ settings }: { settings: Record<string, string> }) {
   return React.createElement('footer', { className: 'bg-gray-50 border-t border-gray-200 mt-16' },
@@ -38,7 +39,7 @@ export default function Footer({ settings }: { settings: Record<string, string> 
       ),
       React.createElement('div', { className: 'text-center pt-6 border-t border-gray-200' },
         React.createElement('p', { className: 'text-sm text-gray-500' },
-          '\u00a9 ' + new Date().getFullYear() + ' ' + (settings.site_title || 'Mortar CMS') + '. ' + t('powered by', settings) + ' Mortar. ',
+          '\u00a9 ' + currentYear(settings?.timezone) + ' ' + (settings.site_title || 'Mortar CMS') + '. ' + t('powered by', settings) + ' Mortar. ',
           React.createElement('a', { href: '/api/feed/rss', className: 'text-primary-600 hover:text-primary-700', target: '_blank' }, t('rss feed', settings))
         )
       )

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import { Check, X, Trash2, Trash, Sparkles, Pencil, Save } from 'lucide-react';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
@@ -100,19 +101,19 @@ export default function Comments() {
                 React.createElement('span', { className: `px-1.5 py-0.5 text-xs rounded-full ${c.status === 'approved' ? 'bg-green-100 text-green-700' : c.status === 'spam' ? 'bg-red-100 text-red-700' : c.status === 'trash' ? 'bg-gray-100 text-gray-500' : 'bg-yellow-100 text-yellow-700'}` }, t('status ' + c.status, getLang()))
               ),
               React.createElement('p', { className: 'text-sm text-gray-700 mt-1' }, c.content),
-              React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, `${t('on', getLang())}: ${c.post?.title || t('unknown', getLang())} · ${new Date(c.createdAt).toLocaleString()}`)
+              React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, `${t('on', getLang())}: ${c.post?.title || t('unknown', getLang())} · ${formatDateTime(c.createdAt)}`)
             )
           ),
           // Action buttons — WordPress-style: approve/spam/edit/trash-restore
           React.createElement('div', { className: 'flex items-center gap-1 ml-4 flex-shrink-0' },
-            c.status !== 'approved' && c.status !== 'trash' && React.createElement('button', { onClick: () => updateStatus(c.id, 'approved'), className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('approve', getLang()) }, React.createElement(Check, { size: 16 })),
-            c.status !== 'spam' && c.status !== 'trash' && React.createElement('button', { onClick: () => updateStatus(c.id, 'spam'), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('spam', getLang()) }, React.createElement(X, { size: 16 })),
-            c.status !== 'trash' && React.createElement('button', { onClick: () => { setEditingId(c.id); setEditText(c.content); setEditAuthor(c.author); }, className: 'p-1.5 text-gray-400 hover:text-blue-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),
+            c.status !== 'approved' && c.status !== 'trash' && React.createElement('button', { onClick: () => updateStatus(c.id, 'approved'), className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('approve', getLang()), 'aria-label': t('approve', getLang())}, React.createElement(Check, { size: 16 })),
+            c.status !== 'spam' && c.status !== 'trash' && React.createElement('button', { onClick: () => updateStatus(c.id, 'spam'), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('spam', getLang()), 'aria-label': t('spam', getLang())}, React.createElement(X, { size: 16 })),
+            c.status !== 'trash' && React.createElement('button', { onClick: () => { setEditingId(c.id); setEditText(c.content); setEditAuthor(c.author); }, className: 'p-1.5 text-gray-400 hover:text-blue-600', title: t('edit', getLang()), 'aria-label': t('edit', getLang())}, React.createElement(Pencil, { size: 16 })),
             c.status !== 'trash'
-              ? React.createElement('button', { onClick: () => updateStatus(c.id, 'trash'), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('move to trash', getLang()) }, React.createElement(Trash2, { size: 16 }))
+              ? React.createElement('button', { onClick: () => updateStatus(c.id, 'trash'), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('move to trash', getLang()), 'aria-label': t('move to trash', getLang())}, React.createElement(Trash2, { size: 16 }))
               : React.createElement(React.Fragment, null,
-                  React.createElement('button', { onClick: () => updateStatus(c.id, 'approved'), className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('restore', getLang()) }, React.createElement(Check, { size: 16 })),
-                  React.createElement('button', { onClick: () => del(c.id), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete permanently', getLang()) }, React.createElement(Trash, { size: 16 }))
+                  React.createElement('button', { onClick: () => updateStatus(c.id, 'approved'), className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('restore', getLang()), 'aria-label': t('restore', getLang())}, React.createElement(Check, { size: 16 })),
+                  React.createElement('button', { onClick: () => del(c.id), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete permanently', getLang()), 'aria-label': t('delete permanently', getLang())}, React.createElement(Trash, { size: 16 }))
                 )
           )
         )

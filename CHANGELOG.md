@@ -86,6 +86,18 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 
 ### Changed
 
+- **Public pages are server-rendered.** The frontend builds a second bundle
+  (`frontend/dist-ssr/entry-server.js`) that the server loads and calls per
+  request, so a visitor and a crawler get the real page — title, body, post list,
+  links — and the client hydrates that markup rather than rendering from scratch.
+  It is best-effort by design: no bundle, a theme the renderer does not have, a
+  content fetch that fails, or a 404 all fall back to the client-rendered shell,
+  and `/api/health/ready` reports `ssr: true|false` so "why is my HTML empty" has
+  an answer. Two things make it safe: the server sanitizes with the *same*
+  DOMPurify the browser uses (jsdom supplies the DOM — a lighter DOM silently
+  turns DOMPurify into a pass-through, so a render without a working sanitizer is
+  refused rather than served), and the payload shipped for hydration is
+  `<`-escaped so a post containing `</script>` cannot break out of its script tag.
 - **Every route is capability-gated.** 64 guards still named roles directly
   (`authorize('admin')`), so editing a role on the Roles page changed nothing for
   posts, taxonomy, links, security, settings or the database tools. New
@@ -141,6 +153,17 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 
 ### Security
 
+- The CSP now carries a **per-response nonce**, and the server stamps it onto the
+  inline scripts a document contains (the frontend's importmap, the render
+  payload; the client stamps the header/footer code it re-creates). This was a
+  real hole rather than a hardening step: with `CSP_ENFORCE=1` the importmap was
+  blocked, and a blocked importmap means no module resolution — the frontend never
+  booted. Report-only mode had been hiding it.
+- Admin accessibility: the dialog traps Tab, restores focus to whatever opened it
+  and exposes `aria-describedby`; 104 icon-only buttons gained an accessible name
+  (they had a hover tooltip and nothing else); dates and counters go through one
+  locale-aware helper instead of the browser's locale, so the same timestamp reads
+  the same everywhere.
 - Capability grants stay bounded by the granter: a role holding `manage_roles`
   cannot write capabilities it does not itself hold (and so cannot escalate to
   `*`), and the superuser capability cannot be handed out by a non-superuser.
@@ -161,10 +184,15 @@ for the full list with priorities.
   bulk translation screen — translations are created one at a time from the
   editor.
 - Search is full-text on SQLite only; MySQL and PostgreSQL still scan with LIKE.
-- The frontend is a client-rendered SPA with a crawler fallback rather than
-  server rendering.
-- The app-wide CSP is report-only until `CSP_ENFORCE=1` is set; plugin screens
-  with inline scripts are the thing to check before flipping it.
+- Server rendering only covers the themes that ship in this repository
+  (`frontend/src/themes/*`); an installed theme from elsewhere loads bare `react`
+  specifiers that Node cannot resolve, so those installs keep the client-rendered
+  shell. Neither SPA is RTL-aware yet.
+- The app-wide CSP is report-only until `CSP_ENFORCE=1` is set. The frontend is
+  ready for enforcement (its inline scripts carry the nonce); the **admin** is
+  not — its shell's inline dark-mode script has no nonce, the block editor loads
+  Font Awesome from cdnjs (`style-src 'self'` blocks it), and plugin screens
+  inject inline scripts. `docs/security-hardening.md` has the checklist.
 - Plugin and market packages carry a SHA-256 but are not signed, and plugins run
   unsandboxed with full server privileges (`docs/plugins.md`).
 - MySQL/PostgreSQL remain experimental: the dialect gaps and the SQLite-only

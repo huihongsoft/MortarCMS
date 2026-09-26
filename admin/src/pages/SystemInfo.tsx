@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDate } from '../lib/format';
 import { Server, Database, Cpu, HardDrive, CheckCircle2, XCircle, Activity, RefreshCw, X } from 'lucide-react';
 import api, { downloadFile } from '../lib/api';
 import { t, getLang } from '../lib/i18n';
@@ -58,7 +59,7 @@ export default function SystemInfo() {
         healthRow(t('mail settings', getLang()), health.checks.mail, health.checks.mail?.configured ? t('configured', getLang()) : t('not configured', getLang())),
         healthRow(t('directory permissions', getLang()), health.checks.permissions, health.checks.permissions?.writable ? t('uploads writable', getLang()) : health.checks.permissions?.error),
         healthRow(t('dependencies', getLang()), health.checks.dependencies, health.checks.dependencies?.deps ? Object.keys(health.checks.dependencies.deps).length + ' key packages' : health.checks.dependencies?.error),
-        healthRow(t('backup status', getLang()), health.checks.backupStatus, health.checks.backupStatus?.lastBackup ? t('last backup', getLang()) + ': ' + new Date(health.checks.backupStatus.lastBackup).toLocaleDateString() : t('no backups yet', getLang())),
+        healthRow(t('backup status', getLang()), health.checks.backupStatus, health.checks.backupStatus?.lastBackup ? t('last backup', getLang()) + ': ' + formatDate(health.checks.backupStatus.lastBackup) : t('no backups yet', getLang())),
         healthRow(t('operations', getLang()), health.checks.operations, (health.checks.operations?.cache ? t('cache on', getLang()) : t('cache off', getLang())) + ' · ' + (health.checks.operations?.maintenance ? t('maintenance active', getLang()) : t('no maintenance', getLang()))),
       )
     ),
@@ -102,7 +103,7 @@ export default function SystemInfo() {
       React.createElement('div', { className: 'bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-lg w-full p-6' },
         React.createElement('div', { className: 'flex items-center justify-between mb-4' },
           React.createElement('h3', { className: 'font-semibold text-gray-900 dark:text-gray-100' }, t('switch database', getLang())),
-          React.createElement('button', { onClick: () => setShowDbSwitch(false), className: 'p-1 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 18 })),
+          React.createElement('button', { onClick: () => setShowDbSwitch(false), className: 'p-1 text-gray-400 hover:text-gray-600', 'aria-label': t('close', getLang())}, React.createElement(X, { size: 18 })),
         ),
         swError && React.createElement('div', { className: 'p-3 mb-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg' }, swError),
         React.createElement('div', { className: 'space-y-2 mb-4' },

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import useSEO from '../hooks/useSEO';
 import { t } from '../lib/i18n';
 import { useTheme } from '../themes';
+import { siteOrigin } from '../lib/ssr';
 
 export default function NotFound() {
   // Optional theme slot: a theme that ships NotFoundLayout styles its own 404
@@ -10,7 +11,7 @@ export default function NotFound() {
   const theme = useTheme();
   // A not-found page has nothing to index (the server answers 404 for unknown
   // paths and adds the same signal as a header).
-  useSEO({ title: '404 - ' + t('page not found'), url: window.location.origin + '/404', noindex: true });
+  useSEO({ title: '404 - ' + t('page not found'), url: siteOrigin() + '/404', noindex: true });
   if (theme.NotFoundLayout) return React.createElement(theme.NotFoundLayout, null);
   return React.createElement('div', { className: 'max-w-md mx-auto px-4 py-20 text-center' },
     React.createElement('h1', { className: 'text-6xl font-bold text-gray-200 mb-4' }, '404'),

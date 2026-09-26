@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatNumber } from '../lib/format';
 import { Plus, Trash2, Pencil, Check, X, Link2, FolderPlus, Search, Handshake } from 'lucide-react';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
@@ -172,8 +173,8 @@ export default function Links() {
                 c.pageId && React.createElement('span', { className: 'text-xs text-gray-400' }, ' · ' + t('landing page', getLang()) + ': ' + (pages.find((pg: any) => pg.id === c.pageId)?.title || '?'))
               ),
               React.createElement('span', { className: 'text-xs text-gray-400' }, c.count || 0),
-              React.createElement('button', { onClick: () => { setCatEditing(c); setCatName(c.name); setCatDesc(c.description || ''); setCatOrder(c.menuOrder || 0); setCatSiteId(c.siteId || ''); setCatPageId(c.pageId || ''); }, className: 'p-1 text-gray-300 hover:text-primary-600 opacity-0 group-hover:opacity-100', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 14 })),
-              React.createElement('button', { onClick: () => delCategory(c), className: 'p-1 text-gray-300 hover:text-red-600 opacity-0 group-hover:opacity-100', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 14 }))
+              React.createElement('button', { onClick: () => { setCatEditing(c); setCatName(c.name); setCatDesc(c.description || ''); setCatOrder(c.menuOrder || 0); setCatSiteId(c.siteId || ''); setCatPageId(c.pageId || ''); }, className: 'p-1 text-gray-300 hover:text-primary-600 opacity-0 group-hover:opacity-100', title: t('edit', getLang()), 'aria-label': t('edit', getLang())}, React.createElement(Pencil, { size: 14 })),
+              React.createElement('button', { onClick: () => delCategory(c), className: 'p-1 text-gray-300 hover:text-red-600 opacity-0 group-hover:opacity-100', title: t('delete', getLang()), 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 14 }))
             ))
           )
         ),
@@ -263,11 +264,11 @@ export default function Links() {
                         (l.posts || []).length > 2 && React.createElement('span', { className: 'text-[10px] text-gray-400' }, '+' + ((l.posts || []).length - 2)))
                       : React.createElement('span', { className: 'text-xs text-gray-300' }, '—')
                   ),
-                  React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500 hidden lg:table-cell' }, (l.clicks || 0).toLocaleString()),
+                  React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500 hidden lg:table-cell' }, formatNumber(l.clicks || 0)),
                   React.createElement('td', { className: 'px-4 py-3' },
                     React.createElement('div', { className: 'flex justify-end gap-1' },
-                      React.createElement('button', { onClick: () => startEdit(l), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),
-                      React.createElement('button', { onClick: () => del(l), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 }))
+                      React.createElement('button', { onClick: () => startEdit(l), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()), 'aria-label': t('edit', getLang())}, React.createElement(Pencil, { size: 16 })),
+                      React.createElement('button', { onClick: () => del(l), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()), 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 16 }))
                     )
                   )
                 )
@@ -312,8 +313,8 @@ export default function Links() {
                   React.createElement('td', { className: 'px-4 py-3 hidden md:table-cell' }, React.createElement('a', { href: f.url, target: '_blank', rel: 'noopener noreferrer', className: 'text-sm text-primary-600 hover:underline truncate block max-w-[220px]' }, f.url)),
                   React.createElement('td', { className: 'px-4 py-3' },
                     React.createElement('div', { className: 'flex justify-end gap-1' },
-                      React.createElement('button', { onClick: () => startEditFriend(f), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),
-                      React.createElement('button', { onClick: () => delFriend(f), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 }))
+                      React.createElement('button', { onClick: () => startEditFriend(f), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()), 'aria-label': t('edit', getLang())}, React.createElement(Pencil, { size: 16 })),
+                      React.createElement('button', { onClick: () => delFriend(f), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()), 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 16 }))
                     )
                   )
                 )

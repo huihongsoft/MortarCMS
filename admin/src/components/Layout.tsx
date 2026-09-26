@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import StatusBar from './StatusBar';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Globe, Moon, Sun, ExternalLink, LogOut, ChevronDown, Bot, Menu, X, Bell } from 'lucide-react';
@@ -200,11 +201,11 @@ export default function Layout() {
                         React.createElement('span', { className: 'mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ' + (n.read ? 'bg-gray-200 dark:bg-gray-600' : 'bg-primary-500') }),
                         React.createElement('div', { className: 'min-w-0' },
                           React.createElement('p', { className: 'text-xs text-gray-700 dark:text-gray-200 break-words' }, n.message),
-                          React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, new Date(n.createdAt).toLocaleString())))))
+                          React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' }, formatDateTime(n.createdAt))))))
               )
             )
           ),
-          React.createElement('button', { onClick: toggleDark, title: t('dark mode', getLang()), className: 'p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors' },
+          React.createElement('button', { onClick: toggleDark, title: t('dark mode', getLang()), 'aria-label': t('dark mode', getLang()), className: 'p-2 text-gray-500 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg transition-colors' },
             isDark() ? React.createElement(Sun, { size: 16 }) : React.createElement(Moon, { size: 16 })),
           // User menu
           React.createElement('div', { ref: menuRef, className: 'relative' },
@@ -229,7 +230,7 @@ export default function Layout() {
       // Floating AI assistant shortcut (Ctrl+K)
       !location.pathname.startsWith('/ai') && React.createElement('button', {
         onClick: () => navigate('/ai'),
-        title: t('ai assistant', getLang()) + ' (Ctrl+K)',
+        title: t('ai assistant', getLang()) + ' (Ctrl+K)', 'aria-label': t('ai assistant', getLang()) + ' (Ctrl+K)',
         className: 'fixed bottom-14 right-6 z-40 w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white flex items-center justify-center shadow-lg shadow-blue-500/30 hover:scale-105 transition-transform',
       }, React.createElement(Bot, { size: 22 })),
     ),

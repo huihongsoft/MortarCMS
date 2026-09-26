@@ -282,6 +282,32 @@ const zh: Record<string, string> = {
   'view monthly archive': '查看月度归档',
 };
 
+// The UI language, as a module value rather than a localStorage read.
+//
+// `t()` runs on nearly every visible string and therefore during the *first*
+// render, which has to agree with the server's. localStorage is not readable on
+// the server, so both sides start from the site's own language and the visitor's
+// stored override is applied after hydration (main.tsx → applyStoredLang).
+let visitorLang: string | null = null;
+
+/**
+ * Apply the visitor's stored override. Must be called from an effect, *after*
+ * the first render — reading localStorage before it would make that render
+ * disagree with the server's. Returns true when an override exists, so the
+ * caller can re-render with it.
+ */
+export function applyStoredLang(): boolean {
+  try {
+    visitorLang = localStorage.getItem('mortar_lang');
+  } catch { visitorLang = null; }
+  return visitorLang !== null;
+}
+
+/** The language a render should use, given the settings in hand. */
+function uiLang(settings?: Record<string, string>): string {
+  return visitorLang || settings?.site_lang || 'zh';
+}
+
 export function t(key: string, settings?: Record<string, string>): string {
   // Site-level translation overrides (admin-managed JSON in settings)
   if (settings?.translations_override) {
@@ -294,13 +320,11 @@ export function t(key: string, settings?: Record<string, string>): string {
   // Visitor preference wins; otherwise fall back to the site default language.
   // The site defaults to Chinese (site_lang empty/'' means zh); set
   // site_lang=en to make the frontend English by default.
-  const lang = localStorage.getItem('mortar_lang') || settings?.site_lang || 'zh';
-  if (lang === 'zh') return zh[key] || key;
-  return key;
+  return uiLang(settings) === 'zh' ? (zh[key] || key) : key;
 }
 
 export function getSiteLang(settings?: Record<string, string>): string {
-  return localStorage.getItem('mortar_lang') || settings?.site_lang || 'zh';
+  return uiLang(settings);
 }
 
 export function setLang(lang: string): void {

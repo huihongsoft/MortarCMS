@@ -559,9 +559,56 @@ export function injectSeoMeta(html: string, m: SeoMeta, fallback?: string | null
   out = out.replace(/<meta name="description" content="[^"]*"\s*\/?>/, () => `<meta name="description" content="${esc(m.description)}" />`);
   // (the same "$" caveat applies to the fallback markup, so it goes through a
   // function replacer as well)
-  if (fallback) out = out.replace(/(<div id="root">)\s*(<\/div>)/, (_m, a, b) => a + fallback + b);
+  if (fallback) out = injectRoot(out, fallback);
   // Function replacer: the tags carry user text (title/description), and a "$&"
   // in there would expand to the matched "</head>" — which is how a post titled
   // "$&" ended up inlining the rest of the document into its own meta tag.
   return out.replace('</head>', () => '    ' + tags.join('\n    ') + '\n  </head>');
+}
+
+// Function replacer, for the same "$" reason as above: the markup being inserted
+// carries user content.
+function injectRoot(html: string, inner: string): string {
+  return html.replace(/(<div id="root">)\s*(<\/div>)/, (_m, open: string) => open + inner + '</div>');
+}
+
+/**
+ * Put the server-rendered app into the shell, followed by the payload the client
+ * needs to hydrate it.
+ *
+ * The payload is JSON inside a <script> tag, so `<` is escaped: a post containing
+ * `</script>` would otherwise end the script element early and the rest of the
+ * document would be parsed as markup — the classic JSON-in-HTML breakout.
+ */
+export function injectSsrRoot(html: string, appHtml: string, payload: unknown): string {
+  const json = JSON.stringify(payload ?? null).replace(/</g, '\\u003c');
+  return injectRoot(html, appHtml + '<script>window.__MORTAR_SSR__=' + json + '</script>');
+}
+
+/**
+ * Give every inline script in the document the response's CSP nonce.
+ *
+ * Both inline scripts a document can carry are written by us — the importmap in
+ * the shell and the render payload — and without the nonce an enforcing policy
+ * blocks them. A blocked importmap means no module resolution at all, so the app
+ * never boots; a blocked payload means the prerendered markup is thrown away and
+ * re-rendered on the client.
+ *
+ * External scripts are deliberately left alone: they are covered by `'self'`, and
+ * stamping them would let a nonce leak past the host allowlist.
+ */
+export function stampInlineScripts(html: string, nonce: string): string {
+  if (!nonce) return html;
+  const attr = 'nonce="' + esc(nonce) + '"';
+  return html.replace(/<script(?![^>]*\bsrc=)(?![^>]*\bnonce=)([^>]*)>/gi, (_m, attrs: string) => '<script ' + attr + attrs + '>');
+}
+
+// A document is built and cached with this placeholder where the nonce goes, and
+// the real per-response nonce is substituted on the way out: a nonce has to be
+// unique per response, so caching one and replaying it would defeat the point.
+export const NONCE_PLACEHOLDER = '__MORTAR_CSP_NONCE__';
+
+/** Substitute a response's nonce into a document built by stampInlineScripts. */
+export function applyNonce(html: string, nonce: string): string {
+  return nonce ? html.split('nonce="' + NONCE_PLACEHOLDER + '"').join('nonce="' + esc(nonce) + '"') : html;
 }

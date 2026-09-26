@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDate } from '../lib/format';
 import { useNavigate } from 'react-router-dom';
 import { Trash2, UserPlus, UserCircle2, ChevronDown } from 'lucide-react';
 import { useAuth } from '../lib/auth';
@@ -162,10 +163,10 @@ export default function Users() {
                   React.createElement('td', { className: 'px-4 py-3 hidden md:table-cell' },
                     React.createElement('span', { className: 'px-2 py-0.5 text-[11px] rounded-full font-medium ' + (u.two_factor_enabled ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' : 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400') },
                       u.two_factor_enabled ? t('2fa enabled', getLang()) : t('2fa disabled', getLang()))),
-                  React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-400 dark:text-gray-500 hidden lg:table-cell' }, u.createdAt ? new Date(u.createdAt).toLocaleDateString() : '-'),
+                  React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-400 dark:text-gray-500 hidden lg:table-cell' }, u.createdAt ? formatDate(u.createdAt) : '-'),
                   React.createElement('td', { className: 'px-4 py-3' },
                     React.createElement('div', { className: 'flex justify-end' },
-                      React.createElement('button', { onClick: () => del(u.id), disabled: u.id === currentUser?.id, className: 'p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 })))
+                      React.createElement('button', { onClick: () => del(u.id), disabled: u.id === currentUser?.id, className: 'p-1.5 text-gray-400 hover:text-red-600 disabled:opacity-30 disabled:cursor-not-allowed', title: t('delete', getLang()), 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 16 })))
                   )
                 )
               ))

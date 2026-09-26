@@ -6,7 +6,7 @@ import { t } from '../../lib/i18n';
 import { cdnUrl, cdnHtml } from '../../lib/cdn';
 import { embedContent } from '../../lib/embed';
 import { sanitizeCss } from '../../lib/safeCss';
-import DOMPurify from 'dompurify';
+import { purify } from '../../lib/purify';
 
 // Aurora page: centered, clean, minimal
 export default function PageLayout(props: any) {
@@ -17,6 +17,6 @@ export default function PageLayout(props: any) {
     settings.theme_show_breadcrumb !== '0' && React.createElement(Breadcrumbs, { items: [{ label: t('home', settings), to: '/' }, { label: page.title || t('page', settings) }] }),
     React.createElement('h1', { className: 'font-bold tracking-tight text-gray-900 leading-tight mb-8', style: { fontSize: 'var(--heading-max-size, 36px)' } }, page.title),
     page.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(page.meta._visual_css) } }),
-    React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(page.content || '')), settings) } }),
+    React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(purify(page.content || '')), settings) } }),
   );
 }

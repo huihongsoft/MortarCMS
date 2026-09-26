@@ -84,6 +84,14 @@ site on the public internet.
   `server/src/middleware/securityHeaders.ts` with a comment per directive
   (`script-src 'self'`, `style-src 'self' 'unsafe-inline'` for the editor's
   inline style blocks, `frame-src` for the visual editor canvas).
+  Every response carries a **per-response nonce** in `script-src`, and the server
+  stamps it onto the inline scripts a document contains — the frontend's importmap
+  and the server-render payload. This matters more than it sounds: without a nonce
+  an enforcing policy blocks the importmap, and a blocked importmap means no
+  module resolution at all, so the frontend would not boot. (Report-only hid that,
+  which is why the nonce has to ship with the policy rather than after it.) The
+  client re-creates the header/footer code an admin pastes into Settings, and
+  stamps those scripts with the same nonce it reads off the payload tag.
 - **Secrets**: AI provider keys and similar settings are encrypted at rest
   (AES-256-GCM), redacted from API responses, and stripped from exports.
 - **Destructive actions**: DB reset/restore require the superuser capability and
@@ -93,8 +101,14 @@ site on the public internet.
 
 ## Known gaps (as of 0.1.3)
 
-- The app-wide CSP is report-only until you set `CSP_ENFORCE=1`; a plugin
-  screen's inline scripts are the thing to check before flipping it.
+- The app-wide CSP is report-only until you set `CSP_ENFORCE=1`. The frontend is
+  ready for enforcement (its inline scripts carry the nonce); the **admin** is
+  not, and this is the checklist to work through first — its shell has an inline
+  dark-mode script with no nonce, the block editor loads Font Awesome from
+  `cdnjs.cloudflare.com` (blocked by `style-src 'self'`, so it needs a `style-src`
+  entry or a self-hosted copy), and a plugin screen injects inline scripts
+  (`admin/src/pages/PluginPage.tsx`) which need the same nonce treatment the
+  frontend got. Until then, enforcement breaks admin icons and plugin screens.
 - The express-rate-limit windows are in-process unless you set
   `RATE_LIMIT_STORE=db`, so per-instance counters reset on restart. The login
   lockout is always shared (database-backed): a restart no longer clears it.

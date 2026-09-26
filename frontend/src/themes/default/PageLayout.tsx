@@ -5,7 +5,7 @@ import Breadcrumbs from '../../components/Breadcrumbs';
 import { t } from '../../lib/i18n';
 import { useContentImageEnhancer } from '../../lib/imageEnhance';
 import { sanitizeCss } from '../../lib/safeCss';
-import DOMPurify from 'dompurify';
+import { purify } from '../../lib/purify';
 
 // Default single-page template — WordPress-style layout
 export default function PageLayout(props: any) {
@@ -18,7 +18,7 @@ export default function PageLayout(props: any) {
     settings.theme_show_breadcrumb !== '0' && React.createElement(Breadcrumbs, { items: [{ label: t('home', settings), to: '/' }, { label: page.title }] }),
     React.createElement('h1', { className: 'text-3xl sm:text-4xl font-bold text-gray-900 leading-tight tracking-tight my-8' }, page.title),
     page.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(page.meta._visual_css) } }),
-    React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none', dangerouslySetInnerHTML: { __html: DOMPurify.sanitize(page.content || '') } }),
+    React.createElement('div', { ref: contentRef, className: 'prose prose-gray prose-lg max-w-none', dangerouslySetInnerHTML: { __html: purify(page.content || '') } }),
     page.parent && React.createElement(Link, { to: '/page/' + page.parent.slug, className: 'inline-flex items-center gap-1 mt-10 text-sm text-gray-500 hover:text-primary-600' },
       React.createElement(ChevronLeft, { size: 15 }), page.parent.title)
   );

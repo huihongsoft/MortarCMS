@@ -6,7 +6,7 @@ import Toc from '../../components/Toc';
 import { cdnHtml } from '../../lib/cdn';
 import { embedContent } from '../../lib/embed';
 import { sanitizeCss } from '../../lib/safeCss';
-import DOMPurify from 'dompurify';
+import { purify } from '../../lib/purify';
 import { t } from '../../lib/i18n';
 import { NoticeBar, SideTabs, formatDate } from './Shared';
 
@@ -41,7 +41,7 @@ export default function SoftstorePageLayout(props: any) {
             page?.meta?._visual_css && React.createElement('style', { dangerouslySetInnerHTML: { __html: sanitizeCss(page.meta._visual_css) } }),
             React.createElement(Toc, { containerRef: contentRef, settings }),
             // Same body typography as the post page (reference base type).
-            React.createElement('div', { ref: contentRef, className: 'prose prose-gray max-w-none text-[15px] leading-[26px] text-[#666]', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(DOMPurify.sanitize(page?.content || '')), settings) } })
+            React.createElement('div', { ref: contentRef, className: 'prose prose-gray max-w-none text-[15px] leading-[26px] text-[#666]', dangerouslySetInnerHTML: { __html: cdnHtml(embedContent(purify(page?.content || '')), settings) } })
           )),
         React.createElement('aside', { className: 'lg:col-span-4 min-w-0 flex flex-col' },
           React.createElement(SideTabs, { settings, fill: true }))

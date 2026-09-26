@@ -16,7 +16,7 @@ export default function Install() {
   const [step, setStep] = useState(1);
   const [dbType, setDbType] = useState('sqlite');
   const [dbConfig, setDbConfig] = useState({ host: 'localhost', port: '3306', user: 'root', password: '', database: 'mortar' });
-  const [site, setSite] = useState({ siteTitle: '', siteDescription: '', siteUrl: window.location.origin, adminUsername: 'admin', adminEmail: '', adminPassword: '' });
+  const [site, setSite] = useState({ siteTitle: '', siteDescription: '', siteUrl: '', adminUsername: 'admin', adminEmail: '', adminPassword: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [done, setDone] = useState(false);
@@ -51,6 +51,9 @@ export default function Install() {
   try { if (siteUrlOk && site.siteUrl.trim()) derivedDomain = normalizeHost(new URL(site.siteUrl.trim()).hostname); } catch { derivedDomain = ''; }
 
   useEffect(() => {
+    // The real origin is only knowable in the browser: render seeded siteUrl: ''
+    // so the first render matches the server, then fill it in here.
+    setSite(s => ({ ...s, siteUrl: window.location.origin }));
     // If already installed, bounce to the home page
     api.get('/install/status').then(r => { if (r.data.installed) window.location.href = '/'; }).catch(() => {});
   }, []);

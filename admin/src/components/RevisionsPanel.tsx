@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import { diffLines } from 'diff';
 import { RotateCcw, GitCompare, X } from 'lucide-react';
 import api from '../lib/api';
@@ -62,19 +63,19 @@ export default function RevisionsPanel({ postId, onRestore }: RevisionsPanelProp
             React.createElement('li', { key: r.id, className: 'flex items-center justify-between gap-2' },
               React.createElement('div', { className: 'min-w-0' },
                 React.createElement('p', { className: 'text-xs text-gray-800 truncate' }, i === 0 ? t('current', getLang()) : (r.title || t('(no title)', getLang()))),
-                React.createElement('p', { className: 'text-[10px] text-gray-400' }, new Date(r.createdAt).toLocaleString()),
+                React.createElement('p', { className: 'text-[10px] text-gray-400' }, formatDateTime(r.createdAt)),
               ),
               React.createElement('div', { className: 'flex items-center gap-1 shrink-0' },
-                i !== 0 && React.createElement('button', { onClick: () => restore(r.id), className: 'p-1 text-gray-400 hover:text-green-600', title: t('restore', getLang()) }, React.createElement(RotateCcw, { size: 14 })),
-                i !== 0 && React.createElement('button', { onClick: () => setCompare(compare && compare.a.id === r.id ? null : { a: r, b: revisions[0] }), className: 'p-1 text-gray-400 hover:text-primary-600', title: t('compare with current', getLang()) }, React.createElement(GitCompare, { size: 14 })),
+                i !== 0 && React.createElement('button', { onClick: () => restore(r.id), className: 'p-1 text-gray-400 hover:text-green-600', title: t('restore', getLang()), 'aria-label': t('restore', getLang())}, React.createElement(RotateCcw, { size: 14 })),
+                i !== 0 && React.createElement('button', { onClick: () => setCompare(compare && compare.a.id === r.id ? null : { a: r, b: revisions[0] }), className: 'p-1 text-gray-400 hover:text-primary-600', title: t('compare with current', getLang()), 'aria-label': t('compare with current', getLang())}, React.createElement(GitCompare, { size: 14 })),
               ),
             )
           )
         ),
     compare && React.createElement('div', { className: 'mt-3 border-t border-gray-200 pt-3' },
       React.createElement('div', { className: 'flex items-center justify-between mb-2' },
-        React.createElement('p', { className: 'text-[10px] text-gray-400' }, t('old', getLang()) + ': ' + new Date(compare.a.createdAt).toLocaleString() + '  ' + t('vs', getLang()) + '  ' + t('current', getLang()) + ': ' + new Date(compare.b.createdAt).toLocaleString()),
-        React.createElement('button', { onClick: () => setCompare(null), className: 'p-0.5 text-gray-400 hover:text-gray-600', title: t('close', getLang()) }, React.createElement(X, { size: 12 })),
+        React.createElement('p', { className: 'text-[10px] text-gray-400' }, t('old', getLang()) + ': ' + formatDateTime(compare.a.createdAt) + '  ' + t('vs', getLang()) + '  ' + t('current', getLang()) + ': ' + formatDateTime(compare.b.createdAt)),
+        React.createElement('button', { onClick: () => setCompare(null), className: 'p-0.5 text-gray-400 hover:text-gray-600', title: t('close', getLang()), 'aria-label': t('close', getLang())}, React.createElement(X, { size: 12 })),
       ),
       renderDiff(compare.a.content, compare.b.content),
     ),

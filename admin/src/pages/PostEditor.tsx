@@ -555,7 +555,7 @@ export default function PostEditor() {
   return React.createElement('div', null,
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
       React.createElement('div', { className: 'flex items-center gap-3' },
-        React.createElement('button', { onClick: () => navigate('/posts'), className: 'p-2 text-gray-400 hover:text-gray-600' }, React.createElement(ArrowLeft, { size: 20 })),
+        React.createElement('button', { onClick: () => navigate('/posts'), className: 'p-2 text-gray-400 hover:text-gray-600', 'aria-label': t('back', getLang())}, React.createElement(ArrowLeft, { size: 20 })),
         React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, id ? t('edit post', getLang()) : t('new post', getLang()))
       ),
       React.createElement('div', { className: 'flex items-center gap-2 flex-wrap justify-end' },

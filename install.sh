@@ -263,6 +263,13 @@ build_all() {
   (cd server && npx tsc) || err "server 编译失败"
   # 前端最终打包（含 esm 产物）
   (cd frontend && npx vite build) || err "frontend 最终打包失败"
+  # 服务端预渲染 bundle（frontend/dist-ssr）：服务端按请求加载它直出首屏 HTML。
+  # 构建失败不影响运行——服务端会退回客户端渲染的壳，所以只告警不中断。
+  if (cd frontend && npx vite build --config vite.ssr.config.ts >/dev/null 2>&1); then
+    ok "服务端预渲染已构建"
+  else
+    warn "服务端预渲染构建失败，将使用客户端渲染（功能不受影响）"
+  fi
   ok "构建完成"
 }
 

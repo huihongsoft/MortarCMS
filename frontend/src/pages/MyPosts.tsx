@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { FileText, Clock, CheckCircle2, XCircle } from 'lucide-react';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
+import { formatDate } from '../lib/time';
 import useSEO from '../hooks/useSEO';
 
 interface MyPost { id: string; title: string; slug: string; status: string; createdAt: string }
@@ -15,9 +16,13 @@ const STATUS_STYLE: Record<string, { cls: string; icon: any }> = {
 
 export default function MyPosts() {
   useSEO({ title: t('my submissions'), url: '/my-posts', noindex: true });
-  const [loggedIn, setLoggedIn] = useState(!!localStorage.getItem('mortar_token'));
+  // A browser-only read, so it is guarded rather than moved into an effect:
+  // these pages are never server-rendered, and deferring it would show a
+  // signed-in visitor the signed-out screen for a frame.
+  const [loggedIn, setLoggedIn] = useState(() => typeof window !== 'undefined' && !!localStorage.getItem('mortar_token'));
   const [posts, setPosts] = useState<MyPost[]>([]);
   const [loading, setLoading] = useState(true);
+
 
   useEffect(() => {
     if (!loggedIn) return;
@@ -47,7 +52,7 @@ export default function MyPosts() {
               return React.createElement('div', { key: p.id, className: 'card p-4 flex items-center gap-3' },
                 React.createElement('div', { className: 'flex-1 min-w-0' },
                   React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 truncate' }, p.title),
-                  React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, new Date(p.createdAt).toLocaleDateString())),
+                  React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, formatDate(p.createdAt))),
                 React.createElement('span', { className: 'text-[10px] px-2 py-0.5 rounded-full flex items-center gap-1 ' + st.cls },
                   React.createElement(st.icon, { size: 10 }), t(p.status === 'pending' ? 'pending review' : p.status)));
             })

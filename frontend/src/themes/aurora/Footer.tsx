@@ -2,10 +2,11 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../lib/api';
 import { t } from '../../lib/i18n';
+import { currentYear } from '../../lib/time';
 
 // Aurora footer: minimal, hairline top border
 export default function Footer({ settings }: { settings: Record<string, string> }) {
-  const year = new Date().getFullYear();
+  const year = currentYear(settings?.timezone);
   const [menuItems, setMenuItems] = useState<any[]>([]);
   useEffect(() => { api.get('/menus/location/footer').then(r => setMenuItems(r.data.items || [])).catch(() => {}); }, []);
   const topLevel = menuItems.filter((i: any) => !i.parentId);

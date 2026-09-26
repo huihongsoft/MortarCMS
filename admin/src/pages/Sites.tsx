@@ -229,12 +229,12 @@ export default function Sites() {
                   )
                 ),
                 React.createElement('div', { className: 'flex items-center gap-1 shrink-0' },
-                  s.isPrimary !== 1 && React.createElement('button', { onClick: () => setPrimary(s), className: 'p-1.5 text-gray-400 hover:text-amber-500', title: t('set as primary', getLang()) }, React.createElement(Star, { size: 16 })),
-                  React.createElement('button', { onClick: () => openContent(s), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('manage content', getLang()) }, React.createElement(Layers, { size: 16 })),
-                  React.createElement('button', { onClick: () => duplicate(s), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('duplicate', getLang()) }, React.createElement(Copy, { size: 16 })),
-                  React.createElement('button', { onClick: () => toggleActive(s), className: 'p-1.5 text-gray-400 hover:text-gray-700', title: s.active ? t('deactivate', getLang()) : t('activate', getLang()) }, s.active ? React.createElement(X, { size: 16 }) : React.createElement(Check, { size: 16 })),
-                  React.createElement('button', { onClick: () => { setEditing(s); setForm({ name: s.name, slug: s.slug, domain: s.domain, description: s.description }); setShowForm(true); }, className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),
-                  React.createElement('button', { onClick: () => remove(s), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 })),
+                  s.isPrimary !== 1 && React.createElement('button', { onClick: () => setPrimary(s), className: 'p-1.5 text-gray-400 hover:text-amber-500', title: t('set as primary', getLang()), 'aria-label': t('set as primary', getLang())}, React.createElement(Star, { size: 16 })),
+                  React.createElement('button', { onClick: () => openContent(s), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('manage content', getLang()), 'aria-label': t('manage content', getLang())}, React.createElement(Layers, { size: 16 })),
+                  React.createElement('button', { onClick: () => duplicate(s), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('duplicate', getLang()), 'aria-label': t('duplicate', getLang())}, React.createElement(Copy, { size: 16 })),
+                  React.createElement('button', { onClick: () => toggleActive(s), className: 'p-1.5 text-gray-400 hover:text-gray-700', title: s.active ? t('deactivate', getLang()) : t('activate', getLang()), 'aria-label': s.active ? t('deactivate', getLang()) : t('activate', getLang())}, s.active ? React.createElement(X, { size: 16 }) : React.createElement(Check, { size: 16 })),
+                  React.createElement('button', { onClick: () => { setEditing(s); setForm({ name: s.name, slug: s.slug, domain: s.domain, description: s.description }); setShowForm(true); }, className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()), 'aria-label': t('edit', getLang())}, React.createElement(Pencil, { size: 16 })),
+                  React.createElement('button', { onClick: () => remove(s), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()), 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 16 })),
                 )
               ),
               React.createElement('div', { className: 'mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-4 gap-3 items-end' },
@@ -269,7 +269,7 @@ export default function Sites() {
       React.createElement('div', { className: 'card w-full max-w-2xl max-h-[80vh] flex flex-col' },
         React.createElement('div', { className: 'flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-700' },
           React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100' }, t('manage content', getLang()) + ': ' + contentSite.name),
-          React.createElement('button', { onClick: () => setContentSite(null), className: 'p-1.5 text-gray-400 hover:text-gray-700', title: t('close', getLang()) }, React.createElement(X, { size: 16 }))
+          React.createElement('button', { onClick: () => setContentSite(null), className: 'p-1.5 text-gray-400 hover:text-gray-700', title: t('close', getLang()), 'aria-label': t('close', getLang())}, React.createElement(X, { size: 16 }))
         ),
         // Type tabs
         React.createElement('div', { className: 'flex gap-1 px-5 pt-4' },
@@ -299,7 +299,7 @@ export default function Sites() {
         React.createElement('div', { className: 'flex items-center gap-2 p-5 border-t border-gray-100 dark:border-gray-700' },
           React.createElement('button', { onClick: () => applyContent('assign'), disabled: selected.size === 0, className: 'btn-primary text-sm disabled:opacity-40' }, React.createElement(Check, { size: 14 }), t('assign to this site', getLang()) + ' (' + selected.size + ')'),
           React.createElement('button', { onClick: () => applyContent('global'), disabled: selected.size === 0, className: 'btn-secondary text-sm disabled:opacity-40' }, React.createElement(Globe, { size: 14 }), t('make global', getLang())),
-          React.createElement('button', { onClick: () => openContent(contentSite), className: 'btn-secondary text-sm ml-auto', title: t('refresh', getLang()) }, React.createElement(RefreshCw, { size: 14 }))
+          React.createElement('button', { onClick: () => openContent(contentSite), className: 'btn-secondary text-sm ml-auto', title: t('refresh', getLang()), 'aria-label': t('refresh', getLang())}, React.createElement(RefreshCw, { size: 14 }))
         )
       )
     )

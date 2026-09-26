@@ -103,7 +103,7 @@ export default function Forms() {
                 // Enable toggle
                 React.createElement('button', {
                   onClick: () => toggleEnabled(f),
-                  title: t('active', getLang()),
+                  title: t('active', getLang()), 'aria-label': t('active', getLang()),
                   role: 'switch',
                   'aria-checked': !!f.enabled,
                   className: 'relative w-9 h-5 rounded-full transition-colors shrink-0 ' + (f.enabled ? 'bg-primary-600' : 'bg-gray-300 dark:bg-gray-700'),
@@ -117,7 +117,7 @@ export default function Forms() {
                   ),
                   React.createElement('div', { className: 'flex items-center gap-2 mt-1' },
                     React.createElement('code', { className: 'text-xs text-gray-500 dark:text-gray-400' }, '[form id="' + f.slug + '"]'),
-                    React.createElement('button', { onClick: () => copyShortcode(f), title: t('copy', getLang()), className: 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200' }, React.createElement(Copy, { size: 13 })),
+                    React.createElement('button', { onClick: () => copyShortcode(f), title: t('copy', getLang()), 'aria-label': t('copy', getLang()), className: 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200' }, React.createElement(Copy, { size: 13 })),
                   ),
                 ),
                 // Actions
@@ -132,10 +132,10 @@ export default function Forms() {
                       emailTo: r.data.emailTo || '', emailSubject: r.data.emailSubject || '',
                       fields: (r.data.fields || []).map((x: any) => ({ ...x, options: x.options || '' })),
                     })); },
-                    title: t('edit', getLang()),
+                    title: t('edit', getLang()), 'aria-label': t('edit', getLang()),
                     className: 'btn-secondary text-xs px-2.5 py-1',
                   }, React.createElement(Pencil, { size: 12 })),
-                  React.createElement('button', { onClick: () => remove(f), title: t('delete', getLang()), className: 'btn-danger text-xs px-2.5 py-1' }, React.createElement(Trash2, { size: 12 })),
+                  React.createElement('button', { onClick: () => remove(f), title: t('delete', getLang()), 'aria-label': t('delete', getLang()), className: 'btn-danger text-xs px-2.5 py-1' }, React.createElement(Trash2, { size: 12 })),
                 ),
               )
             )
@@ -182,7 +182,7 @@ export default function Forms() {
                     onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEditing({ ...editing, fields: editing.fields.map((x, j) => j === i ? { ...x, required: e.target.checked } : x) }),
                     className: 'accent-primary-600',
                   }), t('field required', getLang())),
-                React.createElement('button', { onClick: () => setEditing({ ...editing, fields: editing.fields.filter((_, j) => j !== i) }), className: 'btn-danger text-xs px-2 py-1', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 12 })),
+                React.createElement('button', { onClick: () => setEditing({ ...editing, fields: editing.fields.filter((_, j) => j !== i) }), className: 'btn-danger text-xs px-2 py-1', title: t('delete', getLang()), 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 12 })),
               ),
               React.createElement('div', { className: 'flex gap-2' },
                 React.createElement('input', {

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { formatDateTime } from '../lib/format';
 import { ShieldCheck, CheckCircle2, AlertTriangle, XCircle, Info, RefreshCw, Lock } from 'lucide-react';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
@@ -104,7 +105,7 @@ export default function Security() {
                 );
               })
             ),
-            React.createElement('p', { className: 'text-xs text-gray-400 mt-4' }, t('audit generated at', getLang()) + ' ' + new Date(data.generatedAt).toLocaleString())
+            React.createElement('p', { className: 'text-xs text-gray-400 mt-4' }, t('audit generated at', getLang()) + ' ' + formatDateTime(data.generatedAt))
           )
   );
 }

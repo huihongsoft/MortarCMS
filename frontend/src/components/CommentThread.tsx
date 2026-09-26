@@ -2,6 +2,7 @@ import React from 'react';
 import CommentLike from './CommentLike';
 import { gravatarUrl } from '../lib/gravatar';
 import { t } from '../lib/i18n';
+import { formatDate } from '../lib/time';
 
 // One comment plus its replies, recursively. Themes own the styling (they pass a
 // class map) while the behaviour — nesting, the like button, the reply button —
@@ -43,7 +44,7 @@ export default function CommentThread({ comment, classes, settings, onReply, dep
         avatar,
         React.createElement('div', null,
           React.createElement('p', { className: classes.author }, comment.author),
-          React.createElement('p', { className: classes.date }, new Date(comment.createdAt).toLocaleDateString()))),
+          React.createElement('p', { className: classes.date }, formatDate(comment.createdAt)))),
       React.createElement('p', { className: classes.body }, comment.content),
       React.createElement('div', { className: 'mt-2 flex items-center gap-3' },
         React.createElement(CommentLike, { commentId: comment.id, initial: comment.likes }),

@@ -101,6 +101,15 @@ instance and aggregate in the query.
   balancer or a Kubernetes readiness probe here; restarting on liveness alone
   would keep an instance in rotation while every request fails.
 
+  Its response also carries `ssr: true|false` — whether the server-render bundle
+  (`frontend/dist-ssr/entry-server.js`) is loadable. It is **not** part of
+  readiness: the site serves fine without it, falling back to the client-rendered
+  shell. It is here because "pages arrive as an empty `<div id="root">`" has two
+  very different causes — no build, or a render that fails — and this tells them
+  apart. `false` on an install that ran `install.sh` (which builds it) means the
+  bundle is missing or unreadable; check the server log for the
+  `SSR renderer unavailable` line.
+
 ## Log rotation
 
 `docs/deployment.md` (and the logrotate sample below) covers rotation — the

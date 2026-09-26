@@ -11,9 +11,12 @@ import db, { initDB, closeDb } from './utils/db';
 import { logger } from './utils/logger';
 import { countRequest, startMetrics } from './utils/metrics';
 import { flushViews } from './utils/views';
-import { buildSeoMeta, injectSeoMeta, isKnownRoute, buildRobotsTxt, buildCrawlerFallback } from './utils/seoMeta';
+import { buildSeoMeta, injectSeoMeta, injectSsrRoot, stampInlineScripts, applyNonce, NONCE_PLACEHOLDER, isKnownRoute, buildRobotsTxt, buildCrawlerFallback } from './utils/seoMeta';
+import { renderPath, fetchOwnJson, ssrAvailable } from './utils/ssr';
+import { activeThemeName } from './routes/themes';
+import { contentLangs } from './utils/contentLang';
 import { appPasswordAuth, resolveOptionalUser } from './middleware/auth';
-import { securityHeaders } from './middleware/securityHeaders';
+import { securityHeaders, cspNonce } from './middleware/securityHeaders';
 import { rateLimitStore } from './utils/rateLimitStore';
 import pluginExtRoutes from './routes/pluginExt';
 import { doAction } from './utils/hooks';
@@ -447,7 +450,10 @@ app.get('/api/health/ready', (_req, res) => {
     res.status(503).json({ ready: false, reason: 'schema migrations pending', schema });
     return;
   }
-  res.json({ ready: true, version: APP_VERSION, schema });
+  // Whether the frontend's SSR bundle is loadable. Not part of readiness — the
+  // site serves fine without it — but the one place an operator can see why pages
+  // are arriving as an empty shell.
+  void ssrAvailable().then((ssr) => res.json({ ready: true, version: APP_VERSION, schema, ssr }));
 });
 
 // robots.txt (honors the blog_public SEO setting, per site)
@@ -614,25 +620,84 @@ if (fs.existsSync(frontendDist)) {
     } catch { shellCache = ''; }
     return shellCache || null;
   };
+  // Serve the document for a frontend route.
+  //
+  // The prerender is best-effort: it is used when the frontend's SSR bundle is
+  // present and can render this path, and everything falls back to the shell plus
+  // the crawler fallback otherwise. The prerendered document is cached like any
+  // other content response — the key ends in ' /ssr' so a content purge drops it.
+  const serveHtml = async (
+    req: any, res: any, shell: string, meta: any, missing: boolean,
+    wantsSsr: boolean, origin: string, siteId: string | undefined,
+  ): Promise<void> => {
+    const status = missing ? 404 : 200;
+    // Documents are built with a placeholder nonce so they can be cached, and the
+    // response's own nonce goes in on the way out (see applyNonce).
+    const finish = (html: string): void => {
+      res.status(status).type('html').send(applyNonce(html, cspNonce(res)));
+    };
+    const shellDoc = (fallback: string | null, appHtml?: string, payload?: unknown): string => {
+      let html = injectSeoMeta(shell, meta, fallback);
+      if (appHtml !== undefined) html = injectSsrRoot(html, appHtml, payload);
+      return stampInlineScripts(html, NONCE_PLACEHOLDER);
+    };
+    try {
+      if (!wantsSsr) {
+        finish(shellDoc(missing ? null : buildCrawlerFallback(req.path, siteId)));
+        return;
+      }
+      const key = 'SSR ' + (req.headers.host || '') + ' /ssr' + req.originalUrl;
+      const cached = cacheGet(key);
+      if (cached) { finish(cached); return; }
+
+      // The renderer's content fetches go to 127.0.0.1, not to `origin`: behind a
+      // proxy the public host resolves to the internet, so a loopback fetch would
+      // leave the machine (and is often blocked). The Host header still carries the
+      // site's name, which is what the site resolver reads.
+      const localBase = 'http://127.0.0.1:' + ((server.address() as any)?.port || PORT);
+      const settings = await fetchOwnJson(localBase, req.headers.host, '/api/settings');
+      if (!settings) { finish(shellDoc(buildCrawlerFallback(req.path, siteId))); return; }
+      const rendered = await renderPath({
+        path: req.originalUrl,
+        origin,
+        fetchBase: localBase,
+        host: req.headers.host,
+        settings,
+        themeName: activeThemeName(siteId),
+        contentLangs: contentLangs().join(','),
+        siteId,
+      });
+      if (!rendered) { finish(shellDoc(buildCrawlerFallback(req.path, siteId))); return; }
+
+      const html = shellDoc(null, rendered.html, rendered.payload);
+      cacheSet(key, html);
+      finish(html);
+    } catch {
+      try { res.sendFile(frontendIndexHtml); } catch { /* headers already sent */ }
+    }
+  };
   app.get('*', (req, res) => {
     const shell = frontendShell();
     if (!shell) { res.sendFile(frontendIndexHtml); return; }
     try {
       const origin = (req.secure ? 'https' : 'http') + '://' + (req.headers.host || 'localhost');
-      const meta = buildSeoMeta(req.path, { siteId: (req as any).siteId, origin });
+      const siteId = (req as any).siteId;
+      const meta = buildSeoMeta(req.path, { siteId, origin });
       // A path the SPA has no route for is a real 404 — otherwise every unknown
       // URL answered 200 with the app shell (a "soft 404" that search engines
       // report). The shell is still rendered so visitors see the 404 page.
       const known = isKnownRoute(req.path);
       // A route whose shape is valid but whose content is gone (a deleted post) is
       // 404 too — otherwise search engines keep an empty shell indexed.
-      const missing = !known || meta.notFound;
+      const missing: boolean = !known || meta.notFound === true;
       // X-Robots-Tag rather than a <meta> tag: the client hook removes a robots
       // meta it did not set, so a tag would not survive hydration.
       if (missing || meta.noindex) res.setHeader('X-Robots-Tag', 'noindex, nofollow');
-      // Crawlers that do not run JS would otherwise get an empty <div id="root">.
-      const fallback = missing || meta.noindex ? null : buildCrawlerFallback(req.path, (req as any).siteId);
-      res.status(missing ? 404 : 200).type('html').send(injectSeoMeta(shell, meta, fallback));
+      // Server-rendered first paint. Only for pages that get indexed and only for
+      // anonymous visitors: a signed-in visitor's page is personalized, and the
+      // renderer fetches content anonymously anyway (see utils/ssr.ts).
+      const wantsSsr = !missing && !meta.noindex && !req.headers.authorization;
+      void serveHtml(req, res, shell, meta, missing, wantsSsr, origin, siteId);
     } catch {
       res.sendFile(frontendIndexHtml);
     }

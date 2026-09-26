@@ -4,6 +4,7 @@ import useSEO from '../hooks/useSEO';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
 import { postPath } from '../lib/permalink';
+import { siteOrigin } from '../lib/ssr';
 
 // Navigation-site page: links grouped by category, each card showing the
 // site's icon, name, description and any associated posts (e.g. an official
@@ -44,7 +45,7 @@ export default function LinksPage({ settings }: { settings: Record<string, strin
   useSEO({
     siteTitle: settings.site_title,
     title: t('navigation links'),
-    url: window.location.origin + '/links' + (categoryFilter ? '?category=' + encodeURIComponent(categoryFilter) : ''),
+    url: siteOrigin(settings) + '/links' + (categoryFilter ? '?category=' + encodeURIComponent(categoryFilter) : ''),
     jsonLd: visibleGroups.flatMap(g => g.links.map((l: any) => ({ '@type': 'ListItem', position: 1, name: l.name, url: l.url }))).length
       ? [{ '@context': 'https://schema.org', '@type': 'ItemList', itemListElement: visibleGroups.flatMap(g => g.links.slice(0, 8).map((l: any) => ({ '@type': 'ListItem', position: 1, name: l.name, url: l.url }))) }]
       : [],

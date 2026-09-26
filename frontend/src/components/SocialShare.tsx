@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 import { Link2 } from 'lucide-react';
 import { t } from '../lib/i18n';
+import { siteOrigin } from '../lib/ssr';
 
 interface Props { title: string; url: string; siteUrl?: string; }
 
 export default function SocialShare({ title, url, siteUrl }: Props) {
-  const fullUrl = (siteUrl || window.location.origin) + url;
+  const fullUrl = (siteUrl || siteOrigin()) + url;
   const encoded = encodeURIComponent(fullUrl);
   const encodedTitle = encodeURIComponent(title);
 
