@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, UserCircle, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, ShieldAlert, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3, Webhook, ClipboardList, Mail, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, UserCircle, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, ShieldAlert, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3, Webhook, ClipboardList, Mail, CalendarDays, ArrowRightLeft } from 'lucide-react';
 import CommentBadge from './CommentBadge';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -23,6 +23,7 @@ const groups: { title: string; items: { to: string; icon: any; label: string; de
       { to: '/pages', icon: Files, label: t('pages', getLang()) },
       { to: '/media', icon: Image, label: t('media', getLang()) },
       { to: '/comments', icon: MessageSquare, label: t('comments', getLang()) },
+      { to: '/redirects', icon: ArrowRightLeft, label: t('redirects', getLang()) },
       { to: '/categories', icon: FolderTree, label: t('categories', getLang()) },
       { to: '/tags', icon: TagIcon, label: t('tags', getLang()) },
       { to: '/links', icon: Link2, label: t('links', getLang()) },

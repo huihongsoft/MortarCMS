@@ -341,7 +341,16 @@ export default function PostEditor() {
       // Permalink (matches the visual editor sidebar)
       React.createElement('div', { className: 'card p-4' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('permalink', getLang())),
+        // Editable: this was a read-only preview while the editor still sent the
+        // value in its payload — the API dropped it, so the field looked like it
+        // existed and did nothing.
+        React.createElement('input', {
+          value: slug, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSlug(e.target.value),
+          placeholder: t('post slug', getLang()), className: 'input-field text-sm mb-2 font-mono',
+          spellCheck: false, 'aria-label': t('post slug', getLang()),
+        }),
         React.createElement('p', { className: 'text-xs text-gray-500 break-all' }, postPath(permalink, slug || t('untitled', getLang()), true)),
+        React.createElement('p', { className: 'text-[11px] text-gray-400 mt-1' }, t('slug change hint', getLang())),
         slug && React.createElement('button', { onClick: () => window.open(postPath(permalink, slug, true), '_blank'), className: 'text-xs text-primary-600 hover:text-primary-700 mt-1' }, t('view post', getLang()))
       ),
       // Discussion (matches the visual editor sidebar)

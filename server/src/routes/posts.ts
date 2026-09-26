@@ -6,8 +6,9 @@ import { authenticate, requireCap, resolveOptionalUser, userCan, AuthRequest } f
 import { verifyToken } from '../utils/jwt';
 import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
 import { SiteRequest } from '../middleware/site';
-import { slugify, uniqueSlug } from '../utils/slug';
+import { slugify, uniqueSlug, postUrl } from '../utils/slug';
 import { likeContains } from '../utils/sqlLike';
+import { recordMovedPath } from '../utils/redirects';
 import { rateLimitStore } from '../utils/rateLimitStore';
 import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
 import { applyFilters, doAction } from '../utils/hooks';
@@ -91,7 +92,7 @@ function validPostType(raw: unknown): string | null {
 function sanitizeVisualCss(css: string): string {
   return sanitizeCssText(css);
 }
-const postSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), authorId: z.string().optional(), publishedAt: z.string().optional(), meta: z.record(z.string(), z.string()).optional(), type: z.string().optional() });
+const postSchema = z.object({ title: z.string().min(1), slug: z.string().max(200).optional(), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), authorId: z.string().optional(), publishedAt: z.string().optional(), meta: z.record(z.string(), z.string()).optional(), type: z.string().optional() });
 
 // ---- Bulk operations: the same checks the single-row routes apply -------------
 // The bulk endpoints act on ids the client chose, so every row has to pass the
@@ -540,7 +541,9 @@ router.post('/', authenticate, requireCap('edit_posts'), async (req: AuthRequest
     // Post.slug is UNIQUE across every type, so uniqueness has to be checked globally —
     // a custom-type entry titled like an existing post would otherwise collide.
     const allSlugs = (db.prepare('SELECT slug FROM Post').all() as any[]).map((s: any) => s.slug);
-    const slug = uniqueSlug(data.title, allSlugs);
+    // An explicit slug is honoured (the editor lets an author set one — it used to
+    // send it and have it silently dropped, because the schema did not list it).
+    const slug = data.slug ? uniqueSlug(data.slug, allSlugs) : uniqueSlug(data.title, allSlugs);
     const id = cuid();
     const now = new Date().toISOString();
     // Callers who may edit other people's posts can assign an author; everyone
@@ -600,6 +603,23 @@ router.put('/:id', authenticate, requireCap('edit_posts'), async (req: AuthReque
     if (!userCan(req.user!, 'publish_posts') && data.status !== undefined && data.status !== 'draft') { res.status(403).json({ error: 'Contributors can only keep posts as drafts' }); return; }
     const sets: string[] = []; const vals: any[] = [];
     if (data.title !== undefined) { sets.push('title = ?'); vals.push(data.title); }
+    // Slug edits are honoured, and a published post keeps its old URL working:
+    // changing the slug used to be impossible through the API (the editor sent it
+    // and Zod dropped it), and once it is possible, silently breaking every
+    // existing link — including search-engine results — would be the obvious way
+    // to lose traffic.
+    if (data.slug !== undefined && String(data.slug).trim()) {
+      const others = (db.prepare('SELECT slug FROM Post WHERE id <> ?').all(req.params.id) as any[]).map((s: any) => s.slug);
+      const nextSlug = uniqueSlug(String(data.slug), others);
+      if (nextSlug !== existing.slug) {
+        sets.push('slug = ?'); vals.push(nextSlug);
+        // Only a plain post: a custom type's public URL has its own shape, and a
+        // redirect written from the post prefix would point nowhere.
+        if (existing.type === 'post' && (existing.status === 'published' || existing.status === 'private')) {
+          recordMovedPath(postUrl(existing.slug), postUrl(nextSlug), existing.siteId || null);
+        }
+      }
+    }
     if (data.content !== undefined) { sets.push('content = ?'); vals.push(data.content); }
     if (data.excerpt !== undefined) { sets.push('excerpt = ?'); vals.push(data.excerpt); }
     if (data.status !== undefined) {

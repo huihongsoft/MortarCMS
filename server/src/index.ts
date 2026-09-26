@@ -42,6 +42,7 @@ import mailerRoutes from './routes/mailer';
 import tasksRoutes from './routes/tasks';
 import { registerBuiltinTasks, startScheduler, stopScheduler, runTaskNow } from './utils/scheduler';
 import metricsRoutes from './routes/metrics';
+import redirectRoutes from './routes/redirects';
 import { schemaVersion } from './utils/db';
 import { cacheGet, cacheSet, cacheConfigure, purgeContentCaches, purgeAllCaches, startCacheCoherence } from './utils/cache';
 import importRoutes from './routes/import';
@@ -63,6 +64,7 @@ import brokenLinkRoutes from './routes/brokenLinks';
 import { initWebhooks } from './utils/webhooks';
 import { loadActivePlugins } from './plugins/manager';
 import { resolveSite } from './middleware/site';
+import { redirectMiddleware } from './middleware/redirects';
 
 // Validate configuration before touching the database or listening.
 try { assertValidConfig(); } catch { process.exit(1); }
@@ -421,6 +423,7 @@ app.use('/api', hooksRoutes);
 app.use('/api', cacheAdminRoutes);
 app.use('/api', mailerRoutes);
 app.use('/api', tasksRoutes);
+app.use('/api/redirects', redirectRoutes);
 // Prometheus exposition (aggregate only, unauthenticated — see the route).
 app.use('/metrics', metricsRoutes);
 
@@ -574,6 +577,9 @@ app.get('/api/widgets', (_req, res) => {
 // Unknown API paths must return a JSON 404 (not the SPA HTML catch-all) so
 // client code can distinguish missing endpoints from real API failures.
 app.use('/api', (_req, res) => { res.status(404).json({ error: 'Not found' }); });
+
+// Old-URL redirects, in front of both SPAs (see middleware/redirects.ts).
+app.use(redirectMiddleware());
 
 // Serve Admin SPA
 const adminDist = path.join(__dirname, '../../admin/dist');

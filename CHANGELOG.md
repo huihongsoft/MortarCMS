@@ -29,6 +29,12 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 - Admin **My Profile** page (bio, avatar, password, 2FA, application passwords),
   an unsaved-changes guard for the editors, and a "no permission" screen instead
   of a page that fails on every request.
+- **Redirect management**, and slug editing that works: the editor sent `slug`
+  and the API schema dropped it, so changing a post's URL was silently a no-op.
+  Slugs are editable now, and a published post or page that changes slug gets a
+  301 automatically so the old URL keeps working. The screen adds 301/302,
+  search, hit counts and a CSV import; the responses admin still lists dead links
+  rather than fixing them, which is what this is for.
 - **Two-factor auth that works**: TOTP secrets are base32 (an authenticator app
   can enrol them — the previous base64 secret could not be), encrypted at rest,
   and paired with ten single-use recovery codes. Existing secrets keep working.
@@ -111,8 +117,6 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 Tracked here so an upgrade is not a surprise; see `docs/production-readiness.md`
 for the full list with priorities.
 
-- No redirect manager: changing a post's slug breaks the old URL (301s are not
-  written automatically), and there is no way to add one by hand.
 - Single-instance by design: caches, rate limiters and the scheduler keep state
   in process memory (`docs/deployment.md`).
 - MySQL/PostgreSQL remain experimental: pooled concurrency, full dialect

@@ -6,6 +6,7 @@ import { authenticate, requireCap, userCan, AuthRequest } from '../middleware/au
 import { rateLimitStore } from '../utils/rateLimitStore';
 import { SiteRequest } from '../middleware/site';
 import { uniqueSlug } from '../utils/slug';
+import { recordMovedPath } from '../utils/redirects';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 import { sanitizeCssText } from '../utils/sanitize';
 import { normalizeSeoField } from '../utils/seoFields';
@@ -23,7 +24,7 @@ const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeader
 function sanitizeVisualCss(css: string): string {
   return sanitizeCssText(css);
 }
-const pageSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'password', 'trash']).optional(), password: z.string().optional(), featured: z.string().optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), meta: z.record(z.string(), z.string()).optional() });
+const pageSchema = z.object({ title: z.string().min(1), slug: z.string().max(200).optional(), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'password', 'trash']).optional(), password: z.string().optional(), featured: z.string().optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), meta: z.record(z.string(), z.string()).optional() });
 
 // 'password' status means "published but password protected" (WordPress style):
 // store it as status='published' + a non-empty password field.
@@ -155,7 +156,7 @@ router.post('/', authenticate, requireCap('edit_pages'), async (req: AuthRequest
     const data = pageSchema.parse(req.body);
     // Slug is unique across all content types (see the same note in posts.ts).
     const allSlugs = (db.prepare('SELECT slug FROM Post').all() as any[]).map((s: any) => s.slug);
-    const slug = uniqueSlug(data.title, allSlugs);
+    const slug = data.slug ? uniqueSlug(data.slug, allSlugs) : uniqueSlug(data.title, allSlugs);
     const id = cuid();
     const { status: storeStatus, password: rawPassword } = normalizePage(data);
     // Writing a page and putting it online are separate capabilities.
@@ -193,6 +194,18 @@ router.put('/:id', authenticate, requireCap('edit_pages'), async (req: AuthReque
     const data = pageSchema.partial().parse(req.body);
     const sets: string[] = []; const vals: any[] = [];
     if (data.title !== undefined) { sets.push('title = ?'); vals.push(data.title); }
+    // Pages live at /page/<slug>; the same rule as posts applies — a published
+    // page's old URL keeps working after a slug edit.
+    if (data.slug !== undefined && String(data.slug).trim()) {
+      const others = (db.prepare('SELECT slug FROM Post WHERE id <> ?').all(req.params.id) as any[]).map((s: any) => s.slug);
+      const nextSlug = uniqueSlug(String(data.slug), others);
+      if (nextSlug !== existing.slug) {
+        sets.push('slug = ?'); vals.push(nextSlug);
+        if (existing.status === 'published' || existing.status === 'private') {
+          recordMovedPath('/page/' + existing.slug, '/page/' + nextSlug, existing.siteId || null);
+        }
+      }
+    }
     if (data.content !== undefined) { sets.push('content = ?'); vals.push(data.content); }
     if (data.excerpt !== undefined) { sets.push('excerpt = ?'); vals.push(data.excerpt); }
     if (data.featured !== undefined) { sets.push('featured = ?'); vals.push(data.featured || null); }

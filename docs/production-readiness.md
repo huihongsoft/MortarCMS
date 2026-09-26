@@ -26,7 +26,7 @@ the maintainer, not a code change. Everything else below is in scope.
 | A3 | MySQL/PostgreSQL are experimental, not real support | planned, batch 4 |
 | A4 | Backup/restore unreliable (DB only, retention bug, no pre-upgrade copy) | **done in 0.1.3** |
 | A5 | Versions drift from tags, no changelog, no release job | **done in 0.1.3** |
-| B1 | No redirect manager (slug changes break URLs) | planned, batch 5 |
+| B1 | No redirect manager (slug changes break URLs) | **done in 0.1.3** |
 | B2 | No content i18n (no locale, translation groups, hreflang) | planned, batch 5 |
 | B3 | Search is `LIKE`, no full-text index | planned, batch 5 |
 | B4 | No CAPTCHA or submission limits on public forms | planned, batch 5 |
@@ -66,6 +66,12 @@ the maintainer, not a code change. Everything else below is in scope.
 - **Data integrity**: media deletion removes the row before the files (it was the
   other way round, so a mid-way failure left a broken image reference and a bulk
   delete could stop half-applied).
+- **Redirects**: a `Redirect` table with a cached lookup in front of both SPAs,
+  a management screen (search, 301/302, hit counts, CSV import) and — the part
+  that made the gap real — slug editing actually works now: the editor sent
+  `slug` and the API schema dropped it, so changing a slug was silently a no-op.
+  A published post or page that changes slug gets a 301 automatically, so the old
+  URL (and whatever search engines indexed) keeps working.
 - **Security**: TOTP secrets are encrypted at rest and have single-use recovery
   codes; the secrets are base32 now, so authenticator apps can actually enrol
   them (they could not before — see the commit for the RFC vector that pins it).
@@ -98,10 +104,10 @@ Each batch ends with the full test suite, all three builds and lint green.
   the synchronous `db.prepare()` call sites), finish the dialect coverage
   (`INSERT OR REPLACE`, `sqlite_master`/`PRAGMA` guards), logical backup and
   restore for MySQL/PostgreSQL, three-driver CI matrix.
-- **Batch 5 — content features**: redirects (with automatic 301s on slug
-  change), local anti-spam, full-text search, workflow email + a real
-  notification table, taxonomy bulk merge, media folders and EXIF, then complete
-  content i18n (locale, translation groups, language URLs, hreflang).
+- **Batch 5 — content features**: local anti-spam, full-text search, workflow
+  email + a real notification table, taxonomy bulk merge, media folders and EXIF,
+  then complete content i18n (locale, translation groups, language URLs,
+  hreflang).
 - **Batch 6 — frontend**: server-side rendering with hydration across the
   themes; dialog focus trap, `aria-label` sweep, RTL, `Intl` formatting.
 - **Batch 7 — quality**: Playwright smoke tests over the critical path

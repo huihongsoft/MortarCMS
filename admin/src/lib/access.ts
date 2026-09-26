@@ -27,6 +27,7 @@ export const ROUTE_ACCESS: Record<string, AccessRule> = {
   '/pages/new': { cap: 'edit_pages' },
   '/media': { cap: 'upload_files' },
   '/comments': { cap: 'moderate_comments' },
+  '/redirects': { cap: 'manage_options' },   // SEO-adjacent, same key as the SEO settings
   '/categories': { cap: 'manage_categories' },
   '/tags': { cap: 'manage_tags' },
   '/links': { cap: 'manage_links' },

@@ -861,6 +861,36 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
     },
   },
   {
+    version: 22,
+    name: 'redirects',
+    up: () => {
+      // Old URLs that must keep working. Editing a published post's slug used to
+      // break every existing link to it — including search-engine results — with
+      // nothing on the site that could fix it (the broken-link report only
+      // *lists* dead links). A row here turns that into a 301, written
+      // automatically when a published slug changes and editable by hand.
+      //
+      // siteId is nullable, matching how content is scoped elsewhere: NULL means
+      // "any site" and the lookup also matches the current site's own rows.
+      db.exec(`CREATE TABLE IF NOT EXISTS Redirect (
+        id TEXT PRIMARY KEY,
+        fromPath TEXT NOT NULL,
+        toPath TEXT NOT NULL,
+        status INTEGER NOT NULL DEFAULT 301,
+        siteId TEXT,
+        hits INTEGER NOT NULL DEFAULT 0,
+        createdAt TEXT NOT NULL,
+        createdBy TEXT DEFAULT ''
+      )`);
+      // The lookup is on every unknown path, so it has to be an index hit. Not a
+      // UNIQUE index: `siteId` is NULL for a global redirect and NULLs are
+      // distinct in a unique index on every driver, so it would not constrain what
+      // it looks like it constrains. Uniqueness is enforced by the route that
+      // writes them, and by the slug-change path looking before it writes.
+      db.exec('CREATE INDEX IF NOT EXISTS idx_redirect_from_site ON Redirect (fromPath, siteId)');
+    },
+  },
+  {
     version: 15,
     name: 'role-capability-alignment',
     up: () => {
