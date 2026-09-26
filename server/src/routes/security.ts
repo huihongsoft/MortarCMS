@@ -4,6 +4,7 @@ import path from 'path';
 import db from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { UPLOADS_DIR as uploadsDir } from '../utils/paths';
+import { likeContains } from '../utils/sqlLike';
 
 const router = Router();
 
@@ -15,6 +16,52 @@ export interface SecurityCheck {
   advice: string; // i18n key
   args?: Record<string, string | number>; // values for {n} placeholders
 }
+
+// Login audit: every authentication event, successful or not.
+//
+// Failed attempts were only fired as a hook, never stored, so "someone is
+// guessing passwords on this account" was invisible unless a plugin happened to
+// be listening. The rows live in Activity (which already held successful
+// logins) and are pruned with it after 90 days.
+//
+// Gated by `manage_system`, not `manage_security`: the editor role holds the
+// latter (for the audit score and the broken-link report), and attempted
+// addresses and source IPs are not something an editor needs to see.
+router.get('/auth-log', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
+  try {
+    const page = Math.max(1, parseInt(String(req.query.page || '1')) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(String(req.query.limit || '30')) || 30));
+    const kind = String(req.query.kind || '');
+    const q = String(req.query.q || '').trim();
+    const where: string[] = ["a.action IN ('login','login_failed','2fa_failed','login_recovery_code','logout_all','password_changed')"];
+    const params: any[] = [];
+    if (kind && AUTH_EVENT_KINDS.includes(kind)) { where.push('a.action = ?'); params.push(kind); }
+    if (q) { where.push("(a.detail LIKE ? ESCAPE '\\' OR u.username LIKE ? ESCAPE '\\')"); const p = likeContains(q); params.push(p, p); }
+    const whereSql = ' WHERE ' + where.join(' AND ');
+    const total = (db.prepare('SELECT COUNT(*) as c FROM Activity a LEFT JOIN User u ON u.id = a.userId' + whereSql).get(...params) as any)?.c || 0;
+    // `id DESC` breaks ties within the same second: createdAt is a second-resolution
+    // CURRENT_TIMESTAMP, so two events of the same second used to come back in an
+    // arbitrary order — an audit trail that reorders itself is not an audit trail.
+    // The id starts with a base-36 timestamp, so it sorts by insertion on every
+    // driver.
+    const events = db.prepare(
+      'SELECT a.id, a.action, a.detail, a.createdAt, a.userId, u.username FROM Activity a LEFT JOIN User u ON u.id = a.userId'
+      + whereSql + ' ORDER BY a.createdAt DESC, a.id DESC LIMIT ? OFFSET ?'
+    ).all(...params, limit, (page - 1) * limit) as any[];
+
+    // Failure counts per detail (address / IP) over the last 24h — the signal an
+    // operator actually acts on.
+    let since = '';
+    try { since = new Date(Date.now() - 24 * 3600_000).toISOString(); } catch { /* keep '' */ }
+    const recentFailures = since
+      ? db.prepare("SELECT detail, COUNT(*) as c FROM Activity WHERE action IN ('login_failed','2fa_failed') AND createdAt >= ? GROUP BY detail ORDER BY c DESC LIMIT 10").all(since) as any[]
+      : [];
+
+    res.json({ events, total, page, totalPages: Math.ceil(total / limit), recentFailures });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+export const AUTH_EVENT_KINDS = ['login', 'login_failed', '2fa_failed', 'login_recovery_code', 'logout_all', 'password_changed'];
 
 // Admin: run a security audit (WordPress Site Health style)
 router.get('/audit', authenticate, requireCap('manage_security'), (req: AuthRequest, res: Response) => {

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, UserCircle, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3, Webhook, ClipboardList, Mail, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, UserCircle, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, ShieldAlert, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3, Webhook, ClipboardList, Mail, CalendarDays } from 'lucide-react';
 import CommentBadge from './CommentBadge';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -61,6 +61,9 @@ const groups: { title: string; items: { to: string; icon: any; label: string; de
       { to: '/sites', icon: Network, label: t('sites', getLang()) },
       { to: '/import', icon: UploadCloud, label: t('import', getLang()) },
       { to: '/security', icon: ShieldCheck, label: t('security audit', getLang()) },
+      // Always visible (not developer-mode only): a failed-login burst is
+      // something an operator needs to see without knowing a hidden toggle.
+      { to: '/login-audit', icon: ShieldAlert, label: t('login audit', getLang()) },
       { to: '/sysinfo', icon: ServerIcon, label: t('system', getLang()), devModeOnly: true },
       { to: '/stats', icon: BarChart3, label: t('visit stats', getLang()) },
       { to: '/hooks', icon: Workflow, label: t('hooks browser', getLang()), devModeOnly: true },

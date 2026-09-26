@@ -83,7 +83,9 @@ router.get('/', authenticate, requireCap('manage_system'), (req: AuthRequest, re
     const params: any[] = [];
     if (q) { where = " WHERE a.action LIKE ? ESCAPE '\\'"; params.push(likeContains(q)); }
     const total = (db.prepare('SELECT COUNT(*) as c FROM Activity a' + where).get(...params) as any)?.c || 0;
-    const logs = db.prepare('SELECT a.*, u.username FROM Activity a LEFT JOIN User u ON u.id = a.userId' + where + ' ORDER BY a.createdAt DESC LIMIT ? OFFSET ?').all(...params, limit, (page - 1) * limit) as any[];
+    // Same tie-breaker as the login audit: createdAt has one-second resolution,
+    // so entries from the same second would otherwise shuffle between reads.
+    const logs = db.prepare('SELECT a.*, u.username FROM Activity a LEFT JOIN User u ON u.id = a.userId' + where + ' ORDER BY a.createdAt DESC, a.id DESC LIMIT ? OFFSET ?').all(...params, limit, (page - 1) * limit) as any[];
     backfillDetails(logs);
     res.json({ logs, total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }

@@ -19,6 +19,18 @@ import {
 
 const router = Router();
 
+// Record an authentication failure for the login audit (GET
+// /api/security/auth-log). Only the credential failures land here, not the
+// 429 from the lockout: during a brute-force the lockout would otherwise write a
+// row per attempt, and those earlier failures are already recorded.
+//
+// The address is capped so a hostile caller cannot use the log as unbounded
+// storage. `userId` is empty for an account that does not exist — the audit
+// screen shows the attempted address from `detail`.
+function logAuthFailure(userId: string | null, email: unknown, ip: unknown, reason: string): void {
+  logActivity(userId || '', 'login_failed', 'email=' + String(email || '').slice(0, 100) + ' ip=' + String(ip || '-').slice(0, 60) + ' reason=' + reason);
+}
+
 // Brute-force limiter for the routes that verify a secret. Deliberately NOT
 // router-wide: applying it to /auth/me meant an admin browsing the panel ten
 // times in a minute got 429 there, and the admin client treats a failed session
@@ -145,10 +157,15 @@ router.post('/login', authLimiter, async (req: AuthRequest, res: Response) => {
     if (!user) {
       await bcrypt.compare(data.password, getDummyHash());
       recordFailure(data.email, ip); doAction('login_failed', data.email, ip, 'no_such_user');
+      logAuthFailure(null, data.email, ip, 'no_such_user');
       res.status(401).json({ error: 'Invalid credentials' }); return;
     }
     const valid = await bcrypt.compare(data.password, user.password);
-    if (!valid) { recordFailure(data.email, ip); doAction('login_failed', data.email, ip, 'wrong_password'); res.status(401).json({ error: 'Invalid credentials' }); return; }
+    if (!valid) {
+      recordFailure(data.email, ip); doAction('login_failed', data.email, ip, 'wrong_password');
+      logAuthFailure(user.id, data.email, ip, 'wrong_password');
+      res.status(401).json({ error: 'Invalid credentials' }); return;
+    }
     loginFailures.delete(lockKey(data.email, ip));
     // 2FA challenge: issue a short-lived temp token, final token comes after code verification
     if (user.two_factor_enabled) {
@@ -190,7 +207,13 @@ router.post('/2fa/verify', authLimiter, async (req: AuthRequest, res: Response) 
         remainingCodes = spent.remaining.length;
       }
     }
-    if (!usedTotp && !usedRecovery) { res.status(401).json({ error: 'Invalid verification code' }); return; }
+    if (!usedTotp && !usedRecovery) {
+      // A wrong code at this stage is a brute-force signal against a secret the
+      // caller already proved they know the password for.
+      logActivity(user.id, '2fa_failed', 'ip=' + String(req.ip || '-').slice(0, 60));
+      res.status(401).json({ error: 'Invalid verification code' });
+      return;
+    }
     const token = signToken({ userId: user.id, role: user.role, v: (user as any).tokenVersion || 0 });
     if (usedRecovery) {
       logActivity(user.id, 'login_recovery_code', 'User logged in with a 2FA recovery code');
@@ -237,6 +260,9 @@ router.post('/logout-all', authenticate, (req: AuthRequest, res: Response) => {
       const row = db.prepare('SELECT tokenVersion FROM User WHERE id = ?').get(req.user.userId) as any;
       const nextV = ((row?.tokenVersion || 0) as number) + 1;
       db.prepare('UPDATE User SET tokenVersion = ? WHERE id = ?').run(nextV, req.user.userId);
+      // "Signed out everywhere" is a security action: it belongs in the login
+      // audit, where a burst of them is worth noticing.
+      logActivity(req.user.userId, 'logout_all', 'ip=' + String(req.ip || '-').slice(0, 60));
     }
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -292,6 +318,9 @@ router.put('/me/password', authLimiter, authenticate, async (req: AuthRequest, r
     // working. This also revokes the caller's current session, so the next
     // request re-authenticates with the new password.
     db.prepare('UPDATE User SET password = ?, tokenVersion = tokenVersion + 1, updatedAt = ? WHERE id = ?').run(hash, new Date().toISOString(), req.user!.userId);
+    // A password change invalidates every session, so it is an authentication
+    // event: the audit screen shows it next to the logins it revoked.
+    logActivity(req.user!.userId, 'password_changed', 'self-service');
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
