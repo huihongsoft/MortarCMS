@@ -151,6 +151,22 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 - `theme_deactivated` fires on a theme switch, not only on delete; shortcodes are
   attributed to their plugin, so deactivating one takes its tags with it.
 
+### Tests
+
+- **End-to-end smoke tests** (Playwright, `npm run e2e`, run in CI against the
+  built app): the publishing path through the real admin UI — sign in, write,
+  publish, rename the slug, follow the automatic 301 from the old URL, edit twice,
+  restore the original revision, sign out — plus the HTML the server hands a
+  crawler (rendered body, nonce on every inline script, an un-injectable payload,
+  real 404s). It already earned its keep: it is what proved the prerendered pages
+  actually hydrate, and it caught an icon-only *link* with no accessible name that
+  an earlier button-only sweep had missed.
+- Coverage thresholds were a floor nobody dared raise (15/8/17/18 against a real
+  50/45/58/56). Raised to 48/42/55/53, so a feature losing its tests now fails.
+- `no-unused-vars` is an error (the 90-warning backlog is cleared), and
+  `npm run check:bundle` enforces gzip budgets per app plus per-file ceilings for
+  the block editor's vendor bundle.
+
 ### Security
 
 - The CSP now carries a **per-response nonce**, and the server stamps it onto the

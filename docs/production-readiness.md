@@ -39,7 +39,7 @@ the maintainer, not a code change. Everything else below is in scope.
 | B11 | `siteId` columns had no index; admin `limit` unclamped; LIKE unescaped | **done in 0.1.3** |
 | C | 2FA secret plaintext, no recovery codes, no failed-login audit, no app-wide CSP, process-local limits, unsigned plugins | **done in 0.1.3** (CSP ships report-only; see the known gaps) |
 | D | Operator docs (troubleshooting, hardening, upgrade/rollback, monitoring) | **done in 0.1.3** |
-| E | No frontend/admin/e2e tests, near-floor coverage gates, soft lint | planned, batch 7 |
+| E | No frontend/admin/e2e tests, near-floor coverage gates, soft lint | **done in 0.1.3** — Playwright smoke over the publishing path, coverage ratcheted to the real baseline, `no-unused-vars` an error, bundle budgets in CI |
 
 ## Done in 0.1.3
 
@@ -163,10 +163,11 @@ Each batch ends with the full test suite, all three builds and lint green.
 - ~~**Batch 6 — frontend**~~ **done in 0.1.3** except RTL: server rendering with
   hydration (built-in themes), dialog focus trap, the `aria-label` sweep, and
   locale-stable `Intl` formatting.
-- **Batch 7 — quality**: Playwright smoke tests over the critical path
-  (login → post → publish → slug change → redirect → revision restore → logout),
-  coverage thresholds raised to the real baseline, lint warnings ratcheted,
-  bundle-size budget.
+- ~~**Batch 7 — quality**~~ **done in 0.1.3**: Playwright smoke over the critical
+  path (sign in → publish → rename the slug → the old URL 301s → edit → restore a
+  revision → log out), plus assertions on the HTML the server hands a crawler;
+  coverage thresholds at the real baseline; `no-unused-vars` an error;
+  bundle-size budgets enforced in CI.
 
 ## Known gaps after 0.1.3
 

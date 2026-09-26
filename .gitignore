@@ -30,3 +30,7 @@ server/data/
 
 # img2text tool logs accidentally created inside the workspace
 *img2text*
+
+# Playwright (e2e/) output
+e2e/test-results/
+e2e/playwright-report/

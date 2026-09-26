@@ -99,3 +99,22 @@ a failing request. `LOG_LEVEL=debug` adds detail without a rebuild.
 Collect these before asking for help: the `X-Request-Id` of a failing request,
 the server's log lines for it, `GET /api/health`, the version from Admin → System
 Info, the database driver, and whether the install is Docker or systemd.
+
+## Pages arrive as an empty shell
+
+Public pages are server-rendered when `frontend/dist-ssr/entry-server.js` is
+present; without it, or when the active theme is not one of the built-in ones the
+renderer knows, the server falls back to the client-rendered shell (the page still
+works in a browser, but a crawler sees an empty `<div id="root">`).
+
+- `curl -s http://localhost:3001/api/health/ready` reports `ssr: true|false`.
+- `false` on a source install: `cd frontend && npx vite build --config vite.ssr.config.ts`
+  (or re-run `install.sh`, which builds it).
+- `true` but the HTML is still empty: the theme. Only themes from
+  `frontend/src/themes/*` can be rendered, because installed theme bundles import
+  bare `react` specifiers that Node cannot resolve. `server.log` has the reason.
+
+**Rebuild both frontend bundles together.** `npm run build` does; running
+`npx vite build` alone leaves `dist-ssr` stale, and a stale renderer produces
+markup the client bundle disagrees with — which shows up in the browser console as
+React hydration errors (#418/#422/#425) rather than as an obviously broken page.

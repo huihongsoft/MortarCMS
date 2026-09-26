@@ -78,6 +78,25 @@ jobs:
         # first paint. Run after the builds above.
         run: npm run check:bundle
 
+      - name: End-to-end smoke tests
+        # The publishing workflow through the real admin UI, and the HTML the
+        # server hands a crawler. Runs on the builds above (Playwright's
+        # webServer starts `node server/dist/index.js`), so nothing has to be
+        # rebuilt here — only the browser has to be fetched.
+        run: |
+          npx playwright install --with-deps chromium
+          npm run e2e
+
+      - name: Upload e2e artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            e2e/test-results
+            e2e/playwright-report
+          retention-days: 7
+
       - name: Install script syntax check
         run: bash -n install.sh
 
@@ -102,6 +121,7 @@ jobs:
             server/dist
             admin/dist
             frontend/dist
+            frontend/dist-ssr
           retention-days: 7
 
       - name: Upload coverage report

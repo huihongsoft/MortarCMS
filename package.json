@@ -17,10 +17,13 @@
     "build:frontend": "cd frontend && npm run build",
     "start": "cd server && npm start",
     "lint": "eslint \"server/src/**/*.ts\" \"admin/src/**/*.{ts,tsx}\" \"frontend/src/**/*.{ts,tsx}\"",
-    "check:bundle": "node scripts/check-bundle-size.mjs"
+    "check:bundle": "node scripts/check-bundle-size.mjs",
+    "e2e": "playwright test --config e2e/playwright.config.ts",
+    "e2e:install": "playwright install --with-deps chromium"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.63.0",
     "concurrently": "^9.1.0",
     "eslint": "^10.8.1",
     "eslint-plugin-react-hooks": "^7.1.1",
