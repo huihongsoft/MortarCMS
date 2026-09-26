@@ -29,6 +29,13 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 - Admin **My Profile** page (bio, avatar, password, 2FA, application passwords),
   an unsaved-changes guard for the editors, and a "no permission" screen instead
   of a page that fails on every request.
+- **Local anti-spam** for comments and form submissions: honeypot, fill time,
+  link count, a URL in the name field, and the `spam_words` setting — which had
+  no server-side reader at all, so the admin screen was describing behaviour that
+  did not exist. A word from that list is decisive; the other signals combine into
+  a threshold. Form submissions also get the rate limit they never had, and the
+  honeypot is now enforced on the server instead of only in the browser script a
+  direct POST never runs.
 - **Redirect management**, and slug editing that works: the editor sent `slug`
   and the API schema dropped it, so changing a post's URL was silently a no-op.
   Slugs are editable now, and a published post or page that changes slug gets a

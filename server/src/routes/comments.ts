@@ -7,6 +7,8 @@ import { siteScopeForFilter, userMayAccessSite } from '../utils/userSites';
 import { applyFilters, doAction } from '../utils/hooks';
 import { renderTemplate, sendEmail } from '../utils/mailer';
 import { postUrl } from '../utils/slug';
+import { scoreSpam } from '../utils/spam';
+import { logger } from '../utils/logger';
 
 const router = Router();
 // Every user-supplied value entering an email body must go through this. Kept at
@@ -164,8 +166,21 @@ router.post('/', (req: AuthRequest, res: Response) => {
       authorName = (db.prepare('SELECT username FROM User WHERE id = ?').get(userId) as any)?.username || '';
     }
     if (!authorName) authorName = 'Anonymous';
+    // Local spam scoring decides which side of moderation this lands on. The
+    // response never says which: telling a bot it was caught only teaches it to
+    // adjust, and a false positive must look identical to a normal submission.
+    const verdict = scoreSpam({
+      content: String(data.content || ''),
+      author: authorName,
+      email: data.email,
+      website: data.website,
+      honeypot: (req.body || {})._hp || (req.body || {}).website_url,
+      startedAt: Number((req.body || {})._t) || undefined,
+    });
+    const status = verdict.spam ? 'spam' : 'pending';
+    if (verdict.spam) logger.info({ reasons: verdict.reasons, score: verdict.score }, 'comment filed as spam');
     db.prepare('INSERT INTO Comment (id, content, author, email, website, postId, parentId, status, subscribe, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
-      id, data.content, authorName, data.email || '', data.website || '', data.postId, parentId, 'pending', data.subscribe ? 1 : 0, userId);
+      id, data.content, authorName, data.email || '', data.website || '', data.postId, parentId, status, data.subscribe ? 1 : 0, userId);
     
     // Notify the parent comment author by email when a reply arrives
     if (parentId) {

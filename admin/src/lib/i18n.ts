@@ -1022,7 +1022,7 @@ const zh: Record<string, string> = {
 'drop to upload': '松开鼠标上传',
 
 'spam words (comma separated)': '垃圾词（逗号分隔）',
-'comments containing these words are flagged as spam automatically.': '包含这些词的评论将自动标记为垃圾评论。',
+'submissions containing these words are filed as spam (comments and form submissions).': '包含这些词的提交会被直接判为垃圾（评论与表单）：命中即判定，不再进入待审列表。',
 
 'block table': '表格',
 'block buttons-group': '按钮组',

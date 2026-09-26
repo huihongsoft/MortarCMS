@@ -81,21 +81,36 @@ export default function PostPage({ settings }: { settings: Record<string, string
     return () => { cancelled = true; };
   }, [slug]);
 
+  // When the comment box was last put in front of the reader. Reset after a
+  // successful post, so a second comment is timed on its own rather than looking
+  // instant because the page has been open for an hour.
+  const commentStartedAt = React.useRef(Date.now());
+
   async function submitComment(e: React.FormEvent) {
     e.preventDefault();
     setCommentError('');
     if (!commentForm.content) return;
     if (!commentForm.author || !commentForm.email) { setCommentError(t('name and email are required to comment', settings)); return; }
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(commentForm.email)) { setCommentError(t('enter a valid email address', settings)); return; }
-    // Honeypot: silently drop submissions where bots filled the hidden field
-    if ((document.querySelector('[name="website_url"]') as HTMLInputElement)?.value) return;
+    // Honeypot: silently drop submissions where bots filled the hidden field.
+    // The server checks this too — enforcing it only here meant a POST straight
+    // to the API skipped the check entirely.
+    const honeypot = (document.querySelector('[name="website_url"]') as HTMLInputElement)?.value || '';
+    if (honeypot) return;
     try {
-      await api.post('/comments', { ...commentForm, subscribe: commentForm.notifyMe, postId: post.id, parentId: replyTo?.id || undefined });
+      await api.post('/comments', {
+        ...commentForm, subscribe: commentForm.notifyMe, postId: post.id, parentId: replyTo?.id || undefined,
+        // When the form was put in front of the reader, so the server can tell a
+        // typed reply from an instant machine post.
+        _t: commentStartedAt.current,
+        _hp: honeypot || undefined,
+      });
       // Remember the commenter for next time (privacy-friendly: name + email only)
       try { localStorage.setItem('mortar_commenter', JSON.stringify({ author: commentForm.author, email: commentForm.email })); } catch {}
       setSubmitted(true);
       setReplyTo(null);
       setCommentForm({ author: commentForm.author, email: commentForm.email, content: '', notifyMe: false });
+      commentStartedAt.current = Date.now();
       // Refresh the visible comments (approval may be instant)
       api.get('/comments/post/' + post.id).then(cr => setComments(cr.data)).catch(() => {});
     } catch (err: any) {

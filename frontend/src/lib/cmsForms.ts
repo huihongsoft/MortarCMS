@@ -7,9 +7,21 @@
 
 let installed = false;
 
+// When a form was put in front of the reader, so the server can tell a typed
+// answer from an instant machine post. Stamped when the script runs (for forms
+// already in the DOM) and on first focus (for forms injected later) — a bot
+// never focuses a field, and pays the price for it.
+function stampForm(form: Element | null): void {
+  const el = form as HTMLElement | null;
+  if (el && !el.dataset.mortarShown) el.dataset.mortarShown = String(Date.now());
+}
+
 export function installCmsForms(): void {
   if (installed || typeof document === 'undefined') return;
   installed = true;
+
+  document.querySelectorAll('.cms-form form, .cms-newsletter form').forEach(stampForm);
+  document.addEventListener('focusin', (e) => stampForm((e.target as Element | null)?.closest('form') || null), true);
 
   document.addEventListener('submit', async (e) => {
     const form = e.target as HTMLFormElement | null;
@@ -54,6 +66,8 @@ export function installCmsForms(): void {
       });
       const honeypot = form.querySelector('input[name="_hp"]') as HTMLInputElement | null;
       if (honeypot) payload._hp = honeypot.value;
+      const shown = Number((form as HTMLElement).dataset.mortarShown);
+      if (Number.isFinite(shown) && shown > 0) payload._t = String(shown);
       // No data-field markup (an older cached render): fall back to FormData.
       if (Object.keys(payload).length === 0) new FormData(form).forEach((v, k) => { payload[k] = String(v); });
       const r = await fetch('/api/forms/' + encodeURIComponent(slug) + '/submit', {

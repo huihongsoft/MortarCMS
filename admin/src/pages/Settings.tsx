@@ -267,7 +267,7 @@ export default function Settings() {
         field('default_comment_status', t('default comment status', getLang())),
         React.createElement('div', { className: 'md:col-span-2' },
           React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('spam words (comma separated)', getLang())),
-          React.createElement('p', { className: 'text-xs text-gray-400 mb-1' }, t('comments containing these words are flagged as spam automatically.', getLang())),
+          React.createElement('p', { className: 'text-xs text-gray-400 mb-1' }, t('submissions containing these words are filed as spam (comments and form submissions).', getLang())),
           React.createElement('textarea', { value: settings.spam_words || '', onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setSettings({ ...settings, spam_words: e.target.value }), rows: 3, className: 'input-field text-sm w-full', placeholder: 'viagra, casino, buy now' })
         ),
       )

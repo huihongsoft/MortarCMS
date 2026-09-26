@@ -6,8 +6,15 @@ import { slugify, uniqueSlug } from '../utils/slug';
 import { renderTemplate, sendEmail } from '../utils/mailer';
 import { doAction } from '../utils/hooks';
 import { purgeContentCaches } from '../utils/cache';
+import rateLimit from 'express-rate-limit';
+import { rateLimitStore } from '../utils/rateLimitStore';
+import { scoreSpam } from '../utils/spam';
+import { logger } from '../utils/logger';
 
 const router = Router();
+// Public submissions had no rate limit at all: the global /api cap (600/min) is
+// far too generous for an endpoint that writes a row and sends an email.
+const submitLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, store: rateLimitStore(), message: { error: 'Too many submissions, slow down' } });
 
 // ---- Public: form submission (rendered by the [form] shortcode) ----
 
@@ -15,7 +22,7 @@ function escCsv(v: string): string {
   return '"' + String(v).replace(/"/g, '""') + '"';
 }
 
-router.post('/forms/:slug/submit', async (req: AuthRequest, res: Response) => {
+router.post('/forms/:slug/submit', submitLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const form = db.prepare('SELECT * FROM Form WHERE slug = ? AND enabled = 1').get(req.params.slug) as any;
     if (!form) { res.status(404).json({ error: 'Form not found' }); return; }
@@ -23,7 +30,18 @@ router.post('/forms/:slug/submit', async (req: AuthRequest, res: Response) => {
     try { fields = JSON.parse(form.fields || '[]'); } catch {}
     if (!Array.isArray(fields)) fields = [];
     const body = (req.body || {}) as Record<string, any>;
-    const isSpam = typeof body._hp === 'string' && body._hp.trim() !== '';
+    // Honeypot plus the local signals: honeypot-only meant a POST straight to the
+    // API (skipping the form's own script, which is where the field was checked)
+    // looked perfectly clean.
+    const verdict = scoreSpam({
+      content: Object.values(body).filter((v) => typeof v === 'string').join(' '),
+      email: typeof body.email === 'string' ? body.email : undefined,
+      author: typeof body.name === 'string' ? body.name : undefined,
+      honeypot: typeof body._hp === 'string' ? body._hp : undefined,
+      startedAt: Number(body._t) || undefined,
+    });
+    const isSpam = verdict.spam;
+    if (isSpam) logger.info({ reasons: verdict.reasons, score: verdict.score, form: form.slug }, 'form submission filed as spam');
     // Build the stored payload from declared fields only (ignores injected keys)
     // A field may be named __proto__ (the builder does not reserve names);
     // assigning that key on a plain object is a silent no-op, so the submission

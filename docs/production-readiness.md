@@ -29,7 +29,7 @@ the maintainer, not a code change. Everything else below is in scope.
 | B1 | No redirect manager (slug changes break URLs) | **done in 0.1.3** |
 | B2 | No content i18n (no locale, translation groups, hreflang) | planned, batch 5 |
 | B3 | Search is `LIKE`, no full-text index | planned, batch 5 |
-| B4 | No CAPTCHA or submission limits on public forms | planned, batch 5 |
+| B4 | No CAPTCHA or submission limits on public forms | **done in 0.1.3** (local signals; no external CAPTCHA) |
 | B5 | Review workflow has no email, no queue screen | planned, batch 5 |
 | B6 | No taxonomy bulk merge/rename | planned, batch 5 |
 | B7 | No media folders, no EXIF, no video transcoding | planned, batch 5 |
@@ -66,6 +66,13 @@ the maintainer, not a code change. Everything else below is in scope.
 - **Data integrity**: media deletion removes the row before the files (it was the
   other way round, so a mid-way failure left a broken image reference and a bulk
   delete could stop half-applied).
+- **Local anti-spam**: public submissions are scored server-side — honeypot,
+  fill time, link count, a URL in the name field, and the `spam_words` setting
+  (which had no reader on the server at all before this: the admin described
+  behaviour that did not exist). A word from the operator's list is decisive; the
+  rest combine into a threshold. Form submissions finally have a rate limit, and
+  the honeypot is enforced on the server rather than only in the browser script
+  a direct POST never runs.
 - **Redirects**: a `Redirect` table with a cached lookup in front of both SPAs,
   a management screen (search, 301/302, hit counts, CSV import) and — the part
   that made the gap real — slug editing actually works now: the editor sent
