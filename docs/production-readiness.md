@@ -37,7 +37,7 @@ the maintainer, not a code change. Everything else below is in scope.
 | B9 | Client-rendered SPA only (crawler fallback, no SSR) | planned, batch 6 |
 | B10 | Accessibility: no focus trap, sparse `aria-label`, no RTL | planned, batch 6 |
 | B11 | `siteId` columns had no index; admin `limit` unclamped; LIKE unescaped | **done in 0.1.3** |
-| C | 2FA secret plaintext, no recovery codes, no failed-login audit, no app-wide CSP, process-local limits, unsigned plugins | planned, batch 2 (checksums + docs partial in 0.1.3) |
+| C | 2FA secret plaintext, no recovery codes, no failed-login audit, no app-wide CSP, process-local limits, unsigned plugins | **done in 0.1.3** (CSP ships report-only; see the known gaps) |
 | D | Operator docs (troubleshooting, hardening, upgrade/rollback, monitoring) | **done in 0.1.3** |
 | E | No frontend/admin/e2e tests, near-floor coverage gates, soft lint | planned, batch 7 |
 
@@ -66,6 +66,14 @@ the maintainer, not a code change. Everything else below is in scope.
 - **Data integrity**: media deletion removes the row before the files (it was the
   other way round, so a mid-way failure left a broken image reference and a bulk
   delete could stop half-applied).
+- **Security**: TOTP secrets are encrypted at rest and have single-use recovery
+  codes; the secrets are base32 now, so authenticator apps can actually enrol
+  them (they could not before — see the commit for the RFC vector that pins it).
+  Failed logins and wrong 2FA codes are recorded and surfaced in a Login Audit
+  screen (always visible, not behind developer mode). An app-wide CSP ships
+  report-only, `CSP_ENFORCE=1` enforces it once a session has been watched. The
+  login lockout moved into the database, so a restart no longer clears it, and
+  plugin archives get a SHA-256 that a catalog can require before extraction.
 - **Docs**: [troubleshooting.md](troubleshooting.md),
   [security-hardening.md](security-hardening.md),
   [upgrade-rollback.md](upgrade-rollback.md),
@@ -77,11 +85,6 @@ the maintainer, not a code change. Everything else below is in scope.
 
 Each batch ends with the full test suite, all three builds and lint green.
 
-- **Batch 2 — security**: encrypt 2FA secrets (reuse the AI-key AES-GCM helper,
-  migrate existing rows) and add recovery codes; persist failed logins and expose
-  a login-audit screen; an application-wide CSP (nonce for the editor and plugin
-  screens); move rate limits and the login lockout to a shareable store;
-  checksum plugin/market packages and document the trust model.
 - **Batch 3 — operations and multi-instance**: a `sharedStore` abstraction (DB by
   default, Redis when `REDIS_URL` is set) behind the page cache, role/site
   caches, view counters and scheduler state; a scheduler leader lock; `/metrics`

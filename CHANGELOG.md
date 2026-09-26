@@ -29,6 +29,16 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 - Admin **My Profile** page (bio, avatar, password, 2FA, application passwords),
   an unsaved-changes guard for the editors, and a "no permission" screen instead
   of a page that fails on every request.
+- **Two-factor auth that works**: TOTP secrets are base32 (an authenticator app
+  can enrol them — the previous base64 secret could not be), encrypted at rest,
+  and paired with ten single-use recovery codes. Existing secrets keep working.
+- **Login audit**: failed logins and wrong 2FA codes are recorded, with a screen
+  that shows the events and the last 24 hours of failures grouped by source. The
+  login lockout now lives in the database, so restarting the service no longer
+  clears it.
+- **Content-Security-Policy** on the app's own documents (report-only until
+  `CSP_ENFORCE=1`), plus a SHA-256 fingerprint for plugin archives that a market
+  catalog can require before anything is extracted.
 - **Pre-migration database snapshot**: the server copies the SQLite file to
   `backups/pre-migration-*.db` (newest 5 kept) before any pending migration runs.
   Migrations are forward-only, so this is the way back from a bad upgrade; the
@@ -113,3 +123,7 @@ for the full list with priorities.
   SPA with a crawler fallback rather than server rendering.
 - No CAPTCHA or submission rate limit on public forms; comment spam filtering
   relies on a honeypot plus the optional AI review.
+- The app-wide CSP is report-only until `CSP_ENFORCE=1` is set; plugin screens
+  with inline scripts are the thing to check before flipping it.
+- Plugin and market packages carry a SHA-256 but are not signed, and plugins run
+  unsandboxed with full server privileges (`docs/plugins.md`).

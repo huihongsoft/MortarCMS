@@ -7,6 +7,7 @@ import { execFileSync } from 'child_process';
 import { tmpdir as osTmpDir } from 'os';
 import db from '../utils/db';
 import { assertArchiveWithinLimits } from '../utils/archive';
+import { verifyArtifact } from '../utils/artifact';
 import { isPrivateIp } from '../utils/ssrf';
 import { APP_VERSION } from '../utils/config';
 import { doAction, withHookSource, removeHooksBySource } from '../utils/hooks';
@@ -40,6 +41,10 @@ export interface PluginMeta {
   requires?: string; // minimum core version, e.g. "0.1.0"
   error?: string;
   settingsSchema?: PluginSettingField[];
+  /** sha256 of the archive this plugin was installed from; absent when unknown. */
+  artifactHash?: string;
+  /** sha256 a market catalogue publishes for the package, when it declares one. */
+  marketSha256?: string;
 }
 
 // Validate a plugin's declared settings against its schema
@@ -110,6 +115,7 @@ function discardPluginArtifacts(name: string): void {
 
 export function listPlugins(): PluginMeta[] {
   const active = activePlugins();
+  const hashes = artifactHashes();
   const result: PluginMeta[] = [];
   try {
     const dirs = fs.readdirSync(pluginsDir).filter(d => {
@@ -119,15 +125,21 @@ export function listPlugins(): PluginMeta[] {
     for (const dir of dirs) {
       try {
         const meta = JSON.parse(fs.readFileSync(path.join(pluginsDir, dir, 'plugin.json'), 'utf8'));
+        const name = meta.name || dir;
         result.push({
-          name: meta.name || dir,
+          name,
           version: meta.version || '0.0.0',
           description: meta.description || '',
           author: meta.author || '',
           requires: meta.requires || undefined,
-          active: active.includes(meta.name || dir),
+          active: active.includes(name),
           builtin: true,
           settingsSchema: Array.isArray(meta.settingsSchema) ? meta.settingsSchema : undefined,
+          // Fingerprint of the archive it was installed from, when it came from
+          // one. A plugin copied into the directory by hand has none — that is
+          // reported as "unverified" rather than as an empty hash, because the
+          // two mean different things to an operator.
+          artifactHash: hashes[name],
         });
       } catch (err: any) {
         result.push({ name: dir, version: '?', description: '', active: false, builtin: true, error: err.message });
@@ -135,6 +147,33 @@ export function listPlugins(): PluginMeta[] {
     }
   } catch {}
   return result;
+}
+
+// ---- Installed-artifact fingerprints ----
+//
+// sha256 of the archive each plugin was installed from. Plugins run with full
+// privileges (no sandbox), so recording what was installed is the only
+// integrity signal available: an operator can compare it against the hash the
+// publisher announced, and a re-install of the same release should match.
+function artifactHashes(): Record<string, string> {
+  try {
+    const row = db.prepare("SELECT value FROM Setting WHERE key = 'plugin_artifact_hashes'").get() as any;
+    const parsed = row?.value ? JSON.parse(row.value) : {};
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch { return {}; }
+}
+
+export function recordArtifactHash(name: string, sha256: string): void {
+  try {
+    const map = artifactHashes();
+    map[name] = sha256;
+    db.prepare("INSERT INTO Setting (id, key, value) VALUES ('plugin_artifact_hashes', 'plugin_artifact_hashes', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run(JSON.stringify(map));
+  } catch { /* best effort: a missing fingerprint must not fail an install */ }
+}
+
+export function getArtifactHash(name: string): string | null {
+  return artifactHashes()[name] || null;
 }
 
 // Dynamically load a plugin's register() and execute it
@@ -247,7 +286,7 @@ async function assertPublicUrl(url: string): Promise<void> {
 }
 
 // Download a remote plugin archive (zip or tar.gz) and install it
-export async function installFromUrl(url: string): Promise<{ ok: boolean; error?: string; name?: string }> {
+export async function installFromUrl(url: string, expectedSha256?: string): Promise<{ ok: boolean; error?: string; name?: string; sha256?: string }> {
   const tmpDir = path.join(osTmpDir(), 'mortar-plugin-' + Date.now());
   let archivePath: string | null = null;
   try {
@@ -284,6 +323,14 @@ export async function installFromUrl(url: string): Promise<{ ok: boolean; error?
       req.setTimeout(30000, () => req.destroy(new Error('Download timed out')));
     });
 
+    // Integrity gate: when the source publishes a digest, nothing is extracted
+    // until the archive matches it. Compared before extraction, so a tampered
+    // package never reaches the filesystem.
+    const artifact = verifyArtifact(archivePath, expectedSha256);
+    if (expectedSha256 && !artifact.ok) {
+      return { ok: false, error: 'Checksum mismatch: expected ' + artifact.expected + ', got ' + (artifact.sha256 || '(unreadable)') };
+    }
+
     // Extract into tmpDir/extracted (zip-slip guard, entry-count and real
     // expansion limits all checked before extraction).
     const extractDir = path.join(tmpDir, 'extracted');
@@ -315,7 +362,10 @@ export async function installFromUrl(url: string): Promise<{ ok: boolean; error?
     if (!dest) return { ok: false, error: 'Invalid plugin name' };
     if (fs.existsSync(dest)) return { ok: false, error: 'Plugin already installed: ' + name };
     fs.cpSync(pluginRoot, dest, { recursive: true });
-    return { ok: true, name };
+    // Remember the fingerprint of what was installed, so the admin can see it
+    // and a later re-install can be compared against the same release.
+    if (artifact.sha256) recordArtifactHash(name, artifact.sha256);
+    return { ok: true, name, sha256: artifact.sha256 || undefined };
   } catch (err: any) {
     return { ok: false, error: err.message };
   } finally {

@@ -190,11 +190,43 @@ as a core listener.
 - **Install from URL**: `POST /api/plugins/market/install-url { "url": "..." }`
   (zip or tar.gz; the archive is scanned for zip-slip before extraction)
 
+### Package integrity
+
+Every archive installed from a URL gets a SHA-256 recorded against the plugin
+(`plugin_artifact_hashes`), and `GET /api/plugins` returns it as `artifactHash`
+so an operator can compare it with the digest the publisher announced. A plugin
+copied into `server/plugins/` by hand has no hash — that is reported as "not
+recorded", which is not the same as "verified".
+
+To **verify before installing**, publish the digest and pass it:
+
+- Catalog entry — add `"sha256": "<hex>"` next to the package's `url`; the
+  download is refused unless it matches, before anything is extracted.
+- Direct install — `POST /api/plugins/market/install-url { "url": "...",
+  "sha256": "<hex>" }`.
+
+The comparison tolerates an upper-case digest and a leading `sha256:`. There is
+no signature and no sandbox: a checksum proves the archive is the one the
+publisher described, not that the publisher is trustworthy (see below).
+
 ## Security notes
 
-- Plugins execute server-side with full DB access — install only trusted code
+- **Plugins execute server-side with the full privileges of the server process**
+  — database, filesystem and network, in-process, with no sandbox and no
+  permission model. A plugin can read every row, every uploaded file and every
+  environment variable, and can exfiltrate them. Install only code you would run
+  as a shell user on the same machine, and treat a third-party catalog as
+  untrusted input.
+- The only integrity control is the SHA-256 fingerprint described above: it
+  detects a tampered or wrong artifact, not a malicious one. There is no
+  signature verification and no review process for market packages.
+- Plugins are loaded with `require()` of their TypeScript source at startup;
+  deactivating one unloads its hooks and shortcodes but does not undo anything it
+  did while active.
 - All database access must use parameterized queries (`db.prepare(...)` with `?`)
 - Never log secrets; validate any external input
+- User-visible error messages are your own copy — never surface a raw exception,
+  a filesystem path, SQL text or a provider's response body to a request.
 
 ## Bundled plugins
 

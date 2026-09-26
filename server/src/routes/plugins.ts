@@ -125,14 +125,16 @@ router.post('/market/:name/install', authenticate, requireCap('manage_plugins'),
     // If the package came from a remote catalog with a url, install from there
     const setting = db.prepare("SELECT value FROM Setting WHERE key = 'market_url'").get() as any;
     const marketUrl = setting?.value as string | undefined;
-    let r: { ok: boolean; error?: string; name?: string };
+    let r: { ok: boolean; error?: string; name?: string; sha256?: string };
     if (marketUrl) {
       try {
         const data = await fetchJson(marketUrl);
         const packages = Array.isArray(data) ? data : (data.packages || []);
         const pkg = packages.find((p: any) => p.name === name);
         if (pkg && pkg.url) {
-          r = await installFromUrl(pkg.url);
+          // A catalogue may publish a digest for the package; when it does, the
+          // download has to match before anything is extracted.
+          r = await installFromUrl(pkg.url, pkg.sha256);
         } else if (pkg) {
           r = await installPlugin(name); // remote catalog entry without url -> local market
         } else {
@@ -154,9 +156,12 @@ router.post('/market/install-url', authenticate, requireCap('manage_plugins'), a
   try {
     const url = req.body?.url as string;
     if (!url) { res.status(400).json({ error: 'url required' }); return; }
-    const r = await installFromUrl(url);
+    // Optional: the digest the publisher announced. Supplying it turns the
+    // install into a verified one; leaving it out installs without a check.
+    const expected = req.body?.sha256 ? String(req.body.sha256) : undefined;
+    const r = await installFromUrl(url, expected);
     if (!r.ok) { res.status(400).json({ error: r.error || 'Install failed' }); return; }
-    res.json({ success: true, name: r.name });
+    res.json({ success: true, name: r.name, sha256: r.sha256 });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
