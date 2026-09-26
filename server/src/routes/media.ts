@@ -7,6 +7,7 @@ import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { siteScopeForFilter, mayWriteSite, userMayAccessSite } from '../utils/userSites';
 import { doAction } from '../utils/hooks';
+import { purgeContentCaches } from '../utils/cache';
 import { upload } from '../middleware/upload';
 import { uploadPath, resolveUploadUrl } from '../utils/paths';
 import { getStorageConfig, storeFile, deleteRemoteFile, keyFromUrl } from '../utils/storage';
@@ -95,12 +96,97 @@ router.get('/', authenticate, requireCap('upload_files'), (req: AuthRequest, res
       const p = likeContains(search);
       params.push(p, p);
     }
+    // Folder filter: an id, or 'none' for the files nobody has filed yet.
+    const folder = String(req.query.folderId || '');
+    if (folder === 'none') where += ' AND m.folderId IS NULL';
+    else if (folder) { where += ' AND m.folderId = ?'; params.push(folder); }
     where += sf.clause; params.push(...sf.params);
     const sql = 'SELECT m.*, u.username FROM Media m LEFT JOIN User u ON u.id = m.userId' + where + ' ORDER BY m.createdAt DESC LIMIT ? OFFSET ?';
     const media = db.prepare(sql).all(...params, limit, (page - 1) * limit) as any[];
     const total = (db.prepare('SELECT COUNT(*) as cnt FROM Media m' + where).get(...params) as any)?.cnt || 0;
     media.forEach(ensureResponsiveVariants);
     res.json({ media: parseSrcsetList(media), total, page, totalPages: Math.ceil(total / limit) });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// ---- Folders ----
+//
+// Declared before GET /:id — Express matches in order, and '/folders' would
+// otherwise be read as a media id.
+
+// Admin: list folders with how many files each holds
+router.get('/folders', authenticate, requireCap('upload_files'), (req: AuthRequest, res: Response) => {
+  try {
+    const sf = siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId, 'f.siteId');
+    if (sf.denied) { res.status(403).json({ error: '无权访问该站点' }); return; }
+    const folders = db.prepare('SELECT f.* FROM MediaFolder f WHERE 1=1' + sf.clause + ' ORDER BY f.name ASC').all(...sf.params) as any[];
+    const counts = db.prepare('SELECT folderId, COUNT(*) as c FROM Media WHERE folderId IS NOT NULL GROUP BY folderId').all() as any[];
+    const countMap: Record<string, number> = {};
+    counts.forEach((r: any) => { countMap[r.folderId] = r.c; });
+    const unfiled = (db.prepare('SELECT COUNT(*) as c FROM Media m WHERE m.folderId IS NULL' + siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId, 'm.siteId').clause)
+      .get(...siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId, 'm.siteId').params) as any)?.c || 0;
+    res.json({ folders: folders.map((f) => ({ ...f, count: countMap[f.id] || 0 })), unfiled });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/folders', authenticate, requireCap('upload_files'), (req: AuthRequest, res: Response) => {
+  try {
+    const name = String(req.body?.name || '').trim().slice(0, 60);
+    if (!name) { res.status(400).json({ error: '文件夹名称必填' }); return; }
+    const siteId = req.body?.siteId ? String(req.body.siteId) : null;
+    if (siteId && !mayWriteSite(req.user!.userId, req.user!.role, siteId)) { res.status(403).json({ error: '无权在该站点创建文件夹' }); return; }
+    const id = cuid();
+    db.prepare('INSERT INTO MediaFolder (id, name, parentId, siteId, createdAt) VALUES (?, ?, ?, ?, ?)')
+      .run(id, name, req.body?.parentId ? String(req.body.parentId) : null, siteId, new Date().toISOString());
+    res.status(201).json(db.prepare('SELECT * FROM MediaFolder WHERE id = ?').get(id));
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/folders/:id', authenticate, requireCap('upload_files'), (req: AuthRequest, res: Response) => {
+  try {
+    const folder = db.prepare('SELECT * FROM MediaFolder WHERE id = ?').get(req.params.id) as any;
+    if (!folder) { res.status(404).json({ error: '文件夹不存在' }); return; }
+    const name = String(req.body?.name || '').trim().slice(0, 60);
+    if (!name) { res.status(400).json({ error: '文件夹名称必填' }); return; }
+    db.prepare('UPDATE MediaFolder SET name = ? WHERE id = ?').run(name, req.params.id);
+    res.json(db.prepare('SELECT * FROM MediaFolder WHERE id = ?').get(req.params.id));
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Refuses a non-empty folder rather than orphaning its files or deleting them:
+// the caller can move them first, and a delete that quietly threw away images
+// would be the worst possible behaviour here.
+router.delete('/folders/:id', authenticate, requireCap('upload_files'), (req: AuthRequest, res: Response) => {
+  try {
+    const folder = db.prepare('SELECT * FROM MediaFolder WHERE id = ?').get(req.params.id) as any;
+    if (!folder) { res.status(404).json({ error: '文件夹不存在' }); return; }
+    const count = (db.prepare('SELECT COUNT(*) as c FROM Media WHERE folderId = ?').get(req.params.id) as any)?.c || 0;
+    if (count > 0) { res.status(400).json({ error: '该文件夹还有 ' + count + ' 个文件，请先移动或删除' }); return; }
+    db.prepare('DELETE FROM MediaFolder WHERE id = ?').run(req.params.id);
+    res.json({ success: true });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Move a selection into a folder (or out of every folder with folderId: null).
+router.post('/bulk-move', authenticate, requireCap('upload_files'), (req: AuthRequest, res: Response) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String).slice(0, 500) : [];
+    if (ids.length === 0) { res.status(400).json({ error: 'ids array required' }); return; }
+    const folderId = req.body?.folderId ? String(req.body.folderId) : null;
+    if (folderId) {
+      const folder = db.prepare('SELECT id FROM MediaFolder WHERE id = ?').get(folderId) as any;
+      if (!folder) { res.status(404).json({ error: '文件夹不存在' }); return; }
+    }
+    let moved = 0;
+    withTransaction(() => {
+      for (const id of ids) {
+        const m = db.prepare('SELECT id, siteId FROM Media WHERE id = ?').get(id) as any;
+        if (!m || !mayEditMedia(req, m)) continue;
+        moved += db.prepare('UPDATE Media SET folderId = ? WHERE id = ?').run(folderId, id).changes || 0;
+      }
+    });
+    purgeContentCaches();
+    res.json({ success: true, moved });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -269,7 +355,7 @@ router.get('/:id/download', (req: AuthRequest, res: Response) => {
 });
 
 // Public: single media item detail (for attachment pages / preview)
-router.get('/:id', authenticate, (req: AuthRequest, res: Response) => {
+router.get('/:id', authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const media = db.prepare('SELECT m.*, u.username FROM Media m LEFT JOIN User u ON u.id = m.userId WHERE m.id = ?').get(req.params.id) as any;
     if (!media) { res.status(404).json({ error: 'Media not found' }); return; }
@@ -282,6 +368,33 @@ router.get('/:id', authenticate, (req: AuthRequest, res: Response) => {
     const viewer = resolveOptionalUser(req);
     if (!viewer || !['admin', 'editor', 'author'].includes(viewer.role)) { delete media.username; delete media.userId; }
     ensureResponsiveVariants(media);
+    // Image metadata, read from the file the first time details are opened (older
+    // uploads have none, and re-reading every file at upgrade time would make an
+    // upgrade slow for a field most rows never show). sharp exposes the colour
+    // space, density, orientation and whether an EXIF block is present; it does
+    // not decode the EXIF fields themselves (camera, GPS), so this is honest
+    // "image metadata" and not a claim to have parsed EXIF.
+    if (!media.meta && /^image\//.test(String(media.mimeType || ''))) {
+      try {
+        const filePath = resolveUploadUrl(media.url);
+        if (filePath && fs.existsSync(filePath)) {
+          const info = await sharp(filePath).metadata();
+          const meta = {
+            format: info.format, width: info.width, height: info.height,
+            space: info.space, density: info.density, orientation: info.orientation,
+            hasAlpha: info.hasAlpha, hasProfile: !!info.icc,
+            // The block exists or it does not — a full EXIF reader is a different
+            // dependency and a different promise.
+            exifPresent: !!info.exif,
+          };
+          db.prepare('UPDATE Media SET meta = ? WHERE id = ?').run(JSON.stringify(meta), media.id);
+          media.meta = JSON.stringify(meta);
+        }
+      } catch { /* metadata is a nicety; never fail the detail view for it */ }
+    }
+    if (media.meta) {
+      try { media.meta = JSON.parse(media.meta); } catch { media.meta = null; }
+    }
     // Parse srcset JSON for the client
     if (media.srcset) {
       try { media.srcset = JSON.parse(media.srcset); } catch { media.srcset = null; }

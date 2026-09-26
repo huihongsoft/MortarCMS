@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Upload, Trash2, Copy, FileText, FileImage, FileAudio, FileVideo, File, FileArchive, FileSpreadsheet, FileType, Trash, X, Download, Calendar, Hash, Sparkles, ScanSearch } from 'lucide-react';
+import { Upload, Trash2, Copy, FileText, FileImage, FileAudio, FileVideo, File, FileArchive, FileSpreadsheet, FileType, Trash, X, Download, Calendar, Hash, Sparkles, ScanSearch, Pencil } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
+import Select from '../components/Select';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
@@ -92,10 +93,22 @@ export default function Media() {
   const [genOpen, setGenOpen] = useState(false);
   const [genLoading, setGenLoading] = useState(false);
   const [filter, setFilter] = useState('all');
+  // Folder organisation. '' = everything, 'none' = not filed yet.
+  const [folderFilter, setFolderFilter] = useState('');
+  const [folders, setFolders] = useState<any[]>([]);
+  const [unfiled, setUnfiled] = useState(0);
+  const [bulkFolder, setBulkFolder] = useState('');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { api.get('/media').then(r => { setMedia(r.data.media); setLoaded(true); }).catch(() => setLoaded(true)); }, []);
+  function loadMedia(folder = folderFilter) {
+    const q = folder ? ('?folderId=' + encodeURIComponent(folder)) : '';
+    return api.get('/media' + q).then(r => { setMedia(r.data.media); setLoaded(true); }).catch(() => setLoaded(true));
+  }
+  function loadFolders() {
+    return api.get('/media/folders').then(r => { setFolders(r.data.folders || []); setUnfiled(r.data.unfiled || 0); }).catch(() => {});
+  }
+  useEffect(() => { loadMedia(); loadFolders(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function uploadFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files; if (!files || files.length === 0) return;
@@ -111,7 +124,7 @@ export default function Media() {
     }
     setUploading(false); setUploadProgress(null);
     if (failed > 0) toast.toast(t('upload failed', getLang()) + ' (' + failed + ')', 'error');
-    const r = await api.get('/media'); setMedia(r.data.media);
+    await loadMedia();
   }
 
   async function saveMeta() {
@@ -119,7 +132,7 @@ export default function Media() {
     try {
       const r = await api.put('/media/' + preview.id, { title: preview.title, alt: preview.alt });
       setPreview(r.data);
-      const rr = await api.get('/media'); setMedia(rr.data.media);
+      await loadMedia();
     } catch {}
   }
 
@@ -127,6 +140,38 @@ export default function Media() {
     filter === 'image' ? m.mimeType?.startsWith('image/') :
     filter === 'video' ? m.mimeType?.startsWith('video/') :
     filter === 'audio' ? m.mimeType?.startsWith('audio/') : !m.mimeType?.startsWith('image/') && !m.mimeType?.startsWith('video/') && !m.mimeType?.startsWith('audio/'));
+
+  async function createFolder() {
+    const name = await dialog.prompt({ message: t('folder name', getLang()) });
+    if (!name || !name.trim()) return;
+    try { await api.post('/media/folders', { name: name.trim() }); toast.toast(t('folder created', getLang())); loadFolders(); }
+    catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+  }
+
+  async function renameFolder(f: any) {
+    const name = await dialog.prompt({ message: t('folder name', getLang()), value: f.name } as any);
+    if (!name || !name.trim()) return;
+    try { await api.put('/media/folders/' + f.id, { name: name.trim() }); loadFolders(); }
+    catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+  }
+
+  async function deleteFolder(f: any) {
+    if (!(await dialog.confirm(t('delete folder', getLang()) + ' "' + f.name + '"?', { danger: true }))) return;
+    try {
+      await api.delete('/media/folders/' + f.id);
+      if (folderFilter === f.id) { setFolderFilter(''); await loadMedia(''); }
+      loadFolders();
+    } catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
+  }
+
+  async function moveToFolder() {
+    if (selected.size === 0) return;
+    try {
+      const r = await api.post('/media/bulk-move', { ids: Array.from(selected), folderId: bulkFolder || null });
+      toast.toast(t('moved files', getLang()).replace('{n}', String(r.data?.moved ?? 0)));
+      setSelected(new Set()); setBulkFolder(''); await loadMedia(); loadFolders();
+    } catch (e: any) { toast.toast(e.response?.data?.error || t('move failed', getLang()), 'error'); }
+  }
 
   const [bulkTitle, setBulkTitle] = useState('');
   const [bulkAlt, setBulkAlt] = useState('');
@@ -230,11 +275,36 @@ export default function Media() {
       React.createElement('div', { className: 'flex-1' }),
       React.createElement('button', { onClick: selectAll, className: 'btn-secondary text-xs' }, selected.size === media.length ? t('deselect all', getLang()) : t('select all', getLang()))
     ),
+    // Folder bar: the library was a flat list, so the only way to find an image
+    // was its filename.
+    React.createElement('div', { className: 'flex items-center gap-1 mb-4 flex-wrap' },
+      React.createElement('button', {
+        onClick: () => { setFolderFilter(''); loadMedia(''); },
+        className: 'px-3 py-1.5 text-xs rounded-lg border ' + (folderFilter === '' ? 'border-primary-400 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 text-gray-500 hover:text-gray-700'),
+      }, t('all folders', getLang())),
+      React.createElement('button', {
+        onClick: () => { setFolderFilter('none'); loadMedia('none'); },
+        className: 'px-3 py-1.5 text-xs rounded-lg border ' + (folderFilter === 'none' ? 'border-primary-400 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 text-gray-500 hover:text-gray-700'),
+      }, t('unfiled', getLang()) + ' (' + unfiled + ')'),
+      folders.map((f: any) => React.createElement('span', { key: f.id, className: 'inline-flex items-center group' },
+        React.createElement('button', {
+          onClick: () => { setFolderFilter(f.id); loadMedia(f.id); },
+          className: 'px-3 py-1.5 text-xs rounded-l-lg border ' + (folderFilter === f.id ? 'border-primary-400 bg-primary-50 text-primary-700 font-medium' : 'border-gray-200 text-gray-500 hover:text-gray-700'),
+        }, f.name + ' (' + f.count + ')'),
+        React.createElement('button', { onClick: () => renameFolder(f), title: t('rename', getLang()), className: 'px-1.5 py-1.5 text-xs border border-l-0 border-gray-200 text-gray-400 hover:text-primary-600' }, React.createElement(Pencil, { size: 11 })),
+        React.createElement('button', { onClick: () => deleteFolder(f), title: t('delete', getLang()), className: 'px-1.5 py-1.5 text-xs border border-l-0 border-gray-200 rounded-r-lg text-gray-400 hover:text-red-600' }, React.createElement(X, { size: 11 })))),
+      React.createElement('button', { onClick: createFolder, className: 'px-2.5 py-1.5 text-xs rounded-lg border border-dashed border-gray-300 text-gray-500 hover:text-primary-600 hover:border-primary-400 ml-1' }, '+ ' + t('new folder', getLang()))
+    ),
     selected.size > 0 && React.createElement('div', { className: 'card p-3 mb-3 flex flex-wrap items-center gap-2' },
       React.createElement('span', { className: 'text-xs font-medium text-gray-600' }, t('bulk edit', getLang()) + ' (' + selected.size + ')'),
       React.createElement('input', { value: bulkTitle, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setBulkTitle(e.target.value), placeholder: t('set title', getLang()), className: 'input-field w-44 text-sm' }),
       React.createElement('input', { value: bulkAlt, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setBulkAlt(e.target.value), placeholder: t('set alt text', getLang()), className: 'input-field w-44 text-sm' }),
       React.createElement('button', { onClick: bulkEdit, disabled: !bulkTitle.trim() && !bulkAlt.trim(), className: 'btn-primary text-xs disabled:opacity-40' }, t('apply', getLang())),
+      React.createElement('div', { className: 'flex items-center gap-1 ml-auto' },
+        React.createElement(Select, { value: bulkFolder, onChange: (v: string) => setBulkFolder(v), className: 'input-field text-xs w-44' },
+          React.createElement('option', { value: '' }, t('no folder', getLang())),
+          folders.map((f: any) => React.createElement('option', { key: f.id, value: f.id }, f.name))),
+        React.createElement('button', { onClick: moveToFolder, className: 'btn-secondary text-xs' }, t('move to folder', getLang()))),
       React.createElement('button', { onClick: () => { setSelected(new Set()); setBulkTitle(''); setBulkAlt(''); }, className: 'btn-secondary text-xs' }, t('cancel', getLang()))
     ),
     uploadProgress !== null && React.createElement('div', { className: 'mb-3' },
@@ -316,6 +386,14 @@ export default function Media() {
             preview.width && preview.height ? React.createElement('div', null,
               React.createElement('p', { className: 'text-xs text-gray-400' }, t('dimensions', getLang())),
               React.createElement('p', { className: 'text-gray-700' }, preview.width + ' x ' + preview.height + 'px')) : null,
+            // Read from the file on first open (see the server's GET /media/:id):
+            // colour space, density, orientation, and whether an EXIF block exists.
+            preview.meta ? React.createElement('div', null,
+              React.createElement('p', { className: 'text-xs text-gray-400' }, t('image details', getLang())),
+              React.createElement('p', { className: 'text-gray-700 text-xs' },
+                [preview.meta.format, preview.meta.space, preview.meta.density ? preview.meta.density + 'dpi' : '',
+                 preview.meta.orientation ? t('orientation', getLang()) + ' ' + preview.meta.orientation : '',
+                 preview.meta.exifPresent ? 'EXIF' : ''].filter(Boolean).join(' · '))) : null,
             React.createElement('div', null,
               React.createElement('p', { className: 'text-xs text-gray-400 flex items-center gap-1' }, React.createElement(Calendar, { size: 12 }), t('uploaded', getLang())),
               React.createElement('p', { className: 'text-gray-700' }, new Date(preview.createdAt).toLocaleDateString())),

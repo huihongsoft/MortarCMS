@@ -1,0 +1,145 @@
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import express from 'express';
+import sharp from 'sharp';
+import db, { initDB, cuid } from '../src/utils/db';
+import { signToken } from '../src/utils/jwt';
+import { UPLOADS_DIR } from '../src/utils/paths';
+import mediaRoutes from '../src/routes/media';
+
+// The library was a flat list: an image was findable by filename search and
+// nothing else. Folders, a "not filed yet" view, bulk move, and the image's own
+// metadata (read from the file on first open rather than backfilled at upgrade).
+const DB_FILE = process.env.MORTAR_DB_PATH || '/tmp/mortar-vitest-folders.db';
+let server: any;
+let base = '';
+
+const token = (id: string, role: string) => ({ Authorization: 'Bearer ' + signToken({ userId: id, role, v: 0 }), 'content-type': 'application/json' });
+
+function addMedia(id: string, opts: { mime?: string; url?: string; folderId?: string | null } = {}) {
+  db.prepare('INSERT INTO Media (id, filename, original, mimeType, size, url, alt, title, folderId, createdAt) VALUES (?, ?, ?, ?, 10, ?, \'\', \'\', ?, ?)')
+    .run(id, id + '.png', id + '.png', opts.mime || 'image/png', opts.url || '/uploads/' + id + '.png', opts.folderId ?? null, new Date().toISOString());
+}
+
+beforeAll(async () => {
+  initDB();
+  db.prepare("INSERT INTO User (id, username, email, password, role, tokenVersion) VALUES ('u1','u1','u1@test.dev','x','admin',0)").run();
+  const app = express();
+  app.use(express.json());
+  app.use('/api/media', mediaRoutes);
+  server = app.listen(0);
+  await new Promise((r) => server.on('listening', r));
+  base = 'http://127.0.0.1:' + server.address().port;
+});
+
+afterAll(() => {
+  server?.close();
+  for (const s of ['', '-wal', '-shm']) { try { fs.unlinkSync(DB_FILE + s); } catch {} }
+});
+
+beforeEach(() => {
+  db.prepare('DELETE FROM Media').run();
+  db.prepare('DELETE FROM MediaFolder').run();
+});
+
+describe('folders', () => {
+  it('creates, lists with counts, renames and deletes', async () => {
+    const created = await fetch(base + '/api/media/folders', { method: 'POST', headers: token('u1', 'admin'), body: JSON.stringify({ name: 'Products' }) });
+    expect(created.status).toBe(201);
+    const folder = await created.json();
+
+    addMedia('m1', { folderId: folder.id });
+    addMedia('m2');
+    const list = await (await fetch(base + '/api/media/folders', { headers: token('u1', 'admin') })).json();
+    expect(list.folders[0]).toMatchObject({ name: 'Products', count: 1 });
+    // The unfiled count is what the "unfiled" tab shows.
+    expect(list.unfiled).toBe(1);
+
+    const renamed = await (await fetch(base + '/api/media/folders/' + folder.id, { method: 'PUT', headers: token('u1', 'admin'), body: JSON.stringify({ name: 'Shop' }) })).json();
+    expect(renamed.name).toBe('Shop');
+
+    // A folder is only deletable once it is empty (see the next test).
+    await fetch(base + '/api/media/bulk-move', { method: 'POST', headers: token('u1', 'admin'), body: JSON.stringify({ ids: ['m1'], folderId: null }) });
+    const del = await fetch(base + '/api/media/folders/' + folder.id, { method: 'DELETE', headers: token('u1', 'admin') });
+    expect(del.status).toBe(200);
+  });
+
+  it('refuses to delete a folder that still holds files', async () => {
+    const folder = await (await fetch(base + '/api/media/folders', { method: 'POST', headers: token('u1', 'admin'), body: JSON.stringify({ name: 'Busy' }) })).json();
+    addMedia('m1', { folderId: folder.id });
+    const del = await fetch(base + '/api/media/folders/' + folder.id, { method: 'DELETE', headers: token('u1', 'admin') });
+    expect(del.status).toBe(400);
+    expect((await del.json()).error).toContain('1');
+    // The file is untouched — a delete that quietly discarded images would be the
+    // worst possible behaviour here.
+    expect((db.prepare('SELECT folderId FROM Media WHERE id = ?').get('m1') as any).folderId).toBe(folder.id);
+  });
+
+  it('requires a name', async () => {
+    const r = await fetch(base + '/api/media/folders', { method: 'POST', headers: token('u1', 'admin'), body: JSON.stringify({ name: '   ' }) });
+    expect(r.status).toBe(400);
+  });
+});
+
+describe('filtering by folder', () => {
+  it('narrows to a folder, or to the unfiled files', async () => {
+    const folder = await (await fetch(base + '/api/media/folders', { method: 'POST', headers: token('u1', 'admin'), body: JSON.stringify({ name: 'F' }) })).json();
+    addMedia('in1', { folderId: folder.id });
+    addMedia('out1');
+    addMedia('out2');
+
+    const all = await (await fetch(base + '/api/media', { headers: token('u1', 'admin') })).json();
+    expect(all.total).toBe(3);
+    const inFolder = await (await fetch(base + '/api/media?folderId=' + folder.id, { headers: token('u1', 'admin') })).json();
+    expect(inFolder.media.map((m: any) => m.id)).toEqual(['in1']);
+    const unfiled = await (await fetch(base + '/api/media?folderId=none', { headers: token('u1', 'admin') })).json();
+    expect(unfiled.media.map((m: any) => m.id).sort()).toEqual(['out1', 'out2']);
+  });
+});
+
+describe('bulk move', () => {
+  it('moves a selection in, and out again with a null folder', async () => {
+    const folder = await (await fetch(base + '/api/media/folders', { method: 'POST', headers: token('u1', 'admin'), body: JSON.stringify({ name: 'F' }) })).json();
+    addMedia('m1'); addMedia('m2');
+
+    const moved = await (await fetch(base + '/api/media/bulk-move', { method: 'POST', headers: token('u1', 'admin'), body: JSON.stringify({ ids: ['m1', 'm2'], folderId: folder.id }) })).json();
+    expect(moved.moved).toBe(2);
+    expect((db.prepare('SELECT COUNT(*) c FROM Media WHERE folderId = ?').get(folder.id) as any).c).toBe(2);
+
+    const back = await (await fetch(base + '/api/media/bulk-move', { method: 'POST', headers: token('u1', 'admin'), body: JSON.stringify({ ids: ['m1'], folderId: null }) })).json();
+    expect(back.moved).toBe(1);
+    expect((db.prepare('SELECT folderId FROM Media WHERE id = ?').get('m1') as any).folderId).toBeNull();
+  });
+
+  it('refuses an unknown folder and an empty selection', async () => {
+    addMedia('m1');
+    expect((await fetch(base + '/api/media/bulk-move', { method: 'POST', headers: token('u1', 'admin'), body: JSON.stringify({ ids: ['m1'], folderId: 'nope' }) })).status).toBe(404);
+    expect((await fetch(base + '/api/media/bulk-move', { method: 'POST', headers: token('u1', 'admin'), body: JSON.stringify({ ids: [] }) })).status).toBe(400);
+  });
+});
+
+describe('image metadata', () => {
+  it('is read from the file on first open and cached', async () => {
+    // A real image on disk, because the metadata comes from the file itself.
+    const file = 'meta-' + cuid() + '.png';
+    await sharp({ create: { width: 40, height: 25, channels: 3, background: '#3366ff' } }).png().toFile(path.join(UPLOADS_DIR, file));
+    addMedia('meta1', { url: '/uploads/' + file });
+    try {
+      const detail = await (await fetch(base + '/api/media/meta1', { headers: token('u1', 'admin') })).json();
+      expect(detail.meta).toMatchObject({ format: 'png', width: 40, height: 25 });
+      // Cached, so the second read does not touch the file again.
+      expect((db.prepare('SELECT meta FROM Media WHERE id = ?').get('meta1') as any).meta).toContain('png');
+    } finally {
+      try { fs.unlinkSync(path.join(UPLOADS_DIR, file)); } catch { /* best effort */ }
+    }
+  });
+
+  it('does not fail the detail view when the file is missing', async () => {
+    addMedia('gone', { url: '/uploads/does-not-exist-' + cuid() + '.png' });
+    const r = await fetch(base + '/api/media/gone', { headers: token('u1', 'admin') });
+    expect(r.status).toBe(200);
+    expect((await r.json()).meta).toBeNull();
+  });
+});

@@ -928,6 +928,27 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
     },
   },
   {
+    version: 25,
+    name: 'media-folders',
+    up: () => {
+      // Organisation for the media library, which was a flat list: an image was
+      // findable by filename search and nothing else.
+      db.exec(`CREATE TABLE IF NOT EXISTS MediaFolder (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        parentId TEXT,
+        siteId TEXT,
+        createdAt TEXT NOT NULL
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_mediafolder_site ON MediaFolder (siteId)');
+      addColumn('Media', 'folderId', 'TEXT');
+      // Lazy: filled from sharp the first time a file's details are opened, so no
+      // backfill pass has to re-read every file at upgrade time.
+      addColumn('Media', 'meta', 'TEXT');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_media_folder ON Media (folderId)');
+    },
+  },
+  {
     version: 24,
     name: 'notifications',
     up: () => {

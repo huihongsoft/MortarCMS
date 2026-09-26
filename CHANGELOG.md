@@ -29,6 +29,11 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 - Admin **My Profile** page (bio, avatar, password, 2FA, application passwords),
   an unsaved-changes guard for the editors, and a "no permission" screen instead
   of a page that fails on every request.
+- **Media library**: folders with counts and an "unfiled" view, bulk move into a
+  folder, and per-image metadata (format, colour space, density, orientation, an
+  EXIF block present or not) read from the file when its details are first opened.
+  Duplicate categories and tags can be **merged** — the posts move to the target
+  before the source is removed, which deleting could not do.
 - **Editorial workflow**: a general `Notification` table replaces the AI
   assistant's (the review flow used to write into it, so an author's approval
   arrived in the assistant's inbox), approval and rejection email the author,

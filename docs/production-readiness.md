@@ -31,8 +31,8 @@ the maintainer, not a code change. Everything else below is in scope.
 | B3 | Search is `LIKE`, no full-text index | **done in 0.1.3** (SQLite FTS5 trigram; MySQL/PG keep LIKE) |
 | B4 | No CAPTCHA or submission limits on public forms | **done in 0.1.3** (local signals; no external CAPTCHA) |
 | B5 | Review workflow has no email, no queue screen | **done in 0.1.3** |
-| B6 | No taxonomy bulk merge/rename | planned, batch 5 |
-| B7 | No media folders, no EXIF, no video transcoding | planned, batch 5 |
+| B6 | No taxonomy bulk merge/rename | **done in 0.1.3** |
+| B7 | No media folders, no EXIF, no video transcoding | **done in 0.1.3** for folders + image metadata; EXIF fields and transcoding are still out |
 | B8 | Scheduler has a backend but no admin screen | **done in 0.1.3** |
 | B9 | Client-rendered SPA only (crawler fallback, no SSR) | planned, batch 6 |
 | B10 | Accessibility: no focus trap, sparse `aria-label`, no RTL | planned, batch 6 |
@@ -66,6 +66,12 @@ the maintainer, not a code change. Everything else below is in scope.
 - **Data integrity**: media deletion removes the row before the files (it was the
   other way round, so a mid-way failure left a broken image reference and a bulk
   delete could stop half-applied).
+- **Media organisation**: folders with counts, an "unfiled" view, bulk move, and
+  an image's own metadata (format, colour space, density, orientation, whether an
+  EXIF block exists) read from the file the first time its details are opened —
+  not backfilled at upgrade, and not a claim to have parsed EXIF fields proper.
+- **Duplicate taxonomies** can be merged: the posts move to the target inside one
+  transaction before the source is removed, which deleting could not do.
 - **Workflow notifications**: a general `Notification` table (migration 24) that
   absorbed the AI assistant's, so an author's "your submission was approved" no
   longer arrives in the assistant's inbox. Approval and rejection now email the
