@@ -6,11 +6,12 @@ import { authenticate, requireCap, resolveOptionalUser, userCan, AuthRequest } f
 import { verifyToken } from '../utils/jwt';
 import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
 import { SiteRequest } from '../middleware/site';
-import { slugify, uniqueSlug, postUrl } from '../utils/slug';
+import { slugify, uniqueSlug, postUrl, getPermalinkPrefix } from '../utils/slug';
 import { likeContains } from '../utils/sqlLike';
 import { recordMovedPath } from '../utils/redirects';
 import { notify } from '../utils/notifications';
 import { buildMatchQuery, matchJoin, matchClause, matchOrder } from '../utils/searchIndex';
+import { normalizeLang, defaultLang, contentLangs, translationsOf, postPathForLang, pagePathForLang } from '../utils/contentLang';
 import { rateLimitStore } from '../utils/rateLimitStore';
 import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
 import { applyFilters, doAction } from '../utils/hooks';
@@ -101,7 +102,7 @@ function validPostType(raw: unknown): string | null {
 function sanitizeVisualCss(css: string): string {
   return sanitizeCssText(css);
 }
-const postSchema = z.object({ title: z.string().min(1), slug: z.string().max(200).optional(), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), authorId: z.string().optional(), publishedAt: z.string().optional(), meta: z.record(z.string(), z.string()).optional(), type: z.string().optional() });
+const postSchema = z.object({ title: z.string().min(1), slug: z.string().max(200).optional(), lang: z.string().max(10).optional(), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), authorId: z.string().optional(), publishedAt: z.string().optional(), meta: z.record(z.string(), z.string()).optional(), type: z.string().optional() });
 
 // ---- Bulk operations: the same checks the single-row routes apply -------------
 // The bulk endpoints act on ids the client chose, so every row has to pass the
@@ -230,6 +231,9 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     const category = req.query.category as string;
     const tag = req.query.tag as string;
     const type = (req.query.type as string) || 'post';
+    // '' is the site's default language, which is also what a request without
+    // ?lang= asks for — so an install that never uses this feature is unaffected.
+    const lang = normalizeLang(req.query.lang) || '';
     // Full-text search when the index can answer this query, LIKE otherwise.
     // `buildMatchQuery` returns null for MySQL/Postgres (no FTS5) and for terms
     // shorter than a trigram — a two-character CJK word cannot be matched by the
@@ -244,8 +248,8 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     if (category) { sql += ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId'; }
     if (tag) { sql += ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId'; }
     const now = new Date().toISOString();
-    sql += ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)';
-    params.push(type, 'published', now);
+    sql += ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND p.lang = ?';
+    params.push(type, 'published', now, lang);
     if (req.siteId) { sql += ' AND (p.siteId IS NULL OR p.siteId = ?)'; params.push(req.siteId); }
     if (!isLoggedIn(req)) sql += MEMBERS_ONLY_EXCLUDE;
     if (search) {
@@ -272,8 +276,8 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
       params.push(limit, (page - 1) * limit);
     }
     const postsData = db.prepare(sql).all(...params) as any[];
-    const countSql = 'SELECT COUNT(DISTINCT p.id) as cnt FROM Post p' + (match ? matchJoin() : '') + (category ? ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId' : '') + (tag ? ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId' : '') + ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + (req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '') + (!isLoggedIn(req) ? MEMBERS_ONLY_EXCLUDE : '') + (search ? (match ? ' AND' + matchClause() : " AND (p.title LIKE ? ESCAPE '\\' OR p.content LIKE ? ESCAPE '\\' OR p.excerpt LIKE ? ESCAPE '\\')") : '') + (category ? ' AND c.slug = ?' : '') + (tag ? ' AND t.slug = ?' : '');
-    const countParams: any[] = [type, 'published', now];
+    const countSql = 'SELECT COUNT(DISTINCT p.id) as cnt FROM Post p' + (match ? matchJoin() : '') + (category ? ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId' : '') + (tag ? ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId' : '') + ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND p.lang = ?' + (req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '') + (!isLoggedIn(req) ? MEMBERS_ONLY_EXCLUDE : '') + (search ? (match ? ' AND' + matchClause() : " AND (p.title LIKE ? ESCAPE '\\' OR p.content LIKE ? ESCAPE '\\' OR p.excerpt LIKE ? ESCAPE '\\')") : '') + (category ? ' AND c.slug = ?' : '') + (tag ? ' AND t.slug = ?' : '');
+    const countParams: any[] = [type, 'published', now, lang];
     if (req.siteId) countParams.push(req.siteId);
     if (search) {
       if (match) countParams.push(match);
@@ -336,10 +340,11 @@ router.get('/suggest', (req: AuthRequest & SiteRequest, res: Response) => {
 
 router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
+    const lang = normalizeLang(req.query.lang) || '';
     const post = (req.siteId
       // Any public content type resolves here; pages have their own route.
-      ? db.prepare("SELECT * FROM Post WHERE slug = ? AND type <> 'page' AND (siteId IS NULL OR siteId = ?)").get(req.params.slug, req.siteId)
-      : db.prepare("SELECT * FROM Post WHERE slug = ? AND type <> 'page'").get(req.params.slug)) as any;
+      ? db.prepare("SELECT * FROM Post WHERE slug = ? AND type <> 'page' AND lang = ? AND (siteId IS NULL OR siteId = ?)").get(req.params.slug, lang, req.siteId)
+      : db.prepare("SELECT * FROM Post WHERE slug = ? AND type <> 'page' AND lang = ?").get(req.params.slug, lang)) as any;
     if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
     // Scheduled posts (published but publishedAt in the future) are invisible
     // to anonymous visitors, matching the public lists; logged-in users may
@@ -376,6 +381,9 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
     // (or one crawler) from inflating the count by reloading
     trackView(post.id, (req.ip || '') + '|' + String(req.headers['user-agent'] || '').slice(0, 80));
     const enriched = enrichPost(post);
+    // Translations of this post, so the client and the injected head can emit
+    // hreflang alternates without a second request.
+    enriched.translations = translationsOf(post);
     // Never expose the protection password to the public API
     enriched.hasPassword = !!post.password;
     delete enriched.password;
@@ -596,7 +604,8 @@ router.post('/', authenticate, requireCap('edit_posts'), async (req: AuthRequest
     // The post row and its category/tag/meta rows must land together — a
     // half-written post would show up with missing relations.
     withTransaction(() => {
-      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', status, data.featured || null, password, authorId, data.parentId || null, data.menuOrder || 0, publishedAt, siteId, postType);
+      const lang = normalizeLang(data.lang) || '';
+      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId, type, lang) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', status, data.featured || null, password, authorId, data.parentId || null, data.menuOrder || 0, publishedAt, siteId, postType, lang);
       if (data.categoryIds) for (const cid of data.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, cid);
       if (data.tagIds) for (const tid of data.tagIds) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tid);
       if (data.tagNames) for (const name of data.tagNames) {
@@ -636,17 +645,30 @@ router.put('/:id', authenticate, requireCap('edit_posts'), async (req: AuthReque
     // and Zod dropped it), and once it is possible, silently breaking every
     // existing link — including search-engine results — would be the obvious way
     // to lose traffic.
+    // Both the slug and the language decide the URL, and a request may change
+    // either or both, so the redirect is written once below from the resolved
+    // pair — two separate calls would leave whichever ran first pointing at the
+    // other's stale slug.
+    let nextSlug = existing.slug;
     if (data.slug !== undefined && String(data.slug).trim()) {
       const others = (db.prepare('SELECT slug FROM Post WHERE id <> ?').all(req.params.id) as any[]).map((s: any) => s.slug);
-      const nextSlug = uniqueSlug(String(data.slug), others);
-      if (nextSlug !== existing.slug) {
-        sets.push('slug = ?'); vals.push(nextSlug);
-        // Only a plain post: a custom type's public URL has its own shape, and a
-        // redirect written from the post prefix would point nowhere.
-        if (existing.type === 'post' && (existing.status === 'published' || existing.status === 'private')) {
-          recordMovedPath(postUrl(existing.slug), postUrl(nextSlug), existing.siteId || null);
-        }
-      }
+      nextSlug = uniqueSlug(String(data.slug), others);
+      if (nextSlug !== existing.slug) { sets.push('slug = ?'); vals.push(nextSlug); }
+    }
+    let nextLang = existing.lang || '';
+    if (data.lang !== undefined) {
+      const lang = normalizeLang(data.lang);
+      if (lang === null && String(data.lang).trim() !== '') { res.status(400).json({ error: '语言代码无效（应为 zh 或 en-US 这样的形式）' }); return; }
+      nextLang = lang || '';
+      if (nextLang !== (existing.lang || '')) { sets.push('lang = ?'); vals.push(nextLang); }
+    }
+    // A published post keeps its old URL working. Only a plain post: a custom
+    // type's public URL has its own shape, and a redirect written from the post
+    // prefix would point nowhere.
+    if ((nextSlug !== existing.slug || nextLang !== (existing.lang || '')) &&
+        existing.type === 'post' && (existing.status === 'published' || existing.status === 'private')) {
+      const prefix = getPermalinkPrefix();
+      recordMovedPath(postPathForLang(existing.slug, existing.lang, prefix), postPathForLang(nextSlug, nextLang, prefix), existing.siteId || null);
     }
     if (data.content !== undefined) { sets.push('content = ?'); vals.push(data.content); }
     if (data.excerpt !== undefined) { sets.push('excerpt = ?'); vals.push(data.excerpt); }
@@ -961,6 +983,56 @@ router.get('/mine', authenticate, (req: AuthRequest, res: Response) => {
   try {
     const posts = db.prepare("SELECT id, title, slug, status, excerpt, createdAt FROM Post WHERE authorId = ? AND type = 'post' ORDER BY createdAt DESC").all(req.user!.userId) as any[];
     res.json({ posts });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// ---- Translations ----
+//
+// A translated item is a normal post with a `lang` and a shared
+// `translationGroup`; the group is what hreflang and the editor's translation
+// panel read. Nothing about the source changes except that it gains a group id
+// the first time someone translates it.
+
+router.get('/:id/translations', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
+  try {
+    const post = db.prepare('SELECT id, lang, translationGroup FROM Post WHERE id = ?').get(req.params.id) as any;
+    if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
+    const rows = post.translationGroup
+      ? db.prepare('SELECT id, lang, title, status, slug FROM Post WHERE translationGroup = ? ORDER BY lang').all(post.translationGroup) as any[]
+      : [];
+    res.json({ group: post.translationGroup || null, defaultLang: defaultLang(), langs: contentLangs(), translations: rows });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Start a translation: copies the source so the translator has something to work
+// from, as a draft in the requested language, linked into the same group.
+router.post('/:id/translate', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
+  try {
+    const lang = normalizeLang(req.body?.lang);
+    if (!lang) { res.status(400).json({ error: '语言代码必填（例如 en）' }); return; }
+    if (lang === defaultLang()) { res.status(400).json({ error: '该语言是站点默认语言，无需翻译' }); return; }
+    const source = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
+    if (!source) { res.status(404).json({ error: 'Post not found' }); return; }
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, source.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的内容' }); return; }
+
+    const group = source.translationGroup || cuid();
+    if (!source.translationGroup) db.prepare('UPDATE Post SET translationGroup = ? WHERE id = ?').run(group, source.id);
+    const existing = db.prepare('SELECT id FROM Post WHERE translationGroup = ? AND lang = ?').get(group, lang) as any;
+    if (existing) { res.status(400).json({ error: '该语言已经有翻译了', id: existing.id }); return; }
+
+    const allSlugs = (db.prepare('SELECT slug FROM Post').all() as any[]).map((s: any) => s.slug);
+    const slug = uniqueSlug(source.slug + '-' + lang, allSlugs);
+    const id = cuid();
+    const now = new Date().toISOString();
+    db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId, type, lang, translationGroup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, source.title, slug, source.content || '', source.excerpt || '', 'draft', source.featured || null, '', req.user!.userId, null, 0, null, source.siteId || null, source.type, lang, group);
+    // Relations travel with the copy: a translation of a post filed under
+    // "News" belongs there too, or its category page is empty in that language.
+    for (const c of db.prepare('SELECT categoryId FROM PostCategory WHERE postId = ?').all(source.id) as any[]) {
+      db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, c.categoryId);
+    }
+    try { doAction('post_created', id, 'draft', source.type); } catch {}
+    res.status(201).json(db.prepare('SELECT * FROM Post WHERE id = ?').get(id));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

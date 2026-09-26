@@ -1,5 +1,6 @@
 import db from './db';
 import { effectiveSetting } from './siteSettings';
+import { defaultLang, contentLangs, requestLang, postPathForLang, pagePathForLang } from './contentLang';
 import { PUBLIC_POST_CONDITIONS } from './publicPosts';
 import { postUrl, getPermalinkPrefix, getPermalinkStructure } from './slug';
 
@@ -21,6 +22,8 @@ export interface SeoMeta {
   description: string;
   ogImage?: string;
   canonical?: string;
+  /** Other-language versions of this document, for hreflang. */
+  alternates?: { lang: string; url: string }[];
   ogType: string;
   siteName: string;
   // True when the page must not be indexed. Signalled with an X-Robots-Tag
@@ -45,6 +48,9 @@ export interface SeoMeta {
   // a deleted or renamed post. The caller answers 404 instead of 200 so search
   // engines drop the URL rather than indexing an empty shell.
   notFound?: boolean;
+  // Comma-separated content languages, default first. Carried into the shell as
+  // <meta name="mortar-langs"> for the client's route table and API calls.
+  contentLangs?: string;
 }
 
 const HTML_ESCAPES: Record<string, string> = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
@@ -79,7 +85,11 @@ const ROUTE_PATTERNS: RegExp[] = [
 ];
 
 export function isKnownRoute(pathname: string): boolean {
-  const path = pathname && pathname !== '' ? pathname : '/';
+  const raw = pathname && pathname !== '' ? pathname : '/';
+  // A language prefix is part of the route on a translated site: /en/post/x is
+  // as real as /post/x. On a site that does not publish that language the prefix
+  // is not stripped, so the path stays unknown (and keeps answering 404).
+  const path = requestLang(raw).rest;
   if (ROUTE_PATTERNS.some((re) => re.test(path))) return true;
   // The configured permalink prefix is a post route too. /post/ is already in the
   // table above, so this only adds the custom ones.
@@ -199,16 +209,16 @@ function readSeoMeta(postId: string): Record<string, string> {
 // publishedAt is stored as an ISO-8601 string ('…T…Z'), which compares wrongly
 // against sqlite's datetime('now') ('… …' with a space) — 'T' > ' ', so every row
 // would look like it is in the future. Bind an ISO timestamp instead.
-function findPublished(type: 'post' | 'page', slug: string, siteId: string | undefined): any {
+function findPublished(type: 'post' | 'page', slug: string, siteId: string | undefined, lang = ''): any {
   try {
     const scope = siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '';
     const now = new Date().toISOString();
-    const args: any[] = siteId ? [slug, type, now, siteId] : [slug, type, now];
+    const args: any[] = siteId ? [slug, type, lang, now, siteId] : [slug, type, lang, now];
     return db.prepare(
-      `SELECT p.id, p.title, p.slug, p.excerpt, p.content, p.featured, p.password, p.status,
+      `SELECT p.id, p.title, p.slug, p.lang, p.translationGroup, p.excerpt, p.content, p.featured, p.password, p.status,
               p.publishedAt, p.updatedAt, u.username as authorName
        FROM Post p LEFT JOIN User u ON u.id = p.authorId
-       WHERE p.slug = ? AND p.type = ? AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)${scope}`
+       WHERE p.slug = ? AND p.type = ? AND p.lang = ? AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)${scope}`
     ).get(...args);
   } catch {
     return undefined;
@@ -232,7 +242,11 @@ export function buildSeoMeta(pathname: string, opts: { siteId?: string; origin: 
   const siteName = setting('site_title') || 'Mortar CMS';
   const siteDescription = setting('site_description') || '';
   const siteUrl = (setting('site_url') || opts.origin).replace(/\/$/, '');
-  const path = pathname && pathname !== '' ? pathname : '/';
+  const requested = pathname && pathname !== '' ? pathname : '/';
+  // Which language this URL asks for, and the same path without the prefix. The
+  // prefix decides which row is "the" page here (slug lookup below) and which
+  // URL is canonical; everything else works on the stripped path.
+  const { lang, rest: path } = requestLang(requested);
   const base: SeoMeta = {
     title: siteName,
     description: siteDescription,
@@ -242,6 +256,10 @@ export function buildSeoMeta(pathname: string, opts: { siteId?: string; origin: 
     // Every branch spreads `base`, so the handle reaches every page.
     twitterSite: twitterHandleFor(siteId),
     permalinkStructure: getPermalinkStructure() || undefined,
+    // The languages this site publishes, default first, carried into the shell as
+    // <meta name="mortar-langs"> — the client reads it at module load to build its
+    // route table and to decide which requests need ?lang=.
+    contentLangs: contentLangs().join(',') || undefined,
   };
 
   // Pages that exist only as UI state and must never be indexed.
@@ -251,7 +269,7 @@ export function buildSeoMeta(pathname: string, opts: { siteId?: string; origin: 
 
   const postRoute = contentFromPath(path);
   if (postRoute?.type === 'post') {
-    const post = findPublished('post', postRoute.slug, siteId);
+    const post = findPublished('post', postRoute.slug, siteId, lang);
     if (!post) return { ...base, noindex: true, notFound: true };
     const meta = readSeoMeta(post.id);
     // A password-protected post is reachable but its body is not public, so keep
@@ -263,12 +281,14 @@ export function buildSeoMeta(pathname: string, opts: { siteId?: string; origin: 
       title: (meta._seo_title || post.title) + ' - ' + siteName,
       description: meta._seo_desc || post.excerpt || '',
       ogImage: absoluteUrl(imageSource, siteUrl, setting('cdn_url')),
-      // Built from the slug, not from the requested path: the stored
-      // /post/<slug> shape stays reachable for old links, but it is an alias —
-      // pointing the canonical at it would ask search engines to index the same
-      // post twice once a custom prefix is configured. Both shapes now
-      // canonicalize to the configured one.
-      canonical: meta._seo_canonical || siteUrl + postUrl(post.slug),
+      // Built from the slug and the post's own language, not from the requested
+      // path: the stored /post/<slug> shape stays reachable for old links, but it
+      // is an alias — pointing the canonical at it would ask search engines to
+      // index the same post twice once a custom prefix is configured. A
+      // translation canonicalizes to its own /<lang>/… URL, whichever shape was
+      // used to reach it.
+      canonical: meta._seo_canonical || siteUrl + postPathForLang(post.slug, post.lang, getPermalinkPrefix()),
+      alternates: alternatesFor(post, siteUrl),
       ogType: 'article',
       noindex: meta._seo_noindex === '1',
       imageMeta: imageMetaFor(imageSource, post.title),
@@ -284,7 +304,7 @@ export function buildSeoMeta(pathname: string, opts: { siteId?: string; origin: 
 
   const pageMatch = path.match(/^\/page\/([^/]+)$/);
   if (pageMatch) {
-    const page = findPublished('page', decodeURIComponent(pageMatch[1]), siteId);
+    const page = findPublished('page', decodeURIComponent(pageMatch[1]), siteId, lang);
     if (!page || page.status === 'private') return { ...base, noindex: true, notFound: true };
     if (page.password) return { ...base, title: page.title + ' - ' + siteName, description: '', noindex: true };
     return {
@@ -292,7 +312,10 @@ export function buildSeoMeta(pathname: string, opts: { siteId?: string; origin: 
       title: page.title + ' - ' + siteName,
       description: page.excerpt || '',
       ogImage: absoluteUrl(page.featured, siteUrl, setting('cdn_url')),
-      canonical: siteUrl + path,
+      // From the page's own language, so /en/page/about advertises itself rather
+      // than the default-language path it was reached under.
+      canonical: siteUrl + pagePathForLang(page.slug, page.lang),
+      alternates: alternatesFor(page, siteUrl),
       ogType: 'article',
       noindex: false,
       imageMeta: imageMetaFor(page.featured, page.title),
@@ -337,12 +360,13 @@ function toPlainText(html: unknown): string {
 // visitor with JS sees the real app and never this. Same content, plain text:
 // progressive enhancement, not cloaking.
 export function buildCrawlerFallback(pathname: string, siteId: string | undefined): string | null {
-  const path = pathname && pathname !== '' ? pathname : '/';
+  const raw = pathname && pathname !== '' ? pathname : '/';
+  const { lang, rest: path } = requestLang(raw);
   const siteName = effectiveSetting(siteId, 'site_title') || 'Mortar CMS';
 
   const contentMatch = contentFromPath(path);
   if (contentMatch) {
-    const post = findPublished(contentMatch.type, contentMatch.slug, siteId);
+    const post = findPublished(contentMatch.type, contentMatch.slug, siteId, lang);
     // Gated or missing content gets no fallback: the page is noindex/404 anyway.
     if (!post || post.password) return null;
     const body = toPlainText(post.content).slice(0, 1500);
@@ -355,21 +379,21 @@ export function buildCrawlerFallback(pathname: string, siteId: string | undefine
   // Listing pages: the homepage, the archive by month, the taxonomy archives and
   // the author archive. Each is filtered to the posts that page actually shows —
   // an author page must not list every author's posts.
-  const listing = listingFor(path, siteId, siteName);
+  const listing = listingFor(path, siteId, siteName, lang);
   if (!listing) return null;
   if (!listing.posts.length) return null;
   const prefix = getPermalinkPrefix();
   return '<main><h1>' + esc(listing.title) + '</h1><ul>'
-    + listing.posts.map((p) => '<li><a href="' + esc(postUrl(p.slug, prefix)) + '">' + esc(p.title) + '</a>'
+    + listing.posts.map((p) => '<li><a href="' + esc(postPathForLang(p.slug, p.lang, prefix)) + '">' + esc(p.title) + '</a>'
         + (p.excerpt ? '<p>' + esc(toPlainText(p.excerpt).slice(0, 200)) + '</p>' : '')
         + '</li>').join('')
     + '</ul></main>';
 }
 
-interface ListingPost { slug: string; title: string; excerpt?: string }
+interface ListingPost { slug: string; title: string; excerpt?: string; lang?: string }
 
-function listingFor(path: string, siteId: string | undefined, siteName: string): { title: string; posts: ListingPost[] } | null {
-  if (path === '/') return { title: siteName, posts: publicPosts(siteId, '', []) };
+function listingFor(path: string, siteId: string | undefined, siteName: string, lang = ''): { title: string; posts: ListingPost[] } | null {
+  if (path === '/') return { title: siteName, posts: publicPosts(siteId, lang, '', []) };
 
   const category = path.match(/^\/category\/([^/]+)$/);
   if (category) {
@@ -378,7 +402,7 @@ function listingFor(path: string, siteId: string | undefined, siteName: string):
     if (!row) return null;
     return {
       title: row.name,
-      posts: publicPosts(siteId, ' AND EXISTS (SELECT 1 FROM PostCategory pc JOIN Category c ON c.id = pc.categoryId WHERE pc.postId = p.id AND c.slug = ?)', [slug]),
+      posts: publicPosts(siteId, lang, ' AND EXISTS (SELECT 1 FROM PostCategory pc JOIN Category c ON c.id = pc.categoryId WHERE pc.postId = p.id AND c.slug = ?)', [slug]),
     };
   }
 
@@ -389,7 +413,7 @@ function listingFor(path: string, siteId: string | undefined, siteName: string):
     if (!row) return null;
     return {
       title: row.name,
-      posts: publicPosts(siteId, ' AND EXISTS (SELECT 1 FROM PostTag pt JOIN Tag t ON t.id = pt.tagId WHERE pt.postId = p.id AND t.slug = ?)', [slug]),
+      posts: publicPosts(siteId, lang, ' AND EXISTS (SELECT 1 FROM PostTag pt JOIN Tag t ON t.id = pt.tagId WHERE pt.postId = p.id AND t.slug = ?)', [slug]),
     };
   }
 
@@ -405,13 +429,13 @@ function listingFor(path: string, siteId: string | undefined, siteName: string):
       const found = Array.isArray(list) ? list.find((t: any) => t?.slug === slug) : null;
       if (found?.label) label = String(found.label);
     } catch { /* fall back to the slug */ }
-    return { title: label, posts: publicPosts(siteId, ' AND p.type = ?', [slug]) };
+    return { title: label, posts: publicPosts(siteId, lang, ' AND p.type = ?', [slug]) };
   }
 
   const archive = path.match(/^\/archive\/(\d{4})\/(\d{1,2})$/);
   if (archive) {
     const ym = archive[1] + '-' + archive[2].padStart(2, '0');
-    return { title: archive[1] + '-' + archive[2].padStart(2, '0'), posts: publicPosts(siteId, " AND strftime('%Y-%m', p.publishedAt) = ?", [ym]) };
+    return { title: archive[1] + '-' + archive[2].padStart(2, '0'), posts: publicPosts(siteId, lang, " AND strftime('%Y-%m', p.publishedAt) = ?", [ym]) };
   }
 
   const author = path.match(/^\/author\/([^/]+)$/);
@@ -419,22 +443,23 @@ function listingFor(path: string, siteId: string | undefined, siteName: string):
     const username = decodeURIComponent(author[1]);
     const row = db.prepare('SELECT id, username FROM User WHERE username = ?').get(username) as any;
     if (!row) return null;
-    return { title: row.username, posts: publicPosts(siteId, ' AND p.authorId = ?', [row.id]) };
+    return { title: row.username, posts: publicPosts(siteId, lang, ' AND p.authorId = ?', [row.id]) };
   }
 
   return null;
 }
 
-// Published posts, site-scoped, filtered to what a visitor can read, plus an
-// optional extra condition. `p` is the Post alias the conditions expect.
-function publicPosts(siteId: string | undefined, extraClause: string, extraParams: any[], limit = 20): ListingPost[] {
+// Published posts, site-scoped, filtered to what a visitor can read, in one
+// language, plus an optional extra condition. `p` is the Post alias the
+// conditions expect.
+function publicPosts(siteId: string | undefined, lang: string, extraClause: string, extraParams: any[], limit = 20): ListingPost[] {
   try {
     const scope = siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '';
-    const args: any[] = [new Date().toISOString(), ...extraParams];
+    const args: any[] = [lang, new Date().toISOString(), ...extraParams];
     if (siteId) args.push(siteId);
     return db.prepare(
-      `SELECT p.slug, p.title, p.excerpt FROM Post p
-       WHERE p.type = 'post' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)${extraClause}${scope}${PUBLIC_POST_CONDITIONS}
+      `SELECT p.slug, p.title, p.excerpt, p.lang FROM Post p
+       WHERE p.type = 'post' AND p.lang = ? AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)${extraClause}${scope}${PUBLIC_POST_CONDITIONS}
        ORDER BY p.publishedAt DESC LIMIT ?`
     ).all(...args, limit) as any[];
   } catch {
@@ -461,6 +486,21 @@ export function buildRobotsTxt(siteId: string | undefined): string {
 // than throwing, so the page still renders.
 // `fallback` (see buildCrawlerFallback) goes inside #root, where React replaces
 // it on the first render.
+// The other languages of this content, as absolute URLs. Empty when the item has
+// no translation group — in which case there is nothing to point at.
+function alternatesFor(post: any, siteUrl: string): { lang: string; url: string }[] {
+  if (!post?.translationGroup) return [];
+  try {
+    const prefix = getPermalinkPrefix();
+    const rows = db.prepare("SELECT slug, lang, type FROM Post WHERE translationGroup = ? AND status = 'published' ORDER BY lang").all(post.translationGroup) as any[];
+    if (rows.length < 2) return [];
+    return rows.map((r) => ({
+      lang: r.lang || defaultLang(),
+      url: siteUrl + (r.type === 'page' ? pagePathForLang(r.slug, r.lang) : postPathForLang(r.slug, r.lang, prefix)),
+    }));
+  } catch { return []; }
+}
+
 export function injectSeoMeta(html: string, m: SeoMeta, fallback?: string | null): string {
   const tags: string[] = [
     metaTag('property', 'og:title', m.title),
@@ -489,9 +529,23 @@ export function injectSeoMeta(html: string, m: SeoMeta, fallback?: string | null
   // field's comment). Kept out of the crawler fallback on purpose — the fallback
   // markup already links with the real prefix.
   if (m.permalinkStructure) tags.push(metaTag('name', 'mortar-permalink', m.permalinkStructure));
+  // Same idea for the content languages: lib/contentLang reads it at module load,
+  // so a direct visit to /en/post/<slug> resolves on the first render and the API
+  // calls it fires already carry ?lang=en.
+  if (m.contentLangs) tags.push(metaTag('name', 'mortar-langs', m.contentLangs));
   if (m.canonical) {
     tags.push(metaTag('property', 'og:url', m.canonical));
     tags.push(`<link rel="canonical" href="${esc(m.canonical)}" />`);
+  }
+  // hreflang: the same content in other languages, plus x-default pointing at the
+  // default language's version. Without this a translated site competes with
+  // itself in search results, and Google picks the wrong one.
+  if (m.alternates && m.alternates.length > 0) {
+    for (const alt of m.alternates) {
+      tags.push(`<link rel="alternate" hreflang="${esc(alt.lang)}" href="${esc(alt.url)}" />`);
+    }
+    const fallback = m.alternates.find((a) => a.lang === defaultLang()) || m.alternates[0];
+    tags.push(`<link rel="alternate" hreflang="x-default" href="${esc(fallback.url)}" />`);
   }
 
   let out = html;

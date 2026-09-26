@@ -6,6 +6,7 @@ import { cdnUrl } from '../lib/cdn';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
 import { ContentSkeleton } from '../components/Skeleton';
+import { useContentAlternates } from '../components/LanguageLinks';
 import { useTheme } from '../themes';
 import { postPath } from '../lib/permalink';
 
@@ -44,6 +45,9 @@ export default function PostPage({ settings }: { settings: Record<string, string
   const [submitted, setSubmitted] = useState(false);
   // Must run unconditionally: hooks cannot be called after an early return
   const theme = useTheme();
+  // The other languages this post exists in, for the switcher under the content
+  // (and the hreflang links the server already injected into the head).
+  useContentAlternates(post?.translations);
 
   // Remember commenter name/email locally so returning visitors are pre-filled
   useEffect(() => {

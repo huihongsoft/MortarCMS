@@ -29,6 +29,9 @@ beforeAll(() => {
   setSetting('site_title', 'MySite');
   setSetting('site_description', 'Site description');
   setSetting('site_url', 'https://example.com');
+  // A second content language, so the language-prefixed routes below are live.
+  setSetting('site_lang', 'zh');
+  setSetting('content_langs', 'zh,en');
 
   addPost('p1', 'hello', 'post', { title: 'Hello World', excerpt: 'An excerpt', featured: '/uploads/pic.jpg' });
   addMeta('p1', '_seo_og_image', '/uploads/og.jpg');
@@ -267,10 +270,20 @@ describe('the server route table mirrors the SPA', () => {
     const src = fs.readFileSync(path.join(__dirname, '../../frontend/src/App.tsx'), 'utf8');
     const patterns = [...src.matchAll(/path: '([^']+)'/g)].map((m) => m[1]);
     expect(patterns.length).toBeGreaterThan(10);
-    const sample = (p: string) => p.replace(':year', '2026').replace(':month', '09').replace(/:[^/]+/g, 'x');
+    // ':lang' samples as a language this site publishes: the prefixed routes only
+    // exist for a translated site, and content_langs below makes 'en' one.
+    const sample = (p: string) => p
+      .replace(':lang', 'en').replace(':year', '2026').replace(':month', '09').replace(/:[^/]+/g, 'x');
     for (const p of patterns) {
       if (p === '*') continue; // the catch-all renders NotFound: deliberately not "known"
       expect(isKnownRoute(sample(p)), p + ' should be known').toBe(true);
+    }
+    // langRoute() wraps the path, so the literal never reaches a `path:` — the
+    // same routes registered in a translation are checked here.
+    const prefixed = [...src.matchAll(/langRoute\('([^']+)'/g)].map((m) => m[1]);
+    expect(prefixed.length).toBeGreaterThan(5);
+    for (const p of prefixed) {
+      expect(isKnownRoute(sample('/:lang' + p)), p + ' should be known in a language').toBe(true);
     }
   });
 
@@ -280,6 +293,45 @@ describe('the server route table mirrors the SPA', () => {
     }
     expect(isKnownRoute('/admin/anything')).toBe(true);
     expect(isKnownRoute('/404')).toBe(true);
+  });
+});
+
+describe('language-prefixed URLs', () => {
+  it('resolves a translation under its prefix, and only for a language the site publishes', () => {
+    db.prepare("INSERT INTO Post (id,title,slug,content,excerpt,status,type,authorId,publishedAt,lang) VALUES ('pLang','Hello (EN)','hello-en','<p>hi</p>','An excerpt','published','post','u1',?,'en')").run(new Date().toISOString());
+    const m = build('/en/post/hello-en');
+    expect(m.title).toBe('Hello (EN) - MySite');
+    expect(m.notFound).toBeFalsy();
+    // The canonical is the prefixed URL, not the unprefixed one it could also be
+    // reached by.
+    expect(m.canonical).toBe('https://example.com/en/post/hello-en');
+    // A language the settings do not list is not a prefix: the path stays unknown
+    // and the shell answers 404.
+    setSetting('content_langs', 'zh,en');
+    expect(isKnownRoute('/ja/post/hello-en')).toBe(false);
+    expect(isKnownRoute('/en/post/hello-en')).toBe(true);
+  });
+
+  it('does not resolve the default language under a prefix', () => {
+    // 'zh' is the default here, so /zh/post/hello is not a real page — the
+    // unprefixed URL is the canonical one and adding the prefix must not create
+    // a second copy of it.
+    expect(isKnownRoute('/zh/post/hello')).toBe(false);
+  });
+
+  it('lists the crawler fallback in the requested language', () => {
+    const html = buildCrawlerFallback('/en/', undefined);
+    // The English homepage lists the English posts, linked under /en/.
+    expect(html).toContain('Hello (EN)');
+    expect(html).toContain('/en/post/hello-en');
+    expect(html).not.toContain('/post/hello"');
+  });
+
+  it('strips the prefix in front of the app routes, but keeps them unprefixed-only for real pages', () => {
+    // /en/links is not a page the server advertises: the app routes have no
+    // language dimension, so a prefixed one must not become a soft 200.
+    expect(isKnownRoute('/en/links')).toBe(true); // route shape exists (LangGate renders it)
+    expect(isKnownRoute('/en/nope')).toBe(false);
   });
 });
 

@@ -6,6 +6,7 @@ import { authenticate, requireCap, userCan, AuthRequest } from '../middleware/au
 import { rateLimitStore } from '../utils/rateLimitStore';
 import { SiteRequest } from '../middleware/site';
 import { uniqueSlug } from '../utils/slug';
+import { normalizeLang, translationsOf, pagePathForLang } from '../utils/contentLang';
 import { recordMovedPath } from '../utils/redirects';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 import { sanitizeCssText } from '../utils/sanitize';
@@ -24,7 +25,7 @@ const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeader
 function sanitizeVisualCss(css: string): string {
   return sanitizeCssText(css);
 }
-const pageSchema = z.object({ title: z.string().min(1), slug: z.string().max(200).optional(), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'password', 'trash']).optional(), password: z.string().optional(), featured: z.string().optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), meta: z.record(z.string(), z.string()).optional() });
+const pageSchema = z.object({ title: z.string().min(1), slug: z.string().max(200).optional(), lang: z.string().max(10).optional(), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'password', 'trash']).optional(), password: z.string().optional(), featured: z.string().optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), meta: z.record(z.string(), z.string()).optional() });
 
 // 'password' status means "published but password protected" (WordPress style):
 // store it as status='published' + a non-empty password field.
@@ -39,8 +40,8 @@ function normalizePage(data: any, existingPassword = ''): { status: string; pass
 router.get('/public', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     const pages = (req.siteId
-      ? db.prepare('SELECT id, title, slug, status, menuOrder FROM Post WHERE type = ? AND status = ? AND (siteId IS NULL OR siteId = ?) ORDER BY menuOrder ASC').all('page', 'published', req.siteId)
-      : db.prepare('SELECT id, title, slug, status, menuOrder FROM Post WHERE type = ? AND status = ? ORDER BY menuOrder ASC').all('page', 'published')) as any[];
+      ? db.prepare('SELECT id, title, slug, status, menuOrder, lang FROM Post WHERE type = ? AND status = ? AND lang = ? AND (siteId IS NULL OR siteId = ?) ORDER BY menuOrder ASC').all('page', 'published', normalizeLang(req.query.lang) || '', req.siteId)
+      : db.prepare('SELECT id, title, slug, status, menuOrder, lang FROM Post WHERE type = ? AND status = ? AND lang = ? ORDER BY menuOrder ASC').all('page', 'published', normalizeLang(req.query.lang) || '')) as any[];
     res.json(pages);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -92,6 +93,9 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
     page.meta = {};
     metaRows.forEach((r: any) => { page.meta[r.key] = r.value; });
     delete page.password;
+    // Other languages of this page, so the client can offer a switcher and the
+    // injected head can emit hreflang alternates.
+    page.translations = translationsOf(page);
     page.content = renderCmsBlocks(applyShortcodes(page.content || '', { siteId: req.siteId }), { siteId: req.siteId });
     res.json(page);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -167,7 +171,7 @@ router.post('/', authenticate, requireCap('edit_pages'), async (req: AuthRequest
       res.status(403).json({ error: '无权在该站点创建内容' }); return;
     }
     withTransaction(() => {
-      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, featured, status, password, type, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', data.featured || null, storeStatus, storePassword, 'page', req.user!.userId, data.parentId || null, data.menuOrder || 0, storeStatus === 'published' ? new Date().toISOString() : null, data.siteId || null);
+      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, featured, status, password, type, authorId, parentId, menuOrder, publishedAt, siteId, lang) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', data.featured || null, storeStatus, storePassword, 'page', req.user!.userId, data.parentId || null, data.menuOrder || 0, storeStatus === 'published' ? new Date().toISOString() : null, data.siteId || null, normalizeLang(data.lang) || '');
       if (data.meta) {
         for (const [key, value] of Object.entries(data.meta)) {
           db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : normalizeSeoField(key, value));
@@ -195,16 +199,24 @@ router.put('/:id', authenticate, requireCap('edit_pages'), async (req: AuthReque
     const sets: string[] = []; const vals: any[] = [];
     if (data.title !== undefined) { sets.push('title = ?'); vals.push(data.title); }
     // Pages live at /page/<slug>; the same rule as posts applies — a published
-    // page's old URL keeps working after a slug edit.
+    // page's old URL keeps working after a slug edit or a language change, which
+    // both move the path. Resolved first, written once (see the same note in
+    // posts.ts).
+    let nextSlug = existing.slug;
     if (data.slug !== undefined && String(data.slug).trim()) {
       const others = (db.prepare('SELECT slug FROM Post WHERE id <> ?').all(req.params.id) as any[]).map((s: any) => s.slug);
-      const nextSlug = uniqueSlug(String(data.slug), others);
-      if (nextSlug !== existing.slug) {
-        sets.push('slug = ?'); vals.push(nextSlug);
-        if (existing.status === 'published' || existing.status === 'private') {
-          recordMovedPath('/page/' + existing.slug, '/page/' + nextSlug, existing.siteId || null);
-        }
-      }
+      nextSlug = uniqueSlug(String(data.slug), others);
+      if (nextSlug !== existing.slug) { sets.push('slug = ?'); vals.push(nextSlug); }
+    }
+    let nextLang = existing.lang || '';
+    if (data.lang !== undefined) {
+      const l = normalizeLang(data.lang);
+      if (l === null && String(data.lang).trim() !== '') { res.status(400).json({ error: '语言代码无效（应为 zh 或 en-US 这样的形式）' }); return; }
+      nextLang = l || '';
+      if (nextLang !== (existing.lang || '')) { sets.push('lang = ?'); vals.push(nextLang); }
+    }
+    if ((nextSlug !== existing.slug || nextLang !== (existing.lang || '')) && (existing.status === 'published' || existing.status === 'private')) {
+      recordMovedPath(pagePathForLang(existing.slug, existing.lang), pagePathForLang(nextSlug, nextLang), existing.siteId || null);
     }
     if (data.content !== undefined) { sets.push('content = ?'); vals.push(data.content); }
     if (data.excerpt !== undefined) { sets.push('excerpt = ?'); vals.push(data.excerpt); }

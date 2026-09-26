@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye, Sparkles, PanelRightClose } from 'lucide-react';
+import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye, Sparkles, PanelRightClose, Languages } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { useToast } from '../lib/toast';
 import RichEditor from '../components/RichEditor';
@@ -90,6 +90,14 @@ export default function PostEditor() {
   const [sites, setSites] = useState<any[]>([]);
   const [allowComments, setAllowComments] = useState(true);
   const [password, setPassword] = useState('');
+  // Content language. '' is the site's default language — the one served without
+  // a URL prefix, and what every post written before this feature says.
+  const [lang, setLang] = useState('');
+  const [langs, setLangs] = useState<string[]>([]);
+  const [defaultContentLang, setDefaultContentLang] = useState('zh');
+  // The other languages this content exists in ({ id, lang, title, status }).
+  const [translations, setTranslations] = useState<any[]>([]);
+  const [translating, setTranslating] = useState(false);
   // Publish date shown in the visual sidebar (datetime-local value, '' = immediately)
   const [publishDate, setPublishDate] = useState('');
   // Tracks the id of a newly-created post so draft saves (which stay in the
@@ -122,9 +130,17 @@ export default function PostEditor() {
     api.get('/sites/current').then(r => { if (r.data?.id) setSiteId(r.data.id); }).catch(() => {});
   }, [id, sites.length]);
   useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); api.get('/users').then(r => setUsers(r.data)).catch(() => {});
+    // Which languages this site publishes content in (the default first).
+    api.get('/settings').then(r => {
+      const def = String(r.data?.site_lang || 'zh').trim().toLowerCase() || 'zh';
+      const list = String(r.data?.content_langs || '').split(/[,\s]+/).map(s => s.trim().toLowerCase()).filter(Boolean);
+      setDefaultContentLang(def);
+      setLangs([def, ...list.filter((l: string) => l !== def)]);
+    }).catch(() => {});
     api.get('/categories').then(r => setCategories(r.data)); api.get('/media').then(r => setMediaItems(r.data.media || []));
     api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])).catch(() => {});
-    if (id) { api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.categoryId || c.category?.id) || []); setTagNames(p.tags?.map((t: any) => t.name || t.tag?.name) || []); if (p.featured) setFeatured(p.featured); if (p.allowComments !== undefined) setAllowComments(p.allowComments); if (p.password) setPassword(p.password); if (p.siteId) setSiteId(p.siteId); if (p.authorId) setAuthorId(p.authorId); if (p.publishedAt) { const d = new Date(p.publishedAt); const pad = (n: number) => String(n).padStart(2, '0'); setPublishDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`); } if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); if (p.meta?._seo_title) setSeoTitle(p.meta._seo_title); if (p.meta?._seo_desc) setSeoDesc(p.meta._seo_desc); if (p.meta?._seo_noindex) setSeoNoindex(p.meta._seo_noindex === '1'); if (p.meta?._seo_canonical) setSeoCanonical(p.meta._seo_canonical); if (p.meta?._seo_og_image) setSeoOgImage(p.meta._seo_og_image); if (p.meta?._seo_primary_category) setSeoPrimaryCategory(p.meta._seo_primary_category);
+    if (id) { api.get(`/posts/${id}/translations`).then(r => setTranslations(r.data?.translations || [])).catch(() => {});
+      api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setLang(p.lang || ''); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.categoryId || c.category?.id) || []); setTagNames(p.tags?.map((t: any) => t.name || t.tag?.name) || []); if (p.featured) setFeatured(p.featured); if (p.allowComments !== undefined) setAllowComments(p.allowComments); if (p.password) setPassword(p.password); if (p.siteId) setSiteId(p.siteId); if (p.authorId) setAuthorId(p.authorId); if (p.publishedAt) { const d = new Date(p.publishedAt); const pad = (n: number) => String(n).padStart(2, '0'); setPublishDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`); } if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); if (p.meta?._seo_title) setSeoTitle(p.meta._seo_title); if (p.meta?._seo_desc) setSeoDesc(p.meta._seo_desc); if (p.meta?._seo_noindex) setSeoNoindex(p.meta._seo_noindex === '1'); if (p.meta?._seo_canonical) setSeoCanonical(p.meta._seo_canonical); if (p.meta?._seo_og_image) setSeoOgImage(p.meta._seo_og_image); if (p.meta?._seo_primary_category) setSeoPrimaryCategory(p.meta._seo_primary_category);
       // Custom fields: load user-defined keys (system keys with _ prefixes are managed by their own panels)
       const systemKeys = ['_visual_css', '_seo_title', '_seo_desc', '_seo_noindex', '_seo_canonical', '_seo_og_image', '_seo_primary_category'];
       if (p.meta) setMetaFields(Object.entries(p.meta).filter(([k]) => !systemKeys.includes(k) && k.trim()).map(([key, value]) => ({ key, value: String(value) })));
@@ -158,7 +174,7 @@ export default function PostEditor() {
       const finalStatus = silent
         ? (status || 'draft')
         : (s === 'draft' ? 'draft' : (status === 'draft' || status === 'pending' ? 'published' : status));
-      const payload: any = { title, slug: slug || undefined, content, excerpt, status: finalStatus, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: finalStatus !== 'draft' && schedDate ? new Date(schedDate).toISOString() : undefined, authorId: authorId || undefined, siteId: siteId || null, allowComments, password };
+      const payload: any = { title, slug: slug || undefined, content, excerpt, status: finalStatus, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: finalStatus !== 'draft' && schedDate ? new Date(schedDate).toISOString() : undefined, authorId: authorId || undefined, siteId: siteId || null, allowComments, password, lang };
       // The list can open this editor for a custom post type (?type=<slug>); the
       // type is only sent on create — an existing entry keeps its type.
       if (!id && !createdIdRef.current && createType) payload.type = createType;
@@ -189,6 +205,21 @@ export default function PostEditor() {
   }
 
   function addTag() { if (tagInput.trim() && !tagNames.includes(tagInput.trim())) { setTagNames([...tagNames, tagInput.trim()]); setTagInput(''); } }
+
+  // Create (or jump to) the translation of this post in `target`. The server
+  // copies the content and categories into a draft so the translator starts from
+  // the source rather than from an empty editor.
+  async function translateInto(target: string) {
+    if (!id || translating) return;
+    setTranslating(true);
+    try {
+      const r = await api.post('/posts/' + id + '/translate', { lang: target });
+      toast.toast(t('translation created', getLang()).replace('{lang}', target));
+      if (r.data?.id) navigate('/posts/' + r.data.id + '/edit');
+    } catch (e: any) {
+      toast.toast(serverMessage(e, t('translation failed', getLang())), 'error');
+    } finally { setTranslating(false); }
+  }
 
   // ---- AI assistant for the editor ----
   async function runAi(action: string) {
@@ -349,9 +380,34 @@ export default function PostEditor() {
           placeholder: t('post slug', getLang()), className: 'input-field text-sm mb-2 font-mono',
           spellCheck: false, 'aria-label': t('post slug', getLang()),
         }),
-        React.createElement('p', { className: 'text-xs text-gray-500 break-all' }, postPath(permalink, slug || t('untitled', getLang()), true)),
+        React.createElement('p', { className: 'text-xs text-gray-500 break-all' }, postPath(permalink, slug || t('untitled', getLang()), true, lang)),
         React.createElement('p', { className: 'text-[11px] text-gray-400 mt-1' }, t('slug change hint', getLang())),
-        slug && React.createElement('button', { onClick: () => window.open(postPath(permalink, slug, true), '_blank'), className: 'text-xs text-primary-600 hover:text-primary-700 mt-1' }, t('view post', getLang()))
+        slug && React.createElement('button', { onClick: () => window.open(postPath(permalink, slug, true, lang), '_blank'), className: 'text-xs text-primary-600 hover:text-primary-700 mt-1' }, t('view post', getLang()))
+      ),
+      // Language + translations. Only shown once the site publishes more than one
+      // language, so a single-language install's editor is untouched.
+      langs.length > 1 && React.createElement('div', { className: 'card p-4' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 flex items-center gap-1.5' }, React.createElement(Languages, { size: 14 }), t('language', getLang())),
+        React.createElement(Select, { value: lang, onChange: (v: string) => setLang(v), className: 'input-field' },
+          langs.map(l => React.createElement('option', { key: l, value: l === defaultContentLang ? '' : l }, l === defaultContentLang ? t('default', getLang()) + ' (' + l + ')' : l))),
+        React.createElement('p', { className: 'text-[11px] text-gray-400 mt-1' }, t('content language hint', getLang())),
+        // The translation group: who else this article exists as. Empty until a
+        // translation is created.
+        translations.length > 1 && React.createElement('div', { className: 'mt-3 pt-3 border-t border-gray-100' },
+          React.createElement('p', { className: 'text-xs text-gray-500 mb-1.5' }, t('translations', getLang())),
+          React.createElement('ul', { className: 'space-y-1' }, translations.map(tr => React.createElement('li', { key: tr.id, className: 'flex items-center justify-between gap-2 text-xs' },
+            React.createElement('span', { className: 'text-gray-600' }, (tr.lang || defaultContentLang) + ' · ' + (tr.title || t('untitled', getLang())) + (tr.status !== 'published' ? ' (' + tr.status + ')' : '')),
+            tr.id === id
+              ? React.createElement('span', { className: 'text-gray-400' }, t('current', getLang()))
+              : React.createElement('button', { onClick: () => navigate('/posts/' + tr.id + '/edit'), className: 'text-primary-600 hover:text-primary-700' }, t('edit', getLang())))))
+        ),
+        // Creating one is only meaningful once the post exists (the translation
+        // points back at its source).
+        id && langs.filter(l => l !== defaultContentLang && !translations.some(tr => (tr.lang || '') === l)).map(l =>
+          React.createElement('button', {
+            key: l, disabled: translating, onClick: () => translateInto(l),
+            className: 'mt-3 w-full text-xs btn-secondary justify-center disabled:opacity-50',
+          }, translating ? t('creating', getLang()) + '…' : t('translate into', getLang()) + ' ' + l))
       ),
       // Discussion (matches the visual editor sidebar)
       React.createElement('div', { className: 'card p-4' },

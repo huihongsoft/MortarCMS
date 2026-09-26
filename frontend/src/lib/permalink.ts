@@ -6,6 +6,8 @@
 // settings fetch; every component builds post links through postPath() so a
 // change of prefix moves all of them at once. Falls back to /post/ when neither
 // source has a usable value.
+import { currentLangPrefix } from './contentLang';
+
 const DEFAULT_PREFIX = '/post/';
 const SLUG_TOKEN = '%slug%';
 const MAX_LENGTH = 120;
@@ -68,8 +70,12 @@ export function getPermalinkPrefix(): string {
 
 // Public path for a post. Slugs stay verbatim (they may be CJK), matching how
 // every link was built before the prefix became configurable.
+//
+// The language the visitor is reading goes in front (lib/contentLang), so a link
+// clicked on /en/… stays in English, while on the default language the result is
+// byte-for-byte what it always was.
 export function postPath(slug: unknown): string {
-  return prefix + String(slug ?? '');
+  return currentLangPrefix() + prefix + String(slug ?? '');
 }
 
 // react-router path for the configured prefix ('/blog/:slug'), so a direct visit

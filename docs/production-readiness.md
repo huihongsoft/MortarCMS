@@ -27,7 +27,7 @@ the maintainer, not a code change. Everything else below is in scope.
 | A4 | Backup/restore unreliable (DB only, retention bug, no pre-upgrade copy) | **done in 0.1.3** |
 | A5 | Versions drift from tags, no changelog, no release job | **done in 0.1.3** |
 | B1 | No redirect manager (slug changes break URLs) | **done in 0.1.3** |
-| B2 | No content i18n (no locale, translation groups, hreflang) | planned, batch 5 |
+| B2 | No content i18n (no locale, translation groups, hreflang) | **done in 0.1.3** (posts/pages; default language stays unprefixed) |
 | B3 | Search is `LIKE`, no full-text index | **done in 0.1.3** (SQLite FTS5 trigram; MySQL/PG keep LIKE) |
 | B4 | No CAPTCHA or submission limits on public forms | **done in 0.1.3** (local signals; no external CAPTCHA) |
 | B5 | Review workflow has no email, no queue screen | **done in 0.1.3** |
@@ -114,6 +114,14 @@ the maintainer, not a code change. Everything else below is in scope.
   `GET /api/health/ready` answers readiness (database up + schema current). The
   scheduled tasks finally have a screen: list, enable/disable, run now, last and
   next run, last error.
+- **Content languages**: the default language is served unprefixed and every
+  other one at `/<lang>/…`, which is what keeps an existing install's URLs intact
+  when it adds a translation. A post or page carries `lang`, versions of the same
+  content share a `translationGroup`, the sitemap and the injected head emit
+  `hreflang` (with `x-default`), the reader gets a language switcher, and the
+  editor can start a translation as a draft that already carries the source's
+  content and categories. `content_langs` decides which languages exist, so a
+  site that never fills it in has no prefixed URLs at all.
 - **Docs**: [troubleshooting.md](troubleshooting.md),
   [security-hardening.md](security-hardening.md),
   [upgrade-rollback.md](upgrade-rollback.md),
@@ -129,9 +137,10 @@ Each batch ends with the full test suite, all three builds and lint green.
   the synchronous `db.prepare()` call sites), finish the dialect coverage
   (`INSERT OR REPLACE`, `sqlite_master`/`PRAGMA` guards), logical backup and
   restore for MySQL/PostgreSQL, three-driver CI matrix.
-- **Batch 5 — content features**: taxonomy bulk merge, media folders and EXIF,
-  then complete content i18n (locale, translation groups, language URLs,
-  hreflang).
+- ~~**Batch 5 — content features**~~ **done in 0.1.3**: redirects with automatic
+  301s, local anti-spam, SQLite full-text search, the notification table and
+  review queue, taxonomy merge, media folders with per-image metadata, and
+  content languages (translation groups, language URLs, hreflang).
 - **Batch 6 — frontend**: server-side rendering with hydration across the
   themes; dialog focus trap, `aria-label` sweep, RTL, `Intl` formatting.
 - **Batch 7 — quality**: Playwright smoke tests over the critical path

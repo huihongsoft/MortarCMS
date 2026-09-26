@@ -57,6 +57,17 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
   301 automatically so the old URL keeps working. The screen adds 301/302,
   search, hit counts, a CSV import and an "automatic" marker for the rows the
   slug-change path writes.
+- **Content languages**: a post or page carries a language, and versions of the
+  same content are linked into a translation group. The site's default language
+  stays **unprefixed**, so adding a translation changes no existing URL (every
+  row written before this says "default"); other languages live at `/<lang>/…`.
+  The editor gains a language picker and a "translate into <lang>" action that
+  files a draft in the same group with the source's content and categories, the
+  sitemap emits `xhtml:link` alternates, the injected head emits `hreflang` plus
+  `x-default`, the reader gets a language switcher under the content, and
+  changing a published item's language writes a 301 the same way a slug change
+  does. `content_langs` lists the offered languages (Settings → General). A
+  single-language site is byte-for-byte unchanged.
 - **Two-factor auth that works**: TOTP secrets are base32 (an authenticator app
   can enrol them — the previous base64 secret could not be), encrypted at rest,
   and paired with ten single-use recovery codes. Existing secrets keep working.
@@ -145,8 +156,10 @@ for the full list with priorities.
   unless `SHARED_CACHE=1` / `RATE_LIMIT_STORE=db` (or `REDIS_URL`) is set.
 - MySQL/PostgreSQL remain experimental: pooled concurrency, full dialect
   coverage and logical backups for those drivers are not in yet.
-- Content is single-language: no per-post locale, translation grouping or
-  `hreflang`.
+- Content languages cover posts and pages (the two types with a public URL);
+  categories, tags and menus have no per-language variant, and there is no
+  bulk translation screen — translations are created one at a time from the
+  editor.
 - Search is full-text on SQLite only; MySQL and PostgreSQL still scan with LIKE.
 - The frontend is a client-rendered SPA with a crawler fallback rather than
   server rendering.

@@ -4,6 +4,8 @@ import useSEO from '../hooks/useSEO';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
 import { ContentSkeleton } from '../components/Skeleton';
+import { useContentAlternates } from '../components/LanguageLinks';
+import { langPathFor } from '../lib/contentLang';
 import { useTheme } from '../themes';
 
 export default function PageView({ settings }: { settings: Record<string, string> }) {
@@ -13,6 +15,8 @@ export default function PageView({ settings }: { settings: Record<string, string
   const [pwdSubmitting, setPwdSubmitting] = useState(false);
   // Must run unconditionally: hooks cannot be called after an early return
   const theme = useTheme();
+  // Other languages of this page, for the switcher under the content.
+  useContentAlternates(page?.translations);
 
   useEffect(() => {
     setPwdError(false);
@@ -28,21 +32,23 @@ export default function PageView({ settings }: { settings: Record<string, string
     title: page.title,
     description: page.excerpt || '',
     image: page.featured || undefined,
-    url: (settings.site_url || window.location.origin) + '/page/' + page.slug,
+    // The page's own language, not the URL's: a translated page is reachable
+    // under a prefix but must advertise one canonical URL.
+    url: (settings.site_url || window.location.origin) + langPathFor(page.lang, '/page/' + page.slug),
     jsonLd: [
       {
         '@context': 'https://schema.org',
         '@type': 'WebPage',
         name: page.title,
         description: page.excerpt || undefined,
-        url: (settings.site_url || window.location.origin) + '/page/' + page.slug,
+        url: (settings.site_url || window.location.origin) + langPathFor(page.lang, '/page/' + page.slug),
       },
       {
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
         itemListElement: [
           { '@type': 'ListItem', position: 1, name: t('home', settings), item: settings.site_url || window.location.origin },
-          { '@type': 'ListItem', position: 2, name: page.title, item: (settings.site_url || window.location.origin) + '/page/' + page.slug },
+          { '@type': 'ListItem', position: 2, name: page.title, item: (settings.site_url || window.location.origin) + langPathFor(page.lang, '/page/' + page.slug) },
         ],
       },
     ],

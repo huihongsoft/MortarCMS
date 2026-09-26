@@ -36,6 +36,8 @@ const zh: Record<string, string> = {
   'page not found': '页面未找到',
   'the page you are looking for might have been removed or is temporarily unavailable': '您访问的页面可能已被移除或暂时不可用',
   'back to home': '返回首页',
+  language: '语言',
+  'not translated yet': '暂无该语言的版本',
   'search results': '搜索结果',
   'showing results for': '正在显示',
   'enter a search term': '输入搜索词',

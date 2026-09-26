@@ -189,6 +189,13 @@ export default function Settings() {
             React.createElement('option', { value: 'en' }, 'English'),
             React.createElement('option', { value: 'zh' }, '中文')),
           React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, t('site language hint', getLang()))),
+        // The languages content can be written in. The default language above is
+        // always the first one and is served without a URL prefix, so adding a
+        // language here does not move any existing URL.
+        React.createElement('div', null,
+          React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('content languages', getLang())),
+          React.createElement('input', { type: 'text', value: settings.content_langs || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, content_langs: e.target.value }), className: 'input-field', placeholder: 'zh,en,ja' }),
+          React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, t('content languages hint', getLang()))),
         React.createElement('div', null,
           React.createElement('label', { className: 'block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1' }, t('date format', getLang())),
           React.createElement('input', { type: 'text', value: settings.date_format || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => setSettings({ ...settings, date_format: e.target.value }), className: 'input-field', placeholder: 'Y-m-d' }),

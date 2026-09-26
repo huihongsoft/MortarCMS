@@ -45,7 +45,15 @@ const listeners = new Set<(v: string) => void>();
 function load(): Promise<void> {
   if (inFlight) return inFlight;
   inFlight = api.get('/settings')
-    .then(r => { const v = r.data?.permalink_structure || ''; cached = v; listeners.forEach(fn => fn(v)); })
+    .then(r => {
+      const v = r.data?.permalink_structure || '';
+      // The default content language rides on the same response, so a post's
+      // preview URL can tell a translation (/en/post/x) from the default
+      // (/post/x) without a second request.
+      setDefaultContentLang(r.data?.site_lang);
+      cached = v;
+      listeners.forEach(fn => fn(v));
+    })
     // Deliberately not cached on failure: caching the failure pinned every later
     // render in the session to the default prefix, so "view" links pointed at
     // /post/<slug> (404) until the admin was reloaded. Leaving it null means the
@@ -80,7 +88,22 @@ export function usePermalinkPrefix(): string {
 }
 
 // Path for a post slug, optionally as a full URL (for the "view" links).
-export function postPath(structure: unknown, slug: unknown, absolute = false): string {
-  const path = permalinkPrefix(structure) + String(slug ?? '');
+//
+// `lang` is the post's own content language: the default language is served
+// unprefixed, a translation lives under /<lang>/…. Passing nothing (or the
+// default) gives exactly the path this built before.
+export function postPath(structure: unknown, slug: unknown, absolute = false, lang = ''): string {
+  const l = String(lang || '').trim().toLowerCase();
+  const path = (l && l !== defaultContentLang() ? '/' + l : '') + permalinkPrefix(structure) + String(slug ?? '');
   return absolute ? window.location.origin + path : path;
+}
+
+// The site's default content language, from the settings the panel already
+// loads; 'zh' matches the server's fallback when the setting is empty.
+let defaultLangCache = 'zh';
+export function setDefaultContentLang(lang: unknown): void {
+  defaultLangCache = String(lang || '').trim().toLowerCase() || 'zh';
+}
+export function defaultContentLang(): string {
+  return defaultLangCache;
 }

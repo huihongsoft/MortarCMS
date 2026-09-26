@@ -928,6 +928,19 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
     },
   },
   {
+    version: 26,
+    name: 'content-languages',
+    up: () => {
+      // Per-item language and a group id linking translations of the same content.
+      // '' means "the site's default language", so every existing row keeps the
+      // URL it already has (the default language is served unprefixed).
+      addColumn('Post', 'lang', "TEXT NOT NULL DEFAULT ''");
+      addColumn('Post', 'translationGroup', 'TEXT');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_post_lang ON Post (lang)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_post_translation_group ON Post (translationGroup)');
+    },
+  },
+  {
     version: 25,
     name: 'media-folders',
     up: () => {

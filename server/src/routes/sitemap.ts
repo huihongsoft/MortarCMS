@@ -5,6 +5,7 @@ import { SiteRequest } from '../middleware/site';
 import { effectiveSetting } from '../utils/siteSettings';
 import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
 import { postUrl, getPermalinkPrefix } from '../utils/slug';
+import { defaultLang, postPathForLang, pagePathForLang } from '../utils/contentLang';
 
 const router = Router();
 
@@ -30,11 +31,11 @@ router.get('/sitemap.xml', (req: AuthRequest & SiteRequest, res: Response) => {
 
     const now = new Date().toISOString();
     const posts = (req.siteId
-      ? db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type <> 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND (p.siteId IS NULL OR p.siteId = ?)" + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC').all(now, req.siteId)
-      : db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type <> 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC').all(now)) as any[];
+      ? db.prepare("SELECT p.slug, p.lang, p.translationGroup, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type <> 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND (p.siteId IS NULL OR p.siteId = ?)" + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC').all(now, req.siteId)
+      : db.prepare("SELECT p.slug, p.lang, p.translationGroup, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type <> 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC').all(now)) as any[];
     const pages = (req.siteId
-      ? db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type = 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND (p.siteId IS NULL OR p.siteId = ?)" + PUBLIC_POST_CONDITIONS).all(now, req.siteId)
-      : db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type = 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + PUBLIC_POST_CONDITIONS).all(now)) as any[];
+      ? db.prepare("SELECT p.slug, p.lang, p.translationGroup, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type = 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND (p.siteId IS NULL OR p.siteId = ?)" + PUBLIC_POST_CONDITIONS).all(now, req.siteId)
+      : db.prepare("SELECT p.slug, p.lang, p.translationGroup, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type = 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + PUBLIC_POST_CONDITIONS).all(now)) as any[];
     // Only listing pages that actually have content on THIS site: a global list
     // advertises URLs that render empty for the crawler (and, on a multi-site
     // install, URLs that belong to another site).
@@ -51,13 +52,38 @@ router.get('/sitemap.xml', (req: AuthRequest & SiteRequest, res: Response) => {
       ? db.prepare('SELECT DISTINCT u.username FROM User u JOIN Post p ON p.authorId = u.id WHERE ' + live).all(...siteArgs)
       : db.prepare('SELECT username FROM User WHERE role != ?').all('subscriber')) as any[];
 
-    let xml = '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
+    // The xhtml namespace is what carries the hreflang alternates below.
+    let xml = '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">';
     xml += '<url><loc>' + siteUrl + '</loc><changefreq>daily</changefreq><priority>1.0</priority></url>';
     // One prefix read for the whole loop: this walks every post, and postUrl
     // would otherwise re-read the Setting row per post.
     const prefix = getPermalinkPrefix();
-    for (const p of posts) xml += '<url><loc>' + esc(siteUrl + postUrl(p.slug, prefix)) + '</loc><lastmod>' + p.date + '</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>';
-    for (const p of pages) xml += '<url><loc>' + siteUrl + '/page/' + esc(p.slug) + '</loc><lastmod>' + p.date + '</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>';
+    // Translations of the same content are grouped so each entry can advertise the
+    // others; a single-language site has no groups and nothing changes.
+    const groups = new Map<string, { lang: string; url: string }[]>();
+    const collect = (row: any, url: string) => {
+      if (!row.translationGroup) return;
+      const list = groups.get(row.translationGroup) || [];
+      list.push({ lang: row.lang || defaultLang(), url });
+      groups.set(row.translationGroup, list);
+    };
+    const alternates = (row: any): string => {
+      const list = groups.get(row.translationGroup) || [];
+      if (list.length < 2) return '';
+      return list.map((a) => '<xhtml:link rel="alternate" hreflang="' + esc(a.lang) + '" href="' + esc(a.url) + '"/>').join('');
+    };
+    // First pass: know every member of each group before writing any entry.
+    for (const p of posts) collect(p, siteUrl + postPathForLang(p.slug, p.lang, prefix));
+    for (const p of pages) collect(p, siteUrl + pagePathForLang(p.slug, p.lang));
+
+    for (const p of posts) {
+      const url = siteUrl + postPathForLang(p.slug, p.lang, prefix);
+      xml += '<url><loc>' + esc(url) + '</loc>' + alternates(p) + '<lastmod>' + p.date + '</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>';
+    }
+    for (const p of pages) {
+      const url = siteUrl + pagePathForLang(p.slug, p.lang);
+      xml += '<url><loc>' + esc(url) + '</loc>' + alternates(p) + '<lastmod>' + p.date + '</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>';
+    }
     for (const c of categories) xml += '<url><loc>' + siteUrl + '/category/' + esc(c.slug) + '</loc><changefreq>weekly</changefreq><priority>0.5</priority></url>';
     for (const t of tags) xml += '<url><loc>' + siteUrl + '/tag/' + esc(t.slug) + '</loc><changefreq>weekly</changefreq><priority>0.4</priority></url>';
     for (const a of authors) xml += '<url><loc>' + siteUrl + '/author/' + esc(a.username) + '</loc><changefreq>weekly</changefreq><priority>0.3</priority></url>';

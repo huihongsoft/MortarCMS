@@ -5,13 +5,15 @@ import ThemeSection from './components/ThemeSection';
 import CookieConsent from './components/CookieConsent';
 import ScrollToTop from './components/ScrollToTop';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Routes, Route } from 'react-router-dom';
+import { AlternateLinks, AlternatesProvider } from './components/LanguageLinks';
+import { Routes, Route, useParams } from 'react-router-dom';
 import { ThemeProvider, useTheme } from './themes';
 import { sanitizeCss } from './lib/safeCss';
 import { headingCss } from './lib/typography';
 import api from './lib/api';
 import { initLightbox } from './lib/lightbox';
 import { setPermalinkPrefix, postRoutePath, permalinkFromShell } from './lib/permalink';
+import { isEnabledLang, setContentLangs } from './lib/contentLang';
 import { installCmsForms } from './lib/cmsForms';
 
 // lazyWithRetry: a lazy() wrapper whose failure falls through to the app
@@ -28,6 +30,21 @@ function lazyWithRetry(factory: () => Promise<{ default: React.ComponentType<any
 function AdminBounce() {
   React.useEffect(() => { window.location.replace('/admin/'); }, []);
   return null;
+}
+
+// Translated routes are registered as '/:lang/…' next to the unprefixed ones.
+// The default language is the unprefixed URL, so a ":lang" that is not a
+// language this site publishes must not render the default-language page under a
+// bogus prefix — it falls through to the 404 page instead.
+function LangGate({ children }: { children: React.ReactElement }) {
+  const params = useParams();
+  if (!isEnabledLang(params.lang)) return React.createElement(NotFound);
+  return children;
+}
+
+function langRoute(path: string, element: React.ReactElement) {
+  const routePath = path === '/' ? '/:lang' : '/:lang' + path;
+  return React.createElement(Route, { key: routePath, path: routePath, element: React.createElement(LangGate, null, element) });
 }
 
 // Route-level code splitting: Home stays eager (first paint), the rest load on demand
@@ -58,7 +75,11 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
   const headingCap = settings.theme_heading_cap === '1' ? 1 : (settings.theme_heading_cap === '2' ? 2 : (theme.typography?.cap || 2));
   const headingMax = parseInt(settings.theme_heading_max, 10) || theme.typography?.max || 24;
   const headingStyle = React.createElement('style', { key: 'theme-typography', dangerouslySetInnerHTML: { __html: ':root{--heading-max-size:' + headingMax + 'px}' + headingCss({ cap: headingCap, max: headingMax }) } });
-  return React.createElement('div', { className: 'min-h-screen flex flex-col' },
+  // AlternateLinksProvider wraps the routed content so a page can publish the
+  // languages it exists in; the switcher renders itself right after <main> and
+  // renders nothing at all unless the content has a translation.
+  return React.createElement(AlternatesProvider, null,
+    React.createElement('div', { className: 'min-h-screen flex flex-col' },
       headingStyle,
       React.createElement(AdminBar),
       React.createElement('a', { href: '#main-content', className: 'skip-link' }, 'Skip to content'),
@@ -97,6 +118,23 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
           React.createElement(Route, { path: '/tag/:slug', element: React.createElement(Home, { settings }) }),
           React.createElement(Route, { path: '/category/:slug', element: React.createElement(Home, { settings }) }),
           React.createElement(Route, { path: '/type/:slug', element: React.createElement(Home, { settings }) }),
+          // The same routes in a translation: /en/post/<slug>, /ja/category/news.
+          // Home covers the listing pages (home, tag, category, type), which are
+          // the ones that actually differ per language.
+          langRoute('/', React.createElement(Home, { settings })),
+          langRoute('/post/:slug', React.createElement(PostPage, { settings })),
+          postRoutePath() !== '/post/:slug'
+            ? langRoute(postRoutePath(), React.createElement(PostPage, { settings }))
+            : null,
+          langRoute('/page/:slug', React.createElement(PageView, { settings })),
+          langRoute('/archive/:year/:month', React.createElement(ArchivePage, { settings })),
+          langRoute('/archive/:year', React.createElement(ArchivePage, { settings })),
+          langRoute('/links', React.createElement(LinksPage, { settings })),
+          langRoute('/author/:username', React.createElement(AuthorPage, { settings })),
+          langRoute('/search', React.createElement(SearchPage, { settings })),
+          langRoute('/tag/:slug', React.createElement(Home, { settings })),
+          langRoute('/category/:slug', React.createElement(Home, { settings })),
+          langRoute('/type/:slug', React.createElement(Home, { settings })),
           // Admin lives in a separate SPA — SPA-internal clicks on /admin
           // links (e.g. menu items) get bounced there instead of a 404
           React.createElement(Route, { path: '/admin', element: React.createElement(AdminBounce) }),
@@ -106,6 +144,10 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
         ),
         React.createElement(ThemeSection, { settings, location: 'after_content' }),
       ),
+      // The switcher sits below the content it translates. It renders nothing
+      // unless the page published a translation list, so a single-language site
+      // is unaffected.
+      React.createElement(AlternateLinks, { settings }),
       React.createElement(ThemeSection, { settings, location: 'before_footer' }),
       // A theme may bring its own back-to-top button; only fall back to the
       // app-wide one, otherwise both render in the same corner.
@@ -113,6 +155,7 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
       React.createElement(CookieConsent, { settings }),
       React.createElement(theme.Footer, { settings }),
       React.createElement(ThemeSection, { settings, location: 'after_footer' })
+    )
   );
 }
 
@@ -134,7 +177,11 @@ export default function App() {
         if (!permalinkFromShell()) setPermalinkPrefix(parsed?.permalink_structure);
       }
     } catch {}
+    // The shell normally carries the language list (meta[name=mortar-langs]); this
+    // is the fallback for a shell served without it. Applied before the render
+    // that consumes it, and ignored once the shell has spoken.
     api.get('/settings').then(r => {
+      setContentLangs(r.data?.site_lang, r.data?.content_langs);
       setSettings(r.data);
       // Post URLs are built from this (lib/permalink): every theme and widget
       // reads it through postPath(), so one assignment moves all of them.

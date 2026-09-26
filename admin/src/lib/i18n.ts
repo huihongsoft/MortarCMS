@@ -1449,6 +1449,8 @@ const zh: Record<string, string> = {
 
 // Settings > General
 'site language hint': '站点前台默认语言；访客可在前台自行切换语言',
+'content languages': '内容语言',
+'content languages hint': '可撰写内容的语言，逗号分隔（如 zh,en,ja）。默认语言始终排在最前且不带 URL 前缀，因此新增语言不会改变任何现有链接。',
 'date format hint': '前台日期显示格式，如 Y-m-d、Y/m/d（PHP 日期格式）',
 'allow public registration hint': '允许访客在前台注册账号（可在"阅读设置"中指定默认角色）',
 
@@ -1839,6 +1841,13 @@ const zh: Record<string, string> = {
 'review failed': '审核失败',
 'post slug': '文章别名（URL）',
 'slug change hint': '修改别名后旧地址会自动 301 到新地址，不影响已有链接与搜索引擎收录。',
+'content language hint': '默认语言不带 URL 前缀，其他语言访问地址为 /语言/…。',
+translations: '其他语言版本',
+'not translated yet': '暂无该语言的版本',
+'translate into': '翻译为',
+'creating': '正在创建',
+'translation created': '已创建 {lang} 草稿',
+'translation failed': '创建翻译失败',
 'redirects': '重定向',
 'redirects hint': '旧地址跳转到新地址。修改已发布文章的别名时会自动生成 301，让旧链接（含搜索引擎结果）继续可用。',
 'from path': '来源路径',

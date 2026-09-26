@@ -73,6 +73,11 @@ const CONTENT_PREFIXES = [
 export function purgeContentCaches(): number {
   let n = 0;
   for (const p of CONTENT_PREFIXES) n += cacheDelPrefix(p);
+  // Content mutations change the sitemap too (a publish adds a URL, an unpublished
+  // or renamed post removes one), and it has its own 5-minute cache. Leaving it to
+  // purgeAllCaches meant a published post was missing from sitemap.xml until the
+  // TTL expired.
+  invalidateSitemap();
   bumpGeneration();
   return n;
 }
@@ -80,7 +85,7 @@ export function purgeContentCaches(): number {
 // Full flush, also drops the sitemap cache
 export function purgeAllCaches(): number {
   const n = cacheFlush();
-  try { invalidateSitemapCache(); } catch {}
+  invalidateSitemap();
   bumpGeneration();
   return n;
 }
@@ -137,7 +142,13 @@ function store0Flush(): void { store.clear(); }
 
 // Lazily imported to avoid a static cycle (sitemap.ts only imports db)
 function invalidateSitemapCache(): void {
-   
+
   const sitemap = require('../routes/sitemap') as { invalidateSitemapCache?: () => void };
   sitemap.invalidateSitemapCache?.();
+}
+
+// The require above can throw before the route module is loadable; a cache purge
+// must never take the mutation down with it.
+function invalidateSitemap(): void {
+  try { invalidateSitemapCache(); } catch { /* best effort */ }
 }
