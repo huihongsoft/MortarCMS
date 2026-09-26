@@ -829,6 +829,21 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
     },
   },
   {
+    version: 20,
+    name: 'rate-limit-counters',
+    up: () => {
+      // Counters that survive a restart and are shared by every process on the
+      // same database — the login lockout always, and the express-rate-limit
+      // windows when RATE_LIMIT_STORE=db (see utils/rateLimitStore.ts).
+      db.exec(`CREATE TABLE IF NOT EXISTS RateLimit (
+        key TEXT PRIMARY KEY,
+        hits INTEGER NOT NULL DEFAULT 0,
+        resetAt TEXT NOT NULL
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_ratelimit_reset ON RateLimit (resetAt)');
+    },
+  },
+  {
     version: 15,
     name: 'role-capability-alignment',
     up: () => {

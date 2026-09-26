@@ -13,6 +13,7 @@ import { flushViews } from './utils/views';
 import { buildSeoMeta, injectSeoMeta, isKnownRoute, buildRobotsTxt, buildCrawlerFallback } from './utils/seoMeta';
 import { appPasswordAuth, resolveOptionalUser } from './middleware/auth';
 import { securityHeaders } from './middleware/securityHeaders';
+import { rateLimitStore } from './utils/rateLimitStore';
 import pluginExtRoutes from './routes/pluginExt';
 import { doAction } from './utils/hooks';
 import authRoutes from './routes/auth';
@@ -122,7 +123,7 @@ app.use(pinoHttp({
 // Global API abuse floor: generous per-IP cap so a single client cannot
 // hammer public endpoints (feed, sitemap, search...). Specific endpoints
 // (auth, comments, passwords, AI) keep their own tighter limits.
-app.use('/api', rateLimit({ windowMs: 60 * 1000, max: 600, standardHeaders: true, message: { error: 'Too many requests, slow down' } }));
+app.use('/api', rateLimit({ windowMs: 60 * 1000, max: 600, standardHeaders: true, store: rateLimitStore(), message: { error: 'Too many requests, slow down' } }));
 app.use(resolveSite);
 // Visit tracking (PV/UV): record page views for non-API, non-asset requests.
 // Respects the visit_logging privacy setting (checked with a short cache).
@@ -154,7 +155,7 @@ app.use((req, res, next) => {
   next();
 });
 // Rate limiting for abuse-prone endpoints
-const commentLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, message: { error: 'Too many comments, slow down' } });
+const commentLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, store: rateLimitStore(), message: { error: 'Too many comments, slow down' } });
 // Maintenance mode middleware (auth + admin requests bypass so the site can be managed/recovered)
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/auth') || req.path.startsWith('/admin')) return next();

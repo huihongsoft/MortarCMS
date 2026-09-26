@@ -8,6 +8,7 @@ import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashCo
 import { SiteRequest } from '../middleware/site';
 import { slugify, uniqueSlug } from '../utils/slug';
 import { likeContains } from '../utils/sqlLike';
+import { rateLimitStore } from '../utils/rateLimitStore';
 import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
 import { applyFilters, doAction } from '../utils/hooks';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
@@ -19,7 +20,7 @@ import { loadCustomTypes } from './customPostTypes';
 
 const router = Router();
 // Protected-post password guessing is brute-forced per IP
-const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, message: { error: 'Too many attempts, slow down' } });
+const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, store: rateLimitStore(), message: { error: 'Too many attempts, slow down' } });
 
 // Lightweight "is this visitor logged in?" check for public routes that don't
 // mount the full authenticate middleware (members-only filtering). Delegates to

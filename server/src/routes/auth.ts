@@ -12,6 +12,7 @@ import { getRoleCapabilities } from '../middleware/auth';
 import { renderTemplate, sendEmail } from '../utils/mailer';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { generateSecret, verifyTOTP } from '../utils/totp';
+import { isLockedOut, recordLoginFailure, clearLoginFailures, rateLimitStore } from '../utils/rateLimitStore';
 import {
   sealSecret, readStoredSecret, generateRecoveryCodes, serializeRecoveryHashes,
   countRecoveryCodes, consumeRecoveryCode,
@@ -35,7 +36,7 @@ function logAuthFailure(userId: string | null, email: unknown, ip: unknown, reas
 // router-wide: applying it to /auth/me meant an admin browsing the panel ten
 // times in a minute got 429 there, and the admin client treats a failed session
 // lookup as a logged-out session.
-const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, message: { error: 'Too many attempts, try again later' } });
+const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, store: rateLimitStore(), message: { error: 'Too many attempts, try again later' } });
 // Password policy: >= 8 chars, at least one letter and one digit
 function passwordOk(pw: string): boolean {
   return pw.length >= 8 && /[a-zA-Z]/.test(pw) && /\d/.test(pw);
@@ -54,41 +55,16 @@ const loginSchema = z.object({ email: z.string().email().max(254), password: z.s
 // Keying by email alone would let an attacker lock a victim out of their own
 // account by deliberately failing 5 times; per-IP scoping keeps the brute
 // force protection while removing that denial-of-service vector.
-const loginFailures = new Map<string, { count: number; lockedUntil: number }>();
-function lockKey(email: string, ip: string): string { return email.toLowerCase() + '|' + (ip || ''); }
-// Memory cap: drop the oldest entries when the map grows unbounded (attacker
-// can otherwise grow it indefinitely with random emails).
-function pruneLoginFailures(): void {
-  if (loginFailures.size <= 10000) return;
-  const now = Date.now();
-  for (const [k, rec] of loginFailures) {
-    if (loginFailures.size <= 5000) break;
-    if (rec.lockedUntil <= now) loginFailures.delete(k);
-  }
-  // Still over the cap: evict oldest-inserted entries
-  let extra = loginFailures.size - 5000;
-  for (const k of loginFailures.keys()) {
-    if (extra <= 0) break;
-    loginFailures.delete(k); extra--;
-  }
-}
+//
+// The counters live in the database (utils/rateLimitStore). They used to be a
+// Map in this module, which meant restarting the process cleared every lockout —
+// and the map's size cap evicted entries under load, i.e. an attacker could
+// flush the protection by generating enough distinct addresses.
 function checkLock(email: string, ip: string): boolean {
-  pruneLoginFailures();
-  const rec = loginFailures.get(lockKey(email, ip));
-  if (!rec) return false;
-  if (rec.lockedUntil > Date.now()) return true;
-  // Only clean up expired *locks*; plain failure counters must persist
-  if (rec.lockedUntil > 0 && rec.lockedUntil <= Date.now()) loginFailures.delete(lockKey(email, ip));
-  return false;
+  return isLockedOut(email, ip);
 }
 function recordFailure(email: string, ip: string): void {
-  pruneLoginFailures();
-  const key = lockKey(email, ip);
-  const before = loginFailures.get(key);
-  const rec = before || { count: 0, lockedUntil: 0 };
-  rec.count++;
-  if (rec.count >= 5) { rec.lockedUntil = Date.now() + 15 * 60 * 1000; rec.count = 0; }
-  loginFailures.set(key, rec);
+  recordLoginFailure(email, ip);
 }
 
 router.post('/register', authLimiter, async (req: AuthRequest, res: Response) => {
@@ -166,7 +142,7 @@ router.post('/login', authLimiter, async (req: AuthRequest, res: Response) => {
       logAuthFailure(user.id, data.email, ip, 'wrong_password');
       res.status(401).json({ error: 'Invalid credentials' }); return;
     }
-    loginFailures.delete(lockKey(data.email, ip));
+    clearLoginFailures(data.email, ip);
     // 2FA challenge: issue a short-lived temp token, final token comes after code verification
     if (user.two_factor_enabled) {
       const tempToken = signToken({ userId: user.id, role: user.role, type: '2fa' }, '5m');

@@ -87,8 +87,14 @@ counters, DB query timing and scheduler run state is on the roadmap in
 
 ## Multi-instance caveat
 
-Caches, rate limiters and the scheduler hold state in process memory, so a
-deployment with more than one replica has per-replica limits and runs every
-scheduled task on every replica. The application documents single-instance as its
-supported topology (`docs/deployment.md`); if you run replicas anyway, expect
-duplicate task runs and watch the backup directory for duplicates.
+Caches and the scheduler hold state in process memory, so a deployment with more
+than one replica runs every scheduled task on every replica and its page cache is
+per-replica. The application documents single-instance as its supported topology
+(`docs/deployment.md`); if you run replicas anyway, expect duplicate task runs and
+watch the backup directory for duplicates.
+
+Rate limiting is the one piece that is already shareable: the login lockout is
+always database-backed, and setting `RATE_LIMIT_STORE=db` moves the
+express-rate-limit windows there too (see `utils/rateLimitStore.ts` for the
+trade-off — the default keeps them in-process because the global limiter runs on
+every request).

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, requireCap, userCan, AuthRequest } from '../middleware/auth';
+import { rateLimitStore } from '../utils/rateLimitStore';
 import { SiteRequest } from '../middleware/site';
 import { uniqueSlug } from '../utils/slug';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
@@ -14,7 +15,7 @@ import { doAction } from '../utils/hooks';
 
 const router = Router();
 // Protected-page password guessing is brute-forced per IP
-const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, message: { error: 'Too many attempts, slow down' } });
+const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, store: rateLimitStore(), message: { error: 'Too many attempts, slow down' } });
 
 // Visual-editor CSS is rendered into a <style> tag on the public site — strip
 // dangerous primitives at write time (mirrors the guard in routes/posts.ts).

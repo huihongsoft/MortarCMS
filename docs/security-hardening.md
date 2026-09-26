@@ -71,7 +71,8 @@ site on the public internet.
   login (an unknown account takes the same time as a wrong password).
 - **Rate limits**: global `/api` cap, tighter limits on auth routes, comment
   submission, protected-post unlocking and the destructive DB tools, plus a
-  per-account+IP login lockout.
+  per-account+IP login lockout. The lockout is stored in the database, so it
+  survives a restart and is shared by every process on the same database.
 - **Headers**: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
   `Referrer-Policy`, `Permissions-Policy`; HSTS in production; a restrictive CSP
   on the uploads and theme static trees.
@@ -94,8 +95,9 @@ site on the public internet.
 
 - The app-wide CSP is report-only until you set `CSP_ENFORCE=1`; a plugin
   screen's inline scripts are the thing to check before flipping it.
-- Rate limits and the login lockout are in-process, so they reset on restart and
-  are not shared across instances.
+- The express-rate-limit windows are in-process unless you set
+  `RATE_LIMIT_STORE=db`, so per-instance counters reset on restart. The login
+  lockout is always shared (database-backed): a restart no longer clears it.
 - No CAPTCHA on public forms (comments and form submissions rely on a honeypot
   plus the optional AI review).
 - Plugin and market packages are not signed.

@@ -3,6 +3,7 @@ import rateLimit from 'express-rate-limit';
 import db, { cuid, withTransaction } from '../utils/db';
 import { uniqueSlug, postUrl } from '../utils/slug';
 import { authenticate, requireCap, userCan, AuthRequest } from '../middleware/auth';
+import { rateLimitStore } from '../utils/rateLimitStore';
 import {
   AIProvider, PROVIDER_PRESETS, getProviders, saveProviders, getDefaultProvider,
   setDefaultProvider, chatComplete, pushAssistantWithTools, pushToolResults, testProvider,
@@ -1284,7 +1285,7 @@ router.delete('/sessions/:id', authenticate, (req: AuthRequest, res: Response) =
 // These consume paid provider calls, so they go through the same daily budget
 // and per-user throttle as every other AI endpoint — they used to bypass both,
 // which made them the cheapest way to burn the account's quota.
-const imageLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, message: { error: 'Too many image requests, slow down' } });
+const imageLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, store: rateLimitStore(), message: { error: 'Too many image requests, slow down' } });
 // Rough cost of one image request, expressed in the token unit the budget uses.
 const IMAGE_TOKEN_EQUIVALENT = 5000;
 
@@ -1503,7 +1504,7 @@ router.delete('/bindings/:id', authenticate, (req: AuthRequest, res: Response) =
 // ---- Webhook entry: WeChat/DingTalk bots post here ----
 // Accepts { message } (simplified) or WeChat-style { Content } / DingTalk-style { text: { content } }
 // Webhook endpoints consume AI tokens on every call — bound them per IP
-const webhookLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, message: { error: 'Too many webhook calls, slow down' } });
+const webhookLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, standardHeaders: true, store: rateLimitStore(), message: { error: 'Too many webhook calls, slow down' } });
 // GET: informational, so the endpoint can be verified in a browser (WeChat/
 // DingTalk bots call it with POST, which browsers cannot send). Never echoes
 // binding details — the token is a secret.

@@ -7,6 +7,7 @@ import db, { listSlowQueries, DB_PATH, closeDb } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { assertArchiveWithinLimits, archiveKind } from '../utils/archive';
+import { rateLimitStore } from '../utils/rateLimitStore';
 import { logger } from '../utils/logger';
 import { resetSite, importDemoData } from '../utils/demo';
 import { UPLOADS_DIR as uploadsDir } from '../utils/paths';
@@ -248,6 +249,7 @@ const resetLimiter = rateLimit({
   windowMs: 60 * 60 * 1000,
   max: 6,
   standardHeaders: true,
+  store: rateLimitStore(),
   message: { error: 'Too many reset requests, try again later' },
 });
 

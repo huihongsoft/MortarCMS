@@ -12,6 +12,7 @@ import { uploadPath, resolveUploadUrl } from '../utils/paths';
 import { getStorageConfig, storeFile, deleteRemoteFile, keyFromUrl } from '../utils/storage';
 import { stripEventHandlerAttrs, stripUnsafeUrlAttrs } from '../utils/sanitize';
 import { likeContains } from '../utils/sqlLike';
+import { rateLimitStore } from '../utils/rateLimitStore';
 import { logger } from '../utils/logger';
 
 const router = Router();
@@ -19,7 +20,7 @@ const router = Router();
 // The public image-variant endpoint is unauthenticated (it serves <img> tags),
 // so it is rate-limited per IP to prevent anonymous CPU/disk exhaustion via
 // unique ?w=/fmt= combinations.
-const imageVariantLimiter = rateLimit({ windowMs: 60 * 1000, max: 90, standardHeaders: true, message: { error: 'Too many image requests, slow down' } });
+const imageVariantLimiter = rateLimit({ windowMs: 60 * 1000, max: 90, standardHeaders: true, store: rateLimitStore(), message: { error: 'Too many image requests, slow down' } });
 
 // Backfill responsive variants (thumbnail + 480/960 webp srcset) for legacy
 // uploads. Runs in the background so list requests stay fast; the DB row is
