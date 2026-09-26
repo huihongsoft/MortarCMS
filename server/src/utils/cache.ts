@@ -1,5 +1,14 @@
+import { sharedStoreIfConfigured } from './sharedStore';
+
 // In-memory TTL cache for public page/API responses with prefix-based purging.
 // Content mutations call purgeContentCaches(); settings changes purge everything.
+//
+// Cross-instance invalidation uses a generation counter rather than moving the
+// cache itself into shared storage: the hot path stays a synchronous Map lookup
+// (a shared read per request would add a network round trip, or a database query,
+// to every cached response), while each instance polls the counter and flushes
+// its local map when another instance purged. Without a shared store configured
+// nothing changes.
 interface Entry { value: any; at: number }
 
 const store = new Map<string, Entry>();
@@ -64,6 +73,7 @@ const CONTENT_PREFIXES = [
 export function purgeContentCaches(): number {
   let n = 0;
   for (const p of CONTENT_PREFIXES) n += cacheDelPrefix(p);
+  bumpGeneration();
   return n;
 }
 
@@ -71,8 +81,59 @@ export function purgeContentCaches(): number {
 export function purgeAllCaches(): number {
   const n = cacheFlush();
   try { invalidateSitemapCache(); } catch {}
+  bumpGeneration();
   return n;
 }
+
+// ---- Cross-instance invalidation ----
+//
+// `cache:generation` lives in the shared store. A process that purges bumps it;
+// every process polls it and drops its local map when it changes. The poll is
+// the only cross-process traffic, and only when a shared store is configured.
+const GENERATION_KEY = 'cache:generation';
+const GENERATION_TTL_MS = 7 * 86_400_000;
+let localGeneration = -1;
+let coherenceTimer: NodeJS.Timeout | null = null;
+
+function bumpGeneration(): void {
+  // Fire-and-forget: a purge must not block on (or fail because of) the store.
+  void (async () => {
+    try {
+      const store = await sharedStoreIfConfigured();
+      if (store) await store.incr(GENERATION_KEY, GENERATION_TTL_MS);
+    } catch { /* best effort */ }
+  })();
+}
+
+/** Start polling the shared generation. No-op without a shared store. */
+export function startCacheCoherence(intervalMs = 2000): void {
+  if (coherenceTimer) return;
+  void (async () => {
+    const store = await sharedStoreIfConfigured();
+    if (!store) return; // single-instance install: nothing to keep in step
+    coherenceTimer = setInterval(async () => {
+      try {
+        const gen = Number((await store.get(GENERATION_KEY)) || 0);
+        if (localGeneration === -1) { localGeneration = gen; return; }
+        if (gen !== localGeneration) {
+          localGeneration = gen;
+          store0Flush();
+        }
+      } catch { /* keep serving from the local cache */ }
+    }, intervalMs);
+    coherenceTimer.unref?.();
+  })();
+}
+
+/** Stop the poller (tests, shutdown). */
+export function stopCacheCoherence(): void {
+  if (coherenceTimer) { clearInterval(coherenceTimer); coherenceTimer = null; }
+  localGeneration = -1;
+}
+
+// Named so the poller does not read as clearing the shared store by mistake.
+function store0Flush(): void { store.clear(); }
+
 
 // Lazily imported to avoid a static cycle (sitemap.ts only imports db)
 function invalidateSitemapCache(): void {

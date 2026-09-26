@@ -9,6 +9,7 @@ import fs from 'fs';
 import { config, assertValidConfig, APP_VERSION } from './utils/config';
 import db, { initDB, closeDb } from './utils/db';
 import { logger } from './utils/logger';
+import { countRequest, startMetrics } from './utils/metrics';
 import { flushViews } from './utils/views';
 import { buildSeoMeta, injectSeoMeta, isKnownRoute, buildRobotsTxt, buildCrawlerFallback } from './utils/seoMeta';
 import { appPasswordAuth, resolveOptionalUser } from './middleware/auth';
@@ -40,7 +41,9 @@ import cacheAdminRoutes from './routes/cacheAdmin';
 import mailerRoutes from './routes/mailer';
 import tasksRoutes from './routes/tasks';
 import { registerBuiltinTasks, startScheduler, stopScheduler, runTaskNow } from './utils/scheduler';
-import { cacheGet, cacheSet, cacheConfigure, purgeContentCaches, purgeAllCaches } from './utils/cache';
+import metricsRoutes from './routes/metrics';
+import { schemaVersion } from './utils/db';
+import { cacheGet, cacheSet, cacheConfigure, purgeContentCaches, purgeAllCaches, startCacheCoherence } from './utils/cache';
 import importRoutes from './routes/import';
 import pluginsRoutes from './routes/plugins';
 import siteRoutes from './routes/sites';
@@ -96,6 +99,14 @@ app.use(cors({
 app.set('trust proxy', config.trustProxy);
 
 app.use(securityHeaders());
+
+// Request counters for /metrics. Method and status class only — a path label
+// would be unbounded (ids in the URL) and would echo user input into a scrape
+// response.
+app.use((req: any, res: any, next: any) => {
+  res.on('finish', () => countRequest(req.method, res.statusCode));
+  next();
+});
 
 // Request logging with a correlation id (honours an inbound X-Request-Id so a
 // reverse proxy / client can tie logs together; echoes it back on the response).
@@ -410,8 +421,29 @@ app.use('/api', hooksRoutes);
 app.use('/api', cacheAdminRoutes);
 app.use('/api', mailerRoutes);
 app.use('/api', tasksRoutes);
+// Prometheus exposition (aggregate only, unauthenticated — see the route).
+app.use('/metrics', metricsRoutes);
 
 app.get('/api/health', (_req, res) => { res.json({ status: 'ok', version: APP_VERSION }); });
+
+// Readiness: can this process actually serve traffic? Liveness (/api/health)
+// only says the event loop is turning; a probe that restarts on this answer must
+// know whether the database is reachable and the schema current, or it will keep
+// a process in the load balancer while every request fails.
+app.get('/api/health/ready', (_req, res) => {
+  try {
+    db.prepare('SELECT 1').get();
+  } catch {
+    res.status(503).json({ ready: false, reason: 'database unavailable' });
+    return;
+  }
+  const schema = schemaVersion();
+  if (schema.applied < schema.latest) {
+    res.status(503).json({ ready: false, reason: 'schema migrations pending', schema });
+    return;
+  }
+  res.json({ ready: true, version: APP_VERSION, schema });
+});
 
 // robots.txt (honors the blog_public SEO setting, per site)
 app.get('/robots.txt', (req, res) => {
@@ -603,6 +635,10 @@ if (fs.existsSync(frontendDist)) {
 // Scheduled tasks: auto-publish, trash purge, activity pruning, db maintenance
 registerBuiltinTasks();
 startScheduler();
+startMetrics();
+// Keeps this instance's page cache in step with the others when a shared store
+// is configured (no-op otherwise) — see utils/cache.ts.
+startCacheCoherence();
 void runTaskNow('publish_scheduled'); // catch up on due posts at boot
 
 // Apply page cache settings persisted by the admin tools panel

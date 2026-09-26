@@ -55,6 +55,7 @@ export const ROUTE_ACCESS: Record<string, AccessRule> = {
   // Login attempts carry addresses and source IPs, so this stays with the
   // superuser screens rather than with manage_security (which editors hold).
   '/login-audit': { cap: 'manage_system' },
+  '/system-tasks': { cap: 'manage_options' },   // same guard as /system/tasks
   '/sysinfo': { cap: 'manage_system' },
   '/stats': { cap: 'manage_options' },
   '/hooks': { cap: 'view_system_info' },

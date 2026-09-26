@@ -8,6 +8,7 @@ import { doAction } from './hooks';
 import { purgeContentCaches, purgeAllCaches } from './cache';
 import { postUrl } from './slug';
 import { createBackupArchive, pruneBackups } from './backup';
+import { sharedStore } from './sharedStore';
 
 export interface TaskDef {
   id: string;
@@ -30,6 +31,27 @@ interface TaskState {
 
 const tasks = new Map<string, { def: TaskDef; state: TaskState }>();
 
+// When a task last ran, persisted. It used to live only in memory, so every
+// restart made every task look due and run it immediately — which is how the
+// weekly AI report got mailed on each deploy. Persisting it also stops a second
+// instance from repeating what the first one just did.
+function lastRunKey(id: string): string { return 'task_' + id + '_last_run'; }
+
+function readLastRun(id: string): number | null {
+  try {
+    const row = db.prepare('SELECT value FROM Setting WHERE key = ?').get(lastRunKey(id)) as any;
+    const n = Number(row?.value);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  } catch { return null; }
+}
+
+function writeLastRun(id: string, at: number): void {
+  try {
+    db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+      .run(lastRunKey(id), lastRunKey(id), String(at));
+  } catch { /* best effort — a missed timestamp costs a duplicate run, not correctness */ }
+}
+
 export function registerTask(def: TaskDef): void {
   let enabled = true;
   try {
@@ -38,7 +60,7 @@ export function registerTask(def: TaskDef): void {
   } catch {}
   tasks.set(def.id, {
     def,
-    state: { enabled, running: false, lastRun: null, lastStatus: null, runCount: 0 },
+    state: { enabled, running: false, lastRun: readLastRun(def.id), lastStatus: null, runCount: 0 },
   });
 }
 
@@ -62,10 +84,28 @@ export function listTasks(): any[] {
   }));
 }
 
-export async function runTaskNow(id: string): Promise<{ ok: boolean; error?: string; ms: number }> {
+// Only one process may run a given task at a time. The lock lives in the shared
+// store (the database by default) and is released as soon as the task finishes;
+// the TTL is the safety net for a process that dies mid-run — after it expires
+// another instance may start the task, which is the right trade-off against a
+// task being blocked forever by a crashed holder.
+const TASK_LOCK_TTL_MS = 15 * 60_000;
+
+export async function runTaskNow(id: string): Promise<{ ok: boolean; error?: string; ms: number; skipped?: boolean }> {
   const t = tasks.get(id);
   if (!t) return { ok: false, error: 'Unknown task', ms: 0 };
+  if (t.state.running) return { ok: false, error: 'Task is already running', ms: 0, skipped: true };
+
+  const store = await sharedStore();
+  const release = await store.acquireLock('lock:task:' + id, TASK_LOCK_TTL_MS);
+  if (!release) {
+    // Another instance is running it. Reported rather than silently ignored: an
+    // operator clicking "run now" deserves to know why nothing happened.
+    return { ok: false, error: 'Another instance is running this task right now', ms: 0, skipped: true };
+  }
+
   const t0 = Date.now();
+  t.state.running = true;
   try {
     await t.def.fn();
     t.state.lastStatus = 'ok';
@@ -77,7 +117,9 @@ export async function runTaskNow(id: string): Promise<{ ok: boolean; error?: str
   t.state.lastDurationMs = Date.now() - t0;
   t.state.runCount++;
   t.state.lastRun = Date.now();
+  writeLastRun(id, t.state.lastRun);
   t.state.running = false;
+  await release().catch(() => {});
   // Plugins/webhooks can report or alert on scheduled work (failures included).
   try { doAction('task_run', id, t.state.lastStatus === 'ok', t.state.lastError || '', t.state.lastDurationMs); } catch {}
   return { ok: t.state.lastStatus === 'ok', error: t.state.lastError, ms: t.state.lastDurationMs };
@@ -101,8 +143,10 @@ export function startScheduler(tickMs = 30000): void {
     const now = Date.now();
     for (const { def, state } of tasks.values()) {
       if (!state.enabled || state.running) continue;
+      // lastRun is the persisted one, so a restart no longer re-runs everything.
       if (state.lastRun !== null && now - state.lastRun < def.intervalMs) continue;
-      state.running = true;
+      // runTaskNow owns the running flag and the cross-instance lock; a second
+      // tick lands on the flag or loses the lock race and is skipped.
       runTaskNow(def.id).catch(() => {});
     }
   }, tickMs);

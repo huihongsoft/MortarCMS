@@ -844,6 +844,23 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
     },
   },
   {
+    version: 21,
+    name: 'shared-cache',
+    up: () => {
+      // Keys shared between processes: the scheduler's leader lock, the page
+      // cache generation, and anything else that must agree across instances
+      // (see utils/sharedStore.ts). Rows carry their own expiry; the store prunes
+      // opportunistically, and `expiresAt` is indexed because the lock steal and
+      // the prune both filter on it.
+      db.exec(`CREATE TABLE IF NOT EXISTS SharedCache (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL,
+        expiresAt TEXT
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_sharedcache_expires ON SharedCache (expiresAt)');
+    },
+  },
+  {
     version: 15,
     name: 'role-capability-alignment',
     up: () => {
@@ -936,6 +953,22 @@ export const BUILTIN_ROLES: { slug: string; name: string; capabilities: string[]
 function seedBuiltinRoles(): void {
   const stmt = db.prepare("INSERT OR IGNORE INTO Role (id, slug, name, capabilities, isSystem, createdAt) VALUES (?, ?, ?, ?, 1, '2024-01-01')");
   for (const r of BUILTIN_ROLES) stmt.run('role-' + r.slug, r.slug, r.name, JSON.stringify(r.capabilities));
+}
+
+/**
+ * Schema state, for the readiness probe and the metrics endpoint: how many
+ * migrations the ledger says were applied, and how many exist in this build.
+ * `applied < latest` means the running process is on an older schema than its
+ * code — which a readiness probe should treat as "not ready to serve".
+ */
+export function schemaVersion(): { applied: number; latest: number } {
+  const latest = MIGRATIONS.length ? Math.max(...MIGRATIONS.map((m) => m.version)) : 0;
+  let appliedVersions: number[] = [];
+  try {
+    appliedVersions = (db.prepare('SELECT version FROM _SchemaMigration').all() as any[]).map((r) => Number(r.version));
+  } catch { /* the ledger table is created by initDB; absent means nothing applied */ }
+  const applied = MIGRATIONS.filter((m) => appliedVersions.includes(m.version)).length;
+  return { applied, latest: MIGRATIONS.length };
 }
 
 // Add-only top-up of the built-in role rows: only missing defaults are added, so

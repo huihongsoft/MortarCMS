@@ -22,7 +22,7 @@ the maintainer, not a code change. Everything else below is in scope.
 | # | Gap | Status |
 |---|---|---|
 | A1 | License blocks commercial use | **open** — maintainer decision |
-| A2 | Single-instance only: in-memory caches, rate limits, scheduler | planned, batch 3 |
+| A2 | Single-instance only: in-memory caches, rate limits, scheduler | **done in 0.1.3** (safe by default; `SHARED_CACHE=1` / `REDIS_URL` for replicas) |
 | A3 | MySQL/PostgreSQL are experimental, not real support | planned, batch 4 |
 | A4 | Backup/restore unreliable (DB only, retention bug, no pre-upgrade copy) | **done in 0.1.3** |
 | A5 | Versions drift from tags, no changelog, no release job | **done in 0.1.3** |
@@ -33,7 +33,7 @@ the maintainer, not a code change. Everything else below is in scope.
 | B5 | Review workflow has no email, no queue screen | planned, batch 5 |
 | B6 | No taxonomy bulk merge/rename | planned, batch 5 |
 | B7 | No media folders, no EXIF, no video transcoding | planned, batch 5 |
-| B8 | Scheduler has a backend but no admin screen | planned, batch 3 |
+| B8 | Scheduler has a backend but no admin screen | **done in 0.1.3** |
 | B9 | Client-rendered SPA only (crawler fallback, no SSR) | planned, batch 6 |
 | B10 | Accessibility: no focus trap, sparse `aria-label`, no RTL | planned, batch 6 |
 | B11 | `siteId` columns had no index; admin `limit` unclamped; LIKE unescaped | **done in 0.1.3** |
@@ -74,6 +74,15 @@ the maintainer, not a code change. Everything else below is in scope.
   report-only, `CSP_ENFORCE=1` enforces it once a session has been watched. The
   login lockout moved into the database, so a restart no longer clears it, and
   plugin archives get a SHA-256 that a catalog can require before extraction.
+- **Operations and multi-instance**: the scheduler takes a leader lock and
+  remembers each task's last run in the database — a restart no longer re-runs
+  every task, and a second instance no longer repeats what the first did. A
+  `sharedStore` (database by default, Redis via `REDIS_URL`) carries the page
+  cache generation, so one instance's purge reaches the others without putting a
+  shared read on the request path. `GET /metrics` serves Prometheus text and
+  `GET /api/health/ready` answers readiness (database up + schema current). The
+  scheduled tasks finally have a screen: list, enable/disable, run now, last and
+  next run, last error.
 - **Docs**: [troubleshooting.md](troubleshooting.md),
   [security-hardening.md](security-hardening.md),
   [upgrade-rollback.md](upgrade-rollback.md),
@@ -85,10 +94,6 @@ the maintainer, not a code change. Everything else below is in scope.
 
 Each batch ends with the full test suite, all three builds and lint green.
 
-- **Batch 3 — operations and multi-instance**: a `sharedStore` abstraction (DB by
-  default, Redis when `REDIS_URL` is set) behind the page cache, role/site
-  caches, view counters and scheduler state; a scheduler leader lock; `/metrics`
-  and a readiness probe; a scheduled-task admin screen; log rotation guidance.
 - **Batch 4 — remote databases**: pool + multi-thread the worker bridge (keeping
   the synchronous `db.prepare()` call sites), finish the dialect coverage
   (`INSERT OR REPLACE`, `sqlite_master`/`PRAGMA` guards), logical backup and

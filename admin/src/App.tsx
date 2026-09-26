@@ -27,6 +27,7 @@ const HooksBrowser = React.lazy(() => import('./pages/HooksBrowser'));
 const ApiDocs = React.lazy(() => import('./pages/ApiDocs'));
 const ActivityPage = React.lazy(() => import('./pages/Activity'));
 const LoginAudit = React.lazy(() => import('./pages/LoginAudit'));
+const SystemTasks = React.lazy(() => import('./pages/SystemTasks'));
 const CustomTypes = React.lazy(() => import('./pages/CustomTypes'));
 const Import = React.lazy(() => import('./pages/Import'));
 const Plugins = React.lazy(() => import('./pages/Plugins'));
@@ -127,6 +128,7 @@ function AnimatedRoutes() {
       screen('/links', React.createElement(Links)),
       screen('/security', React.createElement(Security)),
       screen('/login-audit', React.createElement(LoginAudit)),
+      screen('/system-tasks', React.createElement(SystemTasks)),
       screen('/widgets', React.createElement(Widgets)),
       screen('/appearance', React.createElement(Appearance)),
       screen('/post-types', React.createElement(CustomTypes)),

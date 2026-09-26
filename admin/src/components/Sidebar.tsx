@@ -64,6 +64,7 @@ const groups: { title: string; items: { to: string; icon: any; label: string; de
       // Always visible (not developer-mode only): a failed-login burst is
       // something an operator needs to see without knowing a hidden toggle.
       { to: '/login-audit', icon: ShieldAlert, label: t('login audit', getLang()) },
+      { to: '/system-tasks', icon: Workflow, label: t('scheduled tasks', getLang()) },
       { to: '/sysinfo', icon: ServerIcon, label: t('system', getLang()), devModeOnly: true },
       { to: '/stats', icon: BarChart3, label: t('visit stats', getLang()) },
       { to: '/hooks', icon: Workflow, label: t('hooks browser', getLang()), devModeOnly: true },

@@ -154,6 +154,15 @@ JWT_SECRET=<long-random-string>
 # per-request id echoed as X-Request-Id.
 # LOG_LEVEL=info
 
+# Shared state between instances: the scheduler's leader lock always lives in the
+# database, and this also moves the page-cache generation there so one instance's
+# purge reaches the others. Set it when several processes serve the same site.
+# SHARED_CACHE=1
+
+# Use Redis for shared state instead of the database (needs `npm i redis` in
+# server/). Falls back to the database with a warning if the client is missing.
+# REDIS_URL=redis://127.0.0.1:6379
+
 # Where backup archives and pre-migration snapshots are written
 # (default: server/backups). Point it at another volume/disk when you can.
 # MORTAR_BACKUPS_DIR=/mnt/backups/mortar

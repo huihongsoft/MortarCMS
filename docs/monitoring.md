@@ -68,22 +68,43 @@ There is no in-app rotation: use logrotate/journald. A suggested policy:
   and result; a `db_last_backup` setting that stops advancing means backups have
   stopped.
 
-## Metrics (not implemented)
+## Metrics
 
-There is no Prometheus/OpenMetrics endpoint, no OpenTelemetry tracing and no
-error-reporting integration. If you need them today:
+`GET /metrics` serves Prometheus text (no client library). It is
+**unauthenticated**, like `/api/health`, so a scraper can reach it — everything
+in it is an aggregate: request counts by method and status class, process memory
+and uptime, page-cache size, per-task last-run timestamps and run counts, database
+reachability and schema state. No paths, no IPs, no addresses. If that is still
+too much, block the path at the proxy or scrape it over a private network.
 
-- **Blackbox**: poll the health endpoints and expose `probe_success` /
-  `probe_duration_seconds` from your monitoring stack.
-- **Process**: `node_exporter`/`process-exporter` gives CPU, RSS, file
-  descriptors and restart counts.
-- **Traffic**: measure at the reverse proxy (request rate, status classes,
-  latency percentiles) — the app's own counters are per-process and reset on
-  restart.
+```
+scrape_configs:
+  - job_name: mortar
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['mortar.example.com:3001']
+```
 
-Adding `/metrics` (Prometheus text format, no new dependency) with request
-counters, DB query timing and scheduler run state is on the roadmap in
-`docs/production-readiness.md`.
+Worth alerting on: `mortar_db_ready == 0`, `rate(mortar_http_requests_total{status="5xx"}[5m])`
+rising, `time() - mortar_scheduler_task_last_run_timestamp{task="backup_database"}`
+older than 1.5× the interval (the backup stopped running), and
+`mortar_schema_migrations_applied` below `mortar_schema_migrations_expected`.
+
+Each series is process-local, which is what Prometheus expects: scrape every
+instance and aggregate in the query.
+
+## Readiness
+
+- `GET /api/health` — liveness. Says the event loop is turning.
+- `GET /api/health/ready` — readiness: 200 when the database answers and the
+  schema matches the running code, 503 with a reason otherwise. Point a load
+  balancer or a Kubernetes readiness probe here; restarting on liveness alone
+  would keep an instance in rotation while every request fails.
+
+## Log rotation
+
+`docs/deployment.md` (and the logrotate sample below) covers rotation — the
+application writes one line per request and does not rotate its own file.
 
 ## Multi-instance caveat
 
