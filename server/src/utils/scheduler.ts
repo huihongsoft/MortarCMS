@@ -7,6 +7,7 @@ import db, { cuid, DB_PATH } from './db';
 import { doAction } from './hooks';
 import { purgeContentCaches, purgeAllCaches } from './cache';
 import { postUrl } from './slug';
+import { createBackupArchive, pruneBackups } from './backup';
 
 export interface TaskDef {
   id: string;
@@ -270,34 +271,28 @@ export function registerBuiltinTasks(): void {
   registerTask({
     id: 'backup_database',
     name: 'Backup database',
-    desc: 'Copies the database to the backups folder (mirrors it to object storage when configured); keeps only the newest backups (retention setting)',
+    desc: 'Writes a database + uploads archive to the backups folder (mirrors it to object storage when configured); keeps only the newest backups (retention setting)',
     intervalMs: 86_400_000,
     fn: async () => {
-      const backupDir = path.join(__dirname, '..', '..', 'backups');
-      fs.mkdirSync(backupDir, { recursive: true });
       // Use the real database path: a hardcoded server/data/mortar.db would
       // silently back up nothing when MORTAR_DB_PATH is customised.
-      const src = DB_PATH;
-      if (!fs.existsSync(src)) { console.log('[Task] Backup skipped: database file not found at ' + src); return; }
-      const stamp = new Date().toISOString().slice(0, 10) + '-' + Date.now().toString(36).slice(-4);
-      const backupFile = path.join(backupDir, 'mortar-' + stamp + '.db');
-      fs.copyFileSync(src, backupFile);
-      // Retention: keep the newest N backups, drop the rest
+      if (!fs.existsSync(DB_PATH)) { console.log('[Task] Backup skipped: database file not found at ' + DB_PATH); return; }
       let retention = 10;
       try {
         retention = Math.max(1, parseInt((db.prepare("SELECT value FROM Setting WHERE key = 'backup_retention'").get() as any)?.value || '10') || 10);
       } catch {}
-      const files = fs.readdirSync(backupDir).filter(f => f.startsWith('mortar-') && f.endsWith('.db')).sort();
-      while (files.length > retention) {
-        try { fs.unlinkSync(path.join(backupDir, files.shift() as string)); } catch {}
-      }
-      // Object storage: mirror the backup remotely and trim old copies to the
-      // same retention (best-effort — a remote failure never fails the task)
+      // Database *and* uploads: the old copy took only the .db file, so a restore
+      // brought the content back with every image missing.
+      const entry = await createBackupArchive({ includeUploads: true });
+      pruneBackups(retention);
+      // Object storage: mirror the archive remotely and trim old copies to the
+      // same retention (best-effort — a remote failure never fails the task).
+      // Names embed an ISO timestamp, so name order is chronological here.
       try {
         const { getStorageConfig, storeFile, listRemoteFiles, deleteRemoteFile } = await import('./storage');
         const cfg = getStorageConfig();
         if (cfg.provider === 's3') {
-          await storeFile('backups/' + path.basename(backupFile), fs.readFileSync(backupFile), 'application/octet-stream');
+          await storeFile('backups/' + entry.name, fs.readFileSync(entry.path), 'application/gzip');
           const keys = (await listRemoteFiles('backups/')).sort();
           while (keys.length > retention) {
             const old = keys.shift() as string;
@@ -309,8 +304,8 @@ export function registerBuiltinTasks(): void {
       try {
         db.prepare("INSERT INTO Setting (id, key, value) VALUES ('db_last_backup', 'db_last_backup', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date().toISOString());
       } catch {}
-      console.log('[Task] Database backup created (retention ' + retention + ')');
-      try { doAction('backup_completed', backupFile); } catch {}
+      console.log('[Task] Backup created: ' + entry.name + ' (' + entry.bytes + ' bytes, retention ' + retention + ')');
+      try { doAction('backup_completed', entry.path); } catch {}
     },
   });
 

@@ -41,8 +41,13 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 
-# Writable state directories (data = SQLite db, uploads, backups)
-RUN mkdir -p /app/server/data /app/server/uploads /app/server/backups \
+# zip/unzip back the manual full-backup download, its restore, and plugin/theme
+# installs from a .zip. The base image ships tar (used by the scheduled backup)
+# but not zip, so those endpoints answered 500 in this image before.
+# Also create the writable state directories (data = SQLite db, uploads, backups).
+RUN apt-get update && apt-get install -y --no-install-recommends zip unzip \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /app/server/data /app/server/uploads /app/server/backups \
     && chown -R node:node /app
 
 COPY --from=build --chown=node:node /app/server /app/server
@@ -51,7 +56,9 @@ COPY --from=build --chown=node:node /app/frontend/dist /app/frontend/dist
 
 USER node
 EXPOSE 3001
-VOLUME ["/app/server/data", "/app/server/uploads"]
+# backups is a volume too: without it every scheduled backup died with the
+# container, which is exactly when you would want one.
+VOLUME ["/app/server/data", "/app/server/uploads", "/app/server/backups"]
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3001)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"

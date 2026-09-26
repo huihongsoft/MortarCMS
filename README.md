@@ -231,6 +231,11 @@ Configuration via `DATABASE_URL` env or the install wizard. See [docs/deployment
 - [Themes](docs/themes.md) — theme structure & settings
 - [Deployment](docs/deployment.md) — environment, proxy, backup
 - [Development](docs/development.md) — local setup & contribution workflow
+- [Upgrading & rolling back](docs/upgrade-rollback.md) — migrations are forward-only; where the snapshots are
+- [Security hardening](docs/security-hardening.md) — the checklist for a public deployment
+- [Troubleshooting](docs/troubleshooting.md) — symptom → cause → fix
+- [Monitoring](docs/monitoring.md) — health endpoints, log fields, what to alert on
+- [Production readiness](docs/production-readiness.md) — known gaps and the plan
 
 ### AI Setup
 

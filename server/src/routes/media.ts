@@ -3,7 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
 import rateLimit from 'express-rate-limit';
-import db, { cuid } from '../utils/db';
+import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { siteScopeForFilter, mayWriteSite, userMayAccessSite } from '../utils/userSites';
 import { doAction } from '../utils/hooks';
@@ -11,6 +11,8 @@ import { upload } from '../middleware/upload';
 import { uploadPath, resolveUploadUrl } from '../utils/paths';
 import { getStorageConfig, storeFile, deleteRemoteFile, keyFromUrl } from '../utils/storage';
 import { stripEventHandlerAttrs, stripUnsafeUrlAttrs } from '../utils/sanitize';
+import { likeContains } from '../utils/sqlLike';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -86,7 +88,12 @@ router.get('/', authenticate, requireCap('upload_files'), (req: AuthRequest, res
     if (sf.denied) { res.status(403).json({ error: '无权访问该站点' }); return; }
     let where = ' WHERE 1=1';
     const params: any[] = [];
-    if (search) { where += ' AND (m.original LIKE ? OR m.filename LIKE ?)'; params.push('%' + search + '%', '%' + search + '%'); }
+    if (search) {
+      // Escaped: an unescaped "%" matched the whole library.
+      where += " AND (m.original LIKE ? ESCAPE '\\' OR m.filename LIKE ? ESCAPE '\\')";
+      const p = likeContains(search);
+      params.push(p, p);
+    }
     where += sf.clause; params.push(...sf.params);
     const sql = 'SELECT m.*, u.username FROM Media m LEFT JOIN User u ON u.id = m.userId' + where + ' ORDER BY m.createdAt DESC LIMIT ? OFFSET ?';
     const media = db.prepare(sql).all(...params, limit, (page - 1) * limit) as any[];
@@ -367,7 +374,10 @@ function removeMediaFiles(media: any): void {
   // Only delete inside the uploads directory; a tampered Media.url must not
   // let this escape into arbitrary paths.
   const filePath = resolveUploadUrl(media.url);
-  if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  // A failed unlink must not turn a completed row deletion into a 500: the
+  // leftover file is an orphan (recoverable), and callers delete the row first.
+  try { if (filePath && fs.existsSync(filePath)) fs.unlinkSync(filePath); }
+  catch (err: any) { logger.warn({ err: err?.message, url: media.url }, 'media file unlink failed'); }
   try {
     const thumbsDir = uploadPath('thumbs');
     if (fs.existsSync(thumbsDir)) {
@@ -383,8 +393,12 @@ router.delete('/:id', authenticate, requireCap('delete_media'), (req: AuthReques
     const media = db.prepare('SELECT * FROM Media WHERE id = ?').get(req.params.id) as any;
     if (!media) { res.status(404).json({ error: 'Media not found' }); return; }
     if (!mayEditMedia(req, media)) { res.status(403).json({ error: '无权操作该站点的媒体' }); return; }
+    // Row first, then the files. The two cannot share a transaction, so pick the
+    // order whose failure mode is survivable: a crash in between leaves an orphan
+    // object, whereas deleting the file first would leave a row pointing at
+    // nothing — a broken image on the site.
+    withTransaction(() => { db.prepare('DELETE FROM Media WHERE id = ?').run(req.params.id); });
     removeMediaFiles(media);
-    db.prepare('DELETE FROM Media WHERE id = ?').run(req.params.id);
     try { doAction('media_deleted', req.params.id); } catch {}
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -396,13 +410,15 @@ router.post('/bulk-delete', authenticate, requireCap('delete_media'), (req: Auth
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids)) { res.status(400).json({ error: 'ids array required' }); return; }
     for (const id of ids) { if (mediaScope(req, id) === 'denied') { res.status(403).json({ error: '无权操作该站点的媒体' }); return; } }
-    for (const id of ids) {
-      const m = db.prepare('SELECT * FROM Media WHERE id = ?').get(id) as any;
-      if (m) {
-        removeMediaFiles(m);
-        db.prepare('DELETE FROM Media WHERE id = ?').run(id);
-        try { doAction('media_deleted', id); } catch {}
-      }
+    const rows = ids.map((id: string) => db.prepare('SELECT * FROM Media WHERE id = ?').get(id) as any).filter(Boolean);
+    // Same ordering rule as the single-row delete: drop every row in one
+    // transaction first, then unlink. A failure part-way through the old
+    // loop left some rows deleted, some orphaned files and some rows pointing
+    // at files that were already gone.
+    withTransaction(() => { for (const m of rows) db.prepare('DELETE FROM Media WHERE id = ?').run(m.id); });
+    for (const m of rows) {
+      removeMediaFiles(m);
+      try { doAction('media_deleted', m.id); } catch {}
     }
     res.json({ success: true, count: ids.length });
   } catch (err: any) { res.status(500).json({ error: err.message }); }

@@ -28,6 +28,11 @@ function translateMysql(sql) {
   });
   // INSERT OR IGNORE -> INSERT IGNORE
   sql = sql.replace(/INSERT OR IGNORE INTO/gi, 'INSERT IGNORE INTO');
+  // `LIKE ? ESCAPE '\'` -> `ESCAPE '\\'`. MySQL's string parser treats a lone
+  // trailing backslash as escaping the closing quote, so the statement written
+  // for SQLite/Postgres is a syntax error on MySQL. (Parameters are unaffected —
+  // they travel outside the SQL text.)
+  sql = sql.replace(/ESCAPE\s*'\\'/gi, "ESCAPE '\\\\'");
   // strftime('%Y-%m', col) -> DATE_FORMAT on a normalized datetime
   sql = sql.replace(STRFTIME_RE, (m, fmt, col) => 'DATE_FORMAT(' + mysqlDateExpr(col) + ", '" + fmt + "')");
   // datetime(x) -> CAST(normalized AS DATETIME)

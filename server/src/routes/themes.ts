@@ -9,6 +9,7 @@ import { purgeAllCaches } from '../utils/cache';
 import { doAction } from '../utils/hooks';
 import { execFileSync, execSync } from 'child_process';
 import { assertArchiveWithinLimits } from '../utils/archive';
+import { escapeLike } from '../utils/sqlLike';
 
 const router = Router();
 const themesDir = path.join(__dirname, '..', '..', 'themes');
@@ -90,9 +91,8 @@ function activeThemeName(siteId?: string): string {
 
 // Theme override settings (editable in the admin Appearance panel) live under
 // theme_<name>_<key> so each theme keeps its own values.
-// The name is bound as a parameter and LIKE wildcards are escaped so a theme
-// name cannot widen the match to unrelated settings.
-function escapeLike(s: string): string { return s.replace(/[\\%_]/g, (c: string) => '\\' + c); }
+// The name is bound as a parameter and LIKE wildcards are escaped (utils/sqlLike)
+// so a theme name cannot widen the match to unrelated settings.
 function themeOverrides(name: string, siteId?: string): Record<string, string> {
   const prefix = 'theme_' + name + '_';
   const like = 'theme_' + escapeLike(name) + '_%';

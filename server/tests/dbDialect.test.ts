@@ -13,6 +13,18 @@ describe('translateMysql', () => {
       .toBe('INSERT IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)');
   });
 
+  // MySQL's own string parser consumes a lone trailing backslash, so the
+  // `ESCAPE '\'` clause every LIKE search emits is a syntax error there. The
+  // escaping helper (utils/sqlLike) relies on this rewrite.
+  it('doubles the LIKE escape character for MySQL', () => {
+    const sql = "SELECT * FROM Post WHERE title LIKE ? ESCAPE '\\'";
+    expect(translateMysql(sql)).toBe("SELECT * FROM Post WHERE title LIKE ? ESCAPE '\\\\'");
+    // Postgres keeps the single backslash — it is already the LIKE escape char.
+    expect(translatePg(sql)).toBe("SELECT * FROM Post WHERE title LIKE $1 ESCAPE '\\'");
+    // Case and spacing variants still match (the rewrite normalises to upper case).
+    expect(translateMysql("a LIKE ? escape '\\'")).toBe("a LIKE ? ESCAPE '\\\\'");
+  });
+
   it('translates strftime with a nested function call', () => {
     const sql = "SELECT slug, strftime('%Y-%m-%d', COALESCE(publishedAt, createdAt)) as date FROM Post";
     const out = translateMysql(sql);

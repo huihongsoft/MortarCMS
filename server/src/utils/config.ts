@@ -5,9 +5,14 @@
 // point — NOT at module load — so importing this module (e.g. from tests or the
 // logger) never terminates the process as a side effect.
 
-// Single source of truth for the app version reported by the API/health and
-// used as the minimum-core version for plugin compatibility checks.
-export const APP_VERSION = '0.1.2';
+// The app version reported by /api/health and /api/schema, shown in the admin
+// System Info screen, and compared against a plugin's `requires` constraint.
+//
+// Read from the package manifest instead of hardcoded: the hardcoded copy had
+// silently fallen a release behind the git tags, so the API reported a version
+// no release corresponded to. package.json is the single source of truth, and
+// the CI job `version-consistency` fails if the workspaces disagree.
+export const APP_VERSION: string = require('../../package.json').version;
 
 function isProduction(): boolean {
   return process.env.NODE_ENV === 'production';

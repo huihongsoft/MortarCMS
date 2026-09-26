@@ -153,6 +153,10 @@ JWT_SECRET=<long-random-string>
 # production, debug otherwise). Logs are JSON in production, with a
 # per-request id echoed as X-Request-Id.
 # LOG_LEVEL=info
+
+# Where backup archives and pre-migration snapshots are written
+# (default: server/backups). Point it at another volume/disk when you can.
+# MORTAR_BACKUPS_DIR=/mnt/backups/mortar
 ```
 
 ## Running the server
@@ -407,12 +411,32 @@ a 302 to /install).
 
 ## Backups
 
-- **Full backup**: Admin → System Info → Download full backup
-  (database + uploads, single zip)
-- **Restore**: same page → Restore backup
-- Old databases are preserved automatically (`mortar.db.bak-<timestamp>`)
-- Schedule a cron job that hits the backup endpoint with an admin token if
-  you want automated off-host copies
+- **Scheduled**: the `backup_database` task (daily, Admin → System Info → Tasks)
+  writes `server/backups/mortar-<timestamp>.tar.gz` holding the database **and**
+  the uploads directory. `backup_retention` (default 10) keeps the newest N
+  archives; the pruning order comes from file age, not the filename.
+- **Full backup on demand**: Admin → System Info → Download full backup
+  (database + uploads as a zip).
+- **Restore**: Admin → System Info → Restore backup. Both a zip (the download
+  above) and a tar.gz (the scheduled archive) are accepted; the type is detected
+  from the file's magic bytes, not its name. The live database is copied to
+  `mortar.db.bak-<timestamp>` before being replaced, and the server exits so the
+  supervisor restarts it against the restored file.
+- **Before every upgrade**: when the server boots with pending migrations it
+  writes `server/backups/pre-migration-v<versions>-<timestamp>.db` first (newest
+  5 kept). Migrations are forward-only, so this is the only way back — see
+  [upgrade-rollback.md](upgrade-rollback.md).
+- **Verify a backup before you need it**: unpack the archive somewhere and check
+  that `mortar.db` starts with `SQLite format 3` and that your uploads are in
+  there. A backup nobody has ever restored is a guess.
+- **Off-host copies**: mirror `server/backups/` (or point the task at S3 in
+  Admin → Settings → Storage, which mirrors each archive automatically). A backup
+  on the same disk as the database only protects against operator error.
+- **Docker**: `/app/server/backups` is a volume, so archives survive a container
+  rebuild — but an anonymous volume is not a backup strategy. Bind-mount it or
+  mirror it off the host.
+- Restoring does **not** cover a database switch or a different schema version:
+  restore into the same version that wrote the archive.
 
 ## Switching databases
 
@@ -424,7 +448,8 @@ a 302 to /install).
 
 - `maintenance_mode` setting shows a maintenance page to visitors;
   authenticated admins bypass it
-- `npm run db:optimize`-style maintenance available in Admin → System Info
+- Database maintenance (status, integrity check, slow queries, optimize) lives in
+  Admin → System Info, backed by `/api/db/*` — there are no npm scripts for it
 - Scheduled posts publish automatically every minute (built-in cron)
 
 ## Performance notes

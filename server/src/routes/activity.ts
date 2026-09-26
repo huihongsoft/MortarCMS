@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import db from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { likeContains } from '../utils/sqlLike';
 
 const router = Router();
 
@@ -80,7 +81,7 @@ router.get('/', authenticate, requireCap('manage_system'), (req: AuthRequest, re
     const q = String(req.query.q || '').trim();
     let where = '';
     const params: any[] = [];
-    if (q) { where = ' WHERE a.action LIKE ?'; params.push('%' + q + '%'); }
+    if (q) { where = " WHERE a.action LIKE ? ESCAPE '\\'"; params.push(likeContains(q)); }
     const total = (db.prepare('SELECT COUNT(*) as c FROM Activity a' + where).get(...params) as any)?.c || 0;
     const logs = db.prepare('SELECT a.*, u.username FROM Activity a LEFT JOIN User u ON u.id = a.userId' + where + ' ORDER BY a.createdAt DESC LIMIT ? OFFSET ?').all(...params, limit, (page - 1) * limit) as any[];
     backfillDetails(logs);

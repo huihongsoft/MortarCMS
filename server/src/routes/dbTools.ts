@@ -6,7 +6,7 @@ import { execFileSync } from 'child_process';
 import db, { listSlowQueries, DB_PATH, closeDb } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
-import { assertArchiveWithinLimits } from '../utils/archive';
+import { assertArchiveWithinLimits, archiveKind } from '../utils/archive';
 import { logger } from '../utils/logger';
 import { resetSite, importDemoData } from '../utils/demo';
 import { UPLOADS_DIR as uploadsDir } from '../utils/paths';
@@ -188,7 +188,12 @@ router.post('/restore-full', authenticate, requireCap('manage_system'), upload.s
       res.status(400).json({ error: 'Invalid backup: ' + e.message });
       return;
     }
-    execFileSync('unzip', ['-q', req.file.path, '-d', tmpDir]);
+    // Both archive shapes are accepted: the manual full backup downloads as a
+    // zip, while the scheduled task writes a tar.gz (tar is present in every
+    // base image, zip is not). Type comes from the magic bytes because the
+    // upload arrives with no usable extension.
+    if (archiveKind(req.file.path) === 'tar.gz') execFileSync('tar', ['-xzf', req.file.path, '-C', tmpDir]);
+    else execFileSync('unzip', ['-q', req.file.path, '-d', tmpDir]);
     // zip-slip guard: every entry must be a plain file in the extraction root
     // (no nested dirs, no ../, no absolute paths) before it can overwrite
     // uploads. Directories and symlinks are rejected too: copyFileSync would

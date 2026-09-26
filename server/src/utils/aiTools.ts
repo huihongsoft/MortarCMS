@@ -12,6 +12,7 @@ import { activeThemeName, createThemeBackup, readTheme, themeOverrides } from '.
 import { purgeAllCaches, purgeContentCaches } from './cache';
 import { sanitizeHtml } from './sanitize';
 import { isHiddenSettingKey } from './settingsVisibility';
+import { likeContains } from './sqlLike';
 import { UPLOADS_DIR as uploadsDir } from './paths';
 import { fetchUrlGuarded, fetchUrlGuardedBuffer, readCappedBytes } from './ssrf';
 
@@ -316,7 +317,7 @@ register('list_posts', '列出文章，可按状态/关键词过滤，返回标�
   let sql = "SELECT id, title, slug, status, excerpt, publishedAt, createdAt FROM Post WHERE type = 'post'";
   const params: any[] = [];
   if (args.status && args.status !== 'all') { sql += ' AND status = ?'; params.push(args.status); }
-  if (args.search) { sql += ' AND title LIKE ?'; params.push('%' + args.search + '%'); }
+  if (args.search) { sql += " AND title LIKE ? ESCAPE '\\'"; params.push(likeContains(args.search)); }
   const scope = siteWhere('Post', ctx);
   sql += scope.clause; params.push(...scope.params);
   if (ownPostsOnly(ctx)) { sql += ' AND authorId = ?'; params.push(ctx.userId); }

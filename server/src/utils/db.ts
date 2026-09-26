@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
 import { Worker } from 'worker_threads';
+import { snapshotDatabaseFile } from './dbSnapshot';
 
 // Driver selection: DATABASE_URL=mysql://... or postgres://... switches backends.
 // SQLite stays the default (sync, direct); MySQL/PostgreSQL run on a worker
@@ -767,6 +768,37 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
     },
   },
   {
+    version: 18,
+    name: 'site-scoped-indexes',
+    up: () => {
+      // Every site-scoped query filters on `siteId` (`siteId IS NULL OR siteId = ?`),
+      // yet none of these tables had an index on it — the only one in the schema was
+      // LinkCategory's. On a multi-site install every list, moderation view and
+      // analytics read was therefore a full table scan.
+      //
+      // Single-column on purpose: the column is low-cardinality, so a composite
+      // would not pay for itself, and the same tables are also queried with no site
+      // scope at all (where a siteId-leading index cannot help).
+      //
+      // Note for the remote drivers: MySQL cannot index a TEXT column without a
+      // prefix length and has no `CREATE INDEX IF NOT EXISTS`. These statements are
+      // the SQLite/Postgres form; the MySQL rewrite lands with the rest of the
+      // remote-driver work (see docs/deployment.md).
+      const targets: [string, string][] = [
+        ['idx_post_site', 'Post'],
+        ['idx_comment_site', 'Comment'],
+        ['idx_media_site', 'Media'],
+        ['idx_menu_site', 'Menu'],
+        ['idx_visit_site', 'Visit'],
+        ['idx_searchlog_site', 'SearchLog'],
+        ['idx_form_site', 'Form'],
+        ['idx_brokenlink_site', 'BrokenLink'],
+        ['idx_aitask_site', 'AiTask'],
+      ];
+      for (const [name, table] of targets) db.exec('CREATE INDEX IF NOT EXISTS ' + name + ' ON ' + table + ' (siteId)');
+    },
+  },
+  {
     version: 15,
     name: 'role-capability-alignment',
     up: () => {
@@ -909,6 +941,21 @@ function dropColumn(table: string, column: string): void {
   db.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
 }
 
+// True when this database has never had a migration applied and holds no
+// accounts — i.e. the migrations about to run are the initial schema, not an
+// upgrade of live data. The ledger is the primary signal; the `User` check
+// covers a database restored without its ledger, which does have data worth
+// snapshotting.
+function isFreshInstall(applied: Set<number>): boolean {
+  if (applied.size > 0) return false;
+  try {
+    return !db.prepare('SELECT 1 FROM User LIMIT 1').get();
+  } catch {
+    // The table does not exist yet on a brand-new file.
+    return true;
+  }
+}
+
 // Apply every migration not yet in the ledger. On SQLite a failure aborts
 // startup (the supported production path must never run on a half-migrated
 // schema); the experimental remote drivers stay bootable best-effort.
@@ -922,6 +969,16 @@ export function runMigrations(): void {
     console.warn('[DB] Could not read migration ledger:', e.message);
   }
   const pending = MIGRATIONS.filter((m) => !applied.has(m.version)).sort((a, b) => a.version - b.version);
+  // Snapshot before the first migration of this boot mutates the schema. There
+  // is no `down()` anywhere, so this file copy is the only way back from a bad
+  // upgrade — the upgrade docs point at it. Skipped for the remote drivers
+  // (the database is not a file we can copy) and on a fresh install, where
+  // "pending" is just the initial schema creation and there is no data yet to
+  // protect — that snapshot would only eat one of the five kept slots.
+  if (pending.length > 0 && driver === 'sqlite' && !isFreshInstall(applied) && fs.existsSync(DB_PATH)) {
+    const snap = snapshotDatabaseFile('v' + pending.map((m) => m.version).join('-'), DB_PATH);
+    if (snap) console.log('[DB] Pre-migration snapshot: ' + snap);
+  }
   for (const m of pending) {
     try {
       withTransaction(() => {

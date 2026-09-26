@@ -7,6 +7,7 @@ import { verifyToken } from '../utils/jwt';
 import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
 import { SiteRequest } from '../middleware/site';
 import { slugify, uniqueSlug } from '../utils/slug';
+import { likeContains } from '../utils/sqlLike';
 import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
 import { applyFilters, doAction } from '../utils/hooks';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
@@ -214,7 +215,6 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
     // Escape LIKE wildcards so user input ("100%", "a_b") matches literally
-    const escLike = (s: string) => s.replace(/[\\%_]/g, (m) => '\\' + m);
     const search = (req.query.search as string) || '';
     const category = req.query.category as string;
     const tag = req.query.tag as string;
@@ -229,7 +229,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     if (req.siteId) { sql += ' AND (p.siteId IS NULL OR p.siteId = ?)'; params.push(req.siteId); }
     if (!isLoggedIn(req)) sql += MEMBERS_ONLY_EXCLUDE;
     if (search) {
-      const sp = '%' + escLike(search) + '%';
+      const sp = likeContains(search);
       sql += " AND (p.title LIKE ? ESCAPE '\\' OR p.content LIKE ? ESCAPE '\\' OR p.excerpt LIKE ? ESCAPE '\\')";
       params.push(sp, sp, sp);
     }
@@ -237,7 +237,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     if (tag) { sql += ' AND t.slug = ?'; params.push(tag); }
     // Relevance: title matches rank above body matches
     if (search) {
-      const sp = '%' + escLike(search) + '%';
+      const sp = likeContains(search);
       sql += " ORDER BY p.sticky DESC, CASE WHEN p.title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END, p.publishedAt DESC LIMIT ? OFFSET ?";
       params.push(sp, limit, (page - 1) * limit);
     } else {
@@ -248,7 +248,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     const countSql = 'SELECT COUNT(DISTINCT p.id) as cnt FROM Post p' + (category ? ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId' : '') + (tag ? ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId' : '') + ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + (req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '') + (!isLoggedIn(req) ? MEMBERS_ONLY_EXCLUDE : '') + (search ? " AND (p.title LIKE ? ESCAPE '\\' OR p.content LIKE ? ESCAPE '\\' OR p.excerpt LIKE ? ESCAPE '\\')" : '') + (category ? ' AND c.slug = ?' : '') + (tag ? ' AND t.slug = ?' : '');
     const countParams: any[] = [type, 'published', now];
     if (req.siteId) countParams.push(req.siteId);
-    if (search) { const sp = '%' + escLike(search) + '%'; countParams.push(sp, sp, sp); }
+    if (search) { const sp = likeContains(search); countParams.push(sp, sp, sp); }
     if (category) countParams.push(category);
     if (tag) countParams.push(tag);
     const total = (db.prepare(countSql).get(...countParams) as any)?.cnt || 0;
@@ -288,8 +288,7 @@ router.get('/suggest', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     const q = String(req.query.q || '').trim().slice(0, 60);
     if (!q) { res.json({ suggestions: [] }); return; }
-    const escLike = (s: string) => s.replace(/[\\%_]/g, (m) => '\\' + m);
-    const like = '%' + escLike(q) + '%';
+    const like = likeContains(q);
     const now = new Date().toISOString();
     // Same visibility as the public list: never suggest scheduled posts, and no
     // titles of gated/unlisted ones (this dropdown is a plain public list too).
@@ -486,8 +485,10 @@ router.get('/author/:username', (req: AuthRequest & SiteRequest, res: Response) 
 
 router.get('/admin', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
   try {
-    const page = parseInt(req.query.page as string) || 1;
-    const limit = parseInt(req.query.limit as string) || 20;
+    // Clamp like the public list: an unclamped ?limit= let a caller ask for the
+    // whole table in one response.
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
     const status = req.query.status as string;
     const search = (req.query.search as string) || '';
     // Sort columns are whitelisted (never concatenate raw query input into SQL)
@@ -503,8 +504,10 @@ router.get('/admin', authenticate, requireCap('edit_posts'), (req: AuthRequest, 
     if (!userCan(req.user!, 'edit_others_posts')) { sql += ' AND authorId = ?'; params.push(req.user!.userId); }
     if (status) { sql += ' AND status = ?'; params.push(status); }
     // Fuzzy search across the fields an editor recognises an article by.
-    const searchLike = search ? '%' + search + '%' : '';
-    const searchClause = search ? ' AND (title LIKE ? OR excerpt LIKE ? OR content LIKE ?)' : '';
+    // Escaped like the public list: an unescaped "100%" here matched every post,
+    // and "%%%" degenerated into a full table scan.
+    const searchLike = search ? likeContains(search) : '';
+    const searchClause = search ? " AND (title LIKE ? ESCAPE '\\' OR excerpt LIKE ? ESCAPE '\\' OR content LIKE ? ESCAPE '\\')" : '';
     if (search) { sql += searchClause; params.push(searchLike, searchLike, searchLike); }
     // Optional admin site filter (all / global / a specific site)
     // Site filter validated against the caller's assignments: an editor assigned

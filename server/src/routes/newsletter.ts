@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import crypto from 'crypto';
 import db, { cuid } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { likeContains } from '../utils/sqlLike';
 import { renderTemplate, sendEmail, getMailSettings } from '../utils/mailer';
 import { postUrl } from '../utils/slug';
 
@@ -95,7 +96,7 @@ router.get('/admin/subscribers', ...adminGuard, (req: AuthRequest, res: Response
     const status = String(req.query.status || '');
     const where: string[] = [];
     const params: any[] = [];
-    if (q) { where.push('(email LIKE ? OR name LIKE ?)'); params.push('%' + q + '%', '%' + q + '%'); }
+    if (q) { where.push("(email LIKE ? ESCAPE '\\' OR name LIKE ? ESCAPE '\\')"); const p = likeContains(q); params.push(p, p); }
     if (status) { where.push('status = ?'); params.push(status); }
     const whereSql = where.length ? ' WHERE ' + where.join(' AND ') : '';
     const total = (db.prepare('SELECT COUNT(*) as c FROM Subscriber' + whereSql).get(...params) as any).c;

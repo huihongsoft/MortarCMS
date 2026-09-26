@@ -1,11 +1,31 @@
 import { execFileSync, spawn } from 'child_process';
+import fs from 'fs';
 import path from 'path';
+
+// Which decompressor an archive needs, decided by its magic bytes and only
+// falling back to the file name. Uploads reach the server under a multer temp
+// name with no extension, so a `.tar.gz` backup used to be handed to `unzip`
+// (and a plugin zip with a query-string URL to `tar`). gzip always starts with
+// 1f 8b and zip with "PK".
+export function archiveKind(archivePath: string): 'tar.gz' | 'zip' {
+  try {
+    const fd = fs.openSync(archivePath, 'r');
+    const buf = Buffer.alloc(2);
+    const read = fs.readSync(fd, buf, 0, 2, 0);
+    fs.closeSync(fd);
+    if (read === 2) {
+      if (buf[0] === 0x1f && buf[1] === 0x8b) return 'tar.gz';
+      if (buf[0] === 0x50 && buf[1] === 0x4b) return 'zip';
+    }
+  } catch { /* fall through to the name */ }
+  return /\.(tar\.gz|tgz)$/i.test(archivePath) ? 'tar.gz' : 'zip';
+}
 
 // Validate every entry in an archive BEFORE extraction. Throws if any entry
 // could escape the extraction directory (absolute path or ../ components),
 // preventing zip-slip / tar-slip from writing outside the target dir.
 export function assertSafeArchive(archivePath: string): string[] {
-  const isTarGz = /\.(tar\.gz|tgz)$/i.test(archivePath);
+  const isTarGz = archiveKind(archivePath) === 'tar.gz';
   const entries = execFileSync(isTarGz ? 'tar' : 'unzip', isTarGz ? ['-tzf', archivePath] : ['-Z1', archivePath], { encoding: 'utf8' })
     .split('\n').map(e => e.replace(/\r$/, '')).filter(Boolean);
   for (const entry of entries) {
@@ -32,7 +52,7 @@ export function assertSafeArchive(archivePath: string): string[] {
 // them was not portable.
 export function measureArchiveBytes(archivePath: string, maxBytes: number): Promise<number> {
   return new Promise((resolve, reject) => {
-    const isTarGz = /\.(tar\.gz|tgz)$/i.test(archivePath);
+    const isTarGz = archiveKind(archivePath) === 'tar.gz';
     const child = spawn(isTarGz ? 'tar' : 'unzip', isTarGz ? ['-xzOf', archivePath] : ['-p', archivePath], {
       stdio: ['ignore', 'pipe', 'ignore'],
     });
