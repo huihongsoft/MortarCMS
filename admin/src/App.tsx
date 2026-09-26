@@ -17,6 +17,10 @@ const Menus = React.lazy(() => import('./pages/Menus'));
 const MenuEditor = React.lazy(() => import('./pages/MenuEditor'));
 const Comments = React.lazy(() => import('./pages/Comments'));
 const Users = React.lazy(() => import('./pages/Users'));
+const Profile = React.lazy(() => import('./pages/Profile'));
+import { Guarded } from './components/NoAccess';
+import { canOpen, firstAllowedPath } from './lib/access';
+const PluginPage = React.lazy(() => import('./pages/PluginPage'));
 const Appearance = React.lazy(() => import('./pages/Appearance'));
 const SystemInfo = React.lazy(() => import('./pages/SystemInfo'));
 const HooksBrowser = React.lazy(() => import('./pages/HooksBrowser'));
@@ -67,55 +71,76 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return React.createElement(React.Fragment, null, children);
 }
 
+
+// Landing route: the dashboard is stats-driven (manage_options), so an account
+// without it is sent to the first screen it can actually use instead of being
+// shown a page it cannot load.
+function HomeRoute() {
+  const { user, can } = useAuth();
+  if (!canOpen(user, can, '/')) {
+    return React.createElement(Navigate, { to: firstAllowedPath(user, can), replace: true });
+  }
+  return React.createElement(Dashboard);
+}
+
 function AnimatedRoutes() {
   const location = useLocation();
+  // `screen()` is the only way a route is declared: the access rule for its path
+  // comes from lib/access, so a new screen cannot ship without a rule and the
+  // sidebar/guard/buttons cannot drift apart.
+  const screen = (path: string, el: React.ReactNode) =>
+    React.createElement(Route, { key: path, path, element: React.createElement(Guarded, { path, children: el }) });
   return React.createElement(Routes, { location },
     React.createElement(Route, { path: '/login', element: React.createElement(Login) }),
     React.createElement(Route, { element: React.createElement(ProtectedRoute, null, React.createElement(Layout)) },
-      React.createElement(Route, { path: '/', element: React.createElement(Dashboard) }),
-      React.createElement(Route, { path: '/stats', element: React.createElement(StatsPage) }),
-      React.createElement(Route, { path: '/home-editor', element: React.createElement(HomeEditor) }),
-      React.createElement(Route, { path: '/posts', element: React.createElement(Posts) }),
-      React.createElement(Route, { path: '/calendar', element: React.createElement(Calendar) }),
-      React.createElement(Route, { path: '/broken-links', element: React.createElement(BrokenLinks) }),
-      React.createElement(Route, { path: '/posts/new', element: React.createElement(PostEditor) }),
-      React.createElement(Route, { path: '/posts/:id/edit', element: React.createElement(PostEditor) }),
-      React.createElement(Route, { path: '/pages', element: React.createElement(Pages) }),
-      React.createElement(Route, { path: '/pages/new', element: React.createElement(PageEditor) }),
-      React.createElement(Route, { path: '/pages/:id/edit', element: React.createElement(PageEditor) }),
-      React.createElement(Route, { path: '/menus', element: React.createElement(Menus) }),
-      React.createElement(Route, { path: '/menus/:id/edit', element: React.createElement(MenuEditor) }),
-      React.createElement(Route, { path: '/media', element: React.createElement(Media) }),
-      React.createElement(Route, { path: '/comments', element: React.createElement(Comments) }),
-      React.createElement(Route, { path: '/users', element: React.createElement(Users) }),
-      React.createElement(Route, { path: '/sysinfo', element: React.createElement(SystemInfo) }),
-      React.createElement(Route, { path: '/hooks', element: React.createElement(HooksBrowser) }),
-      React.createElement(Route, { path: '/api-docs', element: React.createElement(ApiDocs) }),
-      React.createElement(Route, { path: '/activity', element: React.createElement(ActivityPage) }),
-      React.createElement(Route, { path: '/import', element: React.createElement(Import) }),
-      React.createElement(Route, { path: '/plugins', element: React.createElement(Plugins) }),
-      React.createElement(Route, { path: '/sites', element: React.createElement(Sites) }),
-      React.createElement(Route, { path: '/categories', element: React.createElement(Categories) }),
-      React.createElement(Route, { path: '/tags', element: React.createElement(Tags) }),
-      React.createElement(Route, { path: '/links', element: React.createElement(Links) }),
-      React.createElement(Route, { path: '/security', element: React.createElement(Security) }),
-      React.createElement(Route, { path: '/widgets', element: React.createElement(Widgets) }),
-      React.createElement(Route, { path: '/appearance', element: React.createElement(Appearance) }),
-      React.createElement(Route, { path: '/post-types', element: React.createElement(CustomTypes) }),
-      React.createElement(Route, { path: '/settings', element: React.createElement(Settings) }),
-      React.createElement(Route, { path: '/ai', element: React.createElement(AIChat) }),
-      React.createElement(Route, { path: '/ai/bindings', element: React.createElement(AIBindings) }),
-      React.createElement(Route, { path: '/ai/settings', element: React.createElement(AISettings) }),
-      React.createElement(Route, { path: '/roles', element: React.createElement(Roles) }),
-      React.createElement(Route, { path: '/webhooks', element: React.createElement(Webhooks) }),
-      React.createElement(Route, { path: '/forms', element: React.createElement(Forms) }),
-      React.createElement(Route, { path: '/forms/:id/submissions', element: React.createElement(FormSubmissions) }),
-      React.createElement(Route, { path: '/subscribers', element: React.createElement(Subscribers) }),
+      // Not `screen()`: HomeRoute redirects an account that cannot use the
+      // dashboard instead of showing it a "no permission" page on login.
+      React.createElement(Route, { path: '/', element: React.createElement(HomeRoute) }),
+      screen('/stats', React.createElement(StatsPage)),
+      screen('/home-editor', React.createElement(HomeEditor)),
+      screen('/posts', React.createElement(Posts)),
+      screen('/calendar', React.createElement(Calendar)),
+      screen('/broken-links', React.createElement(BrokenLinks)),
+      screen('/posts/new', React.createElement(PostEditor)),
+      screen('/posts/:id/edit', React.createElement(PostEditor)),
+      screen('/pages', React.createElement(Pages)),
+      screen('/pages/new', React.createElement(PageEditor)),
+      screen('/pages/:id/edit', React.createElement(PageEditor)),
+      screen('/menus', React.createElement(Menus)),
+      screen('/menus/:id/edit', React.createElement(MenuEditor)),
+      screen('/media', React.createElement(Media)),
+      screen('/comments', React.createElement(Comments)),
+      screen('/users', React.createElement(Users)),
+      screen('/profile', React.createElement(Profile)),
+      screen('/sysinfo', React.createElement(SystemInfo)),
+      screen('/hooks', React.createElement(HooksBrowser)),
+      screen('/api-docs', React.createElement(ApiDocs)),
+      screen('/activity', React.createElement(ActivityPage)),
+      screen('/import', React.createElement(Import)),
+      screen('/plugins', React.createElement(Plugins)),
+      // Screens registered by plugins (see server/src/utils/pluginApi.ts)
+      screen('/plugin/:plugin/:page', React.createElement(PluginPage)),
+      screen('/sites', React.createElement(Sites)),
+      screen('/categories', React.createElement(Categories)),
+      screen('/tags', React.createElement(Tags)),
+      screen('/links', React.createElement(Links)),
+      screen('/security', React.createElement(Security)),
+      screen('/widgets', React.createElement(Widgets)),
+      screen('/appearance', React.createElement(Appearance)),
+      screen('/post-types', React.createElement(CustomTypes)),
+      screen('/settings', React.createElement(Settings)),
+      screen('/ai', React.createElement(AIChat)),
+      screen('/ai/bindings', React.createElement(AIBindings)),
+      screen('/ai/settings', React.createElement(AISettings)),
+      screen('/roles', React.createElement(Roles)),
+      screen('/webhooks', React.createElement(Webhooks)),
+      screen('/forms', React.createElement(Forms)),
+      screen('/forms/:id/submissions', React.createElement(FormSubmissions)),
+      screen('/subscribers', React.createElement(Subscribers)),
     ),
     React.createElement(Route, { path: '*', element: React.createElement(Navigate, { to: '/', replace: true }) })
   );
 }
-
 export default function App() {
   return React.createElement(Suspense, { fallback: React.createElement(PageLoader) },
     React.createElement(AnimatedRoutes, null));

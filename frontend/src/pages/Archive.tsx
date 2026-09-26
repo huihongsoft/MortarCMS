@@ -6,31 +6,38 @@ import { t } from '../lib/i18n';
 import { ListSkeleton } from '../components/Skeleton';
 import { useTheme } from '../themes';
 import { postPath } from '../lib/permalink';
+import Pagination from '../components/Pagination';
 
 const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 export default function ArchivePage({ settings }: { settings: Record<string, string> }) {
   const { year, month } = useParams();
   const [data, setData] = useState<any>(null);
+  // A missing month means the yearly archive (/archive/2026); the pager reuses
+  // the same endpoint with ?page=.
+  const [page, setPage] = useState(1);
   // Must run unconditionally: hooks cannot be called after an early return
   const theme = useTheme();
 
+  useEffect(() => { setPage(1); }, [year, month]);
   useEffect(() => {
-    api.get('/posts/archive/' + year + '/' + month).then(r => setData(r.data)).catch(() => setData({ error: true }));
-  }, [year, month]);
+    const perPage = settings.posts_per_page || '10';
+    const url = '/posts/archive/' + year + (month ? '/' + month : '') + '?page=' + page + '&limit=' + perPage;
+    api.get(url).then(r => setData(r.data)).catch(() => setData({ error: true }));
+  }, [year, month, page, settings.posts_per_page]);
 
-  const monthLabel = MONTHS[parseInt(month || '1') - 1] + ' ' + year;
+  const monthLabel = month ? MONTHS[parseInt(month || '1') - 1] + ' ' + year : year;
   useSEO({
     siteTitle: settings.site_title,
     title: monthLabel + ' ' + t('archive'),
-    url: window.location.origin + '/archive/' + year + '/' + month,
+    url: window.location.origin + '/archive/' + year + (month ? '/' + month : ''),
     jsonLd: [
       {
         '@context': 'https://schema.org',
         '@type': 'BreadcrumbList',
         itemListElement: [
           { '@type': 'ListItem', position: 1, name: t('home'), item: window.location.origin + '/' },
-          { '@type': 'ListItem', position: 2, name: monthLabel, item: window.location.origin + '/archive/' + year + '/' + month },
+          { '@type': 'ListItem', position: 2, name: monthLabel, item: window.location.origin + '/archive/' + year + (month ? '/' + month : '') },
         ],
       },
       ...(data?.posts?.length ? [{
@@ -45,5 +52,8 @@ export default function ArchivePage({ settings }: { settings: Record<string, str
   if (data.error) return React.createElement('p', { className: 'text-gray-500 p-8' }, t('failed to load archive'));
 
   const Layout = theme.ArchiveLayout;
-  return React.createElement(Layout, { settings, data, year, month });
+  const pagination = React.createElement(Pagination, {
+    page, total: data.total || 0, perPage: parseInt(settings.posts_per_page || '10'), onChange: setPage, settings,
+  });
+  return React.createElement(Layout, { settings, data, year, month, pagination, page, total: data.total, setPage });
 }

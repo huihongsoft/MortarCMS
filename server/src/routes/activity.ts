@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import db from '../utils/db';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -73,7 +73,7 @@ function backfillDetails(rows: any[]): void {
 }
 
 // Admin: get activity log (filterable by action substring, paginated)
-router.get('/', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.get('/', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);

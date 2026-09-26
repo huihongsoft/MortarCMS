@@ -6,6 +6,25 @@ import { t, getSiteLang, setLang } from '../../lib/i18n';
 export default function Footer({ settings }: { settings: Record<string, string> }) {
   const currentLang = getSiteLang(settings);
   const [menuItems, setMenuItems] = useState<any[]>([]);
+  // Newsletter signup. Only softstore's footer offered one before, so a site on
+  // any other theme had no way to subscribe even though the module (confirm /
+  // unsubscribe pages, subscriber list) was all there.
+  const [email, setEmail] = useState('');
+  const [signup, setSignup] = useState<'idle' | 'sending' | 'done' | 'error'>('idle');
+  // The server distinguishes "confirmation email sent" from "subscribed right
+  // away" (no SMTP configured) — say which one actually happened.
+  const [needsConfirm, setNeedsConfirm] = useState(false);
+  async function subscribe(e: React.FormEvent) {
+    e.preventDefault();
+    if (!email.trim() || signup === 'sending') return;
+    setSignup('sending');
+    try {
+      const r = await api.post('/newsletter/subscribe', { email: email.trim() });
+      setNeedsConfirm(r.data?.message === 'confirmation_sent');
+      setSignup('done');
+      setEmail('');
+    } catch { setSignup('error'); }
+  }
   useEffect(() => { api.get('/menus/location/footer').then(r => setMenuItems(r.data.items || [])).catch(() => {}); }, []);
   const topLevel = menuItems.filter((i: any) => !i.parentId);
   // the truthy check keeps an item without an id from matching every other
@@ -13,6 +32,28 @@ export default function Footer({ settings }: { settings: Record<string, string> 
   const childrenOf = (pid: string) => menuItems.filter((i: any) => i.parentId && i.parentId === pid);
   return React.createElement('footer', { className: 'bg-gray-50 border-t border-gray-200 mt-16' },
     React.createElement('div', { className: 'max-w-5xl mx-auto px-4 py-8' },
+      React.createElement('form', { onSubmit: subscribe, className: 'mb-8 max-w-md' },
+        React.createElement('h4', { className: 'text-sm font-semibold text-gray-900 mb-2' }, t('subscribe to the newsletter', settings)),
+        React.createElement('p', { className: 'text-xs text-gray-500 mb-3' }, t('newsletter signup hint', settings)),
+        React.createElement('div', { className: 'flex gap-2' },
+          React.createElement('label', { className: 'sr-only', htmlFor: 'footer-newsletter-email' }, t('email', settings)),
+          React.createElement('input', {
+            id: 'footer-newsletter-email', type: 'email', required: true, value: email,
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value),
+            placeholder: t('your email', settings),
+            className: 'flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm outline-none focus:border-primary-500 bg-white',
+            disabled: signup === 'sending',
+          }),
+          React.createElement('button', {
+            type: 'submit', disabled: signup === 'sending',
+            className: 'px-4 py-2 rounded-lg text-white text-sm font-medium disabled:opacity-60',
+            style: { background: 'var(--primary-color, #2563eb)' },
+          }, signup === 'sending' ? t('sending', settings) : t('subscribe', settings))
+        ),
+        signup === 'done' && React.createElement('p', { className: 'text-xs text-green-600 mt-2', role: 'status' },
+          needsConfirm ? t('check your inbox to confirm the subscription', settings) : t('subscribed - thank you', settings)),
+        signup === 'error' && React.createElement('p', { className: 'text-xs text-red-600 mt-2', role: 'alert' }, t('subscription failed - please try again later', settings))
+      ),
       React.createElement('div', { className: 'grid grid-cols-2 md:grid-cols-4 gap-6 mb-6' },
         React.createElement('div', null,
           React.createElement('h4', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('navigate', settings)),

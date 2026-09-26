@@ -38,6 +38,9 @@ export default function PostPage({ settings }: { settings: Record<string, string
   const [comments, setComments] = useState<any[]>([]);
   const [commentForm, setCommentForm] = useState({ author: '', email: '', content: '', notifyMe: false });
   const [commentError, setCommentError] = useState('');
+  // Which comment the next submission replies to (null = a new top-level
+  // comment). Threads render recursively; this drives parentId on submit.
+  const [replyTo, setReplyTo] = useState<{ id: string; author: string } | null>(null);
   const [submitted, setSubmitted] = useState(false);
   // Must run unconditionally: hooks cannot be called after an early return
   const theme = useTheme();
@@ -52,6 +55,16 @@ export default function PostPage({ settings }: { settings: Record<string, string
       }
     } catch {}
   }, []);
+
+  // Switching posts keeps the component mounted (same route, new slug), so the
+  // reply target and the previous post's messages have to be cleared — otherwise
+  // the banner still said "replying to @X" and the submission was rejected as an
+  // invalid parent.
+  useEffect(() => {
+    setReplyTo(null);
+    setCommentError('');
+    setSubmitted(false);
+  }, [slug]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,10 +90,11 @@ export default function PostPage({ settings }: { settings: Record<string, string
     // Honeypot: silently drop submissions where bots filled the hidden field
     if ((document.querySelector('[name="website_url"]') as HTMLInputElement)?.value) return;
     try {
-      await api.post('/comments', { ...commentForm, subscribe: commentForm.notifyMe, postId: post.id });
+      await api.post('/comments', { ...commentForm, subscribe: commentForm.notifyMe, postId: post.id, parentId: replyTo?.id || undefined });
       // Remember the commenter for next time (privacy-friendly: name + email only)
       try { localStorage.setItem('mortar_commenter', JSON.stringify({ author: commentForm.author, email: commentForm.email })); } catch {}
       setSubmitted(true);
+      setReplyTo(null);
       setCommentForm({ author: commentForm.author, email: commentForm.email, content: '', notifyMe: false });
       // Refresh the visible comments (approval may be instant)
       api.get('/comments/post/' + post.id).then(cr => setComments(cr.data)).catch(() => {});
@@ -89,6 +103,17 @@ export default function PostPage({ settings }: { settings: Record<string, string
       setCommentError(t(err.response?.data?.error || 'comment failed', settings));
     }
   }
+
+  // Reply buttons live in the themes; focus the (single) form so the visitor
+  // lands where they can type, with the thread target shown above it.
+  function startReply(c: any) {
+    setReplyTo({ id: c.id, author: c.author });
+    const el = document.getElementById('comment-form');
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const box = el?.querySelector('textarea') as HTMLTextAreaElement | null;
+    box?.focus();
+  }
+  function cancelReply() { setReplyTo(null); }
 
   const seoTitle = post?.meta?._seo_title || post?.title;
   const seoDesc = post?.meta?._seo_desc || post?.excerpt || '';
@@ -142,5 +167,5 @@ export default function PostPage({ settings }: { settings: Record<string, string
   if (post.protected) return React.createElement(PasswordForm, { title: post.title, slug, settings });
 
   const Layout = theme.PostLayout;
-  return React.createElement(Layout, { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug });
+  return React.createElement(Layout, { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug, replyTo, startReply, cancelReply });
 }

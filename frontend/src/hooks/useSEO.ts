@@ -78,6 +78,23 @@ export default function useSEO(opts: SEOOptions = {}) {
       ldEl.remove();
     }
 
+    // Feed autodiscovery: readers (and the browser's "subscribe" affordance)
+    // find the feeds without anyone pasting a URL.
+    for (const [rel, type, path] of [
+      ['alternate', 'application/rss+xml', '/api/feed/rss'],
+      ['alternate', 'application/atom+xml', '/api/feed/atom'],
+      ['alternate', 'application/feed+json', '/api/feed/json'],
+    ] as const) {
+      let feedEl = document.head.querySelector(`link[type="${type}"]`) as HTMLLinkElement | null;
+      if (!feedEl) {
+        feedEl = document.createElement('link');
+        feedEl.rel = rel;
+        feedEl.type = type;
+        document.head.appendChild(feedEl);
+      }
+      feedEl.href = window.location.origin + path;
+    }
+
     // Robots: noindex (per-post SEO setting)
     let robotsEl = document.head.querySelector('meta[name="robots"]') as HTMLMetaElement | null;
     if (opts.noindex) {

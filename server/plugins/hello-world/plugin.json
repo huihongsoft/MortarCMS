@@ -1,7 +1,7 @@
 {
  "name": "hello-world",
  "version": "1.0.0",
- "description": "Adds a small greeting banner to the top of every post via the post_content filter.",
+ "description": "Demo plugin: a post_content banner, the [hello] shortcode, its own HTTP endpoint (/api/ext/hello-world/ping), an admin screen and a visual-editor block.",
  "author": "Mortar Team",
  "requires": "0.1.0"
 }

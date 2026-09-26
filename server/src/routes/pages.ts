@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, userCan, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { uniqueSlug } from '../utils/slug';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
@@ -10,6 +10,7 @@ import { sanitizeCssText } from '../utils/sanitize';
 import { normalizeSeoField } from '../utils/seoFields';
 import { siteScopeForFilter, mayWriteSite, userMayAccessSite } from '../utils/userSites';
 import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
+import { doAction } from '../utils/hooks';
 
 const router = Router();
 // Protected-page password guessing is brute-forced per IP
@@ -121,7 +122,7 @@ router.post('/slug/:slug/password', passwordLimiter, async (req: AuthRequest, re
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.get('/', authenticate, requireCap('edit_pages'), (req: AuthRequest, res: Response) => {
   try {
     const sf = siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId, 'p.siteId');
     if (sf.denied) { res.status(403).json({ error: '无权访问该站点' }); return; }
@@ -148,13 +149,16 @@ router.get('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, r
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/', authenticate, authorize('admin', 'editor'), async (req: AuthRequest, res: Response) => {
+router.post('/', authenticate, requireCap('edit_pages'), async (req: AuthRequest, res: Response) => {
   try {
     const data = pageSchema.parse(req.body);
-    const allSlugs = (db.prepare('SELECT slug FROM Post WHERE type = ?').all('page') as any[]).map((s: any) => s.slug);
+    // Slug is unique across all content types (see the same note in posts.ts).
+    const allSlugs = (db.prepare('SELECT slug FROM Post').all() as any[]).map((s: any) => s.slug);
     const slug = uniqueSlug(data.title, allSlugs);
     const id = cuid();
     const { status: storeStatus, password: rawPassword } = normalizePage(data);
+    // Writing a page and putting it online are separate capabilities.
+    if (storeStatus === 'published' && !userCan(req.user!, 'publish_pages')) { res.status(403).json({ error: '无权发布页面' }); return; }
     // Store a hash, never the plaintext (see utils/contentPassword).
     const storePassword = rawPassword ? await hashContentPassword(rawPassword) : '';
     if (data.siteId !== undefined && !mayWriteSite(req.user!.userId, req.user!.role, data.siteId)) {
@@ -169,11 +173,17 @@ router.post('/', authenticate, authorize('admin', 'editor'), async (req: AuthReq
       }
     });
     const page = db.prepare('SELECT * FROM Post WHERE id = ?').get(id) as any;
+    // Pages are posts of type 'page'; the content type travels with the hook so
+    // a listener can decide whether it applies (URLs differ: /page/ vs /post/).
+    try {
+      doAction('post_created', id, storeStatus, 'page');
+      if (storeStatus === 'published') doAction('post_published', id, 'page');
+    } catch {}
     res.status(201).json(page);
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:id', authenticate, authorize('admin', 'editor'), async (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, requireCap('edit_pages'), async (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ? AND type = ?').get(req.params.id, 'page') as any;
     if (!existing) { res.status(404).json({ error: 'Page not found' }); return; }
@@ -187,6 +197,9 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), async (req: AuthR
     if (data.featured !== undefined) { sets.push('featured = ?'); vals.push(data.featured || null); }
     if (data.status !== undefined || data.password !== undefined) {
       const norm = normalizePage({ status: data.status, password: data.password }, existing.password || '');
+      // Only the transition into published is a publish; re-saving an
+      // already-published page must not require the capability.
+      if (norm.status === 'published' && existing.status !== 'published' && !userCan(req.user!, 'publish_pages')) { res.status(403).json({ error: '无权发布页面' }); return; }
       sets.push('status = ?'); vals.push(norm.status);
       // Same unchanged-value rule as posts: the admin editor echoes the stored
       // value back on every save, so only a genuinely new value is re-hashed.
@@ -220,12 +233,16 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), async (req: AuthR
       }
     });
     const page = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
+    try {
+      doAction('post_updated', req.params.id, 'page');
+      if (page.status === 'published' && existing.status !== 'published') doAction('post_published', req.params.id, 'page');
+    } catch {}
     res.json(page);
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
 // Admin: list revisions for a page (history)
-router.get('/:id/revisions', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.get('/:id/revisions', authenticate, requireCap('edit_pages'), (req: AuthRequest, res: Response) => {
   try {
     const revisions = db.prepare('SELECT id, title, content, excerpt, createdAt FROM Revision WHERE postId = ? ORDER BY createdAt DESC LIMIT 20').all(req.params.id) as any[];
     res.json(revisions);
@@ -233,7 +250,7 @@ router.get('/:id/revisions', authenticate, authorize('admin', 'editor'), (req: A
 });
 
 // Admin: restore a page revision (current state becomes a new revision first)
-router.put('/:id/revisions/:revId/restore', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.put('/:id/revisions/:revId/restore', authenticate, requireCap('edit_pages'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ? AND type = ?').get(req.params.id, 'page') as any;
     const rev = db.prepare('SELECT * FROM Revision WHERE id = ? AND postId = ?').get(req.params.revId, req.params.id) as any;
@@ -248,7 +265,7 @@ router.put('/:id/revisions/:revId/restore', authenticate, authorize('admin', 'ed
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticate, requireCap('delete_pages'), (req: AuthRequest, res: Response) => {
   try {
     // Deleting a page is a write on its site, so the row has to be in this user's
     // sites (this handler did not even load it before).
@@ -261,6 +278,7 @@ router.delete('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequ
       // dangling reference so menu jumps don't 404
       db.prepare('UPDATE LinkCategory SET pageId = NULL WHERE pageId = ?').run(req.params.id);
     });
+    try { doAction('delete_post', req.params.id, 'page'); } catch {}
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

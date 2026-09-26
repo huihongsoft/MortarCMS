@@ -9,7 +9,7 @@ import { UPLOADS_DIR as uploadsDir } from '../utils/paths';
 const router = Router();
 
 // Admin: detailed site health check
-router.get('/health/detail', authenticate, requireCap('manage_options'), (_req: AuthRequest, res: Response) => {
+router.get('/health/detail', authenticate, requireCap('manage_system'), (_req: AuthRequest, res: Response) => {
   try {
     const checks: Record<string, any> = {};
 

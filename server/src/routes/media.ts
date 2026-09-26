@@ -4,7 +4,7 @@ import path from 'path';
 import sharp from 'sharp';
 import rateLimit from 'express-rate-limit';
 import db, { cuid } from '../utils/db';
-import { authenticate, authorize, resolveOptionalUser, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { siteScopeForFilter, mayWriteSite, userMayAccessSite } from '../utils/userSites';
 import { doAction } from '../utils/hooks';
 import { upload } from '../middleware/upload';
@@ -73,7 +73,7 @@ function mediaScope(req: AuthRequest, id: unknown): 'ok' | 'denied' | 'missing' 
   return mayEditMedia(req, media) ? 'ok' : 'denied';
 }
 
-router.get('/', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
+router.get('/', authenticate, requireCap('upload_files'), (req: AuthRequest, res: Response) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     // Clamped: media rows are expensive (each one triggers ensureResponsiveVariants).
@@ -96,7 +96,7 @@ router.get('/', authenticate, authorize('admin', 'editor', 'author'), (req: Auth
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/search', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
+router.get('/search', authenticate, requireCap('upload_files'), (req: AuthRequest, res: Response) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
     const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
@@ -138,7 +138,7 @@ function sanitizeSvg(content: string): string {
   return stripUnsafeUrlAttrs(stripEventHandlerAttrs(stripped));
 }
 
-router.post('/upload', authenticate, authorize('admin', 'editor', 'author'), upload.single('file'), async (req: AuthRequest, res: Response) => {
+router.post('/upload', authenticate, requireCap('upload_files'), upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return; }
     const srcPath = uploadPath(req.file.filename);
@@ -314,7 +314,7 @@ router.get('/:id/img', imageVariantLimiter, async (req: AuthRequest, res: Respon
 });
 
 // Admin: bulk update media metadata (title / alt text) for many items at once
-router.post('/bulk-edit', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.post('/bulk-edit', authenticate, requireCap('edit_media'), (req: AuthRequest, res: Response) => {
   try {
     const { ids, title, alt } = req.body || {};
     if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: 'ids array required' }); return; }
@@ -330,7 +330,7 @@ router.post('/bulk-edit', authenticate, authorize('admin', 'editor'), (req: Auth
 });
 
 // Admin: update media metadata (title / alt text) — like the WP attachment edit screen
-router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, requireCap('edit_media'), (req: AuthRequest, res: Response) => {
   try {
     const media = db.prepare('SELECT * FROM Media WHERE id = ?').get(req.params.id) as any;
     if (!media) { res.status(404).json({ error: 'Media not found' }); return; }
@@ -344,6 +344,7 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest
       db.prepare('UPDATE Media SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
     }
     const updated = db.prepare('SELECT * FROM Media WHERE id = ?').get(req.params.id) as any;
+    try { doAction('media_updated', req.params.id); } catch {}
     res.json(updated);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -377,19 +378,20 @@ function removeMediaFiles(media: any): void {
   } catch {}
 }
 
-router.delete('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticate, requireCap('delete_media'), (req: AuthRequest, res: Response) => {
   try {
     const media = db.prepare('SELECT * FROM Media WHERE id = ?').get(req.params.id) as any;
     if (!media) { res.status(404).json({ error: 'Media not found' }); return; }
     if (!mayEditMedia(req, media)) { res.status(403).json({ error: '无权操作该站点的媒体' }); return; }
     removeMediaFiles(media);
     db.prepare('DELETE FROM Media WHERE id = ?').run(req.params.id);
+    try { doAction('media_deleted', req.params.id); } catch {}
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: bulk delete media
-router.post('/bulk-delete', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.post('/bulk-delete', authenticate, requireCap('delete_media'), (req: AuthRequest, res: Response) => {
   try {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids)) { res.status(400).json({ error: 'ids array required' }); return; }
@@ -399,6 +401,7 @@ router.post('/bulk-delete', authenticate, authorize('admin', 'editor'), (req: Au
       if (m) {
         removeMediaFiles(m);
         db.prepare('DELETE FROM Media WHERE id = ?').run(id);
+        try { doAction('media_deleted', id); } catch {}
       }
     }
     res.json({ success: true, count: ids.length });

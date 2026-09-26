@@ -77,6 +77,8 @@ export async function runTaskNow(id: string): Promise<{ ok: boolean; error?: str
   t.state.runCount++;
   t.state.lastRun = Date.now();
   t.state.running = false;
+  // Plugins/webhooks can report or alert on scheduled work (failures included).
+  try { doAction('task_run', id, t.state.lastStatus === 'ok', t.state.lastError || '', t.state.lastDurationMs); } catch {}
   return { ok: t.state.lastStatus === 'ok', error: t.state.lastError, ms: t.state.lastDurationMs };
 }
 

@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import db, { cuid } from '../utils/db';
-import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { purgeContentCaches } from '../utils/cache';
 
 const router = Router();
@@ -37,7 +37,7 @@ router.get('/', (_req: AuthRequest, res: Response) => {
 });
 
 // Admin: register a new custom post type
-router.post('/', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.post('/', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
   try {
     const slug = String((req.body || {}).slug || '').trim().toLowerCase();
     const label = String((req.body || {}).label || '').trim();
@@ -51,8 +51,27 @@ router.post('/', authenticate, authorize('admin'), (req: AuthRequest, res: Respo
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Admin: edit a registered type's label / supports. The slug is immutable — the
+// content rows are keyed by it, so renaming would orphan every entry.
+router.put('/:slug', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
+  try {
+    const slug = req.params.slug;
+    if (BUILTIN_TYPES.some(t => t.slug === slug)) { res.status(400).json({ error: '内置类型不能修改' }); return; }
+    const list = loadCustomTypes();
+    const idx = list.findIndex(t => t.slug === slug);
+    if (idx === -1) { res.status(404).json({ error: '类型不存在' }); return; }
+    const label = String((req.body || {}).label ?? '').trim();
+    if ((req.body || {}).label !== undefined && !label) { res.status(400).json({ error: 'label 不能为空' }); return; }
+    const supports = Array.isArray((req.body || {}).supports) ? (req.body as any).supports.map(String) : undefined;
+    list[idx] = { ...list[idx], ...(label ? { label } : {}), ...(supports ? { supports } : {}) };
+    saveCustomTypes(list);
+    purgeContentCaches();
+    res.json({ success: true, type: list[idx] });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // Admin: unregister a custom post type (its content is kept but no longer listed)
-router.delete('/:slug', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.delete('/:slug', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
   try {
     const slug = req.params.slug;
     if (BUILTIN_TYPES.some(t => t.slug === slug)) { res.status(400).json({ error: '内置类型不能删除' }); return; }

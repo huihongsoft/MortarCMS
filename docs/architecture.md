@@ -129,8 +129,10 @@ because it is public.
   live CMS data preview, real site CSS in the canvas, zoom, block search
 - **AI assistant**: multi-session streaming chat, async tasks, slash
   commands, voice input, prompt library, notifications
-- **RBAC**: Roles & Permissions page — 35 capabilities across 5 groups
-  (content / media / appearance / system / AI), custom roles
+- **RBAC**: Roles & Permissions page — 39 capabilities across 5 groups
+  (content / media / appearance / system / AI), custom roles. Every catalogued
+  key is enforced by at least one route, and every route guard is
+  capability-based (no role-slug allow-lists outside the plugin API)
 - WordPress-style UI: grouped sidebar, admin bar, light/dark mode that
   follows the active theme color
 
@@ -163,3 +165,39 @@ because it is public.
 
 Every 60s: auto-publishes scheduled posts.
 Every 60s: AI scheduler runs interval/daily/weekly agent tasks.
+
+## Roles and capabilities
+
+Built-in roles ship with a capability list defined once in `server/src/utils/db.ts`
+(`BUILTIN_ROLES`): the seed inserts it for a new install, and migration 16
+(`align-builtin-role-capabilities`) tops up an existing install's rows with any
+missing default — add-only, so a capability an administrator removed by hand is
+never silently restored, and custom roles are never touched. Without that step an
+install seeded long ago could have an editor whose row predated the current
+defaults (no `moderate_comments`, no `manage_options`), which looked like a bug:
+the editor simply could not moderate comments or open the dashboard.
+
+`FALLBACK_CAPABILITIES` in `server/src/middleware/auth.ts` mirrors the same lists
+for the case where the `Role` table has no row at all (a deleted row, a database
+restored without it) — keep the two in step.
+
+Migration 17 (`capability-route-alignment`) is the follow-up that finished the
+job: the remaining role-slug guards (`authorize('admin')` on the database tools,
+installer, webhooks, mailer, GDPR, activity log, custom post types, AI provider
+settings and subscribers) became the `manage_system` capability, and category/
+tag/link/security/site-list access moved onto their own keys. It adds exactly
+`manage_security` and `view_sites` to the built-in editor row and nothing else —
+deliberately not `alignBuiltinRoleCapabilities()`, which would resurrect every
+missing default an administrator may have removed on purpose.
+
+`admin/src/lib/access.ts` is the UI half: one table that drives the sidebar
+entries, the route guard (a "no permission" screen instead of an empty page for a
+direct URL) and the in-page buttons. Its rules are capability-based (the single
+`roles:` entry left is the API-docs screen), so a custom role granted a key
+really does reach the screen it unlocks. The server stays the real gate: every
+route answers 401/403 on its own.
+
+Because the admin caches its capability snapshot at login, `Roles.tsx` fires a
+`mortar-permissions-changed` window event after a successful save and
+`AuthProvider` re-reads `/auth/me` on it — otherwise editing your own role left
+the sidebar stale until a full reload.

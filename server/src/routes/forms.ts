@@ -5,6 +5,7 @@ import { assignedSites, mayWriteSite, userMayAccessSite } from '../utils/userSit
 import { slugify, uniqueSlug } from '../utils/slug';
 import { renderTemplate, sendEmail } from '../utils/mailer';
 import { doAction } from '../utils/hooks';
+import { purgeContentCaches } from '../utils/cache';
 
 const router = Router();
 
@@ -24,7 +25,10 @@ router.post('/forms/:slug/submit', async (req: AuthRequest, res: Response) => {
     const body = (req.body || {}) as Record<string, any>;
     const isSpam = typeof body._hp === 'string' && body._hp.trim() !== '';
     // Build the stored payload from declared fields only (ignores injected keys)
-    const data: Record<string, string> = {};
+    // A field may be named __proto__ (the builder does not reserve names);
+    // assigning that key on a plain object is a silent no-op, so the submission
+    // looked empty and required-field validation failed for every visitor.
+    const data: Record<string, string> = Object.create(null);
     for (const f of fields) {
       const name = String(f.name || '');
       if (!name) continue;
@@ -140,6 +144,9 @@ router.post('/admin/forms', ...adminGuard, (req: AuthRequest, res: Response) => 
     if (formSite && !mayWriteSite(req.user!.userId, req.user!.role, formSite)) { res.status(403).json({ error: '无权在该站点创建表单' }); return; }
     db.prepare('INSERT INTO Form (id, name, slug, fields, successMessage, emailTo, emailSubject, enabled, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(id, parsed.name, slug, JSON.stringify(parsed.fields), parsed.successMessage, parsed.emailTo, parsed.emailSubject, parsed.enabled ? 1 : 0, formSite);
+    // [form] renders into cached post/page HTML, so its definition changing
+    // must flush that cache or the page keeps serving the old fields.
+    purgeContentCaches();
     res.status(201).json({ id, slug });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -163,6 +170,7 @@ router.put('/admin/forms/:id', ...adminGuard, (req: AuthRequest, res: Response) 
     if ('error' in parsed) { res.status(400).json({ error: parsed.error }); return; }
     db.prepare('UPDATE Form SET name = ?, fields = ?, successMessage = ?, emailTo = ?, emailSubject = ?, enabled = ?, updatedAt = ? WHERE id = ?')
       .run(parsed.name, JSON.stringify(parsed.fields), parsed.successMessage, parsed.emailTo, parsed.emailSubject, parsed.enabled ? 1 : 0, new Date().toISOString(), req.params.id);
+    purgeContentCaches();
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -174,6 +182,7 @@ router.delete('/admin/forms/:id', ...adminGuard, (req: AuthRequest, res: Respons
     if (!mayTouchForm(req, form)) { res.status(403).json({ error: '无权操作该站点的表单' }); return; }
     const r = db.prepare('DELETE FROM Form WHERE id = ?').run(req.params.id);
     if (r.changes === 0) { res.status(404).json({ error: 'Form not found' }); return; }
+    purgeContentCaches();
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

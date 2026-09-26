@@ -17,12 +17,24 @@ function push(list: Record<string, HookListener[]>, hook: string, entry: HookLis
   list[hook].sort((a, b) => a.priority - b.priority);
 }
 
-export function addAction(hook: string, fn: HookFn, priority = 10, source = 'core'): void {
-  push(actions, hook, { fn, priority, source });
+// While a plugin's register() runs, everything it registers belongs to that
+// plugin. Without this the bundled plugins all registered with the default
+// source 'core': the hooks browser showed them as core listeners and
+// removeAllHooks() could not reset them (it keeps anything labelled core).
+let registeringSource: string | null = null;
+
+export function withHookSource<T>(source: string, fn: () => T): T {
+  const prev = registeringSource;
+  registeringSource = source;
+  try { return fn(); } finally { registeringSource = prev; }
 }
 
-export function addFilter(hook: string, fn: HookFn, priority = 10, source = 'core'): void {
-  push(filters, hook, { fn, priority, source });
+export function addAction(hook: string, fn: HookFn, priority = 10, source?: string): void {
+  push(actions, hook, { fn, priority, source: source || registeringSource || 'core' });
+}
+
+export function addFilter(hook: string, fn: HookFn, priority = 10, source?: string): void {
+  push(filters, hook, { fn, priority, source: source || registeringSource || 'core' });
 }
 
 // Remove one listener by reference, or all listeners on the hook when fn is omitted
@@ -41,6 +53,21 @@ export function removeFilter(hook: string, fn?: HookFn): void {
 export function removeAllHooks(hook: string): void {
   if (actions[hook]) actions[hook] = actions[hook].filter(l => l.source === 'core');
   if (filters[hook]) filters[hook] = filters[hook].filter(l => l.source === 'core');
+}
+
+// Drop every listener a plugin registered. Deactivating a plugin used to leave
+// its hooks running (nothing removed them), and re-activating ran register()
+// again on top — the banner/listener then appeared twice per toggle.
+export function removeHooksBySource(source: string): number {
+  let removed = 0;
+  for (const map of [actions, filters]) {
+    for (const hook of Object.keys(map)) {
+      const before = map[hook].length;
+      map[hook] = map[hook].filter(l => l.source !== source);
+      removed += before - map[hook].length;
+    }
+  }
+  return removed;
 }
 
 export function hasAction(hook: string): boolean { return (actions[hook] || []).length > 0; }
@@ -74,9 +101,12 @@ export function applyFilters(hook: string, value: any, ...args: any[]): any {
 
 // Canonical hooks exposed by the core (reference list for the browser UI)
 export const KNOWN_ACTIONS = [
-  'init', 'post_created', 'post_updated', 'post_published', 'delete_post',
+  'init', 'post_created', 'post_updated', 'post_published', 'post_restored', 'delete_post',
   'comment_added', 'comment_approved', 'comment_spam', 'delete_comment',
-  'user_register', 'media_uploaded', 'form_submitted', 'post_submitted', 'site_reset',
+  'user_register', 'user_updated', 'user_deleted', 'media_uploaded', 'media_updated', 'media_deleted',
+  'form_submitted', 'post_submitted', 'site_reset', 'settings_saved',
+  'menu_saved', 'menu_deleted', 'theme_activated', 'theme_deactivated',
+  'plugin_activated', 'plugin_deactivated', 'task_run',
   'user_login', 'login_failed', 'backup_completed',
 ];
 export const KNOWN_FILTERS = ['post_content', 'comment_validate'];

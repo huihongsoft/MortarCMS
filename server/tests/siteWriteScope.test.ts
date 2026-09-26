@@ -5,6 +5,7 @@ import db, { initDB } from '../src/utils/db';
 import { signToken } from '../src/utils/jwt';
 import { setUserSites } from '../src/utils/userSites';
 import postRoutes from '../src/routes/posts';
+import { addAction, removeAction } from '../src/utils/hooks';
 import pageRoutes from '../src/routes/pages';
 import menuRoutes from '../src/routes/menus';
 import linkRoutes from '../src/routes/links';
@@ -109,5 +110,110 @@ describe('public lists follow the resolved site', () => {
     expect(author.posts.map((p: any) => p.slug)).toEqual(['p1']);
     const related = await (await fetch(base + '/posts/p1/related', { headers: site('s1') })).json();
     expect(related.map((p: any) => p.slug)).not.toContain('p2');
+  });
+});
+
+// The bulk endpoints take ids from the client, so they have to apply the same
+// per-row checks the single-row routes do — they used to update any id handed
+// to them, which let an editor assigned to one site rewrite another site's
+// posts (the by-id tests above missed the bulk paths entirely).
+describe('bulk post operations reuse the single-row rules', () => {
+  const add = (id: string, siteId: string | null, status = 'published') =>
+    db.prepare('INSERT OR REPLACE INTO Post (id, title, slug, content, status, type, authorId, siteId, publishedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, id, id, 'b', status, 'post', 'ed', siteId, new Date().toISOString());
+  const statusOf = (id: string) => (db.prepare('SELECT status FROM Post WHERE id = ?').get(id) as any)?.status;
+  const previousOf = (id: string) => (db.prepare('SELECT previousStatus FROM Post WHERE id = ?').get(id) as any)?.previousStatus;
+  const bulk = (path: string, body: any) => fetch(base + path, { method: 'POST', headers: asEditor, body: JSON.stringify(body) });
+
+  it('skips ids outside the caller\'s sites', async () => {
+    add('b1', 's1'); add('b2', 's2');
+    const r = await bulk('/posts/bulk-trash', { ids: ['b1', 'b2'] });
+    expect(r.status).toBe(200);
+    const body = await r.json();
+    expect(body.count).toBe(1);      // own post
+    expect(body.skipped).toBe(1);    // site two's post was left alone
+    expect(statusOf('b1')).toBe('trash');
+    expect(statusOf('b2')).toBe('published');
+
+    // the same guard on the other two id-driven writes
+    await bulk('/posts/bulk-status', { ids: ['b2'], status: 'draft' });
+    expect(statusOf('b2')).toBe('published');
+    expect((await fetch(base + '/posts/b2/sticky', { method: 'PUT', headers: asEditor })).status).toBe(403);
+  });
+
+  it('remembers the status a post had before the trash, and restores it', async () => {
+    add('b3', 's1', 'published');
+    await bulk('/posts/bulk-trash', { ids: ['b3'] });
+    expect(previousOf('b3')).toBe('published');
+
+    const r = await bulk('/posts/bulk-restore', { ids: ['b3'] });
+    expect((await r.json()).restored).toBe(1);
+    expect(statusOf('b3')).toBe('published');   // not silently downgraded to draft
+    expect(previousOf('b3')).toBeNull();
+  });
+
+  it('single delete and restore use the same memory', async () => {
+    add('b4', 's1', 'published');
+    expect((await fetch(base + '/posts/b4', { method: 'DELETE', headers: asEditor })).status).toBe(200);
+    expect(previousOf('b4')).toBe('published');
+    expect((await fetch(base + '/posts/b4/restore', { method: 'PUT', headers: asEditor })).status).toBe(200);
+    expect(statusOf('b4')).toBe('published');
+  });
+
+  it('trashing an already-trashed post keeps the remembered status', async () => {
+    add('b8', 's1', 'published');
+    await bulk('/posts/bulk-trash', { ids: ['b8'] });
+    await bulk('/posts/bulk-trash', { ids: ['b8'] });   // second pass must not wipe it
+    await bulk('/posts/bulk-status', { ids: ['b8'], status: 'trash' });
+    expect(previousOf('b8')).toBe('published');
+    await bulk('/posts/bulk-restore', { ids: ['b8'] });
+    expect(statusOf('b8')).toBe('published');
+  });
+
+  it('bulk-status publishes with a fresh date instead of keeping a future one', async () => {
+    const future = new Date(Date.now() + 86_400_000).toISOString();
+    add('b5', 's1', 'draft');
+    db.prepare('UPDATE Post SET publishedAt = ? WHERE id = ?').run(future, 'b5');
+    await bulk('/posts/bulk-status', { ids: ['b5'], status: 'published' });
+    const row = db.prepare('SELECT status, publishedAt FROM Post WHERE id = ?').get('b5') as any;
+    expect(row.status).toBe('published');
+    expect(row.publishedAt <= new Date().toISOString()).toBe(true);
+  });
+
+  it('bulk-delete only removes trashed rows and leaves the rest', async () => {
+    add('b6', 's1', 'trash');
+    add('b7', 's1', 'draft');
+    const r = await bulk('/posts/bulk-delete', { ids: ['b6', 'b7'] });
+    expect((await r.json()).deleted).toBe(1);
+    expect(db.prepare('SELECT COUNT(*) c FROM Post WHERE id = ?').get('b6') as any).toEqual({ c: 0 });
+    expect(statusOf('b7')).toBe('draft');
+  });
+});
+
+// Every bulk path used to be silent: a plugin or webhook listening for
+// post_updated / post_published / delete_post never saw a bulk action.
+describe('bulk post operations fire lifecycle hooks', () => {
+  it('fires delete_post, post_updated, post_published and post_restored', async () => {
+    const seen: string[] = [];
+    const listener = (name: string) => () => { seen.push(name); };
+    const pairs: [string, any][] = [
+      ['delete_post', listener('delete_post')],
+      ['post_updated', listener('post_updated')],
+      ['post_published', listener('post_published')],
+      ['post_restored', listener('post_restored')],
+    ];
+    for (const [name, fn] of pairs) addAction(name, fn);
+
+    db.prepare("INSERT OR REPLACE INTO Post (id, title, slug, content, status, type, authorId, siteId, publishedAt) VALUES ('h1','h1','h1','b','draft','post','ed','s1',NULL)").run();
+    const bulk = (path: string, body: any) => fetch(base + path, { method: 'POST', headers: asEditor, body: JSON.stringify(body) });
+    await bulk('/posts/bulk-status', { ids: ['h1'], status: 'published' });
+    await bulk('/posts/bulk-trash', { ids: ['h1'] });
+    await bulk('/posts/bulk-restore', { ids: ['h1'] });
+
+    for (const [name, fn] of pairs) removeAction(name, fn);
+    expect(seen).toContain('post_updated');
+    expect(seen).toContain('post_published');
+    expect(seen).toContain('delete_post');
+    expect(seen).toContain('post_restored');
   });
 });

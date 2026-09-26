@@ -9,6 +9,11 @@ import db from '../utils/db';
 import { assertArchiveWithinLimits } from '../utils/archive';
 import { isPrivateIp } from '../utils/ssrf';
 import { APP_VERSION } from '../utils/config';
+import { doAction, withHookSource, removeHooksBySource } from '../utils/hooks';
+import { purgeContentCaches, purgeAllCaches } from '../utils/cache';
+import { removeShortcodesBySource } from '../utils/shortcodes';
+import { removeToolsBySource } from '../utils/aiTools';
+import { setPluginContext, removePluginRegistrations, clearPluginIntervals } from '../utils/pluginApi';
 
 // Plugins ship as TypeScript sources (server/plugins/<name>/index.ts). Register
 // tsx's CommonJS loader so `node dist/index.js` (production build) can require
@@ -88,6 +93,21 @@ function setActive(names: string[]): void {
 }
 
 // Scan plugin directories and read metadata
+export function isPluginActive(name: string): boolean { return activePlugins().includes(name); }
+
+// Everything a plugin added at runtime: extension points, hook listeners and
+// shortcodes. `plugin:` is the source prefix hooks are tagged with.
+function discardPluginArtifacts(name: string): void {
+  removePluginRegistrations(name);
+  removeHooksBySource('plugin:' + name);
+  removeHooksBySource(name);
+  removeShortcodesBySource(name);
+  removeToolsBySource(name);
+  // Periodic work must stop with the plugin: media-cleanup kept deleting files
+  // after it was disabled because its own setInterval outlived the deactivation.
+  clearPluginIntervals(name);
+}
+
 export function listPlugins(): PluginMeta[] {
   const active = activePlugins();
   const result: PluginMeta[] = [];
@@ -125,7 +145,18 @@ export async function loadPlugin(name: string): Promise<{ ok: boolean; error?: s
     const entry = path.join(dir, 'index.ts');
     if (!fs.existsSync(entry)) return { ok: false, error: 'Plugin entry not found' };
     const mod = require(entry) as any;
-    if (typeof mod.register === 'function') mod.register();
+    // Start from a clean slate so re-loading (a toggle off/on, or a second
+    // loadActivePlugins pass) cannot hit "already registered" errors or stack a
+    // second copy of every hook/shortcode.
+    discardPluginArtifacts(name);
+    // Everything register() adds is attributed to this plugin: hooks (so the
+    // hooks browser shows the real source) and its routes/admin pages/blocks.
+    if (typeof mod.register === 'function') {
+      withHookSource('plugin:' + name, () => {
+        setPluginContext(name);
+        try { mod.register(); } finally { setPluginContext(null); }
+      });
+    }
     loaded[name] = { meta: listPlugins().find((p: any) => p.name === name) as PluginMeta, register: mod.register };
     return { ok: true };
   } catch (err: any) {
@@ -349,11 +380,31 @@ export async function setPluginActive(name: string, active: boolean): Promise<{ 
   if (active && idx === -1) current.push(name);
   if (!active && idx !== -1) current.splice(idx, 1);
   setActive(current);
+  // Plugins and webhooks can react to activation, exactly as they can to a
+  // plugin's own activate()/deactivate() lifecycle function.
+  const fire = (hook: string) => { try { doAction(hook, name, active); } catch (e: any) { console.log('[Plugins] ' + hook + ' listener failed: ' + e.message); } };
   if (active) {
     const r = await loadPlugin(name);
-    if (r.ok) await runLifecycle(name, 'activate');
+    if (!r.ok) {
+      // register() threw: do not leave it marked active with half its
+      // registrations live — a restart would then try to load it again.
+      setActive(activePlugins().filter(n => n !== name));
+      discardPluginArtifacts(name);
+      return r;
+    }
+    await runLifecycle(name, 'activate');
+    // A plugin's shortcodes and post_content filters are part of the rendered
+    // (cached) HTML, so enabling it has to flush the content cache.
+    try { purgeContentCaches(); } catch {}
+    fire('plugin_activated');
     return r;
   }
   await runLifecycle(name, 'deactivate');
+  // A deactivated plugin must stop answering requests, offering admin
+  // pages/blocks and running its hooks/shortcodes; register() re-adds them if it
+  // is enabled again.
+  discardPluginArtifacts(name);
+  try { purgeContentCaches(); } catch {}
+  fire('plugin_deactivated');
   return { ok: true };
 }

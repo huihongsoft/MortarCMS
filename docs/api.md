@@ -10,20 +10,45 @@ password with the `App` scheme).
 POST /api/auth/login          { email, password } -> { token, user } | { twoFactorRequired, tempToken }
 POST /api/auth/2fa/verify     { tempToken, code } -> { token, user }
 POST /api/auth/logout         (blacklists the presented token)
+POST /api/auth/logout-all     auth: bumps the session version, invalidating every token
 POST /api/auth/register       { username, email, password, role? }
 GET  /api/auth/me
+PUT  /api/auth/me             auth: update own profile (username/email/bio/avatar)
+PUT  /api/auth/me/password    auth: change own password
+GET  /api/auth/me/comments    auth: comments authored by the caller
 POST /api/auth/forgot-password
-POST /api/auth/2fa/setup | /2fa/enable | /2fa/disable | /2fa/status
+POST /api/auth/reset-password { token, password }
+POST /api/auth/2fa/setup | /2fa/enable | /2fa/disable | /2fa/status   (all auth)
 ```
 
-Roles: `admin` > `editor` > `author` > `contributor` > `subscriber` —
-seeded in the `Role` table and fully manageable from the admin
-(**角色与权限**). Fine-grained capabilities via `requireCap` resolve from
-the DB role table (cached 3s; invalidated on role changes). Capability
-catalog: content (posts/pages/comments/categories/tags/links), media,
-appearance (themes/menus/widgets), system (users/roles/plugins/import/
-export/sites/security/options), **AI** (`ai_use` / `ai_manage` /
-`ai_bindings` / `ai_tasks` / `ai_review`).
+`GET /api/auth/me` and the other `/me` routes are self-service: any
+authenticated user, no capability needed. `register` is the only public
+write and respects the site's registration setting. `me` also returns the
+caller's `capabilities`, which the admin UI uses to decide which navigation
+entries to show.
+
+A brute-force limiter (10 requests/minute per IP) covers the routes that verify a
+secret — `login`, `register`, `2fa/verify`, `2fa/disable`, `me/password`,
+`forgot-password`, `reset-password`. It is deliberately **not** router-wide:
+`GET /api/auth/me` is called on every admin page load, and counting those against
+the limiter logged administrators out while they were working.
+
+Roles: `admin` > `editor` > `author` > `subscriber` — seeded in the `Role`
+table and fully manageable from the admin (**角色与权限**). Fine-grained
+capabilities via `requireCap` resolve from the DB role table (cached 3s;
+invalidated on role changes). Every route is capability-gated; the role name in
+the JWT only decides site assignment and display. Capability catalog (39 keys
+across 5 groups): content (posts/pages/comments/categories/tags/links/forms),
+media, appearance (themes/menus), system (users/roles/plugins/import/export/
+sites/**view_sites**/security/options/system-info), **AI** (`ai_use` /
+`ai_manage` / `ai_bindings` / `ai_tasks` / `ai_review`).
+
+`manage_system` is the superuser key (database tools, installer, webhooks,
+mailer, GDPR, activity log, custom post types, AI provider settings, newsletter
+subscribers). No built-in role except `admin` holds it, so it must be granted
+deliberately from the Roles page — that is why the area is not gated by
+`manage_options`, which the `editor` role also holds.
+
 
 ## Content
 
@@ -38,8 +63,11 @@ GET    /api/posts/popular         top by views (site-isolated)
                                   excluded for anonymous callers (same rule as
                                   the public list)
 GET    /api/posts/archives        monthly archive counts
+GET    /api/posts/archive/:year    public yearly archive (`?month=` narrows it)
+GET    /api/posts/archive/:year/:month   public monthly archive
 GET    /api/posts/author/:username
-GET    /api/posts/archive/:year/:month
+POST   /api/posts/search-log      public: record an anonymous search term (hot-searches report)
+GET    /api/posts/search-stats    manage_options: top 20 search terms, last 30 days
 GET    /api/posts/admin           admin list (all statuses)
 POST   /api/posts                 create
 PUT    /api/posts/:id             update
@@ -51,6 +79,10 @@ POST   /api/posts/:id/lock | /unlock | /clone
 GET    /api/posts/:id/revisions | /related
 PUT    /api/posts/:id/revisions/:revId/restore
 
+POST   /api/posts/frontend/submit-post   submit_posts: frontend submission (enters the pending queue)
+GET    /api/posts/mine                   auth: the caller's own submissions + review status
+POST   /api/posts/:id/review             review_posts: approve (publish) or reject (draft + notify)
+
 GET    /api/pages/public | /api/pages/slug/:slug | POST/PUT/DELETE | /slug/:slug/password | /:id/revisions
 GET    /api/categories | POST/PUT/DELETE | /bulk-delete
 GET    /api/tags | POST/PUT/DELETE | /bulk-delete
@@ -59,68 +91,109 @@ GET    /api/tags | POST/PUT/DELETE | /bulk-delete
 ## Comments & Users
 
 ```
+GET    /api/comments/recent         public: latest approved comments across posts
 GET    /api/comments/post/:postId   public (approved only, no emails)
-GET    /api/comments/admin          admin moderation queue (?siteId=<id>, and a
-                                    user assigned to specific sites only sees
-                                    those sites' comments + the shared ones).
-                                    A comment's site is its own when set (the
-                                    per-site content screen can assign one),
-                                    otherwise its post's
+POST   /api/comments/:id/like       public: like a comment
+GET    /api/comments/admin          requireCap moderate_comments: moderation queue
+                                    (?siteId=<id>, and a user assigned to
+                                    specific sites only sees those sites'
+                                    comments + the shared ones). A comment's
+                                    site is its own when set (the per-site
+                                    content screen can assign one), otherwise
+                                    its post's
 POST   /api/comments                submit (rate-limited, honeypot)
 PUT    /api/comments/:id            moderate (approve/spam/trash)
 DELETE /api/comments/:id
 POST   /api/comments/bulk-action
 
-GET    /api/users                 admin list (with post counts)
-PUT    /api/users/:id | DELETE /api/users/:id
+GET    /api/users                 requireCap manage_users: list (with post counts)
+PUT    /api/users/:id | DELETE /api/users/:id   manage_users
        (new users are created via POST /api/auth/register — no /api/users POST)
 ```
 
 ## Media
 
 ```
-POST  /api/media/upload            multipart (allowlist + content verify); optional siteId
-GET   /api/media                   list/search (?siteId=<id>; a user assigned to
-                                    specific sites only sees those + shared files)
-GET   /api/media/:id               metadata (auth; scoped to the caller's sites)
+POST  /api/media/upload            requireCap upload_files: multipart (allowlist +
+                                    content verify); optional siteId
+GET   /api/media                   upload_files: list (?siteId=<id>; a user assigned
+                                    to specific sites only sees those + shared files)
+GET   /api/media/search            upload_files: lightweight search for pickers
+GET   /api/media/:id               auth: metadata (scoped to the caller's sites)
 GET   /api/media/:id/img?w=&fmt=   responsive resize (jpeg/webp/avif, cached; public —
                                     serves the same bytes as /uploads)
 GET   /api/media/:id/download      public, same reasoning
-DELETE /api/media/:id | /bulk-delete
+POST  /api/media/bulk-edit         edit_media: bulk title/alt update
+PUT   /api/media/:id               edit_media: metadata update
+DELETE /api/media/:id | /bulk-delete   delete_media
 ```
 
 ## Platform
 
 ```
-GET    /api/themes                  list + active + effective settings
+GET    /api/themes                  public: list + active + effective settings
                                     (?siteId=<id>, admin: as that site sees it)
-POST   /api/themes/:name/activate   { siteId? } — activate for one site
-PUT    /api/themes/:name/settings   per-theme overrides (?siteId=<id> = that
-                                    site's own layer; theme_<name>_<key> keys)
-GET    /api/themes/sections         visual theme sections (hook locations)
-PUT    /api/themes/sections/:location   save a section (html + css, ?siteId=<id>)
-POST   /api/themes/rebuild          one-click rebuild theme bundles
+POST   /api/themes/:name/activate   manage_themes: { siteId? } — activate for one site
+PUT    /api/themes/:name/settings   manage_themes: per-theme overrides
+                                    (?siteId=<id> = that site's own layer;
+                                    theme_<name>_<key> keys)
+POST   /api/themes/install          install_themes: install a theme zip (multipart "file")
+POST   /api/themes/rebuild          rebuild_themes: one-click rebuild theme bundles
+DELETE /api/themes/:name            delete_themes: remove a theme (active/default protected)
+GET    /api/themes/:name/files      manage_themes: list editable theme files
+GET    /api/themes/:name/file       manage_themes: read one file (?path=)
+PUT    /api/themes/:name/file       manage_themes: write a CSS file (only writable type)
+GET    /api/themes/sections         public: visual theme sections (hook locations)
+PUT    /api/themes/sections/:location   manage_themes: save a section (html + css, ?siteId=<id>)
+GET    /api/themes/:name/backups    manage_themes: list settings snapshots
+POST   /api/themes/:name/backups    manage_themes: create a snapshot
+POST   /api/themes/:name/backups/:id/restore   manage_themes: roll back to a snapshot
+DELETE /api/themes/:name/backups/:id           manage_themes
 
-GET    /api/plugins                 installed plugins
-GET    /api/plugins/hooks           hook registry (actions + filters)
-PUT    /api/plugins/:name/toggle    enable/disable (runs lifecycle hooks)
-GET    /api/plugins/market/list     local market or remote catalog
-POST   /api/plugins/market/:name/install
-POST   /api/plugins/market/install-url   install from zip/tar.gz URL
-DELETE /api/plugins/:name           uninstall (runs uninstall hook)
+GET    /api/plugins                 requireCap manage_plugins: installed plugins
+GET    /api/plugins/hooks           manage_plugins: compact hook summary (names + listener counts)
+PUT    /api/plugins/:name/toggle    manage_plugins: enable/disable (runs lifecycle hooks)
+GET    /api/plugins/:name/settings  manage_plugins: settings schema + values + read-only reports
+PUT    /api/plugins/:name/settings  manage_plugins: save settings (validated against the schema)
+GET    /api/plugins/market/list     manage_plugins: local market or remote catalog
+POST   /api/plugins/market/:name/install   manage_plugins
+POST   /api/plugins/market/install-url     manage_plugins: install from zip/tar.gz URL
+DELETE /api/plugins/:name           manage_plugins: uninstall (must be inactive)
 
-GET    /api/sites | POST/PUT/DELETE         multi-site management
-PUT    /api/sites/:id/primary | /settings   (per-site overrides; theme_active
-                                    picks the site's theme, '' = follow global)
-GET    /api/links | POST/PUT/DELETE         friend links
-GET    /api/editor/templates | POST/DELETE  custom block templates
-       /api/editor/templates/export | /import
-GET    /api/editor/canvas-css       built frontend CSS for the builder canvas
-GET    /api/editor/preview-cms/:type live preview HTML for CMS data blocks
-GET    /api/stats?days=N            PV/UV analytics + top posts (visit rows carry
-                                    the resolved site; scoped to the caller's sites)
-GET    /api/stats/dashboard         dashboard counts + recents (same scoping)
-GET    /api/security/audit          security diagnostics (Site Health style)
+GET    /api/sites/current           public: current site info (resolved from the Host header)
+GET    /api/sites                   authorize admin/editor: sites + per-site content stats
+POST   /api/sites                   manage_sites: create
+PUT    /api/sites/:id               manage_sites: update
+POST   /api/sites/:id/primary       manage_sites: make primary
+GET    /api/sites/:id/settings      manage_sites: read per-site overrides
+PUT    /api/sites/:id/settings      manage_sites: per-site overrides (theme_active picks
+                                    the site's theme, '' = follow global)
+GET    /api/sites/:id/content       manage_sites: content assignable to the site
+POST   /api/sites/:id/content/assign   manage_sites: assign content to the site
+POST   /api/sites/:id/content/global   manage_sites: make content visible on every site
+POST   /api/sites/:id/duplicate     manage_sites: duplicate row + overrides + menus
+DELETE /api/sites/:id               manage_sites: delete
+
+GET    /api/links                   public: navigation links (site-filtered; inactive
+                                    hidden from anonymous callers)
+POST   /api/links | PUT/DELETE /:id manage_options
+POST   /api/links/:id/click         public: count a click
+GET    /api/links/categories        public: link categories + counts
+POST   /api/links/categories        manage_options
+PUT    /api/links/categories/:id    manage_options
+DELETE /api/links/categories/:id    manage_options
+
+GET    /api/editor/templates        edit_posts: custom block templates
+POST   /api/editor/templates | DELETE /:id      manage_options
+GET    /api/editor/templates/export | POST /import   manage_options
+GET    /api/editor/shortcodes       edit_posts: registered shortcodes (name + description)
+GET    /api/editor/forms            edit_posts: enabled forms for the [form] inserter
+GET    /api/editor/canvas-css       edit_posts: built frontend CSS for the builder canvas
+GET    /api/editor/preview-cms/:type   edit_posts: live preview HTML for CMS data blocks
+GET    /api/stats?days=N            manage_options: PV/UV analytics + top posts (visit rows
+                                    carry the resolved site; scoped to the caller's sites)
+GET    /api/stats/dashboard         manage_options: dashboard counts + recents (same scoping)
+GET    /api/security/audit          manage_options: security diagnostics (Site Health style)
 ```
 
 ## System & Install
@@ -130,19 +203,34 @@ GET    /api/settings                public (sensitive keys filtered) + theme mer
 PUT    /api/settings                admin
 GET    /api/settings/info           admin only: system info (driver-aware)
 GET    /api/settings/health         public: minimal health (no memory/stats)
-GET    /api/widgets                 widget registry + active configuration
-GET    /api/health | /api/health/detail
-GET    /api/db/backup               database download
-GET    /api/db/backup-full          database + uploads zip
-POST   /api/db/restore-full         restore from backup zip
-GET    /api/db/optimize             vacuum/analyze
+POST   /api/settings/storage/test   admin: test the object-storage connection
+GET    /api/widgets                 public: widget registry + active configuration
+GET    /api/schema                  public: machine-readable endpoint catalog
+GET    /api/health                  public: liveness check
+GET    /api/health/detail           manage_options: detailed site health
+GET    /api/db/status               admin: driver, size, table rows, indexes, last maintenance
+GET    /api/db/slow-queries         admin: recorded slow queries (>150ms)
+GET    /api/db/integrity            admin: SQLite integrity check
+GET    /api/db/backup               admin: database download
+GET    /api/db/backup-full          admin: database + uploads zip
+POST   /api/db/restore-full         admin: restore from backup zip (multipart "file")
+GET    /api/db/optimize             admin: vacuum/analyze
+GET    /api/db/backups              admin: list backup files
+GET    /api/db/backups/:name        admin: download a backup file
+DELETE /api/db/backups/:name        admin: delete a backup file
 POST   /api/db/reset-content        admin: wipe all content, all sites (fresh empty site)
 POST   /api/db/reset-demo           admin: the same wipe, then import the sample content
-GET    /api/install/status          installed?
-POST   /api/install                 install wizard (db choice + admin account, optional sampleData)
+GET    /api/install/status          public: installed?
+POST   /api/install                 public: install wizard (db choice + admin account, optional sampleData)
 GET    /api/install                 admin: current db configuration
 POST   /api/install/switch          admin: runtime database switch
 POST   /api/install/reset           admin only: re-run the wizard
+```
+
+`GET /api/settings` resolves everything for the site serving the request (its
+Host), and an **admin** may add `?siteId=<id>` to read another site's effective
+values — that is how the Appearance panel edits a site's theme. Every other
+`/api/settings/*` route is admin-only.
 
 ## AI Assistant
 
@@ -154,6 +242,7 @@ PUT    /api/ai/settings             save providers / default / allowed roles / t
                                     / allowUnattendedRisky (admin only)
 POST   /api/ai/test                 test a provider connection
 POST   /api/ai/chat                 plain chat (no tools)
+POST   /api/ai/summarize            compress a long conversation excerpt
 POST   /api/ai/assistant            streaming agent (SSE) + tools. Events:
                                       delta       incremental text
                                       tools       tool names about to run
@@ -173,7 +262,10 @@ POST   /api/ai/tasks/:id/cancel | /retry
 DELETE /api/ai/tasks/:id
 GET    /api/ai/schedules | POST | DELETE   scheduled AI tasks (interval/daily/weekly)
 GET    /api/ai/memories | DELETE /:key     long-term memory management
-GET    /api/ai/notifications | POST /read-all   task completion notifications
+GET    /api/ai/notifications | POST /notifications/read-all   task completion notifications
+POST   /api/ai/notifications/:id/read           mark one notification read
+GET    /api/ai/sessions | POST | PUT /:id | DELETE [/:id]    server-side chat sessions
+                                                (cross-device; DELETE without id clears all)
 GET    /api/ai/usage                usage statistics (admin)
 GET    /api/ai/audit                sandbox audit trail (admin)
 GET    /api/ai/bindings | POST | PUT | DELETE   WeChat/DingTalk bindings
@@ -186,7 +278,9 @@ POST   /api/ai/review-comments      AI spam/approve classification
 POST   /api/ai/batch-translate      translate up to 10 posts (creates drafts)
 POST   /api/ai/compare              side-by-side model comparison
 POST   /api/ai/vision | /image-gen  direct image analysis / generation
-POST   /api/ai/share | GET /api/ai/share/:token   shareable conversations
+POST   /api/ai/share | GET /api/ai/share/:token | DELETE /api/ai/share/:token
+                                    shareable conversations (GET is public;
+                                    DELETE is the author or an admin)
 ```
 
 ## Roles & Permissions (RBAC)
@@ -198,18 +292,202 @@ PUT    /api/roles/:slug             update name / capabilities (admin locked)
 DELETE /api/roles/:slug             delete custom role (system/in-use protected)
 ```
 
-## System & Install
+## Custom post types
 
 ```
-GET    /api/settings                public (sensitive keys filtered) + theme merge
-PUT    /api/settings                admin
-GET    /api/settings/info           admin: system info (driver-aware)
-GET    /api/settings/health         public: minimal health (no stats)
+GET    /api/post-types              public: built-in (post/page) + registered types
+POST   /api/post-types              admin: register { slug, label, supports[] }
+PUT    /api/post-types/:slug        admin: edit label/supports (slug is immutable)
+DELETE /api/post-types/:slug        admin: unregister (existing content is kept)
 ```
 
-`GET /api/settings` resolves everything for the site serving the request (its
-Host), and an **admin** may add `?siteId=<id>` to read another site's effective
-values — that is how the Appearance panel edits a site's theme.
+## Forms
+
+Public submission is rate-limited globally and uses a hidden `_hp` honeypot.
+Admin CRUD requires `manage_forms` and is site-scoped (forms and their
+submissions inherit a site; a site-assigned user only sees their own + shared).
+
+```
+POST   /api/forms/:slug/submit      public: submit a form rendered by [form id="..."]
+                                    (declared fields only; required/email/number
+                                    validated; emails the owner unless honeypot)
+GET    /api/admin/forms             manage_forms: list + unread submission counts
+POST   /api/admin/forms             manage_forms: create { name, fields[], emailTo?, ... }
+GET    /api/admin/forms/:id         manage_forms: detail + field definitions
+PUT    /api/admin/forms/:id         manage_forms: update
+DELETE /api/admin/forms/:id         manage_forms: delete form + submissions
+GET    /api/admin/forms/:id/submissions            manage_forms: paginated (?page&limit&status)
+POST   /api/admin/forms/:id/submissions/read       manage_forms: mark read (?submissionId optional)
+DELETE /api/admin/forms/:id/submissions/:sid       manage_forms: delete one submission
+GET    /api/admin/forms/:id/submissions/export     manage_forms: CSV download
+```
+
+## Newsletter
+
+```
+POST   /api/newsletter/subscribe    public: subscribe (double opt-in when SMTP is
+                                    configured, immediate otherwise)
+POST   /api/newsletter/confirm      public: { token } confirm a subscription
+POST   /api/newsletter/unsubscribe  public: { token } unsubscribe
+GET    /api/admin/subscribers       admin: list (?page&limit&q&status) + totals
+DELETE /api/admin/subscribers/:id   admin: delete a subscriber (PII)
+GET    /api/admin/subscribers/export   admin: CSV download
+POST   /api/admin/newsletter/send   admin: { to } = single test send, omitted =
+                                    broadcast the recent-posts digest to every
+                                    confirmed subscriber (one email each)
+```
+
+Subscriber management and mass sending expose the whole mailing list, so they
+are **admin-only** (`authorize('admin')`), not merely `manage_options`.
+
+## GDPR & privacy
+
+```
+GET  /api/gdpr/export               auth: export all personal data for the caller
+POST /api/gdpr/erase                auth: erase the caller's data (content anonymized,
+                                    media deleted; password/2FA/credentials removed)
+GET  /api/gdpr/admin/export/:id     admin: export any user's data
+POST /api/gdpr/admin/erase/:id      admin: erase any user's data (not self)
+```
+
+## Friend links & menus
+
+```
+GET    /api/friend-links            public: blogroll (name/url/avatar/description)
+POST   /api/friend-links            manage_options
+PUT    /api/friend-links/:id        manage_options
+DELETE /api/friend-links/:id        manage_options
+
+GET    /api/menus/location/:location   public: menu for a location (items: [] if none)
+GET    /api/menus                   manage_menus: all menus (site-scoped)
+POST   /api/menus                   manage_menus: create (item URLs validated)
+PUT    /api/menus/:id               manage_menus: update
+DELETE /api/menus/:id               manage_menus: delete
+```
+
+Friend links are a separate, lightweight model from the `/api/links`
+navigation-site links above.
+
+## Broken links & activity
+
+```
+GET    /api/admin/broken-links      manage_options: broken-link report
+                                    (?page&limit&status; scoped to the caller's sites)
+DELETE /api/admin/broken-links/:id  manage_options: remove a report entry
+
+GET    /api/activity                admin: activity log (?page&limit&q)
+```
+
+## Export / Import
+
+```
+GET  /api/export/export             requireCap export: JSON dump of posts, pages,
+                                    categories, tags, users, settings (secrets
+                                    stripped), menus, comments, media, links,
+                                    link categories/associations, friend links
+POST /api/export/import/preview     export: { ...dump } -> counts + slug conflicts
+                                    (writes nothing)
+POST /api/export/import             export: apply a dump (one transaction;
+                                    sanitizes untrusted content)
+POST /api/import/wxr                requireCap import: WordPress WXR XML
+                                    (multipart "file")
+POST /api/import/markdown           import: Markdown files (multipart "files",
+                                    up to 20 with frontmatter)
+```
+
+## Webhooks
+
+Outbound event webhooks. Secrets are generated server-side, returned **once**
+on create/reset, and never listed again.
+
+```
+GET    /api/admin/webhooks                   admin: list (secretSet flag only)
+POST   /api/admin/webhooks                   admin: create { name, url, events[] }
+PUT    /api/admin/webhooks/:id               admin: update name/url/events/active
+DELETE /api/admin/webhooks/:id               admin
+POST   /api/admin/webhooks/:id/reset-secret  admin: rotate (returns new secret once)
+POST   /api/admin/webhooks/:id/test          admin: deliver a test event
+```
+
+## Hooks & scheduled tasks
+
+Hooks are registered in code; the write routes below only manage the
+in-process registrations and are useful for debugging/tests. The full registry
+is `GET /api/system/hooks` (the compact summary is `GET /api/plugins/hooks`).
+
+```
+GET    /api/system/hooks                    requireCap view_system_info: registry
+                                            (actions + filters) with listeners
+POST   /api/system/hooks/actions/:name      admin: add a dynamic action listener
+POST   /api/system/hooks/filters/:name      admin: add a dynamic filter
+DELETE /api/system/hooks/:kind/:name        admin: remove listeners (kind=action|filter)
+DELETE /api/system/hooks/:kind/:name/reset  admin: reset a canonical hook
+GET    /api/plugins/hooks                   manage_plugins: hook summary
+
+GET    /api/system/tasks                    manage_options: scheduled tasks + run stats
+POST   /api/system/tasks/:id/run            manage_options: run a task now
+PUT    /api/system/tasks/:id/enabled        manage_options: enable/disable a task
+```
+
+## Cache
+
+```
+GET  /api/system/cache        manage_options: page-cache stats
+POST /api/system/cache/purge  manage_options: purge every cached response
+PUT  /api/system/cache        manage_options: { enabled, ttl } (ttl clamped 5-3600s)
+```
+
+## Mailer
+
+```
+GET    /api/mailer/templates        admin: email templates + rendered previews
+POST   /api/mailer/test             admin: { to } send a test email
+POST   /api/mailer/send             admin: { to, template, vars } send any template
+DELETE /api/mailer/templates/:name  admin: reset a template to its built-in version
+```
+
+## App passwords
+
+Personal API credentials (per-user, no admin needed). Send them as
+`Authorization: App <token>` instead of a Bearer JWT. `scope` is `full` or
+`read`; a `read` credential is limited to GET/HEAD/OPTIONS and is refused on
+the few mutating GETs (db optimize/backup/backup-full, media download).
+"Log out everywhere" invalidates them too.
+
+```
+GET    /api/app-passwords              auth: the caller's own passwords
+POST   /api/app-passwords              auth: create { name, scope?, expiresInDays? }
+                                       (token returned once)
+POST   /api/app-passwords/:id/revoke   auth: revoke (row kept for the audit trail)
+DELETE /api/app-passwords/:id          auth: delete
+```
+
+## Plugin extensions (`/api/ext`)
+
+Everything a plugin extends lives under `/api/ext/<plugin>/<path>`, dispatched
+through one router so runtime-registered routes are reachable. The
+plugin-declared endpoints (`/:plugin/*`) run **before** any auth so a plugin
+decides its own access (webhook callbacks, public widgets); a Bearer token is
+resolved when offered, so a plugin can read `req.user` if it wants to require
+one. Only active plugins answer; anything else is a 404.
+
+```
+GET  /api/ext/pages              manage_plugins: admin pages plugins registered
+                                 (drives the admin navigation)
+GET  /api/ext/pages/:plugin/:id  manage_plugins: one page body (HTML)
+GET  /api/ext/blocks             edit_posts: editor blocks contributed by plugins
+ANY  /api/ext/:plugin/*          plugin-defined; auth as the plugin chooses
+```
+
+## Feeds & sitemap
+
+```
+GET /api/feed/rss        public: RSS 2.0 (per-site domain/title/description)
+GET /api/feed/atom       public: Atom 1.0
+GET /api/feed/json       public: JSON Feed
+GET /api/feed/comments   public: comments feed
+GET /api/sitemap.xml     public: XML sitemap (site-filtered, 5-minute cache)
+```
 
 ## Post content pipeline
 

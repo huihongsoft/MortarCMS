@@ -35,7 +35,14 @@ server/themes/<name>/
     "sidebar_position": "left",
     "posts_per_row": "1"
   },
-  "custom_css": "article { border-radius: 12px; }"
+  "custom_css": "article { border-radius: 12px; }",
+  // Optional: typed settings shown on the Appearance page (the server validates
+  // them). Without it every key in "settings" is rendered as a plain text field.
+  "settingsSchema": [
+    { "key": "primary_color", "label": "Primary colour", "type": "color" },
+    { "key": "sidebar_position", "label": "Sidebar", "type": "select", "options": ["left", "right"] },
+    { "key": "posts_per_row", "label": "Posts per row", "type": "number", "min": 1, "max": 4 }
+  ]
 }
 ```
 

@@ -21,9 +21,7 @@ export default function Plugins() {
     setDetail(p);
     try {
       const r = await api.get('/system/hooks');
-      const actNames = new Set((r.data?.actions || []).map((a: any) => a.name));
       const all = [...(r.data?.actions || []).map((a: any) => ({ name: a.name, kind: 'action' })), ...(r.data?.filters || []).map((f: any) => ({ name: f.name, kind: 'filter' }))];
-      void actNames;
       const mine = all.filter((h: any) => r.data?.actions?.find((a: any) => a.name === h.name)?.listeners?.some((l: any) => l.source === p.name) || r.data?.filters?.find((f: any) => f.name === h.name)?.listeners?.some((l: any) => l.source === p.name));
       setDetailHooks(mine);
     } catch { setDetailHooks([]); }
@@ -80,6 +78,8 @@ export default function Plugins() {
     try {
       await api.put('/plugins/' + name + '/toggle', { active });
       setPlugins(plugins.map((p: any) => p.name === name ? { ...p, active } : p));
+      // The sidebar lists plugin-provided screens; let it re-fetch.
+      window.dispatchEvent(new Event('mortar-plugins-changed'));
       toast.toast((active ? t('enabled', getLang()) : t('disabled', getLang())) + ' ' + name);
     } catch (e: any) { toast.toast(e.response?.data?.error || t('toggle failed', getLang()), 'error'); }
   }

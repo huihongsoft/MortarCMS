@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { slugify } from '../utils/slug';
 
 const router = Router();
@@ -27,7 +27,9 @@ router.get('/', (req: AuthRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
+// Any writer may create a tag inline (the post editor does so); tag *management*
+// is the dedicated capability.
+router.post('/', authenticate, requireCap('manage_tags', 'edit_posts'), (req: AuthRequest, res: Response) => {
   try {
     const data = tagSchema.parse(req.body);
     const id = cuid();
@@ -36,7 +38,7 @@ router.post('/', authenticate, authorize('admin', 'editor', 'author'), (req: Aut
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, requireCap('manage_tags'), (req: AuthRequest, res: Response) => {
   try {
     const data = tagSchema.partial().parse(req.body);
     if (data.name) db.prepare('UPDATE Tag SET name = ?, slug = ? WHERE id = ?').run(data.name, slugify(data.name), req.params.id);
@@ -44,12 +46,12 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/:id', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticate, requireCap('manage_tags'), (req: AuthRequest, res: Response) => {
   try { db.prepare('DELETE FROM Tag WHERE id = ?').run(req.params.id); res.json({ success: true }); } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: bulk delete tags
-router.post('/bulk-delete', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.post('/bulk-delete', authenticate, requireCap('manage_tags'), (req: AuthRequest, res: Response) => {
   try {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids)) { res.status(400).json({ error: 'ids array required' }); return; }

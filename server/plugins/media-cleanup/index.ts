@@ -1,4 +1,5 @@
 import { addAction } from '../../src/utils/hooks';
+import { addPluginInterval } from '../../src/utils/pluginApi';
 import db from '../../src/utils/db';
 import { purgeAllCaches } from '../../src/utils/cache';
 import fs from 'fs';
@@ -17,7 +18,6 @@ import path from 'path';
 // The latest report is stored in Setting key `media_cleanup_report` (JSON).
 
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
-let timer: NodeJS.Timeout | null = null;
 
 function setting(key: string): string {
   try { return ((db.prepare('SELECT value FROM Setting WHERE key = ?').get(key) as any)?.value || '').toString(); } catch { return ''; }
@@ -56,9 +56,8 @@ export function runCleanup(): { orphaned: number; deleted: number } {
 }
 
 export function register() {
-  addAction('init', () => {
-    try { runCleanup(); } catch {}
-    if (!timer) timer = setInterval(() => { try { runCleanup(); } catch {} }, CHECK_INTERVAL_MS);
-    timer.unref?.();
-  }, 10, 'media-cleanup');
+  // Lifecycle-bound: this one DELETES files, so it must stop the moment the
+  // plugin is disabled (its own setInterval used to outlive deactivation).
+  try { runCleanup(); } catch {}
+  addPluginInterval(runCleanup, CHECK_INTERVAL_MS);
 }

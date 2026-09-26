@@ -2,9 +2,10 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import db, { withTransaction } from '../utils/db';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
 import { passwordOk } from './auth';
 import { getUserSiteIds, setUserSites } from '../utils/userSites';
+import { doAction } from '../utils/hooks';
 
 const router = Router();
 const updateUserSchema = z.object({
@@ -16,7 +17,7 @@ const updateUserSchema = z.object({
   siteIds: z.array(z.string()).optional(),
 });
 
-router.get('/', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.get('/', authenticate, requireCap('manage_users'), (req: AuthRequest, res: Response) => {
   try {
     const users = db.prepare('SELECT id, username, email, role, avatar, bio, createdAt, two_factor_enabled FROM User ORDER BY createdAt DESC').all() as any[];
     // Which sites each user is assigned to, so the UI can show and edit it.
@@ -39,7 +40,7 @@ router.get('/', authenticate, authorize('admin'), (req: AuthRequest, res: Respon
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, requireCap('manage_users'), async (req: AuthRequest, res: Response) => {
   try {
     const data = updateUserSchema.parse(req.body);
     const existing = db.prepare('SELECT role FROM User WHERE id = ?').get(req.params.id) as any;
@@ -66,11 +67,15 @@ router.put('/:id', authenticate, authorize('admin'), async (req: AuthRequest, re
     if (data.siteIds !== undefined) setUserSites(req.params.id, data.siteIds);
     const user = db.prepare('SELECT id, username, email, role, avatar, bio, createdAt FROM User WHERE id = ?').get(req.params.id) as any;
     user.siteIds = getUserSiteIds(req.params.id);
+    // Never pass the parsed body straight through: it carries the new password in
+    // plaintext, and listeners (plugins, webhooks) must not receive credentials.
+    const { password: _pw, ...changed } = data;
+    try { doAction('user_updated', req.params.id, changed); } catch {}
     res.json(user);
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/:id', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticate, requireCap('manage_users'), (req: AuthRequest, res: Response) => {
   try {
     // Post.authorId cascades on delete — refuse so a user's posts are never
     // silently destroyed. Transfer or delete the content first.
@@ -94,6 +99,7 @@ router.delete('/:id', authenticate, authorize('admin'), (req: AuthRequest, res: 
       db.prepare('DELETE FROM Activity WHERE userId = ?').run(req.params.id);
       db.prepare('DELETE FROM User WHERE id = ?').run(req.params.id);
     });
+    try { doAction('user_deleted', req.params.id); } catch {}
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

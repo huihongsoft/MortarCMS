@@ -142,8 +142,8 @@ export function resolveOptionalUser(req: AuthRequest): { userId: string; role: s
 // Fallback capability map (used only if a role row is missing from the DB)
 const FALLBACK_CAPABILITIES: Record<string, string[]> = {
   admin: ['*'],
-  editor: ['edit_posts', 'edit_others_posts', 'publish_posts', 'delete_posts', 'delete_others_posts', 'moderate_comments', 'review_posts', 'manage_categories', 'manage_forms', 'upload_files', 'edit_pages', 'publish_pages', 'manage_options'],
-  author: ['edit_posts', 'publish_posts', 'delete_posts', 'submit_posts', 'upload_files'],
+  editor: ['edit_posts', 'edit_others_posts', 'publish_posts', 'delete_posts', 'delete_others_posts', 'moderate_comments', 'review_posts', 'manage_categories', 'manage_tags', 'manage_links', 'manage_forms', 'upload_files', 'edit_media', 'delete_media', 'edit_pages', 'publish_pages', 'delete_pages', 'manage_menus', 'manage_options', 'manage_security', 'view_sites', 'ai_use', 'ai_review', 'ai_tasks', 'view_system_info'],
+  author: ['edit_posts', 'publish_posts', 'delete_posts', 'submit_posts', 'upload_files', 'ai_use'],
   contributor: ['edit_posts', 'delete_posts'],
   subscriber: ['submit_posts'],
 };

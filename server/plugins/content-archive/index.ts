@@ -1,4 +1,5 @@
 import { addAction } from '../../src/utils/hooks';
+import { addPluginInterval } from '../../src/utils/pluginApi';
 import db from '../../src/utils/db';
 
 // Archive stale content: posts published but not updated for more than
@@ -10,7 +11,6 @@ import db from '../../src/utils/db';
 //   archive_after_days      = days of inactivity before archiving (default 365)
 
 const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000; // every 6 hours
-let timer: NodeJS.Timeout | null = null;
 
 function setting(key: string): string {
   try { return ((db.prepare('SELECT value FROM Setting WHERE key = ?').get(key) as any)?.value || '').toString(); } catch { return ''; }
@@ -33,9 +33,10 @@ function archiveOnce(): void {
 }
 
 export function register() {
-  addAction('init', () => {
-    try { archiveOnce(); } catch {}
-    if (!timer) timer = setInterval(archiveOnce, CHECK_INTERVAL_MS);
-    timer.unref?.();
-  }, 10, 'content-archive');
+  // Lifecycle-bound timer (addPluginInterval): it starts when the plugin is
+  // enabled and stops when it is disabled. A plain setInterval from an `init`
+  // listener kept running after deactivation, and never started at all when the
+  // plugin was enabled while the server was already up.
+  try { archiveOnce(); } catch {}
+  addPluginInterval(archiveOnce, CHECK_INTERVAL_MS);
 }

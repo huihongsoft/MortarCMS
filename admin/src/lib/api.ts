@@ -45,7 +45,11 @@ api.interceptors.response.use(
     if (d && Array.isArray(d.error)) {
       d.error = d.error.map((x: any) => (x && typeof x === 'object' && x.message) ? String(x.message) : JSON.stringify(x)).join('; ');
     }
-    if (err.response?.status === 401) {
+    // Some endpoints answer 401 for a *wrong credential*, not an expired session
+    // (changing your password, unlocking a protected post): signing the user out
+    // would hide the real message behind a login redirect.
+    const credentialCheck = /\/auth\/me\/password|\/content-password|\/posts\/slug\/[^/]+\/password/.test(String(err.config?.url || ''));
+    if (err.response?.status === 401 && !credentialCheck) {
       localStorage.removeItem('mortar_token');
       if (window.location.pathname.startsWith('/admin') && !window.location.pathname.includes('/login')) {
         window.location.href = '/admin#/login';

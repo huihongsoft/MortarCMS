@@ -77,22 +77,102 @@ export function register() {
 
 Usage in post content: `[hello name="Mortar"]`
 
+## HTTP endpoints, admin screens and editor blocks
+
+Besides hooks, a plugin can own an HTTP endpoint, add a screen to the admin and
+contribute a block to the visual editor. All three are registered from
+`register()` — a call at module scope runs during `require()`, where nothing
+knows which plugin is registering, and throws.
+
+```ts
+import { addPluginRoute, addAdminPage, addEditorBlock } from '../../src/utils/pluginApi';
+
+export function register() {
+  // GET /api/ext/<plugin-name>/ping
+  addPluginRoute('get', 'ping', (req, res) => res.json({ ok: true }));
+
+  addAdminPage({
+    id: 'greeting',
+    title: 'My plugin',            // sidebar entry + page heading
+    html: '<div class="card p-5">Any HTML; scripts are re-created when rendered.</div>',
+  });
+
+  addEditorBlock({
+    id: 'my-banner', label: 'My banner', category: 'Content',
+    content: '<div style="padding:16px">Block markup</div>',
+  });
+}
+```
+
+| Call | Where it shows up | Notes |
+|------|-------------------|-------|
+| `addPluginRoute(method, path, handler)` | `/api/ext/<plugin>/<path>` | Path is namespaced per plugin. The handler runs **without auth** — check `req.user` (a session is attached when a Bearer token is sent) if the endpoint should be protected. Only active plugins answer; unknown paths 404. |
+| `addAdminPage({ id, title, html })` | `/admin/plugin/<plugin>/<id>` + a sidebar entry | Requires `manage_plugins` to view. The HTML is injected as-is (plugins are trusted server-side code); inline scripts are re-created after injection. |
+| `addEditorBlock({ id, label, category, content })` | Visual editor → block inserter → "Plugins" | Blocks are merged into the built-in registry at editor start. |
+| `addPluginInterval(fn, ms)` | nothing visible | Periodic work tied to the plugin's lifecycle: it starts when the plugin is enabled and stops when it is disabled. Use this instead of `setInterval` in an `init` listener — a timer started there kept running after deactivation (media cleanup kept deleting files) and never started at all when the plugin was enabled while the server was already up. |
+
+Deactivation also drops the plugin's AI tools (`registerTool`), hook listeners and
+shortcodes, so a disabled plugin cannot keep answering, keep spending the AI
+budget, or keep running on a timer.
+
+Deactivating a plugin removes everything it registered — routes, screens, blocks,
+hook listeners and shortcodes — and purges the content cache (its shortcodes and
+content filters are part of the cached HTML). `register()` re-adds all of it if
+the plugin is enabled again. A plugin whose `register()` throws is not left
+marked active; the toggle rolls back and its partial registrations are dropped.
+
+## What plugins cannot do yet
+
+- **Per-site activation**: `active_plugins` is one install-wide setting. The hook
+  and shortcode systems have no request context, so "this plugin only on site B"
+  could not be honoured consistently; it is deliberately not exposed.
+- **Declared dependencies** on other plugins (`requires_plugins`), plugin
+  updates, and sandboxing/permissions: none. Plugins run in-process with full
+  database access.
+- **Custom tables** are possible (`db.prepare('CREATE TABLE IF NOT EXISTS …')` in
+  `activate()`), but there is no migration ledger for plugins — create tables
+  idempotently and drop them in `uninstall()`.
+
 ## Available hooks
 
 | Hook | Type | When |
 |------|------|------|
 | `init` | action | Server startup |
-| `post_created` | action | A post is created |
-| `post_updated` | action | A post is updated |
-| `post_published` | action | A post transitions to published |
-| `delete_post` | action | A post is deleted |
+| `post_created` | action | A post or page is created — `(id, status, type)` |
+| `post_updated` | action | A post or page is updated — `(id, type)` |
+| `post_published` | action | A post/page transitions to published — `(id, type?)` |
+| `post_restored` | action | A post leaves the trash — `(id, status)` |
+| — | — | `delete_post` fires once per deletion: when a post enters the trash. Emptying the trash permanently is cleanup and emits no second event. |
+| `delete_post` | action | A post/page is trashed or permanently deleted — `(id, type?)` |
 | `comment_added` | action | A comment is submitted |
 | `comment_approved` / `comment_spam` | action | Comment moderation |
 | `delete_comment` | action | A comment is deleted |
-| `user_register` | action | A new user registers |
+| `user_register` / `user_updated` / `user_deleted` | action | Account lifecycle. `user_updated` receives only the changed fields — never the password. |
+| `media_uploaded` / `media_updated` / `media_deleted` | action | Media lifecycle (id) |
+| `settings_saved` | action | Settings written (list of keys) |
+| `menu_saved` / `menu_deleted` | action | Menu changed — `(id, 'created'\|'updated')` |
+| `theme_activated` / `theme_deactivated` | action | Theme switched (`theme_deactivated` carries the previous theme) or a theme was deleted — `(name, siteId)` |
+| `plugin_activated` / `plugin_deactivated` | action | Plugin toggled — `(name, active)` |
+| `task_run` | action | Scheduled task finished — `(id, ok, error, ms)` |
+| `form_submitted`, `post_submitted` | action | Visitor submissions |
+| `user_login` / `login_failed` | action | Authentication |
+| `backup_completed`, `site_reset` | action | Maintenance |
 | `post_content` | filter | Post HTML before it is served (then shortcodes) |
+| `comment_validate` | filter | A comment before it is stored |
 
-The admin Plugins page shows the live registry (Installed / Market tabs).
+Pages are posts of type `page`, so they fire the `post_*` hooks with the type
+attached — a listener that builds a URL should check it (`/page/<slug>` vs
+`/post/<slug>`).
+
+Bulk post actions fire the same hooks as the single-row routes (`delete_post`
+per trashed row, `post_updated` / `post_published` per status change), so a
+listener never misses an event because the editor used the checkbox toolbar.
+
+The admin Plugins page shows the live registry (Installed / Market tabs); the
+**Hooks** page (dev mode) lists every listener with its source. A plugin that
+omits the `source` argument of `addAction`/`addFilter` is attributed to
+`plugin:<name>` automatically while its `register()` runs, so it never shows up
+as a core listener.
 
 ## Market & distribution
 

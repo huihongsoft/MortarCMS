@@ -59,6 +59,7 @@ const ROUTE_PATTERNS: RegExp[] = [
   /^\/install\/?$/,
   /^\/post\/[^/]+$/,
   /^\/page\/[^/]+$/,
+  /^\/archive\/\d{4}$/,
   /^\/archive\/\d{4}\/\d{1,2}$/,
   /^\/links\/?$/,
   /^\/author\/[^/]+$/,

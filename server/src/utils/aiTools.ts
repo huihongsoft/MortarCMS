@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import db, { cuid, withTransaction } from './db';
 import { slugify, uniqueSlug, postUrl } from './slug';
+import { currentPlugin } from './pluginApi';
 import { mdToHtml, parseFrontmatter } from './markdown';
 import { getDefaultProvider, userFacingAiError, logAiDetail } from './ai';
 import { riskyReason, setPluginRiskResolver } from './aiApproval';
@@ -189,10 +190,10 @@ export function canUseTool(role: string, toolName: string): boolean {
 
 type ToolFn = (args: any, ctx: ToolContext) => Promise<any>;
 
-const tools: Record<string, { description: string; parameters: any; run: ToolFn }> = {};
+const tools: Record<string, { description: string; parameters: any; run: ToolFn; source: string }> = {};
 
-function register(name: string, description: string, parameters: any, run: ToolFn) {
-  tools[name] = { description, parameters, run };
+function register(name: string, description: string, parameters: any, run: ToolFn, source = 'core') {
+  tools[name] = { description, parameters, run, source };
 }
 
 // --- Site stats ---
@@ -1527,8 +1528,24 @@ export function registerTool(
     logAiDetail('ai tool registration refused', 'a plugin tried to replace the built-in tool "' + name + '"', {});
     return;
   }
-  register(name, description, parameters, run);
+  // Tagged like hooks/shortcodes so deactivating a plugin takes its tools with it
+  // (a removed plugin's tool used to stay callable by the model).
+  register(name, description, parameters, run, currentPlugin() || 'core');
   if (risk) pluginRisk.set(name, risk);
+}
+
+// Remove the tools a plugin registered; called on deactivate and before a
+// re-register (registerTool refuses a name that already exists, so without this
+// a re-enabled plugin silently kept offering its stale closure).
+export function removeToolsBySource(source: string): number {
+  let removed = 0;
+  for (const name of Object.keys(tools)) {
+    if (tools[name].source !== source) continue;
+    delete tools[name];
+    pluginRisk.delete(name);
+    removed++;
+  }
+  return removed;
 }
 
 // ---- Exports ----

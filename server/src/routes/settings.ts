@@ -1,13 +1,14 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import db, { cuid } from '../utils/db';
-import { authenticate, authorize, resolveOptionalUser, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { activeThemeName, readTheme, themeOverrides } from './themes';
 import { isHiddenSettingKey } from '../utils/settingsVisibility';
 import { APP_VERSION } from '../utils/config';
 import { normalizePermalinkStructure, permalinkStructureError } from '../utils/slug';
 import { purgeAllCaches } from '../utils/cache';
+import { doAction } from '../utils/hooks';
 
 const router = Router();
 
@@ -94,7 +95,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.put('/', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.put('/', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
   try {
     const parsed = putSchema.safeParse(req.body);
     if (!parsed.success) { res.status(400).json({ error: 'Invalid settings payload' }); return; }
@@ -123,12 +124,13 @@ router.put('/', authenticate, authorize('admin'), (req: AuthRequest, res: Respon
       const { invalidateTemplateCache } = require('../utils/mailer');
       invalidateTemplateCache();
     }
+    try { doAction('settings_saved', Object.keys(entries)); } catch {}
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: test the object-storage connection (reads the saved settings)
-router.post('/storage/test', authenticate, authorize('admin'), async (_req: AuthRequest, res: Response) => {
+router.post('/storage/test', authenticate, requireCap('manage_system'), async (_req: AuthRequest, res: Response) => {
   try {
     const { testStorageConnection, invalidateStorageConfig } = await import('../utils/storage');
     invalidateStorageConfig();
@@ -154,7 +156,7 @@ router.get('/health', (req: AuthRequest, res: Response) => {
 
 // Admin-only: site info (node version, platform, memory, table counts — these
 // details are useful for diagnostics but must not be exposed publicly)
-router.get('/info', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.get('/info', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
   try {
     const driver = (db as any).driver || 'sqlite';
     // Dialect-aware table listing

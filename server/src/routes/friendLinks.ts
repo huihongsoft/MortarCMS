@@ -14,7 +14,7 @@ router.get('/', (_req: AuthRequest, res: Response) => {
 });
 
 // Admin: create
-router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/', authenticate, requireCap('manage_links'), (req: AuthRequest, res: Response) => {
   try {
     const { name, url, avatar, description } = req.body || {};
     if (!name || !url) { res.status(400).json({ error: 'name and url required' }); return; }
@@ -26,7 +26,7 @@ router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, 
 });
 
 // Admin: update
-router.put('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, requireCap('manage_links'), (req: AuthRequest, res: Response) => {
   try {
     const { name, url, avatar, description } = req.body || {};
     const sets: string[] = []; const vals: any[] = [];
@@ -40,7 +40,7 @@ router.put('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest
 });
 
 // Admin: delete
-router.delete('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticate, requireCap('manage_links'), (req: AuthRequest, res: Response) => {
   try { db.prepare('DELETE FROM FriendLink WHERE id = ?').run(req.params.id); res.json({ success: true }); } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

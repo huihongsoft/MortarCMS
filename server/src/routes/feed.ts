@@ -50,6 +50,71 @@ router.get('/rss', (req: AuthRequest & SiteRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Feeds share one row query and one item model; only the serialisation differs.
+// A reader that prefers Atom or JSON Feed had no endpoint at all before.
+function feedItems(req: AuthRequest & SiteRequest, siteUrl: string) {
+  const now = new Date().toISOString();
+  const posts = (req.siteId
+    ? db.prepare('SELECT p.*, u.username as authorName FROM Post p JOIN User u ON u.id = p.authorId WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND (p.siteId IS NULL OR p.siteId = ?)' + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC LIMIT 20').all('post', 'published', now, req.siteId)
+    : db.prepare('SELECT p.*, u.username as authorName FROM Post p JOIN User u ON u.id = p.authorId WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC LIMIT 20').all('post', 'published', now)) as any[];
+  const prefix = getPermalinkPrefix();
+  return posts.map((p: any) => ({
+    title: p.title || '',
+    link: siteUrl + postUrl(p.slug, prefix),
+    description: p.excerpt || String(p.content || '').substring(0, 200),
+    date: new Date(p.publishedAt || p.createdAt),
+    author: p.authorName || 'admin',
+    slug: p.slug,
+  }));
+}
+
+// Atom 1.0 — same content as /rss
+router.get('/atom', (req: AuthRequest & SiteRequest, res: Response) => {
+  try {
+    const cfg = {
+      site_url: effectiveSetting(req.siteId, 'site_url'),
+      site_title: effectiveSetting(req.siteId, 'site_title'),
+      site_description: effectiveSetting(req.siteId, 'site_description'),
+    };
+    const siteUrl = cfg.site_url || 'http://localhost:3001';
+    const items = feedItems(req, siteUrl);
+    const updated = (items[0]?.date || new Date()).toISOString();
+    const entries = items.map((it) => '<entry><title>' + esc(it.title) + '</title><link href="' + esc(it.link) + '"/>' +
+      '<id>' + esc(it.link) + '</id><updated>' + it.date.toISOString() + '</updated>' +
+      '<author><name>' + esc(it.author) + '</name></author>' +
+      '<summary>' + esc(it.description) + '</summary></entry>').join('');
+    const xml = '<?xml version="1.0" encoding="UTF-8"?><feed xmlns="http://www.w3.org/2005/Atom">' +
+      '<title>' + esc(cfg.site_title || 'Mortar CMS') + '</title><subtitle>' + esc(cfg.site_description || '') + '</subtitle>' +
+      '<link href="' + esc(siteUrl) + '"/><link rel="self" href="' + esc(siteUrl + '/api/feed/atom') + '"/>' +
+      '<id>' + esc(siteUrl) + '</id><updated>' + updated + '</updated>' + entries + '</feed>';
+    res.type('application/atom+xml');
+    res.send(xml);
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// JSON Feed 1.1 — for readers and scripts that prefer structured data
+router.get('/json', (req: AuthRequest & SiteRequest, res: Response) => {
+  try {
+    const cfg = {
+      site_url: effectiveSetting(req.siteId, 'site_url'),
+      site_title: effectiveSetting(req.siteId, 'site_title'),
+      site_description: effectiveSetting(req.siteId, 'site_description'),
+    };
+    const siteUrl = cfg.site_url || 'http://localhost:3001';
+    res.json({
+      version: 'https://jsonfeed.org/version/1.1',
+      title: cfg.site_title || 'Mortar CMS',
+      home_page_url: siteUrl,
+      feed_url: siteUrl + '/api/feed/json',
+      description: cfg.site_description || '',
+      items: feedItems(req, siteUrl).map((it) => ({
+        id: it.link, url: it.link, title: it.title, summary: it.description,
+        date_published: it.date.toISOString(), authors: [{ name: it.author }],
+      })),
+    });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // Comments feed: the latest approved comments across the site (WP-style)
 router.get('/comments', (req: AuthRequest & SiteRequest, res: Response) => {
   try {

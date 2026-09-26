@@ -57,12 +57,33 @@ async function pingBaidu(postUrl: string): Promise<void> {
   } catch { /* push is best-effort */ }
 }
 
+// One sitemap ping per window, however many posts were published in it (a bulk
+// publish fires post_published per row).
+const SITEMAP_COALESCE_MS = 30_000;
+let sitemapTimer: ReturnType<typeof setTimeout> | null = null;
+let sitemapBase = '';
+
+function scheduleSitemapPing(base: string): void {
+  sitemapBase = base;
+  if (sitemapTimer) return;
+  sitemapTimer = setTimeout(() => {
+    sitemapTimer = null;
+    const b = sitemapBase;
+    if (!b) return;
+    void pingGoogleBing(b + '/api/sitemap.xml').catch(() => {});
+  }, SITEMAP_COALESCE_MS);
+  sitemapTimer.unref?.();
+}
+
 export function register() {
-  addAction('post_published', async (postId: string) => {
+  addAction('post_published', async (postId: string, contentType?: string) => {
     try {
       // Documented in the header but previously never read, so the flag had no
       // effect; honour it now that pings fire by default on a fresh install.
       if (setting('seo_ping_enabled') === '0') return;
+      // Pages live at /page/<slug>, so postUrl() would push the wrong URL for
+      // them; they get the sitemap ping only.
+      const isPage = contentType === 'page';
       const base = siteUrl();
       if (!base || !isPublicSiteUrl(base)) return;
       const post = db.prepare('SELECT slug, status FROM Post WHERE id = ?').get(postId) as any;
@@ -70,8 +91,8 @@ export function register() {
       // Global ping endpoints don't accept a per-URL payload, so we ping the
       // sitemap and Baidu push the exact URL. The sitemap route lives under
       // /api (see index.ts), not at the root.
-      await pingGoogleBing(base + '/api/sitemap.xml');
-      await pingBaidu(base + postUrl(post.slug));
+      scheduleSitemapPing(base);
+      if (!isPage) await pingBaidu(base + postUrl(post.slug));
     } catch { /* never break publishing on ping failures */ }
   }, 10, 'search-engine-ping');
 }

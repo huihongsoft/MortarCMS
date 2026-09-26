@@ -8,15 +8,20 @@ import { postPath } from '../../lib/permalink';
 
 // Default author archive template
 export default function AuthorLayout(props: any) {
-  const { username, posts, loading, error } = props;
+  const { username, posts, loading, error, pagination, author } = props;
 
   return React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-8' },
     React.createElement(Link, { to: '/', className: 'inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-6' }, React.createElement(ArrowLeft, { size: 14 }), t('back')),
     React.createElement('div', { className: 'flex items-center gap-3 mb-8' },
-      React.createElement('div', { className: 'w-12 h-12 rounded-full bg-primary-600 flex items-center justify-center text-white text-lg font-bold' }, (username || '?')[0].toUpperCase()),
+      author?.avatar
+        ? React.createElement('img', { src: author.avatar, alt: '', className: 'w-12 h-12 rounded-full object-cover' })
+        : React.createElement('div', { className: 'w-12 h-12 rounded-full bg-primary-600 flex items-center justify-center text-white text-lg font-bold' }, (username || '?')[0].toUpperCase()),
       React.createElement('div', null,
-        React.createElement('h1', { className: 'text-2xl font-bold text-gray-900' }, username),
-        React.createElement('p', { className: 'text-sm text-gray-500' }, posts.length + ' ' + t('posts'))
+        React.createElement('h1', { className: 'text-2xl font-bold text-gray-900' }, author?.username || username),
+        // The author's bio (admin profile field) — it existed but only ever
+        // appeared under their posts.
+        author?.bio && React.createElement('p', { className: 'text-sm text-gray-600 mt-1' }, author.bio),
+        React.createElement('p', { className: 'text-sm text-gray-500' }, posts.length + ' / ' + (props.total || posts.length) + ' ' + t('posts'))
       )
     ),
     loading ? React.createElement(ListSkeleton, null)
@@ -32,5 +37,7 @@ export default function AuthorLayout(props: any) {
           p.excerpt && React.createElement('p', { className: 'text-sm text-gray-600 mt-2' }, p.excerpt)
         ))
       )
+    ,
+    pagination
   );
 }

@@ -317,12 +317,8 @@ export function initDB(): void {
       createdAt TEXT NOT NULL
     );
 
-    -- Seed system roles with their default capability sets
-    INSERT OR IGNORE INTO Role (id, slug, name, capabilities, isSystem, createdAt) VALUES
-      ('role-admin', 'admin', '管理员', '["*"]', 1, '2024-01-01'),
-      ('role-editor', 'editor', '编辑', '["edit_posts","edit_others_posts","publish_posts","delete_posts","delete_others_posts","moderate_comments","review_posts","manage_categories","manage_tags","manage_links","manage_forms","upload_files","edit_media","delete_media","edit_pages","publish_pages","delete_pages","manage_options","ai_use","ai_review","ai_tasks","view_system_info"]', 1, '2024-01-01'),
-      ('role-author', 'author', '作者', '["edit_posts","publish_posts","delete_posts","submit_posts","upload_files","edit_media","ai_use"]', 1, '2024-01-01'),
-      ('role-subscriber', 'subscriber', '订阅者', '["submit_posts"]', 1, '2024-01-01');
+    -- System roles are seeded from BUILTIN_ROLES below (one source of truth for
+    -- the shipped defaults, shared with the alignment migration).
 
     CREATE TABLE IF NOT EXISTS AiMemory (
       id TEXT PRIMARY KEY,
@@ -563,6 +559,7 @@ export function initDB(): void {
     appliedAt TEXT NOT NULL
   )`);
 
+  seedBuiltinRoles();
   runMigrations();
 }
 
@@ -738,6 +735,82 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
       addColumn('AiTask', 'siteId', 'TEXT');
     },
   },
+  {
+    version: 16,
+    name: 'align-builtin-role-capabilities',
+    up: () => {
+      // Old installs carry role rows seeded long ago whose capability lists are
+      // missing things the current defaults grant (an editor without
+      // moderate_comments/manage_options could not moderate comments or open the
+      // dashboard). Add-only: nothing an administrator removed is restored.
+      const changed = alignBuiltinRoleCapabilities();
+      for (const c of changed) console.log('[DB] role ' + c.slug + ': added ' + c.added.join(', '));
+    },
+  },
+  {
+    version: 17,
+    name: 'capability-route-alignment',
+    up: () => {
+      // The last role-slug route guards moved to capabilities, so the built-in
+      // editor default gained the two keys it needs to keep screens it already
+      // had:
+      //   - manage_security: /security and /broken-links were gated by
+      //     manage_options before, and editors hold manage_options;
+      //   - view_sites: GET /sites backs the post editor's site dropdown, which
+      //     editors could already reach (site create/remove stays manage_sites).
+      // Targeted add-only, deliberately NOT alignBuiltinRoleCapabilities(): that
+      // tops up every missing editor default and would resurrect capabilities an
+      // administrator removed on purpose. New installs get the same values from
+      // seedBuiltinRoles().
+      const added = addRoleCapabilities('editor', ['manage_security', 'view_sites']);
+      if (added.length) console.log('[DB] role editor: added ' + added.join(', '));
+    },
+  },
+  {
+    version: 15,
+    name: 'role-capability-alignment',
+    up: () => {
+      // Bring the seeded capability lists in line with what the routes actually
+      // enforced, in both directions, so switching the routes to capabilities
+      // cannot change who can do what:
+      //   - editors could manage menus, but the list never said manage_menus;
+      //   - authors were granted edit_media, but media metadata was admin/editor
+      //     only (keeping the grant would have handed authors every media row in
+      //     their sites).
+      // The capability each role must keep: wherever a route used to name roles
+      // directly, that role's list has to carry the capability now, or the same
+      // people lose access the moment the route is capability-gated. Which is
+      // why this is a migration and not just a seed change — a live install has
+      // its own (often sparse) role rows.
+      const sync = (slug: string, add: string[], remove: string[]) => {
+        const row = db.prepare('SELECT id, capabilities FROM Role WHERE slug = ?').get(slug) as any;
+        if (!row) return;
+        let caps: string[];
+        try { caps = JSON.parse(row.capabilities); } catch { return; }
+        if (!Array.isArray(caps) || caps.includes('*')) return;
+        let changed = false;
+        for (const c of remove) { if (caps.includes(c)) { caps = caps.filter(x => x !== c); changed = true; } }
+        for (const c of add) { if (!caps.includes(c)) { caps.push(c); changed = true; } }
+        if (changed) db.prepare('UPDATE Role SET capabilities = ? WHERE id = ?').run(JSON.stringify(caps), row.id);
+      };
+      // editor: menus + the media metadata routes + the page routes it could
+      // already use.
+      sync('editor', ['manage_menus', 'edit_media', 'delete_media', 'edit_pages', 'publish_pages', 'delete_pages'], []);
+      // author: upload_files (already present everywhere) — media metadata was
+      // never author-accessible, so drop the grants that said otherwise.
+      sync('author', ['upload_files'], ['edit_media', 'delete_media']);
+    },
+  },
+  {
+    version: 14,
+    name: 'post-previous-status',
+    up: () => {
+      // Trashing dropped the old status, so restoring always came back as a
+      // draft: a published post that was trashed and restored silently went
+      // offline again. Remember what it was before the trash.
+      addColumn('Post', 'previousStatus', 'TEXT');
+    },
+  },
 ];
 
 function columnExists(table: string, column: string): boolean {
@@ -760,6 +833,70 @@ function columnExists(table: string, column: string): boolean {
   } catch {
     return false;
   }
+}
+
+// Shipped capability defaults for the built-in roles. The seed inserts these for
+// a new install; alignBuiltinRoleCapabilities() tops up an existing install whose
+// rows predate the current defaults (an install seeded years ago had an editor
+// without `moderate_comments` or `manage_options`, so those editors could not
+// moderate comments or open the dashboard — for no visible reason).
+export const BUILTIN_ROLES: { slug: string; name: string; capabilities: string[] }[] = [
+  { slug: 'admin', name: '管理员', capabilities: ['*'] },
+  {
+    slug: 'editor', name: '编辑',
+    capabilities: [
+      'edit_posts', 'edit_others_posts', 'publish_posts', 'delete_posts', 'delete_others_posts',
+      'moderate_comments', 'review_posts', 'manage_categories', 'manage_tags', 'manage_links', 'manage_forms',
+      'upload_files', 'edit_media', 'delete_media',
+      'edit_pages', 'publish_pages', 'delete_pages', 'manage_menus',
+      'manage_options', 'manage_security', 'view_sites', 'ai_use', 'ai_review', 'ai_tasks', 'view_system_info',
+    ],
+  },
+  { slug: 'author', name: '作者', capabilities: ['edit_posts', 'publish_posts', 'delete_posts', 'submit_posts', 'upload_files', 'ai_use'] },
+  { slug: 'subscriber', name: '订阅者', capabilities: ['submit_posts'] },
+];
+
+function seedBuiltinRoles(): void {
+  const stmt = db.prepare("INSERT OR IGNORE INTO Role (id, slug, name, capabilities, isSystem, createdAt) VALUES (?, ?, ?, ?, 1, '2024-01-01')");
+  for (const r of BUILTIN_ROLES) stmt.run('role-' + r.slug, r.slug, r.name, JSON.stringify(r.capabilities));
+}
+
+// Add-only top-up of the built-in role rows: only missing defaults are added, so
+// nothing an administrator removed by hand comes back, and custom roles are never
+// touched. Returns what changed so the migration can log it.
+export function alignBuiltinRoleCapabilities(): { slug: string; added: string[] }[] {
+  const changed: { slug: string; added: string[] }[] = [];
+  for (const def of BUILTIN_ROLES) {
+    if (def.capabilities.includes('*')) continue;             // admin stays '*'
+    let row: any;
+    try { row = db.prepare('SELECT id, capabilities FROM Role WHERE slug = ?').get(def.slug); } catch { return changed; }
+    if (!row) continue;                                        // no row: the code fallback applies
+    let caps: string[];
+    try { caps = JSON.parse(row.capabilities); } catch { continue; }
+    if (!Array.isArray(caps) || caps.includes('*')) continue;   // '*' supersedes the list
+    const added = def.capabilities.filter((c) => !caps.includes(c));
+    if (added.length === 0) continue;
+    db.prepare('UPDATE Role SET capabilities = ? WHERE id = ?').run(JSON.stringify([...caps, ...added]), row.id);
+    changed.push({ slug: def.slug, added });
+  }
+  return changed;
+}
+
+// Add-only top-up of ONE role row. Unlike alignBuiltinRoleCapabilities() this
+// touches just the capabilities the caller names, so a migration can grant what
+// a route change requires without resurrecting every missing default an
+// administrator may have removed on purpose. Returns what was added.
+export function addRoleCapabilities(slug: string, caps: string[]): string[] {
+  let row: any;
+  try { row = db.prepare('SELECT id, capabilities FROM Role WHERE slug = ?').get(slug); } catch { return []; }
+  if (!row) return [];
+  let current: string[];
+  try { current = JSON.parse(row.capabilities); } catch { return []; }
+  if (!Array.isArray(current) || current.includes('*')) return [];   // '*' supersedes the list
+  const added = caps.filter((c) => !current.includes(c));
+  if (added.length === 0) return [];
+  db.prepare('UPDATE Role SET capabilities = ? WHERE id = ?').run(JSON.stringify([...current, ...added]), row.id);
+  return added;
 }
 
 function addColumn(table: string, column: string, definition: string): void {

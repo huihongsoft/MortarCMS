@@ -1,4 +1,5 @@
 import { addAction } from '../../src/utils/hooks';
+import { addPluginInterval } from '../../src/utils/pluginApi';
 import db from '../../src/utils/db';
 import { sendEmail } from '../../src/utils/mailer';
 
@@ -12,7 +13,6 @@ import { sendEmail } from '../../src/utils/mailer';
 //   daily_digest_email   = recipient (defaults to admin_email)
 
 const CHECK_INTERVAL_MS = 60 * 1000;
-let timer: NodeJS.Timeout | null = null;
 
 function setting(key: string): string {
   try { return ((db.prepare('SELECT value FROM Setting WHERE key = ?').get(key) as any)?.value || '').toString(); } catch { return ''; }
@@ -61,23 +61,21 @@ function escapeHtml(s: string): string {
 }
 
 export function register() {
-  addAction('init', () => {
-    try {
-      const t = setting('daily_digest_time') || '09:00';
-      const m = t.match(/^(\d{1,2}):(\d{2})$/);
-      if (!m) return;
-      const hour = parseInt(m[1], 10);
-      const minute = parseInt(m[2], 10);
-      const check = () => {
-        const now = new Date();
-        if (now.getHours() !== hour || now.getMinutes() !== minute) return;
-        const today = now.toISOString().slice(0, 10);
-        if (setting('daily_digest_last') === today) return; // already sent today
-        sendDigest();
-      };
-      check();
-      if (!timer) timer = setInterval(check, CHECK_INTERVAL_MS);
-      timer.unref?.();
-    } catch {}
-  }, 10, 'daily-digest');
+  // Lifecycle-bound timer: the configured send time is read on every tick, so
+  // changing it in the settings takes effect without a restart, and disabling
+  // the plugin stops the timer (it used to keep running until a restart).
+  const check = () => {
+    const t = setting('daily_digest_time') || '09:00';
+    const m = t.match(/^(\d{1,2}):(\d{2})$/);
+    if (!m) return;
+    const hour = parseInt(m[1], 10);
+    const minute = parseInt(m[2], 10);
+    const now = new Date();
+    if (now.getHours() !== hour || now.getMinutes() !== minute) return;
+    const today = now.toISOString().slice(0, 10);
+    if (setting('daily_digest_last') === today) return; // already sent today
+    sendDigest();
+  };
+  try { check(); } catch {}
+  addPluginInterval(check, CHECK_INTERVAL_MS);
 }

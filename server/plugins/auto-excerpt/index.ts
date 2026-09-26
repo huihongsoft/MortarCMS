@@ -33,10 +33,12 @@ function fillExcerpt(postId: string): void {
 }
 
 export function register() {
-  addAction('post_created', (postId: string) => {
+  // Pages fire the same hooks with type 'page'; this plugin is about post
+  // excerpts, and quietly rewriting page excerpts was scope creep.
+  const onPost = (postId: string, contentType?: string) => {
+    if (contentType === 'page') return;
     try { if (setting('auto_excerpt_enabled') !== '0') fillExcerpt(postId); } catch {}
-  }, 10, 'auto-excerpt');
-  addAction('post_updated', (postId: string) => {
-    try { if (setting('auto_excerpt_enabled') !== '0') fillExcerpt(postId); } catch {}
-  }, 10, 'auto-excerpt');
+  };
+  addAction('post_created', onPost, 10, 'auto-excerpt');
+  addAction('post_updated', onPost, 10, 'auto-excerpt');
 }

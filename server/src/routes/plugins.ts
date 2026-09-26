@@ -10,7 +10,7 @@ import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/
 const router = Router();
 
 // Public: registered hooks (plugin system introspection)
-router.get('/hooks', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.get('/hooks', authenticate, requireCap('manage_plugins'), (_req: AuthRequest, res: Response) => {
   try {
     const hooks = listHooks();
     res.json({
@@ -21,14 +21,14 @@ router.get('/hooks', authenticate, authorize('admin'), (_req: AuthRequest, res: 
 });
 
 // Admin: list installed plugins
-router.get('/', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.get('/', authenticate, requireCap('manage_plugins'), (_req: AuthRequest, res: Response) => {
   try {
     res.json({ plugins: listPlugins() });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: enable / disable a plugin
-router.put('/:name/toggle', authenticate, authorize('admin'), async (req: AuthRequest, res: Response) => {
+router.put('/:name/toggle', authenticate, requireCap('manage_plugins'), async (req: AuthRequest, res: Response) => {
   try {
     const r = await setPluginActive(req.params.name, req.body?.active === true);
     if (!r.ok) { res.status(400).json({ error: r.error || 'Failed' }); return; }
@@ -37,7 +37,7 @@ router.put('/:name/toggle', authenticate, authorize('admin'), async (req: AuthRe
 });
 
 // Admin: read a plugin's settings (schema + current values + read-only reports)
-router.get('/:name/settings', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.get('/:name/settings', authenticate, requireCap('manage_plugins'), (req: AuthRequest, res: Response) => {
   try {
     const plugin = (listPlugins().find((p: PluginMeta) => p.name === req.params.name));
     if (!plugin) { res.status(404).json({ error: 'Plugin not found' }); return; }
@@ -55,7 +55,7 @@ router.get('/:name/settings', authenticate, authorize('admin'), (req: AuthReques
 });
 
 // Admin: update a plugin's settings (validated against the schema)
-router.put('/:name/settings', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.put('/:name/settings', authenticate, requireCap('manage_plugins'), (req: AuthRequest, res: Response) => {
   try {
     const plugin = (listPlugins().find((p: PluginMeta) => p.name === req.params.name));
     if (!plugin) { res.status(404).json({ error: 'Plugin not found' }); return; }
@@ -93,7 +93,7 @@ function fetchJson(url: string, timeoutMs = 15000): Promise<any> {
 }
 
 // Admin: market catalog — remote repository first (market_url setting), local market as fallback
-router.get('/market/list', authenticate, authorize('admin'), async (_req: AuthRequest, res: Response) => {
+router.get('/market/list', authenticate, requireCap('manage_plugins'), async (_req: AuthRequest, res: Response) => {
   try {
     const setting = db.prepare("SELECT value FROM Setting WHERE key = 'market_url'").get() as any;
     const marketUrl = setting?.value as string | undefined;
@@ -119,7 +119,7 @@ router.get('/market/list', authenticate, authorize('admin'), async (_req: AuthRe
 });
 
 // Admin: install a package from the market (local package or remote URL)
-router.post('/market/:name/install', authenticate, authorize('admin'), async (req: AuthRequest, res: Response) => {
+router.post('/market/:name/install', authenticate, requireCap('manage_plugins'), async (req: AuthRequest, res: Response) => {
   try {
     const name = req.params.name;
     // If the package came from a remote catalog with a url, install from there
@@ -150,7 +150,7 @@ router.post('/market/:name/install', authenticate, authorize('admin'), async (re
 });
 
 // Admin: install a plugin from a remote URL (zip or tar.gz)
-router.post('/market/install-url', authenticate, authorize('admin'), async (req: AuthRequest, res: Response) => {
+router.post('/market/install-url', authenticate, requireCap('manage_plugins'), async (req: AuthRequest, res: Response) => {
   try {
     const url = req.body?.url as string;
     if (!url) { res.status(400).json({ error: 'url required' }); return; }
@@ -161,7 +161,7 @@ router.post('/market/install-url', authenticate, authorize('admin'), async (req:
 });
 
 // Admin: uninstall a plugin (must be inactive)
-router.delete('/:name', authenticate, authorize('admin'), async (req: AuthRequest, res: Response) => {
+router.delete('/:name', authenticate, requireCap('manage_plugins'), async (req: AuthRequest, res: Response) => {
   try {
     const r = await uninstallPlugin(req.params.name);
     if (!r.ok) { res.status(400).json({ error: r.error || 'Uninstall failed' }); return; }

@@ -13,7 +13,42 @@ interface Role {
   userCount: number;
 }
 
-const GROUP_ICONS: Record<string, any> = {};
+// Capability ids come from the server catalog and are translated through the
+// dictionary (`cap <id>` / `cap group <key>`). The dictionary keys are English
+// copy, so a miss returns the key — the English labels below are the fallback,
+// the same convention the block palette uses in VisualEditor.
+const CAP_EN: Record<string, string> = {
+  edit_posts: 'Edit posts', publish_posts: 'Publish posts', delete_posts: 'Delete posts',
+  edit_others_posts: "Edit others' posts", delete_others_posts: "Delete others' posts",
+  edit_pages: 'Edit pages', publish_pages: 'Publish pages', delete_pages: 'Delete pages',
+  moderate_comments: 'Moderate comments', submit_posts: 'Submit posts', review_posts: 'Review submissions',
+  manage_forms: 'Manage forms', manage_categories: 'Manage categories', manage_tags: 'Manage tags', manage_links: 'Manage links',
+  upload_files: 'Upload files', edit_media: 'Edit media details', delete_media: 'Delete media',
+  manage_menus: 'Manage menus', manage_themes: 'Manage themes', install_themes: 'Install themes',
+  delete_themes: 'Delete themes', rebuild_themes: 'Rebuild theme bundles',
+  manage_options: 'Site settings', manage_users: 'Manage users', manage_roles: 'Manage roles & permissions',
+  manage_plugins: 'Manage plugins', import: 'Data import', export: 'Data export',
+  manage_sites: 'Manage sites', view_sites: 'View site list', manage_security: 'Security audit',
+  view_system_info: 'System info', manage_system: 'System maintenance',
+  ai_use: 'Use AI chat / tasks / writing', ai_manage: 'AI providers & permissions', ai_bindings: 'WeChat / DingTalk bindings',
+  ai_tasks: 'View all AI tasks', ai_review: 'AI comment moderation',
+};
+const GROUP_EN: Record<string, string> = { content: 'Content', media: 'Media', appearance: 'Appearance', system: 'System', ai: 'AI assistant' };
+
+/** Translated capability label, falling back to the English map. */
+function capLabel(id: string): string {
+  const key = 'cap ' + id;
+  const translated = t(key, getLang());
+  return translated !== key ? translated : (CAP_EN[id] || id);
+}
+
+/** Translated capability-group title, falling back to the English map. */
+function groupLabel(group: string): string {
+  const key = 'cap group ' + group;
+  const translated = t(key, getLang());
+  return translated !== key ? translated : (GROUP_EN[group] || group);
+}
+
 
 export default function Roles() {
   const toast = useToast();
@@ -57,6 +92,9 @@ export default function Roles() {
     try {
       await api.put('/roles/' + slug, { capabilities: drafts[slug] || [], name: editingNames[slug] });
       toast.toast(t('saved', getLang()));
+      // The caller's own capabilities may have just changed: tell the auth
+      // provider to re-read /auth/me so the sidebar and route guards follow.
+      window.dispatchEvent(new Event('mortar-permissions-changed'));
       const r = await api.get('/roles');
       setRoles(r.data.roles || []);
       const d: Record<string, string[]> = {};
@@ -76,6 +114,7 @@ export default function Roles() {
       (r.data.roles || []).forEach((role: Role) => { d[role.slug] = [...role.capabilities]; });
       setDrafts(d);
       toast.toast(t('role created', getLang()));
+      window.dispatchEvent(new Event('mortar-permissions-changed'));
     } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
   }
 
@@ -89,6 +128,7 @@ export default function Roles() {
       (r.data.roles || []).forEach((role: Role) => { d[role.slug] = [...role.capabilities]; });
       setDrafts(d);
       if (active === slug) setActive('editor');
+      window.dispatchEvent(new Event('mortar-permissions-changed'));
     } catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
   }
 
@@ -146,12 +186,12 @@ export default function Roles() {
             const cur = drafts[activeRole.slug] || [];
             const allOn = groupCaps.every((c: string) => cur.includes(c));
             const someOn = groupCaps.some((c: string) => cur.includes(c));
-            const isAi = group.group.includes('AI');
+            const isAi = group.group === 'ai';
             return React.createElement('div', { key: group.group, className: 'border border-gray-100 dark:border-gray-700 rounded-xl overflow-hidden' },
               React.createElement('div', { className: 'flex items-center justify-between px-3 py-2 bg-gray-50 dark:bg-gray-800' },
                 React.createElement('p', { className: 'text-xs font-semibold text-gray-700 dark:text-gray-200 flex items-center gap-1.5' },
                   isAi ? React.createElement(Bot, { size: 13, className: 'text-primary-600' }) : React.createElement(KeyRound, { size: 13, className: 'text-gray-400' }),
-                  group.group),
+                  groupLabel(group.group)),
                 React.createElement('button', {
                   onClick: () => toggleGroup(activeRole.slug, groupCaps),
                   className: 'text-[10px] px-2 py-0.5 rounded ' + (allOn ? 'bg-primary-600 text-white' : someOn ? 'bg-primary-50 text-primary-600' : 'bg-gray-200 dark:bg-gray-700 text-gray-500'),
@@ -166,7 +206,7 @@ export default function Roles() {
                     className: 'flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors ' + (on ? 'bg-primary-50 dark:bg-primary-500/15' : 'hover:bg-gray-50 dark:hover:bg-gray-800'),
                   },
                     React.createElement('input', { type: 'checkbox', checked: on, disabled, onChange: () => toggleCap(activeRole.slug, c.id), className: 'rounded border-gray-300 text-primary-600 disabled:opacity-50' }),
-                    React.createElement('span', { className: 'text-xs text-gray-700 dark:text-gray-300' }, c.label),
+                    React.createElement('span', { className: 'text-xs text-gray-700 dark:text-gray-300' }, capLabel(c.id)),
                   );
                 })
               )

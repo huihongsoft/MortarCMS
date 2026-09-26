@@ -40,9 +40,12 @@ async function push(event: string, data: Record<string, unknown>): Promise<void>
 }
 
 export function register() {
-  addAction('post_published', async (postId: string) => {
+  addAction('post_published', async (postId: string, contentType?: string) => {
     const p = db.prepare('SELECT id, title, slug FROM Post WHERE id = ?').get(postId) as any;
-    if (p) await push('post_published', { postId, title: p.title, url: siteUrl() + postUrl(p.slug) });
+    if (!p) return;
+    // Pages are served from /page/<slug>; postUrl() would push a 404-bound link.
+    const url = contentType === 'page' ? siteUrl() + '/page/' + encodeURIComponent(p.slug) : siteUrl() + postUrl(p.slug);
+    await push('post_published', { postId, title: p.title, url });
   }, 10, 'event-webhook');
 
   addAction('comment_added', async (commentId: string) => {

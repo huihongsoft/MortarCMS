@@ -17,7 +17,7 @@ function highlight(text: string, q: string): any {
 
 // Default search results template
 export default function SearchLayout(props: any) {
-  const { query, posts, loading, error } = props;
+  const { query, posts, loading, error, pagination } = props;
 
   return React.createElement('div', { className: 'max-w-3xl mx-auto px-4 py-8' },
     React.createElement('h1', { className: 'text-2xl font-bold text-gray-900 mb-2' }, t('search results')),
@@ -27,6 +27,9 @@ export default function SearchLayout(props: any) {
         React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-2' }, t('search failed')),
         React.createElement('p', { className: 'text-sm text-gray-500 mb-4' }, t('try again later')),
       )
+    // No query yet: the heading already asks for a term, so an empty result set
+    // must not be reported as "no results for ''".
+    : !query ? null
     : posts.length === 0 ? React.createElement('div', { className: 'text-center py-12' },
         React.createElement(Search, { size: 48, className: 'mx-auto text-gray-300 mb-4' }),
         React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-2' }, t('no results for') + ' "' + query + '"'),
@@ -43,5 +46,7 @@ export default function SearchLayout(props: any) {
           p.excerpt && React.createElement('p', { className: 'text-sm text-gray-600' }, highlight(p.excerpt, query))
         ))
       )
+    ,
+    pagination
   );
 }

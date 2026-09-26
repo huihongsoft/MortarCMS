@@ -225,6 +225,42 @@ const ALL_BLOCKS = [...LAYOUT_BLOCKS, ...CONTENT_BLOCKS, ...SECTIONS_BLOCKS, ...
 //  VisualEditor Component — Gutenberg-style skeleton layout
 // ============================================================
 
+// Inserter label: built-in blocks are translated by key, while blocks a plugin
+// contributed ship their own label and have no dictionary entry — fall back to
+// it (the translation returns the key unchanged when it is missing).
+function blockLabel(b: any, tr: (key: string) => string): string {
+  if (!b) return '';
+  const translated = tr('block ' + b.id);
+  if (translated !== 'block ' + b.id) return translated;
+  return String(b.label || b.id);
+}
+
+// Blocks contributed by plugins (GET /api/ext/blocks) are appended to the
+// built-in registry once per load, so a plugin can add reusable blocks without
+// shipping a frontend bundle.
+async function loadPluginBlocks(token: string | null): Promise<any[]> {
+  const added: any[] = [];
+  try {
+    const res = await fetch('/api/ext/blocks', { headers: token ? { Authorization: 'Bearer ' + token } : {} });
+    if (!res.ok) return [];
+    const list = await res.json();
+    if (!Array.isArray(list)) return [];
+    for (const b of list) {
+      if (!b?.id || ALL_BLOCKS.some((x: any) => x.id === b.id)) continue;
+      const entry: any = {
+        id: b.id,
+        category: b.category || 'Content',
+        media: '\u{1F9E9}',
+        content: b.content,
+        label: b.label || b.id,
+      };
+      ALL_BLOCKS.push(entry);
+      added.push(entry);
+    }
+  } catch { /* the inserter just shows the built-ins */ }
+  return added;
+}
+
 export default function VisualEditor({ content, css, onChange, height, onSaveShortcut, onPublish, onBack, saveState, pageSettings, mode }: VisualEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | null>(null);
@@ -379,9 +415,9 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       const root = containerRef.current?.querySelector('.ve-guten-content') as HTMLElement;
       if (!root) return;
       const emptyState = document.createElement('div');
-      // Post mode: the canvas has a title input at the top, so the empty
+      // Both modes: the canvas has a title input at the top, so the empty
       // hint must sit below it instead of covering the whole surface
-      emptyState.className = 've-empty-state' + (modeRef.current === 'post' ? ' is-post' : '');
+      emptyState.className = 've-empty-state is-titled';
       emptyState.innerHTML = '<div class="ve-empty-card"><div class="ve-empty-icon">✦</div><p class="ve-empty-title">' + __('click + to add your first block') + '</p><p class="ve-empty-sub">' + __('or start with a template') + ':</p><div class="ve-empty-actions"><button data-add="hero">' + __('hero banner') + '</button><button data-add="two-columns">' + __('2 columns') + '</button><button data-add="sec-pricing">' + __('pricing') + '</button><button data-add="post-list">' + __('post list') + '</button></div></div>';
       root.appendChild(emptyState);
       // The body always contains the prose container once content loads —
@@ -390,9 +426,13 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       const updateEmptyState = () => {
         let hc = false;
         try {
-          const root = editor.getComponents();
           const prose = findProseComp(editor);
-          hc = root.length > 1 || (!!prose && prose.components().length > 0);
+          hc = !!prose && prose.components().length > 0;
+          // Anything but the (empty) prose wrapper counts as content. A brand
+          // new page has no prose wrapper at all — the initial content is only
+          // parsed when there is some — so the old `root.length > 1` test left
+          // the hint sitting on top of the first block the user placed.
+          if (!hc) editor.getComponents().each((c: any) => { if (c !== prose) hc = true; });
         } catch {}
         emptyState.style.display = hc ? 'none' : 'flex';
       };
@@ -452,6 +492,28 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
   useEffect(() => {
     if (!containerRef.current || editorRef.current) return;
     const ct = containerRef.current;
+    // Plugin blocks land in the inserter. Re-fetched on every editor mount: a
+    // one-shot flag meant a plugin activated after the editor had been opened
+    // once never showed up until a full page reload. The inserter's markup is
+    // built during this effect, so the section is appended when the fetch
+    // resolves rather than being awaited here.
+    void loadPluginBlocks(localStorage.getItem('mortar_token')).then((added) => {
+      if (added.length === 0) return;
+      const body = ct.querySelector('[data-ipanel="blocks"]') as HTMLElement | null;
+      if (!body || body.querySelector('[data-plugin-blocks]')) return;
+      const section = document.createElement('div');
+      section.className = 've-guten-inserter-cat';
+      section.setAttribute('data-plugin-blocks', '1');
+      section.innerHTML = '<div class="ve-guten-inserter-cat-title">' + __('block category Plugins') + '</div><div class="ve-guten-inserter-grid">' +
+        added.map((b: any) => '<button class="ve-guten-inserter-block" data-block="' + escAttr(b.id) + '" data-label="' + escAttr(b.label) + '"><span class="ve-guten-inserter-icon">' + b.media + '</span><span class="ve-guten-inserter-label">' + escAttr(blockLabel(b, __)) + '</span></button>').join('') +
+        '</div>';
+      body.appendChild(section);
+    });
+    // Watches the canvas iframe's body so the frame keeps up with content that
+    // grows after the last editor event (images, fonts, widgets). Assigned
+    // inside the load handler, once the iframe body exists.
+    let frameResizeObserver: ResizeObserver | null = null;
+    let observerTimer: ReturnType<typeof setTimeout> | null = null;
 
     // --- Build Gutenberg skeleton ---
     const isPost = modeRef.current === 'post';
@@ -553,7 +615,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
                   const recentBlocks = recentIds.map((id: string) => ALL_BLOCKS.find(b => b.id === id)).filter(Boolean);
                   if (recentBlocks.length > 0) {
                     html += '<div class="ve-guten-inserter-cat"><div class="ve-guten-inserter-cat-title">' + __('recent') + '</div><div class="ve-guten-inserter-grid">' +
-                      recentBlocks.map((b: any) => `<button class="ve-guten-inserter-block" data-block="${b.id}"><span class="ve-guten-inserter-icon">${b.media}</span><span class="ve-guten-inserter-label">${__('block ' + b.id)}</span></button>`).join('') +
+                      recentBlocks.map((b: any) => `<button class="ve-guten-inserter-block" data-block="${b.id}"><span class="ve-guten-inserter-icon">${b.media}</span><span class="ve-guten-inserter-label">${blockLabel(b, __)}</span></button>`).join('') +
                       '</div></div>';
                   }
                 } catch {}
@@ -562,7 +624,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
                   <div class="ve-guten-inserter-cat">
                     <div class="ve-guten-inserter-cat-title">${__('block category ' + cat)}</div>
                     <div class="ve-guten-inserter-grid">
-                      ${blocks.map(b => `<button class="ve-guten-inserter-block" data-block="${b.id}" data-label="${b.label}"><span class="ve-guten-inserter-icon">${b.media}</span><span class="ve-guten-inserter-label">${__('block ' + b.id)}</span></button>`).join('')}
+                      ${blocks.map(b => `<button class="ve-guten-inserter-block" data-block="${b.id}" data-label="${b.label}"><span class="ve-guten-inserter-icon">${b.media}</span><span class="ve-guten-inserter-label">${blockLabel(b, __)}</span></button>`).join('')}
                     </div>
                   </div>
                 `).join('');
@@ -854,6 +916,14 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         // The frames container follows the frame (title input sits above it)
         syncFramesHeight();
       };
+      const observeFrameContent = () => {
+        const fr = ct.querySelector('.gjs-frame-wrapper iframe') as HTMLIFrameElement | null;
+        const b = fr?.contentDocument?.body;
+        if (!b || typeof ResizeObserver === 'undefined') return;
+        frameResizeObserver?.disconnect();
+        frameResizeObserver = new ResizeObserver(() => syncIframeHeight());
+        frameResizeObserver.observe(b);
+      };
       editor.on('component:add', syncIframeHeight);
       editor.on('component:update', syncIframeHeight);
       editor.on('component:remove', syncIframeHeight);
@@ -861,6 +931,15 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       setTimeout(syncIframeHeight, 300);
       setTimeout(syncIframeHeight, 800);
       setTimeout(syncIframeHeight, 1500);
+      // Component events are not the only thing that changes the height:
+      // images decoding, web fonts and widgets grow the page afterwards. Left
+      // unobserved, the frame stays short and the overflow ends up behind a
+      // second (inner) scrollbar. syncIframeHeight is idempotent once the
+      // heights agree, so watching the body cannot ping-pong.
+      observeFrameContent();
+      // Tracked so unmounting before it fires cannot leave an observer attached
+      // to a detached iframe.
+      observerTimer = setTimeout(observeFrameContent, 1200);
     });
 
     // Load initial content
@@ -876,7 +955,10 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     // Injected as the first child of the frames container so it scrolls and
     // zooms together with the iframe (GrapesJS auto-sizes the frame to the
     // content height, so the whole column scrolls as one sheet).
-    if (isPost) {
+    // Both modes: a page needs its title editable here too, otherwise the only
+    // way to give it one is to leave the builder (saving without a title is
+    // refused by the API, so the builder was a dead end for new pages).
+    {
       editor.on('load', () => {
         const frames = ct.querySelector('.gjs-cv-canvas__frames') as HTMLElement;
         if (!frames || frames.querySelector('.ve-post-title-wrap')) return;
@@ -892,8 +974,14 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
         wrap.appendChild(input);
         frames.prepend(wrap);
         input.addEventListener('input', () => { pageSettingsRef.current?.onPostTitleChange?.(input.value); });
-        // Enter moves focus into the canvas (first block), like WordPress
+        // Make room for the sheet right away instead of waiting for the next
+        // content/zoom event.
+        setTimeout(syncFramesHeight, 0);
+        // The canvas shortcut listener lives in the iframe's document, so the
+        // title — the one field outside it — needs its own ⌘/Ctrl+S.
         input.addEventListener('keydown', (e) => {
+          if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveWithTitleCheck(); return; }
+          // Enter moves focus into the canvas (first block), like WordPress
           if (e.key === 'Enter') {
             e.preventDefault();
             try { (editor.Canvas.getFrameEl() as HTMLIFrameElement)?.contentWindow?.focus(); } catch {}
@@ -918,13 +1006,23 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     editor.on('styleable:change', notifyChange);
     editor.on('change:device', notifyChange);
 
+    // A save or publish with no title cannot succeed (the API requires one).
+    // Put the caret in the title box so the fix is one keystroke away instead
+    // of a scavenger hunt; the parent still reports the refusal.
+    const focusTitleIfEmpty = () => {
+      if (String(pageSettingsRef.current?.postTitle || '').trim()) return;
+      const input = ct.querySelector('#ve-post-title-input') as HTMLInputElement | null;
+      if (input) { input.focus(); input.scrollIntoView({ block: 'center' }); }
+    };
+    const saveWithTitleCheck = () => { focusTitleIfEmpty(); onSaveRef.current?.(); };
+
     // --- Canvas keyboard shortcuts ---
     const canvasDoc = editor.Canvas.getDocument();
     // Clipboard for block copy/paste
     let clipHtml: string | null = null;
     const canvasKeyHandler = (e: KeyboardEvent) => {
       const k = e.key.toLowerCase();
-      if ((e.ctrlKey || e.metaKey) && k === 's') { e.preventDefault(); onSaveRef.current?.(); return; }
+      if ((e.ctrlKey || e.metaKey) && k === 's') { e.preventDefault(); saveWithTitleCheck(); return; }
       if ((e.ctrlKey || e.metaKey) && k === 'z') { e.preventDefault(); try { editor.runCommand('core:undo'); } catch {} return; }
       if ((e.ctrlKey || e.metaKey) && k === 'y') { e.preventDefault(); try { editor.runCommand('core:redo'); } catch {} return; }
       const comp = editor.getSelected() as any;
@@ -946,15 +1044,25 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       const frames = ct.querySelector('.gjs-cv-canvas__frames') as HTMLElement;
       const wrapper = frames?.querySelector('.gjs-frame-wrapper') as HTMLElement;
       const canvas = ct.querySelector('.gjs-cv-canvas') as HTMLElement;
-      if (frames && wrapper) {
-        // Post mode: the title input sits above the frame inside the same
-        // scroll flow — include it so the bottom of the sheet is reachable.
-        const titleH = isPost ? (frames.querySelector('.ve-post-title-wrap') as HTMLElement)?.offsetHeight || 0 : 0;
-        const h = wrapper.offsetHeight + titleH;
-        const canvasH = canvas?.clientHeight || 0;
-        if (h > 0) frames.style.height = Math.max(h, canvasH) + 'px';
-        else if (canvasH > 0) frames.style.height = canvasH + 'px';
-      }
+      if (!frames || !wrapper) return;
+      // Both modes: the title input sits above the frame inside the same
+      // scroll flow — include it so the bottom of the sheet is reachable.
+      const titleH = (frames.querySelector('.ve-post-title-wrap') as HTMLElement)?.offsetHeight || 0;
+      // Measure the iframe's own pixel height (syncIframeHeight writes it from
+      // the body's content). Measuring the wrapper instead fed this container's
+      // height straight back in, so every edit inflated the scroll area — one
+      // added block grew it by over 1000px in post mode.
+      const frameEl = wrapper.querySelector('iframe') as HTMLIFrameElement | null;
+      const frameH = frameEl ? parseFloat(frameEl.style.height || '') || 0 : 0;
+      const contentH = frameH > 0 ? frameH : Math.max(0, wrapper.offsetHeight - titleH);
+      const h = contentH + titleH;
+      const canvasH = canvas?.clientHeight || 0;
+      if (h > 0) frames.style.height = Math.max(h, canvasH) + 'px';
+      else if (canvasH > 0) frames.style.height = canvasH + 'px';
+      // The wrapper is absolutely positioned at the top of the container, so
+      // without this it would cover the title sheet (and the title, painted
+      // above it, would in turn hide the first block of the page).
+      wrapper.style.top = titleH + 'px';
     };
     // Apply the zoom by resizing frames to an absolute pixel width.
     // Top-left anchored: growth goes right and down; canvas scrollbars
@@ -2135,7 +2243,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       }
       else if (id === 've-save-btn') {
         showSnackbar(__('saving'));
-        onSaveRef.current?.();
+        saveWithTitleCheck();
       }
       else if (id === 've-publish-btn') {
         if (prePublishEl && previewDd) {
@@ -2146,11 +2254,15 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           if (open) updatePrepublish();
         } else {
           showSnackbar(__('publishing'));
+          focusTitleIfEmpty();
           onPublishRef.current?.();
         }
       }
       else if (id === 've-pp-cancel') { if (prePublishEl) prePublishEl.style.display = 'none'; }
-      else if (id === 've-pp-publish') { showSnackbar(__('publishing')); onPublishRef.current?.(); }
+      else if (id === 've-pp-publish') {
+        showSnackbar(__('publishing')); focusTitleIfEmpty();
+        onPublishRef.current?.();
+      }
       else if (id === 've-preview-open') {
         const ps = pageSettingsRef.current;
         if (!ps?.slug) { showSnackbar(__('save first to preview')); }
@@ -2222,7 +2334,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
           <div class="ve-sb-cat-title">${__('block category ' + cat)}</div>
           ${blocks.map(b => `
             <div class="ve-sb-item">
-              <div class="ve-sb-label">${__('block ' + b.id)}</div>
+              <div class="ve-sb-label">${blockLabel(b, __)}</div>
               <div class="ve-sb-frame" style="${w !== '100%' ? 'width:' + w + 'px' : ''}">${b.content}</div>
             </div>`).join('')}
         </div>`).join('');
@@ -2252,6 +2364,8 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
     // --- Cleanup ---
     return () => {
       clearTimeout(changeTimer);
+      if (observerTimer) clearTimeout(observerTimer);
+      frameResizeObserver?.disconnect();
       zoomBar.remove();
       blockBar.remove();
       document.removeEventListener('keydown', escHandler);
@@ -2335,7 +2449,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       }
       void btn;
     }
-    // ---- Post mode syncs ----
+    // ---- Title syncs (both modes) ----
     // Header breadcrumb title (WordPress "Posts / Title")
     const titleEl = panel.closest('.visual-editor-container')?.querySelector('#ve-wp-title') as HTMLElement;
     if (titleEl) titleEl.textContent = pageSettings.postTitle || t('untitled', getLang());

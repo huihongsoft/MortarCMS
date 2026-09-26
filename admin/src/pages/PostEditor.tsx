@@ -7,8 +7,9 @@ import RichEditor from '../components/RichEditor';
 import VisualEditor from '../components/VisualEditor';
 import RevisionsPanel from '../components/RevisionsPanel';
 import api from '../lib/api';
-import { t, getLang } from '../lib/i18n';
+import { t, getLang, serverMessage } from '../lib/i18n';
 import Select from '../components/Select';
+import { useUnsavedGuard } from '../lib/useUnsavedGuard';
 import { postPath, permalinkPrefix, usePermalinkPrefix } from '../lib/permalink';
 
 export default function PostEditor() {
@@ -33,7 +34,6 @@ export default function PostEditor() {
   const [authorId, setAuthorId] = useState('');
   const [users, setUsers] = useState<any[]>([]);
   const [visualMode, setVisualMode] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
   const [lastSavedAt, setLastSavedAt] = useState('');
   // Baseline snapshot for autosave dirty-detection (title/content/excerpt)
@@ -95,6 +95,11 @@ export default function PostEditor() {
   // Tracks the id of a newly-created post so draft saves (which stay in the
   // editor) reuse the same post instead of creating duplicates
   const createdIdRef = useRef<string | null>(null);
+  // Content type to create as (custom post types live in the same list/editor).
+  const createType = new URLSearchParams(window.location.search).get('type') || '';
+
+  // Closing the tab or following an admin link with unsaved edits asks first.
+  useUnsavedGuard(saveState === 'dirty');
 
   // Keyboard shortcut: Ctrl+S to save draft. Route through saveRef so the
   // handler always sees the latest state (a deps-array closure would go stale
@@ -154,6 +159,9 @@ export default function PostEditor() {
         ? (status || 'draft')
         : (s === 'draft' ? 'draft' : (status === 'draft' || status === 'pending' ? 'published' : status));
       const payload: any = { title, slug: slug || undefined, content, excerpt, status: finalStatus, categoryIds, tagNames, featured: featured || undefined, format: format || 'standard', publishedAt: finalStatus !== 'draft' && schedDate ? new Date(schedDate).toISOString() : undefined, authorId: authorId || undefined, siteId: siteId || null, allowComments, password };
+      // The list can open this editor for a custom post type (?type=<slug>); the
+      // type is only sent on create — an existing entry keeps its type.
+      if (!id && !createdIdRef.current && createType) payload.type = createType;
       payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc, _seo_noindex: seoNoindex ? '1' : '', _seo_canonical: seoCanonical, _seo_og_image: seoOgImage, _seo_primary_category: seoPrimaryCategory };
       // Custom fields (user-defined key/value pairs) ride along in meta
       for (const mf of metaFields) { if (mf.key.trim()) payload.meta[mf.key.trim()] = mf.value; }
@@ -296,7 +304,9 @@ export default function PostEditor() {
     if (Array.isArray(msg)) msg = msg.map((x: any) => x?.message || JSON.stringify(x)).join('; ');
     if (status === 401) return t('session expired - please log in again', lang);
     if (status === 429) return t('too many requests - try again in a moment', lang);
-    return String(msg || t('save failed', lang)) + ' (' + status + ')';
+    // The server answers in Chinese; serverMessage() maps the known ones to
+    // English so an operator on the English UI is not shown raw Chinese.
+    return String(msg ? serverMessage(msg, lang) : t('save failed', lang)) + ' (' + status + ')';
   }
   async function saveTemplate() { if (!templateName.trim() || !content) return; await api.post('/editor/templates', { name: templateName, html: content, css: visualCss }); toast.toast(t('template saved', getLang())); setTemplateName(''); api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])); }
   function loadTemplate(tpl: any) { setContent(tpl.html); setVisualCss(tpl.css || ''); toast.toast(t('template loaded', getLang())); }
@@ -558,25 +568,6 @@ export default function PostEditor() {
             onRestoreRevision: (post: any) => { setTitle(post.title); setContent(post.content || ''); setExcerpt(post.excerpt || ''); setSaveState('dirty'); },
           },
         }),
-        showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },
-          React.createElement('div', {
-            className: 'absolute right-0 top-0 h-full w-96 max-w-[90vw] bg-white dark:bg-gray-900 shadow-2xl overflow-y-auto',
-            onClick: (e: React.MouseEvent) => e.stopPropagation(),
-          },
-            React.createElement('div', { className: 'sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between z-10' },
-              React.createElement('h3', { className: 'text-sm font-semibold text-gray-900' }, t('page settings', getLang())),
-              React.createElement('button', { onClick: () => setShowSettings(false), className: 'p-1 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 16 }))
-            ),
-            React.createElement('div', { className: 'p-4' },
-              React.createElement('div', { className: 'card p-4 mb-4' },
-                React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('excerpt (optional)', getLang())),
-                React.createElement('textarea', { value: excerpt, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setExcerpt(e.target.value), placeholder: t('excerpt (optional)', getLang()), className: 'input-field', rows: 3 })
-              ),
-              renderAiPanel(),
-              renderSidebar()
-            )
-          )
-        )
       ),
       // Bottom spacer the height of the admin status bar (~42px), which stays
       // visible above this full-screen overlay — the editor area ends here so
@@ -587,7 +578,7 @@ export default function PostEditor() {
     !visualMode && React.createElement('div', { className: 'grid grid-cols-1 ' + (sidebarOpen ? 'lg:grid-cols-3' : '') + ' gap-6' },
       React.createElement('div', { className: (sidebarOpen ? 'lg:col-span-2 ' : '') + 'space-y-4' },
         React.createElement('div', { className: 'relative' },
-          React.createElement('input', { value: title, onChange: e => setTitle(e.target.value), placeholder: t('post title', getLang()), className: 'input-field text-lg font-semibold pr-20' }),
+          React.createElement('input', { value: title, onChange: e => { setTitle(e.target.value); setSaveState('dirty'); }, placeholder: t('post title', getLang()), className: 'input-field text-lg font-semibold pr-20' }),
           React.createElement('span', { id: 'post-word-count', className: 'absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400' }, (content || '').replace(/<[^>]*>/g, '').trim().split(/\s+/).filter(Boolean).length + ' ' + t('words', getLang()))
         ),
         React.createElement('div', { className: 'flex items-center border-b border-gray-200 mb-0' },
@@ -608,7 +599,7 @@ export default function PostEditor() {
           }, React.createElement(PanelRightClose, { size: 14 }), t('post settings', getLang())),
         ),
         renderAiPanel(),
-        React.createElement(RichEditor, { value: content, onChange: setContent, placeholder: t('write your post content', getLang()) })
+        React.createElement(RichEditor, { value: content, onChange: (html: string) => { setContent(html); setSaveState('dirty'); }, placeholder: t('write your post content', getLang()) })
       ),
       sidebarOpen && renderSidebar()
     )

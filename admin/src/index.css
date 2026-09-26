@@ -1278,13 +1278,19 @@ table tbody tr { transition: background-color 0.12s ease; }
    EMPTY STATE + HINT
    ================================================================= */
 
+/* The empty-state hint spans the whole content area, which also holds the
+   settings sidebar (GrapesJS .gjs-pn-panel, z-index 3). At z-index 15 with
+   pointer-events:auto it painted over the sidebar and swallowed every click
+   there — with an empty canvas (a new page/post) the page-info panel looked
+   normal but could not be edited at all. Sit above the canvas (z-index 1) and
+   below the sidebar, and let clicks through except on the card itself. */
 .ve-empty-state {
   position: absolute; inset: 0;
-  z-index: 15;
+  z-index: 2;
   display: flex; align-items: center; justify-content: center;
-  pointer-events: auto;
+  pointer-events: none;
 }
-.ve-empty-card { text-align: center; padding: 36px 44px; max-width: 420px; }
+.ve-empty-card { text-align: center; padding: 36px 44px; max-width: 420px; pointer-events: auto; }
 .ve-empty-icon { font-size: 34px; color: var(--wp-admin-theme-color); opacity: 0.7; margin-bottom: 12px; }
 .ve-empty-title {
   font-size: 17px; font-weight: 600; color: #1e1e1e; margin: 0 0 6px;
@@ -1810,6 +1816,12 @@ details.card[open] summary .ve-arrow { transform: rotate(180deg); }
   background: #fff;
   padding: 32px 24px 0;
   box-sizing: border-box;
+  /* The frame wrapper is absolutely positioned at the top of the frames
+     container, so it painted over this sheet and the title could not be
+     clicked at all. Stack above it; the wrapper is pushed down by the title's
+     height in JS so the page content still starts below the title. */
+  position: relative;
+  z-index: 2;
 }
 .dark .ve-post-title-wrap { background: #fff; } /* sheet stays white in dark mode, like WP */
 
@@ -1828,12 +1840,12 @@ details.card[open] summary .ve-arrow { transform: rotate(180deg); }
 }
 .ve-post-title-input::placeholder { color: #949494; font-weight: 400; }
 
-/* Empty-state hint sits below the title in post mode */
-.ve-empty-state.is-post {
+/* Empty-state hint sits below the title sheet — both modes have one */
+.ve-empty-state.is-titled {
   top: 260px;
   align-items: flex-start;
 }
-.ve-empty-state.is-post .ve-empty-card { padding-top: 12px; }
+.ve-empty-state.is-titled .ve-empty-card { padding-top: 12px; }
 
 /* Collapsible sidebar panels (WordPress components-panel behavior) */
 .ve-guten-content .components-panel__body:not(.is-opened) .ve-guten-field { display: none; }

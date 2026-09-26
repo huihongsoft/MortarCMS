@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import crypto from 'crypto';
 import db, { cuid } from '../utils/db';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { renderTemplate, sendEmail, getMailSettings } from '../utils/mailer';
 import { postUrl } from '../utils/slug';
 
@@ -83,8 +83,8 @@ router.post('/newsletter/unsubscribe', (req: AuthRequest, res: Response) => {
 // ---- Admin ----
 
 // Subscriber management exposes the whole mailing list (PII) and can mass-send,
-// so it is admin-only — `manage_options` is held by the editor role too.
-const adminGuard = [authenticate, authorize('admin')];
+// so it needs `manage_system` — `manage_options` is held by the editor role too.
+const adminGuard = [authenticate, requireCap('manage_system')];
 
 // List subscribers with totals (search + status filter + pagination)
 router.get('/admin/subscribers', ...adminGuard, (req: AuthRequest, res: Response) => {

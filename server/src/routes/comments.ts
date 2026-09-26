@@ -63,17 +63,63 @@ router.get('/recent', (req: AuthRequest, res: Response) => {
 
 router.get('/post/:postId', (req: AuthRequest, res: Response) => {
   try {
-    const comments = db.prepare('SELECT id, content, author, website, status, postId, parentId, userId, likes, createdAt FROM Comment WHERE postId = ? AND status = ? AND parentId IS NULL ORDER BY createdAt DESC').all(req.params.postId, 'approved') as any[];
-    // Batch-load children for all top-level comments (one query total)
-    const children = new Map<string, any[]>();
-    if (comments.length > 0) {
-      (db.prepare('SELECT id, content, author, website, status, postId, parentId, userId, likes, createdAt FROM Comment WHERE parentId IN (' + comments.map(() => '?').join(',') + ') AND status = ? ORDER BY createdAt ASC').all(...comments.map((c: any) => c.id), 'approved') as any[])
-        .forEach((r: any) => { if (!children.has(r.parentId)) children.set(r.parentId, []); children.get(r.parentId)!.push(r); });
+    // One query for the whole thread, assembled into a tree: the previous
+    // version fetched roots plus exactly one level of children, so a reply to a
+    // reply existed in the database but was never shown to anyone.
+    const rows = db.prepare('SELECT id, content, author, website, status, postId, parentId, userId, likes, createdAt FROM Comment WHERE postId = ? AND status = ? ORDER BY createdAt ASC').all(req.params.postId, 'approved') as any[];
+    const byId = new Map<string, any>();
+    for (const r of rows) byId.set(r.id, { ...r, children: [] });
+    const roots: any[] = [];
+    for (const c of byId.values()) {
+      // A child whose parent is not approved (or was deleted) is promoted to the
+      // top level rather than vanishing.
+      const parent = c.parentId ? byId.get(c.parentId) : null;
+      if (parent) parent.children.push(c); else roots.push(c);
     }
-    comments.forEach((c: any) => { c.children = children.get(c.id) || []; });
-    res.json(comments);
+    roots.sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+    res.json(roots);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
+
+// Threads nest up to this many levels (root + replies). A reply aimed deeper is
+// attached to the deepest allowed ancestor instead of being refused — it stays
+// visible in the thread, which is what WordPress does at its depth limit.
+const MAX_COMMENT_DEPTH = 3;
+
+// Depth of a comment within its thread (a root comment is depth 1). Returns -1
+// when the id is not a comment of this post, so callers can reject it.
+function commentDepth(id: string, postId: string): number {
+  let depth = 1;
+  let current: string | null = id;
+  const seen = new Set<string>();
+  while (current) {
+    if (seen.has(current)) return depth;          // corrupt data: stop walking
+    seen.add(current);
+    const row = db.prepare('SELECT parentId, postId FROM Comment WHERE id = ?').get(current) as any;
+    if (!row || row.postId !== postId) return -1;
+    if (!row.parentId) return depth;
+    current = row.parentId;
+    depth++;
+  }
+  return depth;
+}
+
+// Which comment a reply should hang off: the one it targets, unless that would
+// push the reply past MAX_COMMENT_DEPTH — then the deepest ancestor that still
+// has room, so the reply stays visible in the thread instead of being refused
+// (WordPress behaves the same way at its depth limit).
+function clampReplyParent(parentId: string, postId: string): string | null {
+  let depth = commentDepth(parentId, postId);
+  if (depth === -1) return null;
+  let current = parentId;
+  while (depth >= MAX_COMMENT_DEPTH) {
+    const row = db.prepare('SELECT parentId FROM Comment WHERE id = ?').get(current) as any;
+    if (!row?.parentId) break;
+    current = row.parentId;
+    depth--;
+  }
+  return current;
+}
 
 // Public: like a comment (global /api rate limit guards abuse)
 router.post('/:id/like', (req: AuthRequest, res: Response) => {
@@ -102,10 +148,12 @@ router.post('/', (req: AuthRequest, res: Response) => {
     const validationError = applyFilters('comment_validate', '', { ...data, ip: req.ip || '' });
     if (validationError) { res.status(400).json({ error: validationError }); return; }
     // A reply must target a comment on the same post; otherwise parentId could
-    // be used to trigger reply notifications across unrelated threads.
+    // be used to trigger reply notifications across unrelated threads. The
+    // target is then clamped to the deepest allowed level.
+    let parentId: string | null = null;
     if (data.parentId) {
-      const parent = db.prepare('SELECT postId FROM Comment WHERE id = ?').get(data.parentId) as any;
-      if (!parent || parent.postId !== data.postId) { res.status(400).json({ error: 'Invalid parent comment' }); return; }
+      parentId = clampReplyParent(data.parentId, data.postId);
+      if (parentId === null) { res.status(400).json({ error: 'Invalid parent comment' }); return; }
     }
     const id = cuid();
     // Logged-in commenters are linked to their account so the profile page
@@ -117,11 +165,11 @@ router.post('/', (req: AuthRequest, res: Response) => {
     }
     if (!authorName) authorName = 'Anonymous';
     db.prepare('INSERT INTO Comment (id, content, author, email, website, postId, parentId, status, subscribe, userId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
-      id, data.content, authorName, data.email || '', data.website || '', data.postId, data.parentId || null, 'pending', data.subscribe ? 1 : 0, userId);
+      id, data.content, authorName, data.email || '', data.website || '', data.postId, parentId, 'pending', data.subscribe ? 1 : 0, userId);
     
     // Notify the parent comment author by email when a reply arrives
-    if (data.parentId) {
-      const parent = db.prepare('SELECT author, email, content FROM Comment WHERE id = ?').get(data.parentId) as any;
+    if (parentId) {
+      const parent = db.prepare('SELECT author, email, content FROM Comment WHERE id = ?').get(parentId) as any;
       if (parent?.email) {
         try {
           // All user-supplied values are HTML-escaped before entering the email

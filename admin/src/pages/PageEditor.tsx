@@ -1,13 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye } from 'lucide-react';
+import { Save, ArrowLeft, Palette, FileText } from 'lucide-react';
 import { useToast } from '../lib/toast';
 import RichEditor from '../components/RichEditor';
 import VisualEditor from '../components/VisualEditor';
 import RevisionsPanel from '../components/RevisionsPanel';
 import api from '../lib/api';
-import { t, getLang } from '../lib/i18n';
+import { t, getLang, serverMessage } from '../lib/i18n';
 import Select from '../components/Select';
+import { dialog } from '../lib/dialog';
+import { useUnsavedGuard } from '../lib/useUnsavedGuard';
 
 export default function PageEditor() {
   const { id } = useParams();
@@ -26,7 +28,6 @@ export default function PageEditor() {
   const [mediaItems, setMediaItems] = useState<any[]>([]);
   const toast = useToast();
   const [visualMode, setVisualMode] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty'>('saved');
   const [visualCss, setVisualCss] = useState('');
   const [saving, setSaving] = useState(false);
@@ -35,15 +36,68 @@ export default function PageEditor() {
   const createdIdRef = useRef<string | null>(null);
 
   useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); }, []);
-  useEffect(() => { api.get('/pages').then(r => { const all = r.data; setParentPages(all.filter((p: any) => p.id !== id)); if (id) { const p = all.find((x: any) => x.id === id); if (p) { setTitle(p.title); setSlug(p.slug || ''); setContent(p.content); setStatus(p.status === 'published' && p.password ? 'password' : p.status); setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); setPassword(p.password || ''); if (p.featured) setFeatured(p.featured); if (p.excerpt) setExcerpt(p.excerpt); if (p.siteId) setSiteId(p.siteId); if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); } } }); api.get('/media').then(r => setMediaItems(r.data.media || [])).catch(() => {}); }, [id]);
+  useEffect(() => {
+    api.get('/pages').then(r => {
+      const all = r.data;
+      setParentPages(all.filter((p: any) => p.id !== id));
+      const p = id ? all.find((x: any) => x.id === id) : null;
+      if (p) {
+        setTitle(p.title); setSlug(p.slug || ''); setContent(p.content);
+        setStatus(p.status === 'published' && p.password ? 'password' : p.status);
+        setMenuOrder(p.menuOrder); setParentId(p.parentId || ''); setPassword(p.password || '');
+        if (p.featured) setFeatured(p.featured);
+        if (p.excerpt) setExcerpt(p.excerpt);
+        if (p.siteId) setSiteId(p.siteId);
+        if (p.meta?._visual_css) setVisualCss(p.meta._visual_css);
+      }
+      // Baseline autosave against what was just loaded (a new page has nothing
+      // to compare against, so it stays empty).
+      snapshotRef.current = p ? (p.title + '\u0000' + (p.content || '') + '\u0000' + (p.excerpt || '')) : '';
+    }).catch(() => {});
+    api.get('/media').then(r => setMediaItems(r.data.media || [])).catch(() => {});
+  }, [id]);
+
+  // Leaving with unsaved edits asks first (tab close/reload + admin links).
+  useUnsavedGuard(saveState === 'dirty');
+
+  // Ctrl/Cmd+S saves a draft. Routed through a ref so the handler always sees
+  // the latest state instead of a stale closure over the first render.
+  const saveRef = useRef(handleSave);
+  useEffect(() => { saveRef.current = handleSave; });
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); saveRef.current('draft', true); }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
+  // Autosave: 30s after the last change, silently save a draft that has moved.
+  // Published pages are never autosaved — a background save must not touch the
+  // live state (same rule as the post editor).
+  // Baseline for autosave: seeded from the loaded page inside the fetch effect
+  // (a plain [id] effect ran before the fetch resolved, so an untouched page
+  // looked dirty and was re-saved every 30 seconds) and refreshed after saves.
+  const snapshotRef = useRef('');
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const cur = title + '\u0000' + content + '\u0000' + excerpt;
+      if (cur === snapshotRef.current || saving) return;
+      if (id && status !== 'draft') return;
+      if (!title.trim()) return;   // an untitled page cannot be saved by the API
+      saveRef.current('draft', true, true);
+    }, 30000);
+    return () => clearInterval(timer);
+  }, [title, content, excerpt, id, status, saving]);
 
   // stay=false (publish): navigate to pages; stay=true (draft from the builder):
-  // keep editing in place
-  async function handleSave(s: string, stay = false) {
+  // keep editing in place. silent=true (autosave) keeps failures off-screen —
+  // the unsaved-changes indicator already tells that story.
+  async function handleSave(s: string, stay = false, silent = false) {
     // The visual editor's own header can call this without a title (its buttons are
     // not disabled on !title like the ones above), and the API requires one: check
     // it here so the user gets a sentence instead of a raw validation error.
-    if (!title.trim()) { toast.toast(t('please enter a title first', getLang()), 'error'); return; }
+    if (!title.trim()) { if (!silent) toast.toast(t('please enter a title first', getLang()), 'error'); return; }
     setSaving(true);
     setSaveState('saving');
     try {
@@ -60,11 +114,19 @@ export default function PageEditor() {
         if (r.data?.id) createdIdRef.current = r.data.id;
       }
       setSaveState('saved');
+      snapshotRef.current = title + '\u0000' + content + '\u0000' + excerpt;
       if (!stay) navigate('/pages');
     } catch (e: any) {
       setSaveState('dirty');
-      toast.toast(describeSaveError(e, getLang()), 'error');
+      if (!silent) toast.toast(describeSaveError(e, getLang()), 'error');
     } finally { setSaving(false); }
+  }
+
+  // The header's back arrow navigates programmatically, which the link guard
+  // does not see — ask here before dropping unsaved edits.
+  async function goBack() {
+    if (saveState === 'dirty' && !(await dialog.confirm(t('unsaved changes', getLang())))) return;
+    navigate('/pages');
   }
 
   function describeSaveError(e: any, lang: string): string {
@@ -75,13 +137,15 @@ export default function PageEditor() {
     if (Array.isArray(msg)) msg = msg.map((x: any) => x?.message || JSON.stringify(x)).join('; ');
     if (status === 401) return t('session expired - please log in again', lang);
     if (status === 429) return t('too many requests - try again in a moment', lang);
-    return String(msg || t('save failed', lang)) + ' (' + status + ')';
+    // The server answers in Chinese; serverMessage() maps the known ones to
+    // English so an operator on the English UI is not shown raw Chinese.
+    return String(msg ? serverMessage(msg, lang) : t('save failed', lang)) + ' (' + status + ')';
   }
 
   return React.createElement('div', null,
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
       React.createElement('div', { className: 'flex items-center gap-3' },
-        React.createElement('button', { onClick: () => navigate('/pages'), className: 'p-2 text-gray-400 hover:text-gray-600' }, React.createElement(ArrowLeft, { size: 20 })),
+        React.createElement('button', { onClick: goBack, className: 'p-2 text-gray-400 hover:text-gray-600', title: t('back', getLang()) }, React.createElement(ArrowLeft, { size: 20 })),
         React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, id ? t('edit page', getLang()) : t('new page', getLang()))
       ),
       React.createElement('div', { className: 'flex items-center gap-2' },
@@ -102,6 +166,10 @@ export default function PageEditor() {
           onBack: () => setVisualMode(false),
           saveState,
           pageSettings: {
+            // The builder's on-canvas title box writes through here; without it
+            // the box shows empty and typing in it is discarded.
+            postTitle: title,
+            onPostTitleChange: (v: string) => { setTitle(v); setSaveState('dirty'); },
             status,
             onStatusChange: (v: string) => { setStatus(v); setSaveState('dirty'); },
             parentId,
@@ -123,37 +191,6 @@ export default function PageEditor() {
             onRestoreRevision: (post: any) => { setTitle(post.title); setContent(post.content || ''); setSaveState('dirty'); },
           },
         }),
-        showSettings && React.createElement('div', { className: 'absolute inset-y-0 right-0 z-20 bg-black/30', onClick: () => setShowSettings(false) },
-          React.createElement('div', {
-            className: 'absolute right-0 top-0 h-full w-96 max-w-[90vw] bg-white dark:bg-gray-900 shadow-2xl overflow-y-auto',
-            onClick: (e: React.MouseEvent) => e.stopPropagation(),
-          },
-            React.createElement('div', { className: 'sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-4 py-3 flex items-center justify-between z-10' },
-              React.createElement('h3', { className: 'text-sm font-semibold text-gray-900' }, t('page settings', getLang())),
-              React.createElement('button', { onClick: () => setShowSettings(false), className: 'p-1 text-gray-400 hover:text-gray-600' }, React.createElement(X, { size: 16 }))
-            ),
-            React.createElement('div', { className: 'p-4 space-y-4' },
-              React.createElement('div', { className: 'card p-4' },
-                React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('status', getLang())),
-                React.createElement(Select, { value: status, onChange: (v: string) => setStatus(v), className: 'input-field' },
-                  React.createElement('option', { value: 'draft' }, t('draft', getLang())), React.createElement('option', { value: 'published' }, t('published', getLang())), React.createElement('option', { value: 'password' }, t('password protected', getLang())), React.createElement('option', { value: 'private' }, t('private', getLang()))
-                ),
-                React.createElement('input', { type: 'password', value: password, onChange: e => setPassword(e.target.value), placeholder: t('password protect this page', getLang()), className: 'input-field mt-2' })
-              ),
-              parentPages.length > 0 && React.createElement('div', { className: 'card p-4' },
-                React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('parent page', getLang())),
-                React.createElement(Select, { value: parentId, onChange: (v: string) => setParentId(v), className: 'input-field' },
-                  React.createElement('option', { value: '' }, '(' + t('no parent', getLang()) + ')'),
-                  parentPages.map((pp: any) => React.createElement('option', { key: pp.id, value: pp.id }, pp.title))
-                )
-              ),
-              React.createElement('div', { className: 'card p-4' },
-                React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('menu order', getLang())),
-                React.createElement('input', { type: 'number', value: menuOrder, onChange: e => setMenuOrder(parseInt(e.target.value) || 0), className: 'input-field' })
-              )
-            )
-          )
-        )
       ),
       // Bottom spacer the height of the admin status bar (~42px), which stays
       // visible above this full-screen overlay — the editor area ends here so
@@ -163,7 +200,7 @@ export default function PageEditor() {
     // ---- TEXT MODE: original 3-col grid ----
     !visualMode && React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
       React.createElement('div', { className: 'lg:col-span-2 space-y-4' },
-        React.createElement('input', { value: title, onChange: e => setTitle(e.target.value), placeholder: t('page title', getLang()), className: 'input-field text-lg font-semibold' }),
+        React.createElement('input', { value: title, onChange: e => { setTitle(e.target.value); setSaveState('dirty'); }, placeholder: t('page title', getLang()), className: 'input-field text-lg font-semibold' }),
         React.createElement('div', { className: 'flex items-center border-b border-gray-200 mb-0' },
           React.createElement('button', {
             onClick: () => setVisualMode(false),
@@ -176,7 +213,7 @@ export default function PageEditor() {
               (visualMode ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'),
           }, React.createElement(Palette, { size: 14 }), t('visual design', getLang())),
         ),
-        React.createElement(RichEditor, { value: content, onChange: setContent, placeholder: t('write page content', getLang()) })
+        React.createElement(RichEditor, { value: content, onChange: (html: string) => { setContent(html); setSaveState('dirty'); }, placeholder: t('write page content', getLang()) })
       ),
       React.createElement('div', { className: 'space-y-4' },
         // Featured image (same picker as the post editor's text mode)

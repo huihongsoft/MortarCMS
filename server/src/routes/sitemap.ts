@@ -30,8 +30,8 @@ router.get('/sitemap.xml', (req: AuthRequest & SiteRequest, res: Response) => {
 
     const now = new Date().toISOString();
     const posts = (req.siteId
-      ? db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type = 'post' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND (p.siteId IS NULL OR p.siteId = ?)" + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC').all(now, req.siteId)
-      : db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type = 'post' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC').all(now)) as any[];
+      ? db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type <> 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND (p.siteId IS NULL OR p.siteId = ?)" + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC').all(now, req.siteId)
+      : db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type <> 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + PUBLIC_POST_CONDITIONS + ' ORDER BY p.publishedAt DESC').all(now)) as any[];
     const pages = (req.siteId
       ? db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type = 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?) AND (p.siteId IS NULL OR p.siteId = ?)" + PUBLIC_POST_CONDITIONS).all(now, req.siteId)
       : db.prepare("SELECT p.slug, strftime('%Y-%m-%d', COALESCE(p.publishedAt, p.createdAt)) as date FROM Post p WHERE p.type = 'page' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + PUBLIC_POST_CONDITIONS).all(now)) as any[];

@@ -1,4 +1,5 @@
 import { addAction } from '../../src/utils/hooks';
+import { addPluginInterval } from '../../src/utils/pluginApi';
 import db from '../../src/utils/db';
 
 // Scheduled visibility windows + expiry handling for posts.
@@ -17,7 +18,6 @@ import db from '../../src/utils/db';
 //                        post_expiry_action  = 'draft' | 'members'
 
 const CHECK_INTERVAL_MS = 60 * 1000;
-let timer: NodeJS.Timeout | null = null;
 
 function setting(key: string): string {
   try { return ((db.prepare('SELECT value FROM Setting WHERE key = ?').get(key) as any)?.value || '').toString(); } catch { return ''; }
@@ -53,11 +53,8 @@ function checkWindows(): void {
 }
 
 export function register() {
-  // Check on boot (windows may have passed while the server was down) and
-  // then periodically.
-  addAction('init', () => {
-    try { checkWindows(); } catch {}
-    if (!timer) timer = setInterval(checkWindows, CHECK_INTERVAL_MS);
-    timer.unref?.();
-  }, 10, 'post-expiry');
+  // Check immediately (windows may have passed while the server was down) and
+  // then periodically, on a timer tied to the plugin's lifecycle.
+  try { checkWindows(); } catch {}
+  addPluginInterval(checkWindows, CHECK_INTERVAL_MS);
 }

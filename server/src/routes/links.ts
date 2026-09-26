@@ -60,18 +60,18 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
 });
 
 // The management view (all sites' links, including inactive ones) is for callers
-// that can manage links — the write routes below require `manage_options`.
+// that can manage links — the write routes below require `manage_links`.
 // Merely being logged in must not unlock it: a subscriber token used to bypass
 // the site filter and expose other sites' disabled links.
 function isAdminReq(req: AuthRequest): boolean {
   const user = resolveOptionalUser(req);
   if (!user) return false;
   const caps = getRoleCapabilities(user.role);
-  return caps.includes('*') || caps.includes('manage_options');
+  return caps.includes('*') || caps.includes('manage_links');
 }
 
 // Admin: create link
-router.post('/', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/', authenticate, requireCap('manage_links'), (req: AuthRequest, res: Response) => {
   try {
     const { name, url, description, avatar, icon, categoryId, menuOrder, active } = req.body || {};
     if (!name || !url) { res.status(400).json({ error: 'name and url required' }); return; }
@@ -107,7 +107,7 @@ function belongsInCategory(req: AuthRequest, categoryId: unknown): boolean {
 }
 
 // Admin: update link
-router.put('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, requireCap('manage_links'), (req: AuthRequest, res: Response) => {
   try {
     const current = db.prepare('SELECT * FROM Link WHERE id = ?').get(req.params.id) as any;
     if (!current) { res.status(404).json({ error: 'Link not found' }); return; }
@@ -141,7 +141,7 @@ router.put('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest
 });
 
 // Admin: delete link
-router.delete('/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticate, requireCap('manage_links'), (req: AuthRequest, res: Response) => {
   try {
     const current = db.prepare('SELECT * FROM Link WHERE id = ?').get(req.params.id) as any;
     if (!current) { res.status(404).json({ error: 'Link not found' }); return; }
@@ -202,7 +202,7 @@ router.get('/categories', (req: AuthRequest & SiteRequest, res: Response) => {
 });
 
 // Admin: create category
-router.post('/categories', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.post('/categories', authenticate, requireCap('manage_links'), (req: AuthRequest, res: Response) => {
   try {
     const { name, description, menuOrder, siteId, pageId } = req.body || {};
     if (!name) { res.status(400).json({ error: 'name required' }); return; }
@@ -220,7 +220,7 @@ router.post('/categories', authenticate, requireCap('manage_options'), (req: Aut
 });
 
 // Admin: update category
-router.put('/categories/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.put('/categories/:id', authenticate, requireCap('manage_links'), (req: AuthRequest, res: Response) => {
   try {
     const { name, description, menuOrder, siteId, pageId } = req.body || {};
     const existing = db.prepare('SELECT slug, siteId FROM LinkCategory WHERE id = ?').get(req.params.id) as any;
@@ -254,7 +254,7 @@ router.put('/categories/:id', authenticate, requireCap('manage_options'), (req: 
 
 // Admin: delete category (links keep existing, categoryId set null; menu
 // items pointing at the category fall back to the links page)
-router.delete('/categories/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.delete('/categories/:id', authenticate, requireCap('manage_links'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT slug, siteId FROM LinkCategory WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Category not found' }); return; }

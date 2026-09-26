@@ -5,6 +5,7 @@ import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { t, getLang } from '../lib/i18n';
 import { dialog } from '../lib/dialog';
+import { useAuth } from '../lib/auth';
 
 function formatSize(bytes: number): string {
   if (!bytes) return '0 B';
@@ -74,6 +75,9 @@ function MediaThumb({ m }: { m: any }) {
 
 export default function Media() {
   const toast = useToast();
+  const { can } = useAuth();
+  // upload_files lets an author upload; deleting needs delete_media.
+  const canDeleteMedia = can('delete_media');
   const [media, setMedia] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -213,7 +217,7 @@ export default function Media() {
         React.createElement('input', { type: 'text', placeholder: t('search media', getLang()), onChange: (e: React.ChangeEvent<HTMLInputElement>) => { api.get('/media?search=' + encodeURIComponent(e.target.value)).then(r => setMedia(r.data.media)); }, className: 'input-field w-48 text-sm' }),
         React.createElement('button', { onClick: () => fileRef.current?.click(), disabled: uploading, className: 'btn-primary' }, React.createElement(Upload, { size: 16 }), uploading ? t('uploading', getLang()) : t('upload', getLang())),
         React.createElement('button', { onClick: () => setGenOpen(!genOpen), className: 'btn-secondary' }, React.createElement(Sparkles, { size: 16 }), t('ai generate image', getLang())),
-        selected.size > 0 && React.createElement('button', { onClick: bulkDelete, className: 'btn-danger text-xs' }, React.createElement(Trash, { size: 14 }), t('delete selected', getLang()) + ' (' + selected.size + ')')),
+        canDeleteMedia && selected.size > 0 && React.createElement('button', { onClick: bulkDelete, className: 'btn-danger text-xs' }, React.createElement(Trash, { size: 14 }), t('delete selected', getLang()) + ' (' + selected.size + ')')),
       React.createElement('input', { ref: fileRef, type: 'file', multiple: true, onChange: uploadFile, className: 'hidden', accept: 'image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,audio/mpeg,audio/wav,video/mp4,application/zip' })
     ),
     // Type filter tabs (WordPress media filter bar)

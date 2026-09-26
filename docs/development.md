@@ -41,15 +41,30 @@ The Vite dev servers proxy `/api` and `/uploads` to `:3001`.
 
 1. Create `server/src/routes/<name>.ts` exporting a `Router`
 2. Mount it in `server/src/index.ts` (`app.use('/api/<name>', router)`)
-3. Protect it: `authenticate` + `authorize`/`requireCap` unless intentionally public
+3. Protect it: `authenticate` + `requireCap('<capability>')` unless intentionally
+   public. Use a capability from the catalog in `server/src/routes/roles.ts`, not
+   `authorize(...)` — role-slug guards ignore the Roles page, so a permission the
+   administrator grants there would not reach the route. Add the capability to
+   `CAPABILITY_CATALOG` (and its label to `admin/src/lib/i18n.ts`) if it is new.
+   `authorize()` stays exported for the plugin API only.
+   A capability that no route reads is a checkbox that lies — the test in
+   `server/tests/capabilities.test.ts` fails if the catalog has one.
 4. Add tests manually against SQLite (and ideally MySQL/PG if available)
 
 ## Adding an admin page
 
 1. Create `admin/src/pages/<Name>.tsx`
-2. Register a lazy import + route in `admin/src/App.tsx`
+2. Register the route in `admin/src/App.tsx` with the `screen()` helper — it
+   wraps the page in the permission guard
 3. Add the sidebar entry (and group) in `admin/src/components/Sidebar.tsx`
-4. Localize all strings
+4. Add the path to `admin/src/lib/access.ts` with the capability its endpoints
+   enforce (a `roles:` list is a last resort, for routes guarded by role only).
+   **This table is the only thing that decides whether the sidebar shows the
+   entry, whether a direct URL renders a "no permission" screen instead of the
+   page, and what the in-page buttons check — a missing entry means "any
+   signed-in account", so always add it.** Keep it in step with the route's guard
+   on the server, which remains the real gate.
+5. Localize all strings
 
 ## Adding a frontend page
 

@@ -1,8 +1,9 @@
 import { Router, Response } from 'express';
 import { mayWriteSite, userMayAccessSite, assignedSites } from '../utils/userSites';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
+import { doAction } from '../utils/hooks';
 
 const router = Router();
 
@@ -78,7 +79,7 @@ router.get('/location/:location', (req: AuthRequest & SiteRequest, res: Response
 });
 
 // Admin: list all menus
-router.get('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.get('/', authenticate, requireCap('manage_menus'), (req: AuthRequest, res: Response) => {
   try {
     // Site-scoped like the other admin lists: an editor assigned to specific sites
     // sees their own menus plus the shared ones.
@@ -91,7 +92,7 @@ router.get('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, r
 });
 
 // Admin: save menu
-router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.post('/', authenticate, requireCap('manage_menus'), (req: AuthRequest, res: Response) => {
   try {
     const { name, location, items, siteId } = req.body;
     // Naming a site requires that site to be one the caller is assigned to.
@@ -103,12 +104,13 @@ router.post('/', authenticate, authorize('admin', 'editor'), (req: AuthRequest, 
     const id = cuid();
     db.prepare('INSERT INTO Menu (id, name, location, items, siteId) VALUES (?, ?, ?, ?, ?)').run(id, name || 'Menu', location || 'primary', JSON.stringify(normalized), siteId || null);
     const created = db.prepare('SELECT * FROM Menu WHERE id = ?').get(id) as any;
+    try { doAction('menu_saved', id, 'created'); } catch {}
     res.status(201).json({ ...created, items: JSON.parse(created.items || '[]') });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: update menu
-router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, requireCap('manage_menus'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Menu WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Menu not found' }); return; }
@@ -126,16 +128,18 @@ router.put('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest
       if (location !== undefined) db.prepare('UPDATE Menu SET location = ? WHERE id = ?').run(location, req.params.id);
       if (siteId !== undefined) db.prepare('UPDATE Menu SET siteId = ? WHERE id = ?').run(siteId || null, req.params.id);
     });
+    try { doAction('menu_saved', req.params.id, 'updated'); } catch {}
     res.json(db.prepare('SELECT * FROM Menu WHERE id = ?').get(req.params.id));
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/:id', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticate, requireCap('manage_menus'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Menu WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Menu not found' }); return; }
     if (!userMayAccessSite(req.user!.userId, req.user!.role, existing.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的菜单' }); return; }
     db.prepare('DELETE FROM Menu WHERE id = ?').run(req.params.id);
+    try { doAction('menu_deleted', req.params.id); } catch {}
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

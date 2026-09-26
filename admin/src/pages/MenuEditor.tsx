@@ -15,7 +15,6 @@ export default function MenuEditor() {
   const [showAdd, setShowAdd] = useState(false);
   const [linkCats, setLinkCats] = useState<any[]>([]);
   const [newItem, setNewItem] = useState<{ type: string; label: string; url: string; pageId: string; categoryId: string; linkCategoryId: string; parentId: string }>({ type: 'page', label: '', url: '', pageId: '', categoryId: '', linkCategoryId: '', parentId: '' });
-  const [editParent, setEditParent] = useState<{ id: string; parentId: string } | null>(null);
 
   useEffect(() => {
     api.get('/menus').then(r => { const m = r.data.find((x: any) => x.id === id); if (m) { setMenu(m); setItems(m.items || []); setMenuName(m.name || ''); setMenuLocation(m.location || 'primary'); setMenuSiteId(m.siteId || ''); } });

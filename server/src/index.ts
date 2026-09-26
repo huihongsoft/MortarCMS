@@ -12,6 +12,7 @@ import { logger } from './utils/logger';
 import { flushViews } from './utils/views';
 import { buildSeoMeta, injectSeoMeta, isKnownRoute, buildRobotsTxt, buildCrawlerFallback } from './utils/seoMeta';
 import { appPasswordAuth, resolveOptionalUser } from './middleware/auth';
+import pluginExtRoutes from './routes/pluginExt';
 import { doAction } from './utils/hooks';
 import authRoutes from './routes/auth';
 import postRoutes from './routes/posts';
@@ -162,7 +163,6 @@ app.use((req, res, next) => {
   next();
 });
 // Rate limiting for abuse-prone endpoints
-const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, message: { error: 'Too many attempts, try again later' } });
 const commentLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, message: { error: 'Too many comments, slow down' } });
 // Maintenance mode middleware (auth + admin requests bypass so the site can be managed/recovered)
 app.use((req, res, next) => {
@@ -370,7 +370,10 @@ app.use('/api', (req: any, res: any, next: any) => {
   next();
 });
 
-app.use('/api/auth', authLimiter, authRoutes);
+// No router-wide limiter here: the brute-force limiter lives on the
+// credential-checking routes inside the router, so GET /auth/me (called on every
+// admin page load) is not counted against it.
+app.use('/api/auth', authRoutes);
 app.use('/api/posts', postRoutes);
 app.use('/api/pages', pageRoutes);
 app.use('/api/categories', categoryRoutes);
@@ -387,6 +390,11 @@ app.use('/api/post-types', postTypesRoutes);
 app.use('/api/export', exportRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/plugins', pluginsRoutes);
+// Everything plugins extend (their own endpoints, admin pages, editor blocks).
+// Mounted once here — plugin routes registered later still arrive through this
+// dispatcher, whereas adding routes to the app at runtime would put them behind
+// the SPA catch-all.
+app.use('/api/ext', pluginExtRoutes);
 app.use('/api/sites', siteRoutes);
 app.use('/api/themes', themeRoutes);
 app.use('/api/links', linkRoutes);
@@ -444,8 +452,8 @@ app.get('/api/schema', (_req, res) => {
     { method: 'POST', path: '/api/posts/bulk-delete', auth: 'editor+', desc: 'Permanently delete posts', body: { ids: [] } },
     { method: 'GET', path: '/api/posts/:id/revisions', auth: 'editor+', desc: 'Revision history of a post' },
     { method: 'PUT', path: '/api/posts/:id/revisions/:revId/restore', auth: 'editor+', desc: 'Restore a revision' },
-    { method: 'GET', path: '/api/pages', desc: 'Published pages' },
-    { method: 'GET', path: '/api/pages/slug/:slug', desc: 'Single page by slug' },
+    { method: 'GET', path: '/api/pages', auth: 'edit_pages', desc: 'All pages (admin list); the public list is /api/pages/public' },
+    { method: 'GET', path: '/api/pages/slug/:slug', desc: 'Single page by slug (public; password-protected pages need the unlock cookie)' },
     { method: 'POST', path: '/api/pages', auth: 'editor+', desc: 'Create a page', body: { title: 'About', content: '<p>...</p>', status: 'published' } },
     { method: 'PUT', path: '/api/pages/:id', auth: 'editor+', desc: 'Update a page' },
     { method: 'DELETE', path: '/api/pages/:id', auth: 'editor+', desc: 'Delete a page' },
@@ -455,7 +463,7 @@ app.get('/api/schema', (_req, res) => {
     { method: 'POST', path: '/api/comments', desc: 'Submit a comment', body: { postId: 'id', author: 'Name', email: 'a@b.c', content: 'Nice post!' } },
     { method: 'GET', path: '/api/comments/admin', auth: 'editor+', desc: 'All comments with status (moderation queue)' },
     { method: 'POST', path: '/api/comments/bulk-action', auth: 'editor+', desc: 'Moderate comments', body: { ids: [], action: 'approved' } },
-    { method: 'GET', path: '/api/media', auth: 'editor+', desc: 'Media library, paginated', query: { page: '1', limit: '20', search: '' } },
+    { method: 'GET', path: '/api/media', auth: 'upload_files', desc: 'Media library, paginated', query: { page: '1', limit: '20', search: '' } },
     { method: 'GET', path: '/api/media/:id/img', desc: 'Responsive resized image', query: { w: '640', fmt: 'webp' } },
     { method: 'POST', path: '/api/media/upload', auth: 'editor+', desc: 'Upload a file (multipart field "file")' },
     { method: 'GET', path: '/api/menus', desc: 'All menus' },
@@ -470,7 +478,7 @@ app.get('/api/schema', (_req, res) => {
     { method: 'GET', path: '/api/health/detail', auth: 'admin', desc: 'Detailed site health' },
     { method: 'GET', path: '/api/users', auth: 'admin', desc: 'All users' },
     { method: 'GET', path: '/api/activity', auth: 'admin', desc: 'Activity log' },
-    { method: 'GET', path: '/api/gdpr/export', auth: 'admin', desc: 'Download all user data' },
+    { method: 'GET', path: '/api/gdpr/export', auth: 'user', desc: 'Download your own data (self-service)' },
     { method: 'GET', path: '/api/db/backup', auth: 'admin', desc: 'SQLite backup download' },
     { method: 'GET', path: '/api/system/hooks', auth: 'admin', desc: 'Registered hooks (actions/filters) with listeners' },
     { method: 'GET', path: '/api/system/cache', auth: 'admin', desc: 'Page cache stats' },
@@ -559,11 +567,19 @@ if (fs.existsSync(frontendDist)) {
   // index:false so "/" reaches the catch-all below instead of being served
   // straight from disk — otherwise the homepage would skip the SEO injection.
   app.use(express.static(frontendDist, { index: false }));
-  // The shell is read once and cached: it only changes on rebuild/redeploy, which
-  // restarts the process.
+  // The shell is cached, but keyed on the file's mtime: it names hashed assets,
+  // so serving a stale copy after a rebuild (without restarting) points the
+  // browser at a bundle that no longer exists and every lazy route renders blank.
   let shellCache: string | null = null;
+  let shellMtime = 0;
   const frontendShell = (): string | null => {
-    if (shellCache === null) { try { shellCache = fs.readFileSync(frontendIndexHtml, 'utf8'); } catch { shellCache = ''; } }
+    try {
+      const mtime = fs.statSync(frontendIndexHtml).mtimeMs;
+      if (shellCache === null || mtime !== shellMtime) {
+        shellCache = fs.readFileSync(frontendIndexHtml, 'utf8');
+        shellMtime = mtime;
+      }
+    } catch { shellCache = ''; }
     return shellCache || null;
   };
   app.get('*', (req, res) => {

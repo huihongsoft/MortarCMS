@@ -17,7 +17,7 @@ export interface SecurityCheck {
 }
 
 // Admin: run a security audit (WordPress Site Health style)
-router.get('/audit', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.get('/audit', authenticate, requireCap('manage_security'), (req: AuthRequest, res: Response) => {
   try {
     const checks: SecurityCheck[] = [];
     const isProd = process.env.NODE_ENV === 'production';

@@ -15,6 +15,9 @@ export default function SearchLayout(props: any) {
       ? React.createElement('div', { className: 'text-center py-16' }, React.createElement('h3', { className: 'text-lg font-semibold text-gray-900 mb-2' }, t('search failed', settings)))
       : React.createElement(React.Fragment, null,
           props.loading ? React.createElement('p', { className: 'text-gray-500 text-center py-16' }, t('searching', settings))
+          // No query yet: the heading already asks for one, so do not claim
+          // "no results" for an empty search.
+          : !query ? null
           : props.posts.length === 0
             ? React.createElement('div', { className: 'text-center py-16' },
                 React.createElement(Search, { size: 40, className: 'mx-auto text-gray-300 mb-4' }),

@@ -1,4 +1,5 @@
 import { Router, Response } from 'express';
+import rateLimit from 'express-rate-limit';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
@@ -7,10 +8,17 @@ import { signToken, verifyToken } from '../utils/jwt';
 export { passwordOk };
 import { logActivity } from './activity';
 import { doAction } from '../utils/hooks';
+import { getRoleCapabilities } from '../middleware/auth';
 import { renderTemplate, sendEmail } from '../utils/mailer';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 const router = Router();
+
+// Brute-force limiter for the routes that verify a secret. Deliberately NOT
+// router-wide: applying it to /auth/me meant an admin browsing the panel ten
+// times in a minute got 429 there, and the admin client treats a failed session
+// lookup as a logged-out session.
+const authLimiter = rateLimit({ windowMs: 60 * 1000, max: 10, standardHeaders: true, message: { error: 'Too many attempts, try again later' } });
 // Password policy: >= 8 chars, at least one letter and one digit
 function passwordOk(pw: string): boolean {
   return pw.length >= 8 && /[a-zA-Z]/.test(pw) && /\d/.test(pw);
@@ -66,7 +74,7 @@ function recordFailure(email: string, ip: string): void {
   loginFailures.set(key, rec);
 }
 
-router.post('/register', async (req: AuthRequest, res: Response) => {
+router.post('/register', authLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const data = registerSchema.parse(req.body);
     if (!passwordOk(data.password)) { res.status(400).json({ error: 'Password must be at least 8 characters with letters and numbers' }); return; }
@@ -123,7 +131,7 @@ function getDummyHash(): string {
   return dummyHash;
 }
 
-router.post('/login', async (req: AuthRequest, res: Response) => {
+router.post('/login', authLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const data = loginSchema.parse(req.body);
     const ip = req.ip || '';
@@ -147,12 +155,12 @@ router.post('/login', async (req: AuthRequest, res: Response) => {
     logActivity(user.id, 'login', 'User logged in');
     doAction('user_login', user.id, ip, 'password');
     // Whitelist: never expose two_factor_secret / reset_token / password hash
-    res.json({ user: toPublicUser(user), token });
+    res.json({ user: { ...toPublicUser(user), capabilities: getRoleCapabilities(user.role) }, token });
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
 // 2FA: verify challenge code and issue the real token
-router.post('/2fa/verify', async (req: AuthRequest, res: Response) => {
+router.post('/2fa/verify', authLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const { tempToken, code } = req.body || {};
     if (!tempToken || !code) { res.status(400).json({ error: 'tempToken and code required' }); return; }
@@ -223,6 +231,9 @@ router.get('/me', authenticate, (req: AuthRequest, res: Response) => {
   try {
     const user = db.prepare('SELECT id, username, email, role, avatar, bio, createdAt FROM User WHERE id = ?').get(req.user!.userId) as any;
     if (!user) { res.status(404).json({ error: 'User not found' }); return; }
+    // The admin UI filters its navigation by these so a custom role granted a
+    // capability actually finds the screen it unlocks.
+    user.capabilities = getRoleCapabilities(user.role);
     res.json(user);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -240,7 +251,7 @@ router.put('/me', authenticate, (req: AuthRequest, res: Response) => {
 });
 
 // Self-service password change: old password must verify, then bcrypt the new one
-router.put('/me/password', authenticate, async (req: AuthRequest, res: Response) => {
+router.put('/me/password', authLimiter, authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const oldPassword = String(req.body?.oldPassword ?? '');
     const newPassword = String(req.body?.newPassword ?? '');
@@ -298,7 +309,7 @@ router.post('/2fa/enable', authenticate, (req: AuthRequest, res: Response) => {
 // 2FA: disable — requires re-authentication (current password or a valid TOTP
 // code). Without this, a hijacked session could silently strip 2FA and lock
 // the legitimate owner out of their own hardening.
-router.post('/2fa/disable', authenticate, async (req: AuthRequest, res: Response) => {
+router.post('/2fa/disable', authLimiter, authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { password, code } = req.body || {};
     if (!password && !code) { res.status(400).json({ error: 'Password or 2FA code required' }); return; }
@@ -324,7 +335,7 @@ router.get('/2fa/status', authenticate, (req: AuthRequest, res: Response) => {
 });
 
 // Password Reset: request token (sends the reset link by email when SMTP is configured)
-router.post('/forgot-password', (req: AuthRequest, res: Response) => {
+router.post('/forgot-password', authLimiter, (req: AuthRequest, res: Response) => {
   try {
     const { email } = req.body;
     const user = db.prepare('SELECT id, username FROM User WHERE email = ?').get(email) as any;
@@ -343,7 +354,7 @@ router.post('/forgot-password', (req: AuthRequest, res: Response) => {
 });
 
 // Password Reset: verify token and set new password
-router.post('/reset-password', async (req: AuthRequest, res: Response) => {
+router.post('/reset-password', authLimiter, async (req: AuthRequest, res: Response) => {
   try {
     const { token, password } = req.body;
     if (!token || !password) { res.status(400).json({ error: 'Token and password required' }); return; }

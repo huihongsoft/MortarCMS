@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3, Webhook, ClipboardList, Mail, CalendarDays } from 'lucide-react';
+import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, UserCircle, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3, Webhook, ClipboardList, Mail, CalendarDays } from 'lucide-react';
 import CommentBadge from './CommentBadge';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { t, getLang } from '../lib/i18n';
+import { canOpen } from '../lib/access';
 
-const groups: { title: string; items: { to: string; icon: any; label: string; role?: string; devModeOnly?: boolean }[] }[] = [
+const groups: { title: string; items: { to: string; icon: any; label: string; devModeOnly?: boolean }[] }[] = [
   {
     title: t('dashboard', getLang()),
     items: [
@@ -28,7 +29,7 @@ const groups: { title: string; items: { to: string; icon: any; label: string; ro
       { to: '/forms', icon: ClipboardList, label: t('forms', getLang()) },
       // Subscriber management is admin-only on the server (it exposes the whole
       // mailing list), so keep the nav entry in step.
-      { to: '/subscribers', icon: Mail, label: t('subscribers', getLang()), role: 'admin' },
+      { to: '/subscribers', icon: Mail, label: t('subscribers', getLang()) },
     ],
   },
   {
@@ -37,7 +38,7 @@ const groups: { title: string; items: { to: string; icon: any; label: string; ro
       { to: '/appearance', icon: Palette, label: t('appearance', getLang()) },
       { to: '/menus', icon: Menu, label: t('menus', getLang()) },
       { to: '/widgets', icon: Shapes, label: t('widgets', getLang()) },
-      { to: '/post-types', icon: Layers, label: t('custom post types', getLang()), role: 'admin' },
+      { to: '/post-types', icon: Layers, label: t('custom post types', getLang()) },
     ],
   },
   {
@@ -45,31 +46,44 @@ const groups: { title: string; items: { to: string; icon: any; label: string; ro
     items: [
       { to: '/ai', icon: Bot, label: t('ai chat', getLang()) },
       { to: '/ai/bindings', icon: MessageCircle, label: t('ai bindings', getLang()) },
-      { to: '/ai/settings', icon: Cpu, label: t('ai settings', getLang()), role: 'admin' },
+      { to: '/ai/settings', icon: Cpu, label: t('ai settings', getLang()) },
     ],
   },
   {
     title: t('system', getLang()),
     items: [
-      { to: '/users', icon: Users, label: t('users', getLang()), role: 'admin' },
-      { to: '/roles', icon: ShieldCheck, label: t('roles & permissions', getLang()), role: 'admin' },
-      { to: '/plugins', icon: Puzzle, label: t('plugins', getLang()), role: 'admin' },
-      { to: '/sites', icon: Network, label: t('sites', getLang()), role: 'admin' },
-      { to: '/import', icon: UploadCloud, label: t('import', getLang()), role: 'admin' },
-      { to: '/security', icon: ShieldCheck, label: t('security audit', getLang()), role: 'admin' },
-      { to: '/sysinfo', icon: ServerIcon, label: t('system', getLang()), role: 'admin', devModeOnly: true },
-      { to: '/stats', icon: BarChart3, label: t('visit stats', getLang()), role: 'admin' },
-      { to: '/hooks', icon: Workflow, label: t('hooks browser', getLang()), role: 'admin', devModeOnly: true },
-      { to: '/api-docs', icon: Code, label: t('api docs & test center', getLang()), role: 'admin', devModeOnly: true },
-      { to: '/activity', icon: History, label: t('activity log', getLang()), role: 'admin', devModeOnly: true },
-      { to: '/webhooks', icon: Webhook, label: t('webhooks', getLang()), role: 'admin' },
-      { to: '/settings', icon: Settings, label: t('settings', getLang()), role: 'admin' },
+      // No role: every logged-in user has a profile (own bio/avatar, password,
+      // 2FA, application passwords) — the user table below is admin-only.
+      { to: '/profile', icon: UserCircle, label: t('my profile', getLang()) },
+      { to: '/users', icon: Users, label: t('users', getLang()) },
+      { to: '/roles', icon: ShieldCheck, label: t('roles & permissions', getLang()) },
+      { to: '/plugins', icon: Puzzle, label: t('plugins', getLang()) },
+      { to: '/sites', icon: Network, label: t('sites', getLang()) },
+      { to: '/import', icon: UploadCloud, label: t('import', getLang()) },
+      { to: '/security', icon: ShieldCheck, label: t('security audit', getLang()) },
+      { to: '/sysinfo', icon: ServerIcon, label: t('system', getLang()), devModeOnly: true },
+      { to: '/stats', icon: BarChart3, label: t('visit stats', getLang()) },
+      { to: '/hooks', icon: Workflow, label: t('hooks browser', getLang()), devModeOnly: true },
+      { to: '/api-docs', icon: Code, label: t('api docs & test center', getLang()), devModeOnly: true },
+      { to: '/activity', icon: History, label: t('activity log', getLang()), devModeOnly: true },
+      { to: '/webhooks', icon: Webhook, label: t('webhooks', getLang()) },
+      { to: '/settings', icon: Settings, label: t('settings', getLang()) },
     ],
   },
 ];
 
 export default function Sidebar({ open = true, onClose }: { open?: boolean; onClose?: () => void }) {
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
+  // Screens registered by plugins (addAdminPage). Fetched rather than hardcoded
+  // so activating a plugin adds its entry without a rebuild.
+  const [pluginPages, setPluginPages] = useState<{ plugin: string; id: string; title: string; path: string }[]>([]);
+  useEffect(() => {
+    if (!can('manage_plugins')) return;
+    const load = () => api.get('/ext/pages').then(r => setPluginPages(Array.isArray(r.data) ? r.data : [])).catch(() => {});
+    load();
+    window.addEventListener('mortar-plugins-changed', load);
+    return () => window.removeEventListener('mortar-plugins-changed', load);
+  }, [user?.capabilities, user?.role]);
   // Diagnostic entries (activity log, API docs) only show in developer mode
   // (toggled in Settings > General)
   const [devMode, setDevMode] = useState(false);
@@ -100,7 +114,8 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
         React.createElement('div', { key: g.title, className: 'mb-4' },
           React.createElement('p', { className: 'px-4 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500' }, g.title),
           React.createElement('div', { className: 'space-y-0.5' },
-            g.items.filter(l => (!l.role || user?.role === 'admin' || l.role === user?.role) && (!l.devModeOnly || devMode)).map(link =>
+            // Visibility comes from lib/access, the same table the route guard uses.
+            g.items.filter(l => (!l.devModeOnly || devMode) && canOpen(user, can, l.to)).map(link =>
               React.createElement(NavLink, {
                 key: link.to,
                 to: link.to,
@@ -116,6 +131,17 @@ export default function Sidebar({ open = true, onClose }: { open?: boolean; onCl
               }, React.createElement(link.icon, { size: 18 }), React.createElement('span', { className: 'capitalize' }, link.label))
             )
           )
+        )
+      ),
+      // Plugin screens live at the bottom of the System group
+      pluginPages.length > 0 && React.createElement('div', { key: 'plugin-pages', className: 'mb-4' },
+        React.createElement('p', { className: 'px-4 pb-1.5 text-[11px] font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-500' }, t('plugins', getLang())),
+        React.createElement('div', { className: 'space-y-0.5' },
+          pluginPages.map(p => React.createElement(NavLink, {
+            key: p.path,
+            to: p.path,
+            className: ({ isActive }: { isActive: boolean }) => `sidebar-link ${isActive ? 'active' : ''}`,
+          }, React.createElement(Puzzle, { size: 18 }), React.createElement('span', { className: 'truncate' }, p.title)))
         )
       )
     )

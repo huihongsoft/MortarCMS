@@ -12,6 +12,7 @@ import { headingCss } from './lib/typography';
 import api from './lib/api';
 import { initLightbox } from './lib/lightbox';
 import { setPermalinkPrefix, postRoutePath, permalinkFromShell } from './lib/permalink';
+import { installCmsForms } from './lib/cmsForms';
 
 // lazyWithRetry: a lazy() wrapper whose failure falls through to the app
 // ErrorBoundary (React.lazy rejects once and caches the failure — retrying
@@ -49,6 +50,8 @@ const NewsletterConfirm = lazyWithRetry(() => import('./pages/NewsletterConfirm'
 
 function SiteLayout({ settings }: { settings: Record<string, string> }) {
   const theme = useTheme();
+  // One delegated handler for every `[form]` block the content renders.
+  React.useEffect(() => { installCmsForms(); }, []);
   // Theme heading standard: cap + max drive the .prose h1-h6 sizes for every
   // article/page body (content keeps its semantic h1-h6 tags). Site settings
   // override the theme's declared defaults.
@@ -79,6 +82,7 @@ function SiteLayout({ settings }: { settings: Record<string, string> }) {
             : null,
           React.createElement(Route, { path: '/page/:slug', element: React.createElement(PageView, { settings }) }),
           React.createElement(Route, { path: '/archive/:year/:month', element: React.createElement(ArchivePage, { settings }) }),
+          React.createElement(Route, { path: '/archive/:year', element: React.createElement(ArchivePage, { settings }) }),
           React.createElement(Route, { path: '/links', element: React.createElement(LinksPage, { settings }) }),
           React.createElement(Route, { path: '/author/:username', element: React.createElement(AuthorPage, { settings }) }),
           React.createElement(Route, { path: '/search', element: React.createElement(SearchPage, { settings }) }),

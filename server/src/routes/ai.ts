@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import rateLimit from 'express-rate-limit';
 import db, { cuid, withTransaction } from '../utils/db';
 import { uniqueSlug, postUrl } from '../utils/slug';
-import { authenticate, authorize, requireCap, userCan, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, userCan, AuthRequest } from '../middleware/auth';
 import {
   AIProvider, PROVIDER_PRESETS, getProviders, saveProviders, getDefaultProvider,
   setDefaultProvider, chatComplete, pushAssistantWithTools, pushToolResults, testProvider,
@@ -95,14 +95,15 @@ router.get('/settings', authenticate, requireCap('ai_manage'), (req: AuthRequest
   } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
 });
 
-// Save providers (apiKey kept if masked). Admin only: this decides where the
-// server sends requests AND which credentials it uses. A local endpoint is a
-// supported configuration (the Ollama preset points at localhost), so an
-// internal baseUrl is a feature, not a bug — which is exactly why configuring
-// it must not be delegable. Falling back to manage_options would let editors
-// point the provider at an internal host, overwrite API keys, and grant
-// themselves tool permissions (ai_allowed_roles / ai_tool_permissions).
-router.put('/settings', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+// Save providers (apiKey kept if masked). This decides where the server sends
+// requests AND which credentials it uses. A local endpoint is a supported
+// configuration (the Ollama preset points at localhost), so an internal baseUrl
+// is a feature, not a bug — which is exactly why configuring it must not be
+// delegable. `manage_system` is the superuser capability (no built-in role but
+// admin holds it); manage_options would let editors point the provider at an
+// internal host, overwrite API keys, and grant themselves tool permissions
+// (ai_allowed_roles / ai_tool_permissions).
+router.put('/settings', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
   try {
     // Providers are validated only when present: this endpoint also carries the
     // standalone toggles, and demanding a providers array made a request like
@@ -146,11 +147,11 @@ router.put('/settings', authenticate, authorize('admin'), (req: AuthRequest, res
   } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
 });
 
-// Test a provider connection. Admin only: the baseUrl comes from the request
-// body, so a caller-supplied value makes the server fetch an arbitrary URL
-// (internal port scanning, cloud metadata). It must match who may persist a
-// provider, otherwise "save an internal baseUrl, then test it" is the same hole.
-router.post('/test', authenticate, authorize('admin'), async (req: AuthRequest, res: Response) => {
+// Test a provider connection. The baseUrl comes from the request body, so a
+// caller-supplied value makes the server fetch an arbitrary URL (internal port
+// scanning, cloud metadata). It must match who may persist a provider, otherwise
+// "save an internal baseUrl, then test it" is the same hole.
+router.post('/test', authenticate, requireCap('manage_system'), async (req: AuthRequest, res: Response) => {
   try {
     let p = req.body?.provider as AIProvider | undefined;
     // Testing an already-saved provider must not require re-typing the key:
@@ -167,7 +168,7 @@ router.post('/test', authenticate, authorize('admin'), async (req: AuthRequest, 
 
 // ---- Chat (no tools; permission checked against allowed roles) ----
 
-router.post('/chat', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
+router.post('/chat', authenticate, requireCap('ai_use'), enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     const provider = getDefaultProvider();
@@ -184,7 +185,7 @@ router.post('/chat', authenticate, enforceUsageLimit, async (req: AuthRequest, r
 });
 
 // Summarize a long conversation excerpt (used to compress chat history)
-router.post('/summarize', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
+router.post('/summarize', authenticate, requireCap('ai_use'), enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
     // Per-operation throttle: compressing a long conversation and sending the next
     // message happen back to back, so sharing one slot would reject the message.
@@ -232,7 +233,7 @@ function buildHistoryMessages(raw: any): { role: 'user' | 'assistant'; content: 
   return out;
 }
 
-router.post('/assistant', authenticate, enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
+router.post('/assistant', authenticate, requireCap('ai_use'), enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     // Same per-operation slot as the other AI endpoints, and short enough that a
@@ -368,7 +369,7 @@ router.post('/assistant', authenticate, enforceUsageLimit, async (req: AuthReque
 // different arguments. The calls are re-checked at execution time (capabilities,
 // tool permissions and ownership all live inside executeTool), so a plan signed
 // before a role change does not outlive the change.
-router.post('/assistant/approve', authenticate, enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
+router.post('/assistant/approve', authenticate, requireCap('ai_use'), enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     if (throttledAiRequest(req.user!.userId, 'approve')) { res.status(429).json({ error: '请求太频繁，请稍等几秒再试' }); return; }
@@ -431,7 +432,7 @@ function summarizeApproved(results: any[]): string {
   }).join('\n');
 }
 
-router.post('/generate', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
+router.post('/generate', authenticate, requireCap('ai_use'), enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     const provider = getDefaultProvider();
@@ -763,7 +764,7 @@ router.post('/notifications/read-all', authenticate, (req: AuthRequest, res: Res
   } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
 });
 
-router.post('/task', authenticate, enforceUsageLimit, (req: AuthRequest & SiteRequest, res: Response) => {
+router.post('/task', authenticate, requireCap('ai_use'), enforceUsageLimit, (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '你的角色无权使用 AI 功能' }); return; }
     const message = String((req.body || {}).message || '').trim();
@@ -980,7 +981,7 @@ router.delete('/schedules/:id', authenticate, (req: AuthRequest, res: Response) 
 });
 
 // AI review of pending comments (spam detection suggestion)
-router.post('/review-comments', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
+router.post('/review-comments', authenticate, requireCap('ai_use'), enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
     // Reviewing comments exposes their content. Gate on the dedicated ai_review
     // capability so it is not a dead switch: before this, the endpoint checked
@@ -1014,7 +1015,7 @@ router.post('/review-comments', authenticate, enforceUsageLimit, async (req: Aut
 });
 
 // Compare two providers with the same prompt (model evaluation)
-router.post('/compare', authenticate, enforceUsageLimit, async (req: AuthRequest, res: Response) => {
+router.post('/compare', authenticate, requireCap('ai_use'), enforceUsageLimit, async (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
     const { prompt, providerAId, providerBId } = req.body || {};
@@ -1035,7 +1036,7 @@ router.post('/compare', authenticate, enforceUsageLimit, async (req: AuthRequest
 });
 
 // Batch translate posts into a target language (creates drafts)
-router.post('/batch-translate', authenticate, enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
+router.post('/batch-translate', authenticate, requireCap('ai_use'), enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
     const provider = getDefaultProvider();
@@ -1331,7 +1332,7 @@ router.get('/audit', authenticate, requireCap('ai_manage'), (req: AuthRequest, r
   } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
 });
 
-router.post('/tasks/:id/retry', authenticate, enforceUsageLimit, (req: AuthRequest, res: Response) => {
+router.post('/tasks/:id/retry', authenticate, requireCap('ai_use'), enforceUsageLimit, (req: AuthRequest, res: Response) => {
   try {
     const task = getTask(req.params.id);
     if (!task) { res.status(404).json({ error: '任务不存在' }); return; }
@@ -1423,7 +1424,7 @@ function saveBindings(bindings: Binding[]): void {
 
 // List bindings (admin) or own (regular users). Tokens are returned in full:
 // the webhook URL and WeChat token must be copyable for external configuration.
-router.get('/bindings', authenticate, (req: AuthRequest, res: Response) => {
+router.get('/bindings', authenticate, requireCap('ai_bindings'), (req: AuthRequest, res: Response) => {
   try {
     const all = getBindings();
     const list = req.user!.role === 'admin' ? all : all.filter(b => b.userId === req.user!.userId);
@@ -1432,7 +1433,7 @@ router.get('/bindings', authenticate, (req: AuthRequest, res: Response) => {
 });
 
 // Create a binding (admin picks the target user; users can bind themselves)
-router.post('/bindings', authenticate, (req: AuthRequest, res: Response) => {
+router.post('/bindings', authenticate, requireCap('ai_bindings'), (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: 'Insufficient permissions' }); return; }
     const { platform, userId, label, ddToken, ddAesKey, ddAppKey, ddAppSecret, ddWebhook, ddSecret } = req.body || {};

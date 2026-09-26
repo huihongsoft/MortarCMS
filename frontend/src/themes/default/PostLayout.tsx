@@ -5,7 +5,7 @@ import Breadcrumbs from '../../components/Breadcrumbs';
 import RelatedPosts from '../../components/RelatedPosts';
 import SocialShare from '../../components/SocialShare';
 import Toc from '../../components/Toc';
-import CommentLike from '../../components/CommentLike';
+import CommentThread, { CommentReplyBanner, CommentClasses } from '../../components/CommentThread';
 import { cdnUrl, cdnHtml } from '../../lib/cdn';
 import { sanitizeCss } from '../../lib/safeCss';
 import { embedContent } from '../../lib/embed';
@@ -21,7 +21,7 @@ import { postPath } from '../../lib/permalink';
 // Default single-post template — WordPress-style layout
 export default function PostLayout(props: any) {
   useTimeTick();
-  const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug } = props;
+  const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug, replyTo, startReply, cancelReply } = props;
   // WordPress-style multi-page posts: split content on <!--nextpage-->
   const parts = String(post?.content || '').split(/<!--\s*nextpage\s*-->/i);
   const [searchParams] = useSearchParams();
@@ -43,28 +43,26 @@ export default function PostLayout(props: any) {
   const inputCls = 'w-full px-3.5 py-2.5 border border-gray-200 rounded-xl text-sm outline-none focus:border-primary-500 bg-white';
 
   // ---- Comments list ----
+  // Threads render recursively (a reply to a reply is a real reply, not a lost
+  // row); styling stays in this theme via the class map.
+  const commentClasses: CommentClasses = {
+    item: 'mb-5 p-5 rounded-2xl border border-gray-100',
+    nested: 'ml-8 mt-3 pl-4 border-l-2 border-gray-100 space-y-3',
+    avatar: 'w-8 h-8 rounded-full',
+    avatarSmall: 'w-6 h-6 rounded-full',
+    author: 'font-medium text-sm text-gray-900',
+    date: 'text-xs text-gray-500',
+    body: 'text-sm text-gray-700 leading-relaxed',
+    reply: 'text-xs text-gray-500 hover:text-primary-600',
+  };
   const commentList = comments.map((c: any) => (
-    React.createElement('div', { key: c.id, className: 'mb-5 p-5 rounded-2xl border border-gray-100' },
-      React.createElement('div', { className: 'flex items-center gap-2.5 mb-2' },
-        React.createElement('img', { src: gravatarUrl(c.email || ''), alt: '', className: 'w-8 h-8 rounded-full' }),
-        React.createElement('div', null,
-          React.createElement('p', { className: 'font-medium text-sm text-gray-900' }, c.author),
-          React.createElement('p', { className: 'text-xs text-gray-500' }, new Date(c.createdAt).toLocaleDateString()))),
-      React.createElement('p', { className: 'text-sm text-gray-700 leading-relaxed' }, c.content),
-      React.createElement('div', { className: 'mt-2' }, React.createElement(CommentLike, { commentId: c.id, initial: c.likes })),
-      (c.children || []).map((child: any) => (
-        React.createElement('div', { key: child.id, className: 'ml-8 mt-3 pl-4 border-l-2 border-gray-100' },
-          React.createElement('div', { className: 'flex items-center gap-2 mb-1' },
-            React.createElement('img', { src: gravatarUrl(child.email || ''), alt: '', className: 'w-6 h-6 rounded-full' }),
-            React.createElement('span', { className: 'font-medium text-sm text-gray-800' }, child.author)),
-          React.createElement('p', { className: 'text-sm text-gray-600' }, child.content))
-      ))
-    )
+    React.createElement(CommentThread, { key: c.id, comment: c, classes: commentClasses, settings, onReply: startReply })
   ));
 
   // ---- Comment form ----
-  const commentFormEl = React.createElement('form', { onSubmit: submitComment, noValidate: true, className: 'space-y-3 mt-6 p-6 rounded-2xl bg-gray-50' },
-    React.createElement('h4', { className: 'text-sm font-semibold text-gray-900' }, t('leave a comment', settings)),
+  const commentFormEl = React.createElement('form', { id: 'comment-form', onSubmit: submitComment, noValidate: true, className: 'space-y-3 mt-6 p-6 rounded-2xl bg-gray-50' },
+    React.createElement('h4', { className: 'text-sm font-semibold text-gray-900' }, replyTo ? t('leave a reply', settings) : t('leave a comment', settings)),
+    React.createElement(CommentReplyBanner, { replyTo, cancelReply, settings }),
     commentError && React.createElement('div', { role: 'alert', className: 'p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg' }, commentError),
     React.createElement('input', { type: 'text', name: 'website_url', style: { position: 'absolute', left: '-9999px' }, tabIndex: -1, autoComplete: 'off' }),
     React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },

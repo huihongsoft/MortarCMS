@@ -6,6 +6,7 @@ import { authenticate, requireCap, authorize, resolveOptionalUser, AuthRequest }
 import { SiteRequest } from '../middleware/site';
 import { upload } from '../middleware/upload';
 import { purgeAllCaches } from '../utils/cache';
+import { doAction } from '../utils/hooks';
 import { execFileSync, execSync } from 'child_process';
 import { assertArchiveWithinLimits } from '../utils/archive';
 
@@ -138,11 +139,16 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
 
 // Admin: activate a theme. With `siteId` it activates for that one site
 // (SiteSetting.theme_active), otherwise it becomes the install-wide default.
-router.post('/:name/activate', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.post('/:name/activate', authenticate, requireCap('manage_themes'), (req: AuthRequest, res: Response) => {
   try {
     const t = readTheme(req.params.name);
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
     const siteId = String((req.body as any)?.siteId || (req.query as any).siteId || '').trim();
+    // The theme being switched away from, so `theme_deactivated` describes a
+    // switch rather than only a deletion (it used to fire on DELETE alone).
+    const previous = siteId
+      ? ((db.prepare('SELECT value FROM SiteSetting WHERE siteId = ? AND key = ?').get(siteId, 'theme_active') as any)?.value || activeThemeName())
+      : activeThemeName();
     if (siteId) {
       const site = db.prepare('SELECT id FROM Site WHERE id = ?').get(siteId) as any;
       if (!site) { res.status(404).json({ error: 'Site not found' }); return; }
@@ -152,11 +158,19 @@ router.post('/:name/activate', authenticate, authorize('admin'), (req: AuthReque
       // theme to load — without this the site keeps rendering the old one for the
       // cache TTL.
       purgeAllCaches();
+      try {
+        if (previous && previous !== t.name) doAction('theme_deactivated', previous, siteId);
+        doAction('theme_activated', t.name, siteId);
+      } catch {}
       res.json({ success: true, active: t.name, siteId });
       return;
     }
     db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, 'theme_active', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run('theme_active', t.name);
     purgeAllCaches();
+    try {
+      if (previous && previous !== t.name) doAction('theme_deactivated', previous, '');
+      doAction('theme_activated', t.name, '');
+    } catch {}
     res.json({ success: true, active: t.name });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -164,7 +178,7 @@ router.post('/:name/activate', authenticate, authorize('admin'), (req: AuthReque
 // Admin: save theme setting overrides. `siteId` scopes the write to one site
 // (SiteSetting.theme_<name>_<key>), which is how a site restyles a theme the
 // other sites keep using as-is.
-router.put('/:name/settings', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.put('/:name/settings', authenticate, requireCap('manage_themes'), (req: AuthRequest, res: Response) => {
   try {
     const t = readTheme(req.params.name);
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
@@ -194,7 +208,7 @@ router.put('/:name/settings', authenticate, authorize('admin'), (req: AuthReques
 });
 
 // Admin: install a theme from a zip (theme.json + optional screenshot.css etc.)
-router.post('/install', authenticate, authorize('admin'), upload.single('file'), async (req: AuthRequest, res: Response) => {
+router.post('/install', authenticate, requireCap('install_themes'), upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) { res.status(400).json({ error: 'No theme zip uploaded' }); return; }
     const tmpDir = path.join(require('os').tmpdir(), 'mortar-theme-' + Date.now());
@@ -245,7 +259,7 @@ router.post('/install', authenticate, authorize('admin'), upload.single('file'),
 
 // Admin: rebuild built-in theme bundles from frontend source
 // (frontend/src/themes/<name>/ -> vite build -> server/themes/<name>/theme.js)
-router.post('/rebuild', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.post('/rebuild', authenticate, requireCap('rebuild_themes'), (req: AuthRequest, res: Response) => {
   try {
     const frontendDir = path.join(__dirname, '..', '..', '..', 'frontend');
     if (!fs.existsSync(path.join(frontendDir, 'package.json'))) {
@@ -284,7 +298,7 @@ router.post('/rebuild', authenticate, authorize('admin'), (req: AuthRequest, res
 });
 
 // Admin: delete a theme (cannot delete the active theme or the default)
-router.delete('/:name', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.delete('/:name', authenticate, requireCap('delete_themes'), (req: AuthRequest, res: Response) => {
   try {
     const name = req.params.name;
     // fs.rmSync is recursive: an unvalidated name ("../../uploads") would delete a
@@ -311,6 +325,7 @@ router.delete('/:name', authenticate, authorize('admin'), (req: AuthRequest, res
     // must not resurrect the old one's settings.
     for (const b of getAllBackups().filter((x: any) => x.theme === name)) deleteThemeBackup(b.id);
     purgeAllCaches();
+    try { doAction('theme_deactivated', name, ''); } catch {}
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -324,7 +339,7 @@ function safeThemePath(themeName: string, rel: string): string | null {
   if (!full.startsWith(path.resolve(path.join(themesDir, themeName)) + path.sep)) return null;
   return full;
 }
-router.get('/:name/files', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.get('/:name/files', authenticate, requireCap('manage_themes'), (req: AuthRequest, res: Response) => {
   try {
     if (!readTheme(req.params.name)) { res.status(404).json({ error: 'Theme not found' }); return; }
     const dir = path.join(themesDir, req.params.name);
@@ -345,7 +360,7 @@ router.get('/:name/files', authenticate, authorize('admin'), (req: AuthRequest, 
     res.json({ files: walk(dir) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
-router.get('/:name/file', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.get('/:name/file', authenticate, requireCap('manage_themes'), (req: AuthRequest, res: Response) => {
   try {
     const full = safeThemePath(req.params.name, String(req.query.path || ''));
     if (!full || !fs.existsSync(full)) { res.status(404).json({ error: 'File not found' }); return; }
@@ -354,7 +369,7 @@ router.get('/:name/file', authenticate, authorize('admin'), (req: AuthRequest, r
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 // Admin: edit a CSS file (the only writable type — safe from code injection)
-router.put('/:name/file', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.put('/:name/file', authenticate, requireCap('manage_themes'), (req: AuthRequest, res: Response) => {
   try {
     const rel = String(req.body.path || '');
     if (!rel.endsWith('.css')) { res.status(400).json({ error: 'Only CSS files are editable' }); return; }
@@ -378,7 +393,7 @@ router.get('/sections', (_req: AuthRequest, res: Response) => {
 });
 
 // Admin: save a theme section for a hook location
-router.put('/sections/:location', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.put('/sections/:location', authenticate, requireCap('manage_themes'), (req: AuthRequest, res: Response) => {
   try {
     const { location } = req.params;
     const { html, css } = req.body || {};
@@ -463,7 +478,7 @@ function deleteThemeBackup(id: string): boolean {
   return !!snap;
 }
 
-router.get('/:name/backups', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.get('/:name/backups', authenticate, requireCap('manage_themes'), (req: AuthRequest, res: Response) => {
   try {
     const t = readTheme(req.params.name);
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
@@ -471,7 +486,7 @@ router.get('/:name/backups', authenticate, authorize('admin'), (req: AuthRequest
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/:name/backups', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.post('/:name/backups', authenticate, requireCap('manage_themes'), (req: AuthRequest, res: Response) => {
   try {
     const t = readTheme(req.params.name);
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
@@ -480,7 +495,7 @@ router.post('/:name/backups', authenticate, authorize('admin'), (req: AuthReques
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/:name/backups/:id/restore', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.post('/:name/backups/:id/restore', authenticate, requireCap('manage_themes'), (req: AuthRequest, res: Response) => {
   try {
     const t = readTheme(req.params.name);
     if (!t) { res.status(404).json({ error: 'Theme not found' }); return; }
@@ -508,7 +523,7 @@ router.post('/:name/backups/:id/restore', authenticate, authorize('admin'), (req
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.delete('/:name/backups/:id', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.delete('/:name/backups/:id', authenticate, requireCap('manage_themes'), (req: AuthRequest, res: Response) => {
   try {
     if (!deleteThemeBackup(req.params.id)) { res.status(404).json({ error: '备份不存在' }); return; }
     res.json({ success: true });

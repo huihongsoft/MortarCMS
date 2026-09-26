@@ -6,8 +6,12 @@ import Select from '../components/Select';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 import { dialog } from '../lib/dialog';
+import { useAuth } from '../lib/auth';
 
 export default function Pages() {
+  const { can } = useAuth();
+  // Deleting a page needs delete_pages; edit_pages alone does not grant it.
+  const canDeletePages = can('delete_pages');
   const [pages, setPages] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [sites, setSites] = useState<any[]>([]);
@@ -74,7 +78,7 @@ export default function Pages() {
                     className: 'p-1.5 text-gray-400 hover:text-blue-600',
                   }, React.createElement(Eye, { size: 16 })) : null,
                   React.createElement(Link, { to: `/pages/${p.id}/edit`, className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Edit2, { size: 16 })),
-                  React.createElement('button', { onClick: () => del(p.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 16 }))
+                  canDeletePages && React.createElement('button', { onClick: () => del(p.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 16 }))
                 )
               )
             )

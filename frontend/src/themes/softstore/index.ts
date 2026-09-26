@@ -3,6 +3,7 @@ import Footer from './Footer';
 import HomeLayout from './HomeLayout';
 import PostLayout from './PostLayout';
 import ArchiveView from './ArchiveLayout';
+import NotFoundLayout from './NotFoundLayout';
 import PageLayout from './PageLayout';
 import { BackToTop } from './Shared';
 
@@ -31,14 +32,20 @@ const listProps = (p: any) => ({
 
 const CategoryLayout = (p: any) => ArchiveView(listProps(p));
 const TagLayout = (p: any) => ArchiveView(listProps(p));
+// Archive/Author/Search own their state on the page side (page/total/setPage)
+// now that they paginate; the heading differs per route.
 const ArchiveLayout = (p: any) => ArchiveView({
   settings: p.settings,
   posts: p.data?.posts || [],
+  total: p.data?.total || 0,
+  page: p.data?.page || 1,
+  setPage: undefined,          // the page hands over a ready-made pager instead
+  pagination: p.pagination,
   error: p.data?.error,
-  heading: p.year && p.month ? p.year + '-' + String(p.month).padStart(2, '0') : null,
+  heading: p.year && p.month ? p.year + '-' + String(p.month).padStart(2, '0') : (p.year || null),
 });
-const AuthorLayout = (p: any) => ArchiveView({ settings: p.settings, posts: p.posts || [], loading: p.loading, error: p.error, heading: p.username });
-const SearchLayout = (p: any) => ArchiveView({ settings: p.settings, posts: p.posts || [], loading: p.loading, error: p.error, heading: p.query });
+const AuthorLayout = (p: any) => ArchiveView({ settings: p.settings, posts: p.posts || [], total: p.total, page: p.page, pagination: p.pagination, loading: p.loading, error: p.error, heading: p.author?.username || p.username, author: p.author });
+const SearchLayout = (p: any) => ArchiveView({ settings: p.settings, posts: p.posts || [], total: p.total, page: p.page, pagination: p.pagination, loading: p.loading, error: p.error, heading: p.query });
 
 export default {
   name: 'softstore',
@@ -50,6 +57,7 @@ export default {
   CategoryLayout,
   TagLayout,
   ArchiveLayout,
+  NotFoundLayout,
   AuthorLayout,
   SearchLayout,
   PageLayout,

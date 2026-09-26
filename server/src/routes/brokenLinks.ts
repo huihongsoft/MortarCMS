@@ -6,7 +6,7 @@ import { assignedSites, userMayAccessSite } from '../utils/userSites';
 const router = Router();
 
 // Admin: broken-link report (filter by status, paginated)
-router.get('/admin/broken-links', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.get('/admin/broken-links', authenticate, requireCap('manage_security'), (req: AuthRequest, res: Response) => {
   try {
     const page = Math.max(1, parseInt(String(req.query.page || '1')) || 1);
     const limit = Math.min(50, Math.max(1, parseInt(String(req.query.limit || '15')) || 15));
@@ -29,7 +29,7 @@ router.get('/admin/broken-links', authenticate, requireCap('manage_options'), (r
 });
 
 // Admin: delete one entry (e.g. a fixed or irrelevant link)
-router.delete('/admin/broken-links/:id', authenticate, requireCap('manage_options'), (req: AuthRequest, res: Response) => {
+router.delete('/admin/broken-links/:id', authenticate, requireCap('manage_security'), (req: AuthRequest, res: Response) => {
   try {
     const row = db.prepare('SELECT * FROM BrokenLink WHERE id = ?').get(req.params.id) as any;
     if (!row) { res.status(404).json({ error: 'Link not found' }); return; }

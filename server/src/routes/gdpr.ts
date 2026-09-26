@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import db, { withTransaction } from '../utils/db';
 import { resolveUploadUrl } from '../utils/paths';
-import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -87,14 +87,14 @@ router.post('/erase', authenticate, (req: AuthRequest, res: Response) => {
 });
 
 // Admin: export any user's personal data
-router.get('/admin/export/:id', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.get('/admin/export/:id', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
   try {
     res.json({ exported_at: new Date().toISOString(), ...collectUserData(req.params.id) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: erase any user's personal data
-router.post('/admin/erase/:id', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.post('/admin/erase/:id', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
   try {
     if (req.params.id === req.user!.userId) { res.status(400).json({ error: 'Use the self-service erase for your own account' }); return; }
     const result = eraseUserData(req.params.id);

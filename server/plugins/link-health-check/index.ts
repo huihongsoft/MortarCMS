@@ -1,4 +1,5 @@
 import { addAction } from '../../src/utils/hooks';
+import { addPluginInterval } from '../../src/utils/pluginApi';
 import db from '../../src/utils/db';
 import { sendEmail } from '../../src/utils/mailer';
 
@@ -12,7 +13,6 @@ import { sendEmail } from '../../src/utils/mailer';
 //   link_health_email   = recipient (defaults to admin_email)
 
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // daily
-let timer: NodeJS.Timeout | null = null;
 
 function setting(key: string): string {
   try { return ((db.prepare('SELECT value FROM Setting WHERE key = ?').get(key) as any)?.value || '').toString(); } catch { return ''; }
@@ -66,9 +66,7 @@ function escapeHtml(s: string): string {
 }
 
 export function register() {
-  addAction('init', () => {
-    try { void runCheck(); } catch {}
-    if (!timer) timer = setInterval(() => { try { void runCheck(); } catch {} }, CHECK_INTERVAL_MS);
-    timer.unref?.();
-  }, 10, 'link-health-check');
+  // Lifecycle-bound timer; the check is best-effort and never throws.
+  try { void runCheck(); } catch {}
+  addPluginInterval(() => { void runCheck(); }, CHECK_INTERVAL_MS);
 }

@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import db, { withTransaction } from '../utils/db';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
 import { sanitizeHtml } from '../utils/sanitize';
 
 const router = Router();
@@ -32,7 +32,7 @@ function safeMediaUrl(value: unknown): string | null {
   return null;
 }
 
-router.get('/export', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.get('/export', authenticate, requireCap('export'), (_req: AuthRequest, res: Response) => {
   try {
     const data: any = {};
     data.posts = db.prepare("SELECT * FROM Post").all();
@@ -62,7 +62,7 @@ router.get('/export', authenticate, authorize('admin'), (_req: AuthRequest, res:
 });
 
 // Import preview: report what the file contains without writing anything
-router.post('/import/preview', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.post('/import/preview', authenticate, requireCap('import'), (req: AuthRequest, res: Response) => {
   try {
     const data = req.body || {};
     const counts: Record<string, number> = {};
@@ -77,7 +77,7 @@ router.post('/import/preview', authenticate, authorize('admin'), (req: AuthReque
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/import', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.post('/import', authenticate, requireCap('import'), (req: AuthRequest, res: Response) => {
   try {
     const data = req.body;
     let count = 0;

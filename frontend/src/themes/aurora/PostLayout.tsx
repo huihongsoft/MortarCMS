@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, User, Clock, MessageSquare, Folder, Tag as TagIcon  } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
-import CommentLike from '../../components/CommentLike';
+import CommentThread, { CommentReplyBanner, CommentClasses } from '../../components/CommentThread';
 import RelatedPosts from '../../components/RelatedPosts';
 import SocialShare from '../../components/SocialShare';
 import Toc from '../../components/Toc';
@@ -20,32 +20,30 @@ import { postPath } from '../../lib/permalink';
 // Aurora post: centered, large type, editorial prose
 export default function PostLayout(props: any) {
   useTimeTick();
-  const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug } = props;
+  const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug, replyTo, startReply, cancelReply } = props;
   const contentRef = useRef<HTMLDivElement>(null);
   const author = post.author;
   const inputCls = 'w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 text-sm transition-shadow';
   const pageContent = post.content || '';
 
-  const commentList = comments.map((c: any) => (
-    React.createElement('div', { key: c.id, className: 'py-6 border-b border-gray-100 last:border-0' },
-      React.createElement('div', { className: 'flex items-center gap-3 mb-2' },
-        React.createElement('div', { className: 'w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center text-sm font-medium' }, (c.author || '?')[0].toUpperCase()),
-        React.createElement('div', null,
-          React.createElement('p', { className: 'font-medium text-sm text-gray-900' }, c.author),
-          React.createElement('p', { className: 'text-xs text-gray-500' }, new Date(c.createdAt).toLocaleDateString())),
-      ),
-      React.createElement('p', { className: 'text-sm text-gray-600 leading-relaxed' }, c.content),
-      React.createElement('div', { className: 'mt-2' }, React.createElement(CommentLike, { commentId: c.id, initial: c.likes })),
-      c.children && c.children.map((child: any) => (
-        React.createElement('div', { key: child.id, className: 'ml-10 mt-4 p-4 rounded-xl bg-gray-50/70' },
-          React.createElement('p', { className: 'font-medium text-sm text-gray-900 mb-1' }, child.author),
-          React.createElement('p', { className: 'text-sm text-gray-600' }, child.content))
-      ))
-    )
-  ));
+  const commentClasses: CommentClasses = {
+    item: 'py-6 border-b border-gray-100 last:border-0',
+    nested: 'ml-10 mt-4 space-y-3',
+    avatar: 'w-9 h-9 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center text-sm font-medium',
+    avatarSmall: 'w-7 h-7 rounded-full bg-gradient-to-br from-indigo-400 to-violet-500 text-white flex items-center justify-center text-xs font-medium',
+    author: 'font-medium text-sm text-gray-900',
+    date: 'text-xs text-gray-500',
+    body: 'text-sm text-gray-600 leading-relaxed',
+    reply: 'text-xs text-gray-400 hover:text-indigo-500',
+    avatarMode: 'initial',
+  };
+  const commentList = comments.map((c: any) =>
+    React.createElement(CommentThread, { key: c.id, comment: c, classes: commentClasses, settings, onReply: startReply })
+  );
 
-  const commentFormEl = React.createElement('form', { onSubmit: submitComment, noValidate: true, className: 'space-y-4 mt-8 p-8 rounded-2xl bg-gray-50/70 border border-gray-100' },
-    React.createElement('h4', { className: 'text-base font-semibold text-gray-900' }, t('leave a comment', settings)),
+  const commentFormEl = React.createElement('form', { id: 'comment-form', onSubmit: submitComment, noValidate: true, className: 'space-y-4 mt-8 p-8 rounded-2xl bg-gray-50/70 border border-gray-100' },
+    React.createElement('h4', { className: 'text-base font-semibold text-gray-900' }, replyTo ? t('leave a reply', settings) : t('leave a comment', settings)),
+    React.createElement(CommentReplyBanner, { replyTo, cancelReply, settings }),
     commentError && React.createElement('div', { role: 'alert', className: 'p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg' }, commentError),
     React.createElement('input', { type: 'text', name: 'website_url', style: { position: 'absolute', left: '-9999px' }, tabIndex: -1, autoComplete: 'off' }),
     React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-4' },

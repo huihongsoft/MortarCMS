@@ -1,4 +1,5 @@
 import db from './db';
+import { currentPlugin } from './pluginApi';
 import { PUBLIC_POST_CONDITIONS } from './publicPosts';
 import { postUrl } from './slug';
 
@@ -12,10 +13,29 @@ function esc(v: any): string {
   return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-const shortcodes = new Map<string, { fn: ShortcodeFn; desc?: string }>();
+const shortcodes = new Map<string, { fn: ShortcodeFn; desc?: string; source: string }>();
 
 export function addShortcode(name: string, fn: ShortcodeFn, desc?: string): void {
-  shortcodes.set(name, { fn, desc });
+  const source = currentPlugin() || 'core';
+  const existing = shortcodes.get(name);
+  // Overriding is allowed (WordPress works the same way), but a silent
+  // replacement between two different owners is a debugging trap.
+  if (existing && existing.source !== source) {
+    console.log('[Shortcodes] "' + name + '" registered by ' + source + ' replaces the one from ' + existing.source);
+  }
+  // Tagged like hooks, so deactivating a plugin can take its shortcodes with it
+  // (a `[hello]` tag kept rendering after the plugin was disabled).
+  shortcodes.set(name, { fn, desc, source });
+}
+
+// Remove every shortcode a plugin registered; called on deactivate and before a
+// re-register, so toggling a plugin cannot stack duplicate handlers.
+export function removeShortcodesBySource(source: string): number {
+  let removed = 0;
+  for (const [name, v] of [...shortcodes.entries()]) {
+    if (v.source === source) { shortcodes.delete(name); removed++; }
+  }
+  return removed;
 }
 
 export function listShortcodes(): { name: string; desc?: string }[] {
@@ -216,10 +236,13 @@ addShortcode('link-list', (attrs, _content, ctx) => {
   return '<div class="cms-rendered-link-list">' + items + '</div>';
 }, 'Links of a navigation category (category=slug, optional)');
 
-// [form id="slug"] — render a Form-builder form. Submits via fetch to
-// /api/forms/:slug/submit; the inline script replaces the form with the
-// server-provided success message. Script is static (no user data spliced
-// into it), all DB values pass through esc().
+// [form id="slug"] — render a Form-builder form.
+//
+// The markup is plain HTML on purpose: post/page content is injected with
+// innerHTML after DOMPurify, which strips <script>, so the previous version's
+// inline submit handler never ran (the form fell back to a native POST and
+// navigated the visitor to a JSON response). The frontend installs one delegated
+// submit handler for `.cms-form` instead — see frontend/src/lib/cmsForms.ts.
 addShortcode('form', (attrs, _content) => {
   const slug = String(attrs.id || '').trim();
   if (!slug) return '';
@@ -231,7 +254,6 @@ addShortcode('form', (attrs, _content) => {
   const lang = siteLang();
   const zh = lang === 'zh';
   const submitLabel = zh ? '提交' : 'Submit';
-  const sendingLabel = zh ? '提交中…' : 'Sending…';
   const inputs = fields.map((f: any, i: number) => {
     const name = esc(String(f.name || 'field' + i));
     const label = esc(String(f.label || f.name || name));
@@ -239,7 +261,11 @@ addShortcode('form', (attrs, _content) => {
     const required = f.required ? ' required' : '';
     const reqMark = f.required ? ' <span style="color:#dc2626;">*</span>' : '';
     const labelHtml = '<label for="cf-' + i + '" style="display:block;margin:0 0 6px;font-size:14px;font-weight:500;color:#374151;">' + label + reqMark + '</label>';
-    const common = 'id="cf-' + i + '" name="' + name + '" placeholder="' + placeholder + '"' + required +
+    // data-field carries the submission key: the sanitizer strips a `name`
+    // attribute that would clobber a DOM global (a field called "name" is the
+    // obvious one, and the browser drops it silently), so the frontend builds
+    // the payload from data-field instead. `name` stays for the no-JS fallback.
+    const common = 'id="cf-' + i + '" name="' + name + '" data-field="' + name + '" placeholder="' + placeholder + '"' + required +
       ' style="width:100%;box-sizing:border-box;padding:10px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;font-family:inherit;outline:none;background:#fff;color:#111827;margin:0 0 14px;"';
     const type = String(f.type || 'text');
     if (type === 'textarea') return labelHtml + '<textarea ' + common + ' rows="5"></textarea>';
@@ -252,14 +278,16 @@ addShortcode('form', (attrs, _content) => {
     return labelHtml + '<input type="' + inputType + '" ' + common + '>';
   }).join('');
   const msg = esc(form.successMessage || (zh ? '提交成功，感谢您的来信！' : 'Thank you! Your message has been sent.'));
-  return '<div class="cms-form" data-form="' + esc(slug) + '">' +
-    '<form class="cms-form-inner" novalidate style="max-width:560px;margin:0 auto;">' +
+  return '<div class="cms-form" data-form="' + esc(slug) + '" data-success="' + msg + '">' +
+    // The action/method are for the no-JS case: without the delegated handler the
+    // browser posts the fields to the endpoint instead of reloading the page.
+    '<form class="cms-form-inner" action="/api/forms/' + esc(slug) + '/submit" method="post" novalidate style="max-width:560px;margin:0 auto;">' +
     '<input type="hidden" name="_form" value="' + esc(slug) + '">' +
     '<div style="position:absolute;left:-9999px;top:auto;width:1px;height:1px;overflow:hidden;" aria-hidden="true"><label>Leave this field empty<input type="text" name="_hp" tabindex="-1" autocomplete="off"></label></div>' +
     inputs +
     '<button type="submit" style="padding:10px 22px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">' + submitLabel + '</button>' +
+    '<p class="cms-form-msg" role="status" hidden style="margin:14px 0 0;font-size:14px;"></p>' +
     '</form>' +
-    '<script>(function(){var f=document.querySelector(".cms-form[data-form=\\"' + esc(slug) + '\\"] form");if(!f)return;f.addEventListener("submit",function(e){e.preventDefault();var b=f.querySelector("button[type=submit]");var o=b?b.textContent:"";if(b)b.textContent="' + sendingLabel + '";fetch("/api/forms/' + esc(slug) + '/submit",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(Object.fromEntries(new FormData(f)))}).then(function(r){return r.json()}).then(function(d){if(b)b.textContent=o;var w=f.parentNode;if(d&&d.success){w.innerHTML="<p style=\\"padding:14px 16px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;color:#166534;font-size:14px;\\">"+ (d.message||' + JSON.stringify(msg) + ') + "</p>";}else{alert((d&&d.error)||"Request failed");}}).catch(function(){if(b)b.textContent=o;alert("Request failed");});});})();</script>' +
     '</div>';
 }, 'Render a form builder form (id=slug)');
 
@@ -276,9 +304,12 @@ addShortcode('download', (attrs) => {
   return '<a href="/api/media/' + esc(id) + '/download" class="cms-download" style="display:inline-flex;align-items:center;gap:8px;padding:10px 20px;background:#2563eb;color:#fff;border-radius:8px;text-decoration:none;font-size:14px;">' + name + '</a>';
 }, 'Download button for a media file (id=media-id, label=optional)');
 
-// [newsletter] — subscribe form for the newsletter digest. Submits via fetch
-// to /api/newsletter/subscribe; the inline script shows the server reply
-// (confirmation sent / subscribed) in place of the form.
+// [newsletter] — subscribe form for the newsletter digest.
+//
+// Plain HTML like the [form] shortcode: content is injected with innerHTML
+// after DOMPurify, which strips <script>, so the inline handler this used to
+// carry never ran (the browser fell back to a native GET of the current URL).
+// The frontend handles .cms-newsletter submissions in lib/cmsForms.ts.
 addShortcode('newsletter', () => {
   const lang = siteLang();
   const zh = lang === 'zh';
@@ -287,13 +318,20 @@ addShortcode('newsletter', () => {
   const btnLabel = zh ? '订阅' : 'Subscribe';
   const sentMsg = zh ? '订阅成功，感谢关注！' : 'Subscribed! Thank you for joining.';
   const confirmMsg = zh ? '确认邮件已发送，请查收并点击确认' : 'A confirmation email has been sent — please check your inbox.';
-  return '<div class="cms-newsletter" data-newsletter>' +
-    '<form class="cms-newsletter-form" novalidate style="max-width:420px;margin:0 auto;display:flex;flex-direction:column;gap:10px;">' +
-    '<div><label for="nl-name" style="display:block;margin:0 0 4px;font-size:13px;color:#4b5563;">' + nameLabel + '</label><input id="nl-name" name="name" type="text" style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none;"></div>' +
-    '<div><label for="nl-email" style="display:block;margin:0 0 4px;font-size:13px;color:#4b5563;">' + emailLabel + ' *</label><input id="nl-email" name="email" type="email" required style="width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none;"></div>' +
-    '<button type="submit" style="padding:9px 18px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">' + btnLabel + '</button>' +
+  const inputStyle = 'width:100%;box-sizing:border-box;padding:9px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:14px;outline:none;';
+  const labelStyle = 'display:block;margin:0 0 4px;font-size:13px;color:#4b5563;';
+  return '<div class="cms-newsletter" data-newsletter data-email-field="email" data-name-field="name"' +
+    ' data-sent="' + esc(sentMsg) + '" data-confirm="' + esc(confirmMsg) + '">' +
+    // No-JS fallback: without the delegated handler this posts the form to the
+    // subscribe endpoint and the browser at least leaves the page correctly.
+    '<form class="cms-newsletter-form" action="/api/newsletter/subscribe" method="post" novalidate style="max-width:420px;margin:0 auto;display:flex;flex-direction:column;gap:10px;">' +
+    '<div><label for="nl-name" style="' + labelStyle + '">' + esc(nameLabel) + '</label>' +
+    '<input id="nl-name" name="name" type="text" data-field="name" style="' + inputStyle + '"></div>' +
+    '<div><label for="nl-email" style="' + labelStyle + '">' + esc(emailLabel) + ' *</label>' +
+    '<input id="nl-email" name="email" type="email" required data-field="email" style="' + inputStyle + '"></div>' +
+    '<button type="submit" style="padding:9px 18px;background:#2563eb;color:#fff;border:none;border-radius:8px;font-size:14px;cursor:pointer;">' + esc(btnLabel) + '</button>' +
+    '<p class="cms-form-msg" role="status" hidden style="margin:0;font-size:14px;"></p>' +
     '</form>' +
-    '<script>(function(){var f=document.querySelector(".cms-newsletter[data-newsletter] form");if(!f)return;f.addEventListener("submit",function(e){e.preventDefault();var b=f.querySelector("button[type=submit]");var o=b?b.textContent:"";if(b)b.textContent="…";fetch("/api/newsletter/subscribe",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:document.getElementById("nl-name")?document.getElementById("nl-name").value:"",email:document.getElementById("nl-email").value})}).then(function(r){return r.json()}).then(function(d){if(b)b.textContent=o;var w=f.parentNode;if(d&&d.success){var msg=d.message==="confirmation_sent"?"' + confirmMsg + '":"' + sentMsg + '";w.innerHTML="<p style=\\"padding:12px 14px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;color:#166534;font-size:14px;\\">"+msg+"</p>";}else{alert((d&&d.error)||"Request failed");}}).catch(function(){if(b)b.textContent=o;alert("Request failed");});});})();</script>' +
     '</div>';
 }, 'Newsletter subscribe form');
 

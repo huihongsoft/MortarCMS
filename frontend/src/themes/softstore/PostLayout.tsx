@@ -2,7 +2,7 @@ import React, { useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, Folder, Clock, MessageSquare, User, Eye } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
-import CommentLike from '../../components/CommentLike';
+import CommentThread, { CommentReplyBanner, CommentClasses } from '../../components/CommentThread';
 import Toc from '../../components/Toc';
 import { cdnUrl, cdnHtml } from '../../lib/cdn';
 import { embedContent } from '../../lib/embed';
@@ -15,30 +15,30 @@ import { SideTabs, NoticeBar, TagPill, formatDate } from './Shared';
 // Software detail page in huirj style: white content block on a light-gray
 // page, breadcrumb, meta bar, cover, prose content, tags, comments.
 export default function SoftstorePostLayout(props: any) {
-  const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug } = props;
+  const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug, replyTo, startReply, cancelReply } = props;
   const contentRef = useRef<HTMLDivElement>(null);
   const author = post.author;
   const category = post.categories?.[0];
   const inputCls = 'w-full px-3.5 py-2.5 border border-[#ddd] rounded text-sm outline-none focus:border-[#5066e1] bg-white';
 
+  const commentClasses: CommentClasses = {
+    item: 'py-5 border-b border-[#eee] last:border-b-0',
+    nested: 'ml-8 mt-3 pl-4 border-l-2 border-[#eee] space-y-3',
+    avatar: 'w-8 h-8 rounded-full bg-[#f1f1f1] flex items-center justify-center text-sm font-medium text-[#888]',
+    avatarSmall: 'w-7 h-7 rounded-full bg-[#f1f1f1] flex items-center justify-center text-xs font-medium text-[#888]',
+    author: 'font-medium text-sm text-[#333]',
+    date: 'text-xs text-[#999]',
+    body: 'text-sm text-[#555] leading-relaxed',
+    reply: 'text-xs text-[#999] hover:text-[#5066e1]',
+    avatarMode: 'initial',
+  };
   const commentList = comments.map((c: any) =>
-    React.createElement('div', { key: c.id, className: 'py-5 border-b border-[#eee] last:border-b-0' },
-      React.createElement('div', { className: 'flex items-center gap-2.5 mb-2' },
-        React.createElement('div', { className: 'w-8 h-8 rounded-full bg-[#f1f1f1] flex items-center justify-center text-sm font-medium text-[#888]' }, (c.author || '?')[0].toUpperCase()),
-        React.createElement('div', null,
-          React.createElement('p', { className: 'font-medium text-sm text-[#333]' }, c.author),
-          React.createElement('p', { className: 'text-xs text-[#999]' }, formatDate(c.createdAt)))),
-      React.createElement('p', { className: 'text-sm text-[#555] leading-relaxed' }, c.content),
-      React.createElement('div', { className: 'mt-2' }, React.createElement(CommentLike, { commentId: c.id, initial: c.likes })),
-      (c.children || []).map((child: any) =>
-        React.createElement('div', { key: child.id, className: 'ml-8 mt-3 pl-4 border-l-2 border-[#eee]' },
-          React.createElement('p', { className: 'font-medium text-sm text-[#444] mb-1' }, child.author),
-          React.createElement('p', { className: 'text-sm text-[#666]' }, child.content)))
-    )
+    React.createElement(CommentThread, { key: c.id, comment: c, classes: commentClasses, settings, onReply: startReply })
   );
 
-  const commentFormEl = React.createElement('form', { onSubmit: submitComment, noValidate: true, className: 'space-y-3 mt-4 p-5 bg-[#f8f8f9] border border-[#eee] rounded' },
-    React.createElement('h4', { className: 'text-sm font-semibold text-[#333]' }, t('leave a comment', settings)),
+  const commentFormEl = React.createElement('form', { id: 'comment-form', onSubmit: submitComment, noValidate: true, className: 'space-y-3 mt-4 p-5 bg-[#f8f8f9] border border-[#eee] rounded' },
+    React.createElement('h4', { className: 'text-sm font-semibold text-[#333]' }, replyTo ? t('leave a reply', settings) : t('leave a comment', settings)),
+    React.createElement(CommentReplyBanner, { replyTo, cancelReply, settings }),
     commentError && React.createElement('div', { role: 'alert', className: 'p-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded' }, commentError),
     React.createElement('input', { type: 'text', name: 'website_url', style: { position: 'absolute', left: '-9999px' }, tabIndex: -1, autoComplete: 'off' }),
     React.createElement('div', { className: 'grid grid-cols-1 sm:grid-cols-2 gap-3' },

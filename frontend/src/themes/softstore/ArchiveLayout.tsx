@@ -146,8 +146,10 @@ export default function ArchiveView(props: {
   heading?: string | null;
   loading?: boolean;
   error?: boolean;
+  pagination?: any;
+  author?: { username?: string; bio?: string; avatar?: string };
 }) {
-  const { settings = {}, posts = [], total = 0, page = 1, setPage, categories = [], heading, loading, error } = props;
+  const { settings = {}, posts = [], total = 0, page = 1, setPage, categories = [], heading, loading, error, pagination } = props;
   const perPage = parseInt(settings.posts_per_page || '10') || 10;
 
   return React.createElement('div', { className: 'min-h-screen bg-[#fff]' },
@@ -155,14 +157,18 @@ export default function ArchiveView(props: {
       React.createElement(NoticeBar, { settings }),
       React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-12 gap-4' },
         React.createElement('div', { className: 'lg:col-span-8 min-w-0' },
-          heading && React.createElement('h1', { className: 'text-[24px] leading-[34px] font-bold text-[#1d1d1d] mb-[15px]' }, heading),
+          heading && React.createElement('div', { className: 'mb-[15px]' },
+            React.createElement('h1', { className: 'text-[24px] leading-[34px] font-bold text-[#1d1d1d]' }, heading),
+            props.author?.bio && React.createElement('p', { className: 'text-sm text-[#666] mt-1' }, props.author.bio)),
           loading && posts.length === 0
             ? React.createElement('p', { className: 'py-10 text-sm text-[#999]' }, t('loading', settings) + '…')
             : posts.length === 0
               ? React.createElement('div', { className: 'bg-white rounded-[5px] border border-[#dedede] px-[25px] py-16 text-center' },
                   React.createElement('p', { className: 'text-sm text-[#999]' }, error ? t('failed to load posts', settings) : t('no posts yet', settings)))
               : React.createElement('div', null, posts.map((p: any) => React.createElement(BlogCard, { key: p.id, p, settings }))),
-          setPage && React.createElement(Pager, { page, total, perPage, setPage })),
+          // The page supplies a ready-made pager (archive/author/search); the
+          // homepage paths still pass page/setPage and use the theme's own.
+          pagination || (setPage && React.createElement(Pager, { page, total, perPage, setPage }))),
         React.createElement(ArchiveSidebar, { settings, categories })
       )
     )

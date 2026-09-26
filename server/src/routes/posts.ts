@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, authorize, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, resolveOptionalUser, userCan, AuthRequest } from '../middleware/auth';
 import { verifyToken } from '../utils/jwt';
 import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
 import { SiteRequest } from '../middleware/site';
@@ -14,6 +14,7 @@ import { sanitizeCssText } from '../utils/sanitize';
 import { normalizeSeoField } from '../utils/seoFields';
 import { siteScopeForFilter, mayWriteSite, userMayAccessSite, assignedSites } from '../utils/userSites';
 import { trackView } from '../utils/views';
+import { loadCustomTypes } from './customPostTypes';
 
 const router = Router();
 // Protected-post password guessing is brute-forced per IP
@@ -64,7 +65,19 @@ function publicShape(posts: any[], canBypass: boolean): any[] {
 // every editor would be treated as anonymous.
 function mayBypassProtection(req: AuthRequest): boolean {
   const user = req.user || resolveOptionalUser(req);
-  return !!user && ['admin', 'editor'].includes(user.role);
+  return !!user && userCan(user, 'edit_others_posts');
+}
+
+// Which content type a post may be created as. Custom types come from the
+// registry (routes/customPostTypes.ts); accepting any string here would create
+// rows that no list, template or sitemap can ever show. Pages have their own
+// route (parent/menu order/etc.), so they are not creatable through /posts.
+function validPostType(raw: unknown): string | null {
+  const t = String(raw ?? '').trim().toLowerCase();
+  if (!t) return null;
+  if (t === 'post') return 'post';
+  if (t === 'page') return null;
+  return loadCustomTypes().some(x => x.slug === t) ? t : null;
 }
 
 // Visual-editor CSS is rendered into a <style> tag on the public site, so
@@ -76,7 +89,58 @@ function mayBypassProtection(req: AuthRequest): boolean {
 function sanitizeVisualCss(css: string): string {
   return sanitizeCssText(css);
 }
-const postSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), authorId: z.string().optional(), publishedAt: z.string().optional(), meta: z.record(z.string(), z.string()).optional() });
+const postSchema = z.object({ title: z.string().min(1), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), authorId: z.string().optional(), publishedAt: z.string().optional(), meta: z.record(z.string(), z.string()).optional(), type: z.string().optional() });
+
+// ---- Bulk operations: the same checks the single-row routes apply -------------
+// The bulk endpoints act on ids the client chose, so every row has to pass the
+// checks the single-row PUT/DELETE already make: the row's own site (an editor
+// assigned to site A could otherwise rewrite site B by id) and, for the roles
+// that only own their own posts, ownership. Ids the caller may not touch are
+// skipped and reported rather than aborting the whole batch.
+function loadBulkPosts(ids: unknown): any[] {
+  if (!Array.isArray(ids)) return [];
+  const uniq = [...new Set(ids.filter((i): i is string => typeof i === 'string' && i.length > 0))];
+  if (uniq.length === 0) return [];
+  const rows: any[] = [];
+  // Stay under SQLite's bound-variable limit for large selections.
+  for (let i = 0; i < uniq.length; i += 400) {
+    const chunk = uniq.slice(i, i + 400);
+    rows.push(...db.prepare('SELECT id, siteId, status, previousStatus, authorId, publishedAt, type FROM Post WHERE id IN (' + chunk.map(() => '?').join(',') + ')').all(...chunk) as any[]);
+  }
+  return rows;
+}
+
+function mayTouchPost(user: { userId: string; role: string }, row: any): boolean {
+  if (!userMayAccessSite(user.userId, user.role, row.siteId || undefined)) return false;
+  // A caller who cannot touch other people's posts is limited to their own.
+  if (!userCan(user, 'edit_others_posts') && row.authorId !== user.userId) return false;
+  return true;
+}
+
+// Trash keeps the status it had, so restore can put the post back online
+// instead of silently downgrading it to a draft. Returns whether anything
+// changed: trashing an already-trashed row must NOT overwrite the memory (it
+// would come back as a draft) or fire the hook twice for one post.
+function trashPost(row: any): boolean {
+  if (row.status === 'trash') return false;
+  const now = new Date().toISOString();
+  db.prepare('UPDATE Post SET status = ?, previousStatus = ?, updatedAt = ? WHERE id = ?')
+    .run('trash', row.status || null, now, row.id);
+  doAction('delete_post', row.id);
+  return true;
+}
+
+function restorePost(row: any): void {
+  const now = new Date().toISOString();
+  const back = row.previousStatus && row.previousStatus !== 'trash' ? row.previousStatus : 'draft';
+  // A restored "published" post must not resurrect a future publish date.
+  const publishedAt = back === 'published'
+    ? (row.publishedAt && row.publishedAt <= now ? row.publishedAt : now)
+    : null;
+  db.prepare('UPDATE Post SET status = ?, previousStatus = NULL, publishedAt = COALESCE(?, publishedAt), updatedAt = ? WHERE id = ?')
+    .run(back, publishedAt, now, row.id);
+  doAction('post_restored', row.id, back);
+}
 
 // Batch enrichment: one query per relation for the whole list instead of one
 // per post (a 10-post page used to run ~70 queries). Chunked so a huge
@@ -244,8 +308,9 @@ router.get('/suggest', (req: AuthRequest & SiteRequest, res: Response) => {
 router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     const post = (req.siteId
-      ? db.prepare('SELECT * FROM Post WHERE slug = ? AND type = ? AND (siteId IS NULL OR siteId = ?)').get(req.params.slug, 'post', req.siteId)
-      : db.prepare('SELECT * FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'post')) as any;
+      // Any public content type resolves here; pages have their own route.
+      ? db.prepare("SELECT * FROM Post WHERE slug = ? AND type <> 'page' AND (siteId IS NULL OR siteId = ?)").get(req.params.slug, req.siteId)
+      : db.prepare("SELECT * FROM Post WHERE slug = ? AND type <> 'page'").get(req.params.slug)) as any;
     if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
     // Scheduled posts (published but publishedAt in the future) are invisible
     // to anonymous visitors, matching the public lists; logged-in users may
@@ -254,8 +319,8 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
       res.status(404).json({ error: 'Post not found' }); return;
     }
     // WordPress-style password protection: cookie (hashed) unlocks the post.
-    // Admins/editors bypass.
-    if (post.password && (!req.user || !['admin', 'editor'].includes(req.user.role))) {
+    // Callers who may edit other people's posts bypass.
+    if (post.password && (!req.user || !userCan(req.user, 'edit_others_posts'))) {
       const raw = String(req.headers.cookie || '');
       const m = raw.match(new RegExp('mortar_post_pass_' + post.id + '=([^;]+)'));
       const cookieVal = m ? decodeURIComponent(m[1]) : null;
@@ -266,10 +331,10 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
       }
     }
     if (post.status !== 'published') {
-      // Non-published posts (draft/private/trash) are only visible to
-      // admins/editors or the author themselves — never to other logged-in
-      // users or anonymous visitors.
-      const canView = req.user && (['admin', 'editor'].includes(req.user.role) || (req.user.userId && req.user.userId === post.authorId));
+      // Non-published posts (draft/private/trash) are only visible to callers
+      // who can edit other people's posts, or to the author themselves — never
+      // to other logged-in users or anonymous visitors.
+      const canView = req.user && (userCan(req.user, 'edit_others_posts') || (req.user.userId && req.user.userId === post.authorId));
       if (!canView) { res.status(404).json({ error: 'Post not found' }); return; }
     }
     // Members-only posts: anonymous visitors get a 403 so the frontend can
@@ -294,7 +359,7 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
 // (WordPress-style wp-postpass behaviour, matching the page flow).
 router.post('/slug/:slug/password', passwordLimiter, async (req: AuthRequest, res: Response) => {
   try {
-    const post = db.prepare('SELECT id, password FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'post') as any;
+    const post = db.prepare("SELECT id, password FROM Post WHERE slug = ? AND type <> 'page'").get(req.params.slug) as any;
     if (!post || !post.password) { res.status(404).json({ error: 'Post not found' }); return; }
     const submitted = String((req.body || {}).password || '');
     const check = await verifyContentPassword(submitted, post.password);
@@ -344,6 +409,29 @@ router.get('/popular', (req: AuthRequest & SiteRequest, res: Response) => {
 
 // Public: posts by author
 
+// Public: yearly archive. `?month=` narrows it, which is how the archive page
+// offers "2026" and then the months inside it without a second endpoint.
+router.get('/archive/:year', (req: AuthRequest & SiteRequest, res: Response) => {
+  try {
+    const page = Math.max(1, parseInt(req.query.page as string) || 1);
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 10));
+    const y = String(req.params.year);
+    if (!/^\d{4}$/.test(y)) { res.status(400).json({ error: 'Invalid year' }); return; }
+    const now = new Date().toISOString();
+    // strftime with a single-quoted format (see the note in the month route).
+    let where = "p.type = ? AND p.status = ? AND strftime('%Y', p.publishedAt) = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)";
+    const scopeArgs: any[] = [];
+    if (req.siteId) { where += ' AND (p.siteId IS NULL OR p.siteId = ?)'; scopeArgs.push(req.siteId); }
+    const posts = db.prepare('SELECT DISTINCT p.* FROM Post p WHERE ' + where + ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?').all('post', 'published', y, now, ...scopeArgs, limit, (page - 1) * limit) as any[];
+    const total = (db.prepare('SELECT COUNT(DISTINCT p.id) as cnt FROM Post p WHERE ' + where).get('post', 'published', y, now, ...scopeArgs) as any)?.cnt || 0;
+    // Month breakdown so the page can offer the months that actually have posts
+    const months = req.siteId
+      ? db.prepare("SELECT strftime('%m', publishedAt) as month, COUNT(*) as count FROM Post WHERE type = 'post' AND status = 'published' AND strftime('%Y', publishedAt) = ? AND (publishedAt IS NULL OR publishedAt <= ?) AND (siteId IS NULL OR siteId = ?) GROUP BY month ORDER BY month").all(y, now, req.siteId)
+      : db.prepare("SELECT strftime('%m', publishedAt) as month, COUNT(*) as count FROM Post WHERE type = 'post' AND status = 'published' AND strftime('%Y', publishedAt) = ? AND (publishedAt IS NULL OR publishedAt <= ?) GROUP BY month ORDER BY month").all(y, now);
+    res.json({ posts: publicShape(enrichPosts(posts), mayBypassProtection(req)), total, page, totalPages: Math.ceil(total / limit), archive: { year: y, month: null }, months });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 // Public: monthly archive
 router.get('/archive/:year/:month', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
@@ -388,11 +476,15 @@ router.get('/author/:username', (req: AuthRequest & SiteRequest, res: Response) 
     if (req.siteId) { where += ' AND (p.siteId IS NULL OR p.siteId = ?)'; scopeArgs.push(req.siteId); }
     const posts = db.prepare('SELECT DISTINCT p.* FROM Post p WHERE ' + where + ' ORDER BY p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?').all('post', 'published', author.id, new Date().toISOString(), ...scopeArgs, limit, (page - 1) * limit) as any[];
     const total = (db.prepare('SELECT COUNT(DISTINCT p.id) as cnt FROM Post p WHERE ' + where).get('post', 'published', author.id, new Date().toISOString(), ...scopeArgs) as any)?.cnt || 0;
-    res.json({ posts: publicShape(enrichPosts(posts), mayBypassProtection(req)), total, page, totalPages: Math.ceil(total / limit), author: { username: req.params.username } });
+    const profile = db.prepare('SELECT username, bio, avatar FROM User WHERE id = ?').get(author.id) as any;
+    res.json({
+      posts: publicShape(enrichPosts(posts), mayBypassProtection(req)), total, page, totalPages: Math.ceil(total / limit),
+      author: { username: profile?.username || req.params.username, bio: profile?.bio || '', avatar: profile?.avatar || '' },
+    });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/admin', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
+router.get('/admin', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
   try {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
@@ -402,9 +494,13 @@ router.get('/admin', authenticate, authorize('admin', 'editor', 'author'), (req:
     const sortCols: Record<string, string> = { title: 'title', createdAt: 'createdAt', views: 'views', status: 'status' };
     const sortCol = sortCols[(req.query.sortBy as string) || 'createdAt'] || 'createdAt';
     const sortDir = req.query.sortDir === 'asc' ? 'ASC' : 'DESC';
+    // Content type filter: the posts list shows one type at a time (a custom
+    // type's entries live there too). Unregistered names fall back to 'post'.
+    const listType = req.query.type === undefined ? 'post' : (validPostType(req.query.type) || 'post');
     let sql = 'SELECT * FROM Post WHERE type = ?';
-    const params: any[] = ['post'];
-    if (req.user!.role === 'author') { sql += ' AND authorId = ?'; params.push(req.user!.userId); }
+    const params: any[] = [listType];
+    // Callers who cannot edit other people's posts only see their own.
+    if (!userCan(req.user!, 'edit_others_posts')) { sql += ' AND authorId = ?'; params.push(req.user!.userId); }
     if (status) { sql += ' AND status = ?'; params.push(status); }
     // Fuzzy search across the fields an editor recognises an article by.
     const searchLike = search ? '%' + search + '%' : '';
@@ -419,9 +515,10 @@ router.get('/admin', authenticate, authorize('admin', 'editor', 'author'), (req:
     sql += ' ORDER BY sticky DESC, ' + sortCol + ' ' + sortDir + ' LIMIT ? OFFSET ?';
     params.push(limit, (page - 1) * limit);
     const postsData = db.prepare(sql).all(...params) as any[];
-    const cntSql = 'SELECT COUNT(*) as cnt FROM Post WHERE type = ?' + (req.user!.role === 'author' ? ' AND authorId = ?' : '') + (status ? ' AND status = ?' : '') + searchClause + sf.clause;
-    const cntParams: any[] = ['post'];
-    if (req.user!.role === 'author') cntParams.push(req.user!.userId);
+    const cntSql = 'SELECT COUNT(*) as cnt FROM Post WHERE type = ?' + (!userCan(req.user!, 'edit_others_posts') ? ' AND authorId = ?' : '') + (status ? ' AND status = ?' : '') + searchClause + sf.clause;
+    // Must match the list query above, including the content-type filter.
+    const cntParams: any[] = [listType];
+    if (!userCan(req.user!, 'edit_others_posts')) cntParams.push(req.user!.userId);
     if (status) cntParams.push(status);
     if (search) cntParams.push(searchLike, searchLike, searchLike);
     cntParams.push(...sf.params);
@@ -430,18 +527,22 @@ router.get('/admin', authenticate, authorize('admin', 'editor', 'author'), (req:
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contributor'), async (req: AuthRequest, res: Response) => {
+router.post('/', authenticate, requireCap('edit_posts'), async (req: AuthRequest, res: Response) => {
   try {
     const data = postSchema.parse(req.body);
-    // Contributors submit drafts only (an editor publishes later), like WP
-    const status = req.user!.role === 'contributor' ? 'draft' : (data.status || 'draft');
-    const allSlugs = (db.prepare('SELECT slug FROM Post WHERE type = ?').all('post') as any[]).map((s: any) => s.slug);
+    // A caller who cannot publish may only submit drafts (an editor publishes
+    // later), like WP contributors.
+    const status = !userCan(req.user!, 'publish_posts') ? 'draft' : (data.status || 'draft');
+    // Post.slug is UNIQUE across every type, so uniqueness has to be checked globally —
+    // a custom-type entry titled like an existing post would otherwise collide.
+    const allSlugs = (db.prepare('SELECT slug FROM Post').all() as any[]).map((s: any) => s.slug);
     const slug = uniqueSlug(data.title, allSlugs);
     const id = cuid();
     const now = new Date().toISOString();
-    // Admins/editors may assign an author; everyone else writes as themselves.
-    // A supplied publish date drives scheduled publishing; otherwise publish now.
-    const authorId = data.authorId && ['admin', 'editor'].includes(req.user!.role) ? data.authorId : req.user!.userId;
+    // Callers who may edit other people's posts can assign an author; everyone
+    // else writes as themselves. A supplied publish date drives scheduled
+    // publishing; otherwise publish now.
+    const authorId = data.authorId && userCan(req.user!, 'edit_others_posts') ? data.authorId : req.user!.userId;
     // Same rule as authorId: only admin/editor may target another site. An author
     // assigning their own post to a different site would inject content into
     // that site's frontend.
@@ -449,14 +550,18 @@ router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contribut
     if (data.siteId !== undefined && !mayWriteSite(req.user!.userId, req.user!.role, data.siteId)) {
       res.status(403).json({ error: '无权在该站点创建内容' }); return;
     }
-    const siteId = data.siteId && ['admin', 'editor'].includes(req.user!.role) ? data.siteId : null;
+    const siteId = data.siteId && userCan(req.user!, 'edit_others_posts') ? data.siteId : null;
     const publishedAt = data.publishedAt || (status === 'published' ? now : null);
+    // A custom type must be registered; pages keep their own route. Validated
+    // before the transaction so a refusal never half-writes.
+    const postType = data.type !== undefined ? validPostType(data.type) : 'post';
+    if (postType === null) { res.status(400).json({ error: '未知的内容类型: ' + data.type }); return; }
     // Store a hash, never the plaintext (see utils/contentPassword).
     const password = data.password ? await hashContentPassword(data.password) : '';
     // The post row and its category/tag/meta rows must land together — a
     // half-written post would show up with missing relations.
     withTransaction(() => {
-      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', status, data.featured || null, password, authorId, data.parentId || null, data.menuOrder || 0, publishedAt, siteId);
+      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId, type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', status, data.featured || null, password, authorId, data.parentId || null, data.menuOrder || 0, publishedAt, siteId, postType);
       if (data.categoryIds) for (const cid of data.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(id, cid);
       if (data.tagIds) for (const tid of data.tagIds) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tid);
       if (data.tagNames) for (const name of data.tagNames) {
@@ -478,17 +583,17 @@ router.post('/', authenticate, authorize('admin', 'editor', 'author', 'contribut
   } catch (err: any) { if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; } res.status(500).json({ error: err.message }); }
 });
 
-router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contributor'), async (req: AuthRequest, res: Response) => {
+router.put('/:id', authenticate, requireCap('edit_posts'), async (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
     // The row itself must be in this user's sites: validating only the *new*
     // siteId let an editor assigned to site A rewrite a site B post.
     if (!userMayAccessSite(req.user!.userId, req.user!.role, existing.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的内容' }); return; }
-    if ((req.user!.role === 'author' || req.user!.role === 'contributor') && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot edit another user\'s post' }); return; }
+    if (!userCan(req.user!, 'edit_others_posts') && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot edit another user\'s post' }); return; }
     const data = postSchema.partial().parse(req.body);
-    // Contributors may never publish (or unpublish) their drafts
-    if (req.user!.role === 'contributor' && data.status !== undefined && data.status !== 'draft') { res.status(403).json({ error: 'Contributors can only keep posts as drafts' }); return; }
+    // A caller who cannot publish may never publish (or unpublish) their drafts
+    if (!userCan(req.user!, 'publish_posts') && data.status !== undefined && data.status !== 'draft') { res.status(403).json({ error: 'Contributors can only keep posts as drafts' }); return; }
     const sets: string[] = []; const vals: any[] = [];
     if (data.title !== undefined) { sets.push('title = ?'); vals.push(data.title); }
     if (data.content !== undefined) { sets.push('content = ?'); vals.push(data.content); }
@@ -513,12 +618,13 @@ router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contrib
       sets.push('password = ?');
       vals.push(data.password ? await hashContentPassword(data.password) : '');
     }
-    // Only admin/editor may move a post between sites (mirrors the authorId rule).
-    if (data.siteId !== undefined && ['admin', 'editor'].includes(req.user!.role)) {
+    // Only callers who may edit other people's posts may move a post between
+    // sites (mirrors the authorId rule).
+    if (data.siteId !== undefined && userCan(req.user!, 'edit_others_posts')) {
       if (!mayWriteSite(req.user!.userId, req.user!.role, data.siteId)) { res.status(403).json({ error: '无权移到该站点' }); return; }
       sets.push('siteId = ?'); vals.push(data.siteId || null);
     }
-    if (data.authorId !== undefined && ['admin', 'editor'].includes(req.user!.role)) { sets.push('authorId = ?'); vals.push(data.authorId); }
+    if (data.authorId !== undefined && userCan(req.user!, 'edit_others_posts')) { sets.push('authorId = ?'); vals.push(data.authorId); }
     if (data.publishedAt !== undefined) { sets.push('publishedAt = ?'); vals.push(data.publishedAt); }
     // Relation rewrites (delete-then-insert), the pre-save revision and the
     // Post row itself are one unit: a failure mid-way must not leave a post
@@ -552,85 +658,115 @@ router.put('/:id', authenticate, authorize('admin', 'editor', 'author', 'contrib
 
 // Single delete goes to the trash too (same flow as bulk-trash) so nothing
 // is ever destroyed without the recovery path — restore is /:id/restore.
-router.delete('/:id', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
+router.delete('/:id', authenticate, requireCap('delete_posts'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
     if (!userMayAccessSite(req.user!.userId, req.user!.role, existing.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的内容' }); return; }
-    if (req.user!.role === 'author' && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot delete another author\'s post' }); return; }
-    doAction('delete_post', req.params.id);
-    db.prepare('UPDATE Post SET status = ?, updatedAt = ? WHERE id = ?').run('trash', new Date().toISOString(), req.params.id);
+    if (!userCan(req.user!, 'delete_others_posts') && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot delete another author\'s post' }); return; }
+    trashPost(existing);
     res.json({ success: true, trashed: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: restore from trash
-router.put('/:id/restore', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.put('/:id/restore', authenticate, requireCap('edit_others_posts'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
-    db.prepare('UPDATE Post SET status = ?, updatedAt = ? WHERE id = ?').run('draft', new Date().toISOString(), req.params.id);
-    res.json({ success: true });
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, existing.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的内容' }); return; }
+    restorePost(existing);
+    res.json({ success: true, status: db.prepare('SELECT status FROM Post WHERE id = ?').get(req.params.id) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: bulk trash
-router.post('/bulk-trash', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.post('/bulk-trash', authenticate, requireCap('delete_others_posts'), (req: AuthRequest, res: Response) => {
   try {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids)) { res.status(400).json({ error: 'ids array required' }); return; }
-    const stmt = db.prepare('UPDATE Post SET status = ?, updatedAt = ? WHERE id = ?');
-    const now = new Date().toISOString();
-    for (const id of ids) stmt.run('trash', now, id);
-    res.json({ success: true, count: ids.length });
+    const rows = loadBulkPosts(ids);
+    const allowed = rows.filter((r) => mayTouchPost(req.user!, r));
+    let count = 0;
+    withTransaction(() => { for (const r of allowed) { if (trashPost(r)) count++; } });
+    res.json({ success: true, count, skipped: new Set(ids).size - allowed.length });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: bulk restore trashed posts
-router.post('/bulk-restore', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.post('/bulk-restore', authenticate, requireCap('edit_others_posts'), (req: AuthRequest, res: Response) => {
   try {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: 'ids array required' }); return; }
-    const stmt = db.prepare("UPDATE Post SET status = 'draft', updatedAt = ? WHERE id = ? AND status = 'trash'");
-    const now = new Date().toISOString();
+    const rows = loadBulkPosts(ids).filter((r) => mayTouchPost(req.user!, r));
     let restored = 0;
-    for (const id of ids) restored += stmt.run(now, id).changes;
-    res.json({ success: true, restored });
+    withTransaction(() => {
+      for (const r of rows) { if (r.status === 'trash') { restorePost(r); restored++; } }
+    });
+    res.json({ success: true, restored, skipped: new Set(ids).size - rows.length });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: bulk change status (e.g. publish / draft a selection at once)
-router.post('/bulk-status', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.post('/bulk-status', authenticate, requireCap('edit_others_posts'), (req: AuthRequest, res: Response) => {
   try {
     const { ids, status } = req.body || {};
     if (!ids || !Array.isArray(ids) || ids.length === 0 || !status) { res.status(400).json({ error: 'ids and status required' }); return; }
     const valid = ['draft', 'published', 'private', 'pending', 'trash'];
     if (!valid.includes(status)) { res.status(400).json({ error: 'invalid status' }); return; }
-    const stmt = db.prepare("UPDATE Post SET status = ?, publishedAt = CASE WHEN ? = 'published' THEN COALESCE(publishedAt, ?) ELSE publishedAt END, updatedAt = ? WHERE id = ?");
+    const rows = loadBulkPosts(ids).filter((r) => mayTouchPost(req.user!, r));
     const now = new Date().toISOString();
     let updated = 0;
-    for (const id of ids) updated += stmt.run(status, status, now, now, id).changes;
-    res.json({ success: true, updated });
+    withTransaction(() => {
+      for (const r of rows) {
+        if (status === 'trash') { if (trashPost(r)) updated++; continue; }
+        if (r.status === status) continue;
+        // An explicit status wins over the trash memory; publishing must not
+        // keep a FUTURE publishedAt (same rule as PUT /:id — the post would be
+        // status=published yet missing from every public list).
+        const sets = ['status = ?', 'previousStatus = NULL', 'updatedAt = ?'];
+        const vals: any[] = [status, now];
+        if (status === 'published' && (!r.publishedAt || r.publishedAt > now)) { sets.push('publishedAt = ?'); vals.push(now); }
+        vals.push(r.id);
+        updated += db.prepare('UPDATE Post SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals).changes;
+        // The type travels with the hook (see the single-row route): a page
+        // announced as a post would get a /post/<slug> URL in listeners.
+        doAction('post_updated', r.id, r.type);
+        if (status === 'published') doAction('post_published', r.id, r.type);
+      }
+    });
+    res.json({ success: true, updated, skipped: new Set(ids).size - rows.length });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: bulk permanently delete trashed posts
-router.post('/bulk-delete', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.post('/bulk-delete', authenticate, requireCap('delete_others_posts'), (req: AuthRequest, res: Response) => {
   try {
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: 'ids array required' }); return; }
+    const rows = loadBulkPosts(ids).filter((r) => mayTouchPost(req.user!, r));
     const stmt = db.prepare("DELETE FROM Post WHERE id = ? AND status = 'trash'");
     let deleted = 0;
-    for (const id of ids) deleted += stmt.run(id).changes;
-    res.json({ success: true, deleted });
+    withTransaction(() => {
+      for (const r of rows) {
+        if (r.status !== 'trash') continue;
+        // Related rows (categories, tags, meta, revisions, comments) go with it
+        // through the ON DELETE CASCADE declared in the schema. No hook here:
+        // delete_post already fired when the post entered the trash, and firing
+        // it again would send listeners (webhooks) two events for one deletion.
+        if (stmt.run(r.id).changes > 0) deleted++;
+      }
+    });
+    res.json({ success: true, deleted, skipped: new Set(ids).size - rows.length });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: toggle sticky
-router.put('/:id/sticky', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.put('/:id/sticky', authenticate, requireCap('edit_others_posts'), (req: AuthRequest, res: Response) => {
   try {
-    const existing = db.prepare('SELECT id, sticky FROM Post WHERE id = ?').get(req.params.id) as any;
+    const existing = db.prepare('SELECT id, sticky, siteId FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, existing.siteId || undefined)) { res.status(403).json({ error: '无权操作该站点的内容' }); return; }
     const newSticky = existing.sticky ? 0 : 1;
     db.prepare('UPDATE Post SET sticky = ? WHERE id = ?').run(newSticky, req.params.id);
     res.json({ sticky: newSticky });
@@ -638,24 +774,24 @@ router.put('/:id/sticky', authenticate, authorize('admin', 'editor'), (req: Auth
 });
 
 // Admin: get revisions for a post
-router.get('/:id/revisions', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
+router.get('/:id/revisions', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT authorId FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
-    if (req.user!.role === 'author' && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot view another author\'s revisions' }); return; }
+    if (!userCan(req.user!, 'edit_others_posts') && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot view another author\'s revisions' }); return; }
     const revisions = db.prepare('SELECT id, title, content, excerpt, createdAt FROM Revision WHERE postId = ? ORDER BY createdAt DESC LIMIT 20').all(req.params.id) as any[];
     res.json(revisions);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: restore a revision (writes back to post, keeps a new revision of the overwritten state)
-router.put('/:id/revisions/:revId/restore', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
+router.put('/:id/revisions/:revId/restore', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
   try {
     const rev = db.prepare('SELECT * FROM Revision WHERE id = ? AND postId = ?').get(req.params.revId, req.params.id) as any;
     if (!rev) { res.status(404).json({ error: 'Revision not found' }); return; }
     const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
-    if (req.user!.role === 'author' && post.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot restore another author\'s revisions' }); return; }
+    if (!userCan(req.user!, 'edit_others_posts') && post.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot restore another author\'s revisions' }); return; }
     const now = new Date().toISOString();
     // Keep a revision of the current state before overwriting (restore itself leaves a trace)
     db.prepare('INSERT INTO Revision (id, postId, title, content, excerpt, createdAt) VALUES (?, ?, ?, ?, ?, ?)').run(
@@ -687,13 +823,13 @@ router.get('/:id/related', (req: AuthRequest & SiteRequest, res: Response) => {
 });
 
 // Admin: lock post for editing
-router.post('/:id/lock', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
+router.post('/:id/lock', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT id, lockedAt, lockedBy, authorId FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
-    // An author may only lock their own post; otherwise anyone could block
-    // another author's editing for 5 minutes.
-    if (req.user!.role === 'author' && existing.authorId !== req.user!.userId) {
+    // A caller who cannot edit other people's posts may only lock their own;
+    // otherwise anyone could block another author's editing for 5 minutes.
+    if (!userCan(req.user!, 'edit_others_posts') && existing.authorId !== req.user!.userId) {
       res.status(403).json({ error: 'Cannot lock another user\'s post' });
       return;
     }
@@ -711,7 +847,7 @@ router.post('/:id/lock', authenticate, authorize('admin', 'editor', 'author'), (
 });
 
 // Admin: unlock post
-router.post('/:id/unlock', authenticate, authorize('admin', 'editor'), (req: AuthRequest, res: Response) => {
+router.post('/:id/unlock', authenticate, requireCap('edit_others_posts'), (req: AuthRequest, res: Response) => {
   try {
     db.prepare('UPDATE Post SET lockedAt = ?, lockedBy = ? WHERE id = ?').run('', '', req.params.id);
     res.json({ success: true });
@@ -719,11 +855,11 @@ router.post('/:id/unlock', authenticate, authorize('admin', 'editor'), (req: Aut
 });
 
 // Admin: clone/duplicate a post
-router.post('/:id/clone', authenticate, authorize('admin', 'editor', 'author'), (req: AuthRequest, res: Response) => {
+router.post('/:id/clone', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
-    if (req.user!.role === 'author' && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot clone another author\'s post' }); return; }
+    if (!userCan(req.user!, 'edit_others_posts') && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot clone another author\'s post' }); return; }
     const id = cuid();
     const now = new Date().toISOString();
     withTransaction(() => {

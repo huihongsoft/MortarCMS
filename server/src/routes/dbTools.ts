@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import { execFileSync } from 'child_process';
 import db, { listSlowQueries, DB_PATH, closeDb } from '../utils/db';
-import { authenticate, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { upload } from '../middleware/upload';
 import { assertArchiveWithinLimits } from '../utils/archive';
 import { logger } from '../utils/logger';
@@ -14,7 +14,7 @@ import { UPLOADS_DIR as uploadsDir } from '../utils/paths';
 const router = Router();
 
 // Admin: database status (driver, size, per-table rows, indexes, last maintenance)
-router.get('/status', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.get('/status', authenticate, requireCap('manage_system'), (_req: AuthRequest, res: Response) => {
   try {
     const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' AND name != '_SchemaMigration' ORDER BY name").all() as any[]).map((t: any) => {
       const cnt = (db.prepare('SELECT COUNT(*) as cnt FROM "' + t.name + '"').get() as any)?.cnt || 0;
@@ -51,14 +51,14 @@ router.get('/status', authenticate, authorize('admin'), (_req: AuthRequest, res:
 });
 
 // Admin: recently recorded slow queries (>150ms)
-router.get('/slow-queries', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.get('/slow-queries', authenticate, requireCap('manage_system'), (_req: AuthRequest, res: Response) => {
   try {
     res.json({ slow: listSlowQueries() });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
 // Admin: SQLite integrity quick check
-router.get('/integrity', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.get('/integrity', authenticate, requireCap('manage_system'), (_req: AuthRequest, res: Response) => {
   try {
     if ((db as any).driver !== 'sqlite' || !db.raw) {
       res.json({ ok: false, detail: 'SQLite-only check — unavailable for the current driver' });
@@ -70,7 +70,7 @@ router.get('/integrity', authenticate, authorize('admin'), (_req: AuthRequest, r
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-router.get('/optimize', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.get('/optimize', authenticate, requireCap('manage_system'), (_req: AuthRequest, res: Response) => {
   try {
     db.pragma('optimize');
     db.pragma('vacuum');
@@ -92,7 +92,7 @@ router.get('/optimize', authenticate, authorize('admin'), (_req: AuthRequest, re
 });
 
 // Admin: list backups in the backups folder
-router.get('/backups', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.get('/backups', authenticate, requireCap('manage_system'), (_req: AuthRequest, res: Response) => {
   try {
     const backupDir = path.join(__dirname, '../..', 'backups');
     let files: { name: string; sizeKB: number; at: string }[] = [];
@@ -108,7 +108,7 @@ router.get('/backups', authenticate, authorize('admin'), (_req: AuthRequest, res
 });
 
 // Admin: download a backup file (path-traversal safe)
-router.get('/backups/:name', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.get('/backups/:name', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
   try {
     const name = path.basename(req.params.name);
     if (!/^[a-zA-Z0-9._-]+$/.test(name)) { res.status(400).json({ error: 'Invalid backup name' }); return; }
@@ -119,7 +119,7 @@ router.get('/backups/:name', authenticate, authorize('admin'), (req: AuthRequest
 });
 
 // Admin: delete a backup file
-router.delete('/backups/:name', authenticate, authorize('admin'), (req: AuthRequest, res: Response) => {
+router.delete('/backups/:name', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
   try {
     const name = path.basename(req.params.name);
     if (!/^[a-zA-Z0-9._-]+$/.test(name)) { res.status(400).json({ error: 'Invalid backup name' }); return; }
@@ -131,7 +131,7 @@ router.delete('/backups/:name', authenticate, authorize('admin'), (req: AuthRequ
 });
 
 // Admin: download database backup (SQLite only — the file is the database)
-router.get('/backup', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.get('/backup', authenticate, requireCap('manage_system'), (_req: AuthRequest, res: Response) => {
   let backupPath = '';
   try {
     if (db.driver !== 'sqlite') { res.status(400).json({ error: 'Database backup is only available for SQLite' }); return; }
@@ -150,7 +150,7 @@ router.get('/backup', authenticate, authorize('admin'), (_req: AuthRequest, res:
 });
 
 // Admin: download a full backup (database + uploads) as a zip
-router.get('/backup-full', authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.get('/backup-full', authenticate, requireCap('manage_system'), (_req: AuthRequest, res: Response) => {
   try {
     if (db.driver !== 'sqlite') { res.status(400).json({ error: 'Database backup is only available for SQLite' }); return; }
     const tmpZip = path.join(require('os').tmpdir(), 'mortar-backup-' + process.pid + '-' + Date.now() + '.zip');
@@ -172,7 +172,7 @@ router.get('/backup-full', authenticate, authorize('admin'), (_req: AuthRequest,
 });
 
 // Admin: restore a full backup zip (database + uploads)
-router.post('/restore-full', authenticate, authorize('admin'), upload.single('file'), async (req: AuthRequest, res: Response) => {
+router.post('/restore-full', authenticate, requireCap('manage_system'), upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) { res.status(400).json({ error: 'No file uploaded' }); return; }
     const tmpDir = path.join(require('os').tmpdir(), 'mortar-restore-' + Date.now());
@@ -246,7 +246,7 @@ const resetLimiter = rateLimit({
   message: { error: 'Too many reset requests, try again later' },
 });
 
-router.post('/reset-content', resetLimiter, authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.post('/reset-content', resetLimiter, authenticate, requireCap('manage_system'), (_req: AuthRequest, res: Response) => {
   try {
     const stats = resetSite();
     res.json({ success: true, message: 'Site content reset', stats });
@@ -260,7 +260,7 @@ router.post('/reset-content', resetLimiter, authenticate, authorize('admin'), (_
 // the content tables itself but leaves uploaded files behind, while resetSite()
 // removes those files and the demo-owned settings too. Both are destructive, so
 // this is admin-only and the UI asks twice.
-router.post('/reset-demo', resetLimiter, authenticate, authorize('admin'), (_req: AuthRequest, res: Response) => {
+router.post('/reset-demo', resetLimiter, authenticate, requireCap('manage_system'), (_req: AuthRequest, res: Response) => {
   try {
     resetSite();
     try {

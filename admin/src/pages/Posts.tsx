@@ -7,6 +7,7 @@ import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 import Select from '../components/Select';
 import { dialog } from '../lib/dialog';
+import { useAuth } from '../lib/auth';
 import { postPath, usePermalinkPrefix } from '../lib/permalink';
 
 export default function Posts() {
@@ -17,6 +18,13 @@ export default function Posts() {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const toast = useToast();
+  const { can } = useAuth();
+  // Bulk actions and sticky need edit_others_posts on the server, bulk trash and
+  // permanent delete need delete_others_posts (see routes/posts.ts): offering
+  // them to a caller who lacks the capability only produced a 403 after the click.
+  const canBulk = can('edit_others_posts');
+  const canBulkDelete = can('delete_others_posts');
+  const canDelete = can('delete_posts');
   const [quickEdit, setQuickEdit] = useState<any>(null);
   const [batchLang, setBatchLang] = useState('English');
   const [batchRunning, setBatchRunning] = useState(false);
@@ -26,12 +34,17 @@ export default function Posts() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortDir, setSortDir] = useState('desc');
-  const [counts, setCounts] = useState<Record<string,number>>({});
   const [filter, setFilter] = useState(() => new URLSearchParams(window.location.search).get('status') || '');
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
   const [sites, setSites] = useState<any[]>([]);
   const [siteFilter, setSiteFilter] = useState('all');
+  // Content type filter. Only rendered once a custom post type exists; the
+  // entries of a custom type are managed through this same list.
+  const [typeFilter, setTypeFilter] = useState(() => new URLSearchParams(window.location.search).get('type') || 'post');
+  const [postTypes, setPostTypes] = useState<any[]>([]);
+  useEffect(() => { api.get('/post-types').then(r => setPostTypes(Array.isArray(r.data) ? r.data : [])).catch(() => {}); }, []);
+  const customTypes = postTypes.filter((t: any) => !['post', 'page'].includes(t.slug));
   // Site column/filter only make sense once more than one site exists.
   const multiSite = sites.length > 1;
   useEffect(() => { api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {}); }, []);
@@ -48,21 +61,12 @@ export default function Posts() {
     window.history.replaceState(null, '', url.toString());
   }, [filter]);
 
-  useEffect(() => {
-    const sf = '&siteId=' + encodeURIComponent(siteFilter);
-    api.get('/posts/admin?limit=1' + sf).then(r => setCounts(c => ({...c, all: r.data.total || 0}))).catch(()=>{});
-    api.get('/posts/admin?status=published&limit=1' + sf).then(r => setCounts(c => ({...c, published: r.data.total || 0}))).catch(()=>{});
-    api.get('/posts/admin?status=draft&limit=1' + sf).then(r => setCounts(c => ({...c, draft: r.data.total || 0}))).catch(()=>{});
-    api.get('/posts/admin?status=scheduled&limit=1' + sf).then(r => setCounts(c => ({...c, scheduled: r.data.total || 0}))).catch(()=>{});
-    api.get('/posts/admin?status=pending&limit=1' + sf).then(r => setCounts(c => ({...c, pending: r.data.total || 0}))).catch(()=>{});
-    api.get('/posts/admin?status=trash&limit=1' + sf).then(r => setCounts(c => ({...c, trash: r.data.total || 0}))).catch(()=>{});
-  }, [siteFilter]);
-  useEffect(() => { fetchPosts(); }, [page, filter, sortBy, sortDir, search, siteFilter]);
+  useEffect(() => { fetchPosts(); }, [page, filter, sortBy, sortDir, search, siteFilter, typeFilter]);
 
   async function fetchPosts() {
     setLoading(true);
     try {
-      const q = `/posts/admin?page=${page}&limit=15&status=${filter}&sortBy=${sortBy}&sortDir=${sortDir}${search ? '&search=' + encodeURIComponent(search) : ''}&siteId=${encodeURIComponent(siteFilter)}`;
+      const q = `/posts/admin?page=${page}&limit=15&status=${filter}&sortBy=${sortBy}&sortDir=${sortDir}${search ? '&search=' + encodeURIComponent(search) : ''}&siteId=${encodeURIComponent(siteFilter)}&type=${encodeURIComponent(typeFilter)}`;
       const r = await api.get(q); setPosts(r.data.posts); setTotal(r.data.total);
     } catch {} finally { setLoading(false); }
   }
@@ -78,25 +82,32 @@ export default function Posts() {
   }
   function openQuickEdit(p: any) { setQuickEdit(p); setQeTitle(p.title); setQeStatus(p.status); }
 
+  // The server can only act on rows inside the sites this user is assigned to;
+  // it reports the rest as skipped. Say so rather than claiming they all went.
+  function skipNote(skipped: unknown): string {
+    const n = Number(skipped) || 0;
+    return n > 0 ? ' · ' + n + ' ' + t('skipped - no access to that site', getLang()) : '';
+  }
+
   async function bulkStatus(status: string) {
     if (selected.size === 0) return;
-    await api.post('/posts/bulk-status', { ids: Array.from(selected), status });
-    toast.toast(selected.size + ' ' + t('posts', getLang()) + ' → ' + t(status, getLang()));
+    const r = await api.post('/posts/bulk-status', { ids: Array.from(selected), status });
+    toast.toast(selected.size + ' ' + t('posts', getLang()) + ' → ' + t(status, getLang()) + skipNote(r.data?.skipped));
     setSelected(new Set());
     fetchPosts();
   }
   async function bulkTrash() {
     if (selected.size === 0) return;
-    await api.post('/posts/bulk-trash', { ids: Array.from(selected) });
-    toast.toast(`${selected.size} ${t('posts trashed', getLang())}`);
+    const r = await api.post('/posts/bulk-trash', { ids: Array.from(selected) });
+    toast.toast(`${selected.size} ${t('posts trashed', getLang())}${skipNote(r.data?.skipped)}`);
     setSelected(new Set());
     fetchPosts();
   }
 
   async function bulkRestore() {
     if (selected.size === 0) return;
-    await api.post('/posts/bulk-restore', { ids: Array.from(selected) });
-    toast.toast(selected.size + ' ' + t('posts restored', getLang()));
+    const r = await api.post('/posts/bulk-restore', { ids: Array.from(selected) });
+    toast.toast(selected.size + ' ' + t('posts restored', getLang()) + skipNote(r.data?.skipped));
     setSelected(new Set());
     fetchPosts();
   }
@@ -115,8 +126,8 @@ export default function Posts() {
   async function bulkDelete() {
     if (selected.size === 0) return;
     if (!(await dialog.confirm(t('permanently delete', getLang()) + ' ' + selected.size + ' ' + t('posts', getLang()) + '?', { danger: true }))) return;
-    await api.post('/posts/bulk-delete', { ids: Array.from(selected) });
-    toast.toast(selected.size + ' ' + t('posts permanently deleted', getLang()));
+    const r = await api.post('/posts/bulk-delete', { ids: Array.from(selected) });
+    toast.toast(selected.size + ' ' + t('posts permanently deleted', getLang()) + skipNote(r.data?.skipped));
     setSelected(new Set());
     fetchPosts();
   }
@@ -156,21 +167,22 @@ export default function Posts() {
 
   return React.createElement('div', null,
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
-      React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' }, t('posts', getLang())),
-      React.createElement(Link, { to: '/posts/new', className: 'btn-primary' }, React.createElement(Plus, { size: 16 }), t('new post', getLang()))
+      React.createElement('h2', { className: 'text-2xl font-bold text-gray-900' },
+        typeFilter === 'post' ? t('posts', getLang()) : (postTypes.find((x: any) => x.slug === typeFilter)?.label || typeFilter)),
+      React.createElement(Link, { to: '/posts/new' + (typeFilter === 'post' ? '' : '?type=' + encodeURIComponent(typeFilter)), className: 'btn-primary' }, React.createElement(Plus, { size: 16 }), t('new post', getLang()))
     ),
     
-      React.createElement('div', { className: 'flex items-center gap-3 mb-4' },
+      (canBulk || canBulkDelete) && React.createElement('div', { className: 'flex items-center gap-3 mb-4' },
         selected.size > 0 && (
           filter === 'trash'
             ? React.createElement('div', { className: 'flex items-center gap-2' },
-                React.createElement('button', { onClick: bulkRestore, className: 'btn-secondary text-xs' }, t('restore selected', getLang()) + ' (' + selected.size + ')'),
-                React.createElement('button', { onClick: bulkDelete, className: 'btn-danger text-xs' }, t('delete permanently', getLang()) + ' (' + selected.size + ')'),
+                canBulk && React.createElement('button', { onClick: bulkRestore, className: 'btn-secondary text-xs' }, t('restore selected', getLang()) + ' (' + selected.size + ')'),
+                canBulkDelete && React.createElement('button', { onClick: bulkDelete, className: 'btn-danger text-xs' }, t('delete permanently', getLang()) + ' (' + selected.size + ')'),
               )
             : React.createElement(React.Fragment, null,
-                React.createElement('button', { onClick: () => bulkStatus('published'), className: 'btn-secondary text-xs' }, t('publish selected', getLang()) + ' (' + selected.size + ')'),
-                React.createElement('button', { onClick: () => bulkStatus('draft'), className: 'btn-secondary text-xs' }, t('draft selected', getLang()) + ' (' + selected.size + ')'),
-                React.createElement('button', { onClick: bulkTrash, className: 'btn-danger text-xs' }, React.createElement(Trash, { size: 14 }), t('trash selected', getLang()) + ' (' + selected.size + ')'),
+                canBulk && React.createElement('button', { onClick: () => bulkStatus('published'), className: 'btn-secondary text-xs' }, t('publish selected', getLang()) + ' (' + selected.size + ')'),
+                canBulk && React.createElement('button', { onClick: () => bulkStatus('draft'), className: 'btn-secondary text-xs' }, t('draft selected', getLang()) + ' (' + selected.size + ')'),
+                canBulkDelete && React.createElement('button', { onClick: bulkTrash, className: 'btn-danger text-xs' }, React.createElement(Trash, { size: 14 }), t('trash selected', getLang()) + ' (' + selected.size + ')'),
                 React.createElement('div', { className: 'flex items-center gap-1' },
                   React.createElement(Select, { value: batchLang, onChange: (v: string) => setBatchLang(v), className: 'input-field w-28 text-xs' },
                     ['English', '日本語', '한국어', 'Français', 'Deutsch', 'Español', '简体中文'].map(l => React.createElement('option', { key: l, value: l }, l))),
@@ -201,6 +213,12 @@ export default function Posts() {
   
       React.createElement('button', { key: s, onClick: () => { setFilter(s === 'all' ? '' : s); setPage(1); }, className: `px-3 py-1.5 text-sm rounded-lg whitespace-nowrap ${(s === 'all' && !filter) || filter === s ? 'bg-primary-600 text-white' : 'bg-white border border-gray-300 text-gray-600 hover:bg-gray-50'}` }, t(s, getLang()))
       ),
+      // Content type selector — only useful once a custom type is registered
+      customTypes.length > 0 && React.createElement(Select, {
+        value: typeFilter,
+        onChange: (v: string) => { setTypeFilter(v); setPage(1); },
+        className: 'input-field w-40 text-sm',
+      }, postTypes.filter((x: any) => x.slug !== 'page').map((x: any) => React.createElement('option', { key: x.slug, value: x.slug }, x.label))),
       // Site filter (only when more than one site exists)
       multiSite && React.createElement(Select, {
         value: siteFilter,
@@ -234,7 +252,7 @@ export default function Posts() {
         icon: FileText,
         title: t('no posts found', getLang()),
         description: search ? t('no posts match your search', getLang()) : t('start writing and share your first post', getLang()),
-        action: React.createElement('button', { onClick: () => navigate('/posts/new'), className: 'btn-primary text-sm' }, React.createElement(Plus, { size: 15 }), t('new post', getLang())),
+        action: React.createElement('button', { onClick: () => navigate('/posts/new' + (typeFilter === 'post' ? '' : '?type=' + encodeURIComponent(typeFilter))), className: 'btn-primary text-sm' }, React.createElement(Plus, { size: 15 }), t('new post', getLang())),
       })
     : React.createElement('div', { className: 'card overflow-x-auto' },
         React.createElement('table', { className: 'w-full min-w-[720px]' },
@@ -268,8 +286,8 @@ export default function Posts() {
                   ),
                   p.status === 'published' && React.createElement('a', { href: postPath(permalink, p.slug), target: '_blank', className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('view post', getLang()) }, React.createElement(Eye, { size: 16 })),
                   React.createElement(Link, { to: `/posts/${p.id}/edit`, className: 'p-1.5 text-gray-400 hover:text-primary-600' }, React.createElement(Edit2, { size: 16 })),
-                  p.status === 'trash' ? React.createElement('button', { onClick: () => restorePost(p.id), className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('restore', getLang()) }, React.createElement('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, className: 'lucide' }, React.createElement('polyline', { points: '1 4 1 10 7 10' }), React.createElement('path', { d: 'M3.51 15a9 9 0 1 0 2.13-9.36L1 10' }))) : React.createElement('button', { onClick: () => toggleSticky(p.id), className: `p-1.5 ${p.sticky ? 'text-orange-500' : 'text-gray-400 hover:text-orange-500'}`, title: p.sticky ? t('unpin', getLang()) : t('pin', getLang()) }, React.createElement(Pin, { size: 16 })),
-                  React.createElement('button', { onClick: () => deletePost(p.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 16 }))
+                  p.status === 'trash' ? canBulk && React.createElement('button', { onClick: () => restorePost(p.id), className: 'p-1.5 text-gray-400 hover:text-green-600', title: t('restore', getLang()) }, React.createElement('svg', { width: 16, height: 16, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, className: 'lucide' }, React.createElement('polyline', { points: '1 4 1 10 7 10' }), React.createElement('path', { d: 'M3.51 15a9 9 0 1 0 2.13-9.36L1 10' }))) : canBulk && React.createElement('button', { onClick: () => toggleSticky(p.id), className: `p-1.5 ${p.sticky ? 'text-orange-500' : 'text-gray-400 hover:text-orange-500'}`, title: p.sticky ? t('unpin', getLang()) : t('pin', getLang()) }, React.createElement(Pin, { size: 16 })),
+                  canDelete && React.createElement('button', { onClick: () => deletePost(p.id), className: 'p-1.5 text-gray-400 hover:text-red-600' }, React.createElement(Trash2, { size: 16 }))
                 )
               )
             )
