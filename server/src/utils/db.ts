@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { Worker } from 'worker_threads';
 import { snapshotDatabaseFile } from './dbSnapshot';
+import { encryptSecret, isEncryptedSecret } from './secretBox';
 
 // Driver selection: DATABASE_URL=mysql://... or postgres://... switches backends.
 // SQLite stays the default (sync, direct); MySQL/PostgreSQL run on a worker
@@ -796,6 +797,35 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
         ['idx_aitask_site', 'AiTask'],
       ];
       for (const [name, table] of targets) db.exec('CREATE INDEX IF NOT EXISTS ' + name + ' ON ' + table + ' (siteId)');
+    },
+  },
+  {
+    version: 19,
+    name: 'encrypt-2fa-secrets',
+    up: () => {
+      // Recovery codes: single-use, SHA-256 hashed, stored as a JSON array.
+      addColumn('User', 'two_factor_recovery_codes', "TEXT DEFAULT ''");
+      // TOTP secrets were stored in plaintext, so a database dump — or a backup
+      // archive, which this app hands out by design — was enough to generate
+      // valid codes for every account with 2FA on. Encrypt the rows written
+      // before this change; the routes encrypt everything written since.
+      //
+      // A row that cannot be encrypted is left alone rather than cleared: losing
+      // the secret would lock its owner out of an account they had hardened, and
+      // the read path accepts a plaintext value for exactly this case.
+      const rows = db.prepare("SELECT id, two_factor_secret FROM User WHERE two_factor_secret IS NOT NULL AND two_factor_secret <> ''").all() as any[];
+      let encrypted = 0;
+      for (const row of rows) {
+        const value = String(row.two_factor_secret);
+        if (isEncryptedSecret(value)) continue;
+        try {
+          db.prepare('UPDATE User SET two_factor_secret = ? WHERE id = ?').run(encryptSecret(value), row.id);
+          encrypted++;
+        } catch (err: any) {
+          console.warn('[DB] Could not encrypt the 2FA secret of user ' + row.id + ': ' + (err?.message || err));
+        }
+      }
+      if (encrypted > 0) console.log('[DB] Encrypted ' + encrypted + ' stored 2FA secret(s)');
     },
   },
   {

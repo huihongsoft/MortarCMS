@@ -11,6 +11,11 @@ import { doAction } from '../utils/hooks';
 import { getRoleCapabilities } from '../middleware/auth';
 import { renderTemplate, sendEmail } from '../utils/mailer';
 import { authenticate, AuthRequest } from '../middleware/auth';
+import { generateSecret, verifyTOTP } from '../utils/totp';
+import {
+  sealSecret, readStoredSecret, generateRecoveryCodes, serializeRecoveryHashes,
+  countRecoveryCodes, consumeRecoveryCode,
+} from '../utils/twoFactor';
 
 const router = Router();
 
@@ -168,12 +173,32 @@ router.post('/2fa/verify', authLimiter, async (req: AuthRequest, res: Response) 
     if (!payload || payload.type !== '2fa') { res.status(401).json({ error: 'Invalid or expired challenge' }); return; }
     const user = db.prepare('SELECT * FROM User WHERE id = ?').get(payload.userId) as any;
     if (!user || !user.two_factor_enabled) { res.status(401).json({ error: 'Invalid challenge' }); return; }
-    const { verifyTOTP } = require('../utils/totp');
-    if (!verifyTOTP(user.two_factor_secret, String(code))) { res.status(401).json({ error: 'Invalid verification code' }); return; }
+    const secret = readStoredSecret(user.two_factor_secret);
+    const usedTotp = !!secret && verifyTOTP(secret, String(code));
+    // A recovery code is the way back in when the authenticator is gone. It is
+    // single-use: the remaining hashes are written before the token is issued,
+    // so a replay of the same code cannot succeed even if the response is
+    // captured.
+    let usedRecovery = false;
+    let remainingCodes = countRecoveryCodes(user.two_factor_recovery_codes);
+    if (!usedTotp) {
+      const spent = consumeRecoveryCode(user.two_factor_recovery_codes, code);
+      if (spent.ok) {
+        db.prepare('UPDATE User SET two_factor_recovery_codes = ? WHERE id = ?')
+          .run(serializeRecoveryHashes(spent.remaining), user.id);
+        usedRecovery = true;
+        remainingCodes = spent.remaining.length;
+      }
+    }
+    if (!usedTotp && !usedRecovery) { res.status(401).json({ error: 'Invalid verification code' }); return; }
     const token = signToken({ userId: user.id, role: user.role, v: (user as any).tokenVersion || 0 });
-    logActivity(user.id, 'login', 'User logged in with 2FA');
-    doAction('user_login', user.id, req.ip || '', '2fa');
-    res.json({ user: toPublicUser(user), token });
+    if (usedRecovery) {
+      logActivity(user.id, 'login_recovery_code', 'User logged in with a 2FA recovery code');
+    } else {
+      logActivity(user.id, 'login', 'User logged in with 2FA');
+    }
+    doAction('user_login', user.id, req.ip || '', usedRecovery ? 'recovery_code' : '2fa');
+    res.json({ user: toPublicUser(user), token, recoveryCodeUsed: usedRecovery, recoveryCodesRemaining: remainingCodes });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -282,13 +307,14 @@ router.get('/me/comments', authenticate, (req: AuthRequest, res: Response) => {
 // 2FA: setup (get secret + QR URL)
 router.post('/2fa/setup', authenticate, (req: AuthRequest, res: Response) => {
   try {
-    const { generateSecret } = require('../utils/totp');
     const user = db.prepare('SELECT id, two_factor_secret, two_factor_enabled, email FROM User WHERE id = ?').get(req.user!.userId) as any;
     if (!user) { res.status(404).json({ error: 'User not found' }); return; }
     if (user.two_factor_enabled) { res.json({ enabled: true, message: '2FA already enabled' }); return; }
     const secret = generateSecret();
-    db.prepare('UPDATE User SET two_factor_secret = ? WHERE id = ?').run(secret, req.user!.userId);
-    const otpauth = 'otpauth://totp/Mortar:' + user.email + '?secret=' + secret + '&issuer=Mortar';
+    // Stored encrypted: the plaintext goes back to the caller exactly once, into
+    // the QR code they scan.
+    db.prepare('UPDATE User SET two_factor_secret = ? WHERE id = ?').run(sealSecret(secret), req.user!.userId);
+    const otpauth = 'otpauth://totp/Mortar:' + encodeURIComponent(user.email) + '?secret=' + secret + '&issuer=Mortar&algorithm=SHA1&digits=6&period=30';
     res.json({ secret, otpauth, enabled: false });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -298,9 +324,9 @@ router.post('/2fa/enable', authenticate, (req: AuthRequest, res: Response) => {
   try {
     const { code } = req.body;
     const user = db.prepare('SELECT two_factor_secret FROM User WHERE id = ?').get(req.user!.userId) as any;
-    if (!user?.two_factor_secret) { res.status(400).json({ error: 'Setup 2FA first' }); return; }
-    const { verifyTOTP } = require('../utils/totp');
-    if (!verifyTOTP(user.two_factor_secret, code)) { res.status(400).json({ error: 'Invalid code' }); return; }
+    const secret = readStoredSecret(user?.two_factor_secret);
+    if (!secret) { res.status(400).json({ error: 'Setup 2FA first' }); return; }
+    if (!verifyTOTP(secret, String(code || ''))) { res.status(400).json({ error: 'Invalid code' }); return; }
     db.prepare('UPDATE User SET two_factor_enabled = 1 WHERE id = ?').run(req.user!.userId);
     res.json({ success: true, message: '2FA enabled' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -308,7 +334,9 @@ router.post('/2fa/enable', authenticate, (req: AuthRequest, res: Response) => {
 
 // 2FA: disable — requires re-authentication (current password or a valid TOTP
 // code). Without this, a hijacked session could silently strip 2FA and lock
-// the legitimate owner out of their own hardening.
+// the legitimate owner out of their own hardening. Recovery codes are cleared
+// with the secret: leaving them behind would keep a working credential alive
+// against an account that no longer uses 2FA.
 router.post('/2fa/disable', authLimiter, authenticate, async (req: AuthRequest, res: Response) => {
   try {
     const { password, code } = req.body || {};
@@ -316,21 +344,49 @@ router.post('/2fa/disable', authLimiter, authenticate, async (req: AuthRequest, 
     const user = db.prepare('SELECT password, two_factor_secret FROM User WHERE id = ?').get(req.user!.userId) as any;
     let ok = false;
     if (password && user?.password && await bcrypt.compare(String(password), user.password)) ok = true;
-    if (!ok && code && user?.two_factor_secret) {
-      const { verifyTOTP } = require('../utils/totp');
-      ok = verifyTOTP(user.two_factor_secret, String(code));
+    if (!ok && code) {
+      const secret = readStoredSecret(user?.two_factor_secret);
+      if (secret) ok = verifyTOTP(secret, String(code));
     }
     if (!ok) { res.status(400).json({ error: 'Invalid password or code' }); return; }
-    db.prepare("UPDATE User SET two_factor_enabled = 0, two_factor_secret = '' WHERE id = ?").run(req.user!.userId);
+    db.prepare("UPDATE User SET two_factor_enabled = 0, two_factor_secret = '', two_factor_recovery_codes = '' WHERE id = ?").run(req.user!.userId);
     res.json({ success: true, message: '2FA disabled' });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// 2FA: check status
+// 2FA: check status (also reports how many recovery codes are left, so the UI can
+// nag before the last one is spent)
 router.get('/2fa/status', authenticate, (req: AuthRequest, res: Response) => {
   try {
-    const user = db.prepare('SELECT two_factor_enabled FROM User WHERE id = ?').get(req.user!.userId) as any;
-    res.json({ enabled: !!user?.two_factor_enabled });
+    const user = db.prepare('SELECT two_factor_enabled, two_factor_recovery_codes FROM User WHERE id = ?').get(req.user!.userId) as any;
+    res.json({
+      enabled: !!user?.two_factor_enabled,
+      recoveryCodesRemaining: user?.two_factor_enabled ? countRecoveryCodes(user.two_factor_recovery_codes) : 0,
+    });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// 2FA: issue a fresh set of recovery codes. Re-authentication is required for
+// the same reason as disable: a hijacked session must not be able to mint
+// credentials that outlive it. The codes are returned exactly once — only their
+// hashes are stored.
+router.post('/2fa/recovery-codes', authLimiter, authenticate, async (req: AuthRequest, res: Response) => {
+  try {
+    const { password, code } = req.body || {};
+    if (!password && !code) { res.status(400).json({ error: 'Password or 2FA code required' }); return; }
+    const user = db.prepare('SELECT password, two_factor_enabled, two_factor_secret FROM User WHERE id = ?').get(req.user!.userId) as any;
+    if (!user?.two_factor_enabled) { res.status(400).json({ error: 'Enable 2FA first' }); return; }
+    let ok = false;
+    if (password && user?.password && await bcrypt.compare(String(password), user.password)) ok = true;
+    if (!ok && code) {
+      const secret = readStoredSecret(user?.two_factor_secret);
+      if (secret) ok = verifyTOTP(secret, String(code));
+    }
+    if (!ok) { res.status(400).json({ error: 'Invalid password or code' }); return; }
+    const { plain, hashed } = generateRecoveryCodes();
+    db.prepare('UPDATE User SET two_factor_recovery_codes = ? WHERE id = ?').run(serializeRecoveryHashes(hashed), req.user!.userId);
+    logActivity(req.user!.userId, '2fa_recovery_codes_issued', 'Regenerated 2FA recovery codes');
+    res.json({ codes: plain });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

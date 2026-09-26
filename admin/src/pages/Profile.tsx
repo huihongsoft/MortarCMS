@@ -58,11 +58,13 @@ export default function Profile() {
   }
 
   // ---- 2FA (self-service: the API acts on the logged-in user) ----
-  const [twoFa, setTwoFa] = useState<null | { enabled: boolean; secret?: string; otpauth?: string }>(null);
+  const [twoFa, setTwoFa] = useState<null | { enabled: boolean; secret?: string; otpauth?: string; recoveryCodesRemaining?: number }>(null);
   const [twoFaCode, setTwoFaCode] = useState('');
   const [twoFaBusy, setTwoFaBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const [qrUrl, setQrUrl] = useState('');
+  // Shown once, right after they are minted — only the hashes are stored.
+  const [recoveryCodes, setRecoveryCodes] = useState<string[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -77,7 +79,10 @@ export default function Profile() {
   async function open2fa() {
     try {
       const status = await api.get('/auth/2fa/status');
-      if (status.data?.enabled) { setTwoFa({ enabled: true }); return; }
+      if (status.data?.enabled) {
+        setTwoFa({ enabled: true, recoveryCodesRemaining: status.data.recoveryCodesRemaining });
+        return;
+      }
       const s = await api.post('/auth/2fa/setup');
       setTwoFa({ enabled: false, secret: s.data.secret, otpauth: s.data.otpauth });
     } catch (e: any) { dialog.alert(e.response?.data?.error || t('2fa setup failed', getLang())); }
@@ -88,7 +93,7 @@ export default function Profile() {
     setTwoFaBusy(true);
     try {
       await api.post('/auth/2fa/enable', { code: twoFaCode.trim() });
-      setTwoFa({ enabled: true });
+      setTwoFa({ enabled: true, recoveryCodesRemaining: 0 });
       setTwoFaCode('');
     } catch (e: any) { dialog.alert(e.response?.data?.error || t('invalid 2fa code', getLang())); }
     finally { setTwoFaBusy(false); }
@@ -101,7 +106,23 @@ export default function Profile() {
     try {
       await api.post('/auth/2fa/disable', { password });
       setTwoFa(null);
+      setRecoveryCodes([]);
     } catch (e: any) { dialog.alert(e.response?.data?.error || t('2fa disable failed', getLang())); }
+  }
+
+  // Minting a new set invalidates the old one, so re-authentication is required
+  // (the API enforces it too — the dialog is not the control).
+  async function issueRecoveryCodes() {
+    const password = await dialog.prompt({ message: t('enter your password to get recovery codes', getLang()), password: true });
+    if (!password) return;
+    setTwoFaBusy(true);
+    try {
+      const r = await api.post('/auth/2fa/recovery-codes', { password });
+      const codes: string[] = Array.isArray(r.data?.codes) ? r.data.codes : [];
+      setRecoveryCodes(codes);
+      setTwoFa({ enabled: true, recoveryCodesRemaining: codes.length });
+    } catch (e: any) { dialog.alert(e.response?.data?.error || t('recovery codes failed', getLang())); }
+    finally { setTwoFaBusy(false); }
   }
 
   function copyText(v: string) {
@@ -259,6 +280,21 @@ export default function Profile() {
         twoFa.enabled
           ? React.createElement(React.Fragment, null,
               React.createElement('div', { className: 'p-3 rounded-lg bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-300 text-sm mb-4 flex items-center gap-2' }, React.createElement(ShieldCheck, { size: 16 }), t('2fa enabled hint', getLang())),
+              // Recovery codes: the way back in when the authenticator is lost.
+              // Shown in full exactly once; afterwards only the count.
+              recoveryCodes.length > 0
+                ? React.createElement('div', { className: 'p-3 rounded-lg bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-800 mb-4' },
+                    React.createElement('p', { className: 'text-xs font-semibold text-amber-800 dark:text-amber-200 mb-2' }, t('copy these codes now - each works once', getLang())),
+                    React.createElement('div', { className: 'grid grid-cols-2 gap-1 mb-2' },
+                      recoveryCodes.map((c: string) => React.createElement('code', { key: c, className: 'px-2 py-1 bg-white dark:bg-gray-900 rounded text-[11px] font-mono' }, c))),
+                    React.createElement('div', { className: 'flex items-center gap-2' },
+                      React.createElement('button', { onClick: () => copyText(recoveryCodes.join('\n')), className: 'btn-secondary text-xs' }, copied ? React.createElement(Check, { size: 14 }) : React.createElement(Copy, { size: 14 }), copied ? t('copied', getLang()) : t('copy', getLang())),
+                      React.createElement('button', { onClick: () => setRecoveryCodes([]), className: 'btn-secondary text-xs' }, t('done', getLang()))))
+                : React.createElement('p', { className: 'text-xs text-gray-500 dark:text-gray-400 mb-3' },
+                    (twoFa.recoveryCodesRemaining ?? 0) > 0
+                      ? t('recovery codes remaining', getLang()) + ': ' + twoFa.recoveryCodesRemaining
+                      : t('no recovery codes yet', getLang())),
+              React.createElement('button', { onClick: issueRecoveryCodes, disabled: twoFaBusy, className: 'btn-secondary w-full justify-center text-sm mb-2 disabled:opacity-50' }, t('generate recovery codes', getLang())),
               React.createElement('button', { onClick: disable2fa, className: 'btn-danger w-full justify-center text-sm' }, t('disable 2fa', getLang())))
           : React.createElement(React.Fragment, null,
               React.createElement('p', { className: 'text-xs text-gray-500 dark:text-gray-400 mb-3' }, t('scan the qr or enter the secret', getLang())),

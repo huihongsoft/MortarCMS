@@ -1813,6 +1813,12 @@ const zh: Record<string, string> = {
 'revoke this application password?': '确定吊销这个应用密码吗？使用它的客户端会立即失效。',
 'delete this application password?': '确定删除这条记录吗？',
 'read & write': '读写',
+'recovery codes failed': '恢复码生成失败',
+'recovery codes remaining': '剩余恢复码',
+'no recovery codes yet': '还没有恢复码。生成后请离线保存——验证器丢失时用它登录。',
+'generate recovery codes': '生成恢复码',
+'enter your password to get recovery codes': '请输入密码以生成恢复码（旧的恢复码会立即失效）',
+'copy these codes now - each works once': '请立即保存这些恢复码：每个只能用一次，关闭后不再显示',
 // Capability catalog on the Roles screen (the server sends ids; English is the
 // fallback label in Roles.tsx, so only the Chinese side lives here).
 'cap group content': '内容',

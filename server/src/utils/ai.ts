@@ -124,41 +124,14 @@ export const PROVIDER_PRESETS = [
 ];
 
 // Provider API keys are encrypted at rest (AES-256-GCM) so a database backup
-// or export leak does not expose credentials. The key is derived from the
-// JWT secret (which is never stored in the DB). Legacy plaintext values are
-// detected and transparently migrated on the next save.
-import crypto from 'crypto';
-import { loadSecret } from './jwt';
-
-const PROVIDERS_ENC = 'enc:v1:';
-
-function providerKey(): Buffer {
-  return crypto.createHash('sha256').update(loadSecret()).digest();
-}
-
-// Generic secret-blob encryption, reused for other credential JSON (bindings).
-export function encryptSecretJson(value: unknown): string {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv('aes-256-gcm', providerKey(), iv);
-  const enc = Buffer.concat([cipher.update(JSON.stringify(value), 'utf8'), cipher.final()]);
-  return PROVIDERS_ENC + Buffer.concat([iv, cipher.getAuthTag(), enc]).toString('base64');
-}
-
-export function decryptSecretJson<T = unknown>(value: string): T | null {
-  try {
-    const raw = Buffer.from(value.slice(PROVIDERS_ENC.length), 'base64');
-    const iv = raw.subarray(0, 12);
-    const tag = raw.subarray(12, 28);
-    const data = raw.subarray(28);
-    const decipher = crypto.createDecipheriv('aes-256-gcm', providerKey(), iv);
-    decipher.setAuthTag(tag);
-    return JSON.parse(Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')) as T;
-  } catch { return null; }
-}
-
-export function isEncryptedSecret(value: string): boolean {
-  return String(value || '').startsWith(PROVIDERS_ENC);
-}
+// or export leak does not expose credentials. The envelope lives in
+// utils/secretBox, which has no database import — db.ts needs the same helpers
+// for the migration that encrypts existing TOTP secrets, and importing them from
+// here would make db.ts → ai.ts → db.ts a cycle. Re-exported because these names
+// are this module's public API (routes/ai.ts imports them from here).
+import { encryptSecretJson, decryptSecretJson, isEncryptedSecret } from './secretBox';
+// Re-exported so existing importers (routes/ai.ts) keep working unchanged.
+export { encryptSecretJson, decryptSecretJson, isEncryptedSecret };
 
 function encryptProviders(providers: AIProvider[]): string {
   return encryptSecretJson(providers);
@@ -174,7 +147,7 @@ export function getProviders(): AIProvider[] {
   if (!row?.value) return [];
   const raw = String(row.value);
   try {
-    const list = raw.startsWith(PROVIDERS_ENC)
+    const list = isEncryptedSecret(raw)
       ? decryptProviders(raw)
       : JSON.parse(raw) as AIProvider[]; // legacy plaintext
     return Array.isArray(list) ? list : [];
