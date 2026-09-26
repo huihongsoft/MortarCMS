@@ -29,6 +29,11 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 - Admin **My Profile** page (bio, avatar, password, 2FA, application passwords),
   an unsaved-changes guard for the editors, and a "no permission" screen instead
   of a page that fails on every request.
+- **Full-text search** (SQLite): FTS5 with the trigram tokenizer — the default
+  tokenizer cannot find word boundaries in Chinese, which this CMS publishes —
+  kept in step by triggers and ranked by bm25. Queries shorter than three
+  characters, including two-character CJK words, fall back to LIKE instead of
+  matching nothing; MySQL/PostgreSQL keep the LIKE path.
 - **Local anti-spam** for comments and form submissions: honeypot, fill time,
   link count, a URL in the name field, and the `spam_words` setting — which had
   no server-side reader at all, so the admin screen was describing behaviour that
@@ -132,8 +137,9 @@ for the full list with priorities.
   coverage and logical backups for those drivers are not in yet.
 - Content is single-language: no per-post locale, translation grouping or
   `hreflang`.
-- Search is `LIKE`-based (no full-text index); the frontend is a client-rendered
-  SPA with a crawler fallback rather than server rendering.
+- Search is full-text on SQLite only; MySQL and PostgreSQL still scan with LIKE.
+- The frontend is a client-rendered SPA with a crawler fallback rather than
+  server rendering.
 - No CAPTCHA or submission rate limit on public forms; comment spam filtering
   relies on a honeypot plus the optional AI review.
 - The app-wide CSP is report-only until `CSP_ENFORCE=1` is set; plugin screens

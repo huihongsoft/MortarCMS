@@ -28,7 +28,7 @@ the maintainer, not a code change. Everything else below is in scope.
 | A5 | Versions drift from tags, no changelog, no release job | **done in 0.1.3** |
 | B1 | No redirect manager (slug changes break URLs) | **done in 0.1.3** |
 | B2 | No content i18n (no locale, translation groups, hreflang) | planned, batch 5 |
-| B3 | Search is `LIKE`, no full-text index | planned, batch 5 |
+| B3 | Search is `LIKE`, no full-text index | **done in 0.1.3** (SQLite FTS5 trigram; MySQL/PG keep LIKE) |
 | B4 | No CAPTCHA or submission limits on public forms | **done in 0.1.3** (local signals; no external CAPTCHA) |
 | B5 | Review workflow has no email, no queue screen | planned, batch 5 |
 | B6 | No taxonomy bulk merge/rename | planned, batch 5 |
@@ -66,6 +66,12 @@ the maintainer, not a code change. Everything else below is in scope.
 - **Data integrity**: media deletion removes the row before the files (it was the
   other way round, so a mid-way failure left a broken image reference and a bulk
   delete could stop half-applied).
+- **Full-text search** on SQLite: FTS5 with the **trigram** tokenizer (the
+  default tokenizer has no word boundaries to find in Chinese, which this CMS
+  publishes), maintained by triggers so no write path can forget it, ranked by
+  bm25 and combined with every existing visibility filter. Queries shorter than a
+  trigram — including two-character CJK words — fall back to LIKE rather than
+  silently matching nothing, and MySQL/PostgreSQL keep the LIKE path entirely.
 - **Local anti-spam**: public submissions are scored server-side — honeypot,
   fill time, link count, a URL in the name field, and the `spam_words` setting
   (which had no reader on the server at all before this: the admin described
@@ -111,10 +117,9 @@ Each batch ends with the full test suite, all three builds and lint green.
   the synchronous `db.prepare()` call sites), finish the dialect coverage
   (`INSERT OR REPLACE`, `sqlite_master`/`PRAGMA` guards), logical backup and
   restore for MySQL/PostgreSQL, three-driver CI matrix.
-- **Batch 5 — content features**: local anti-spam, full-text search, workflow
-  email + a real notification table, taxonomy bulk merge, media folders and EXIF,
-  then complete content i18n (locale, translation groups, language URLs,
-  hreflang).
+- **Batch 5 — content features**: workflow email + a real notification table,
+  taxonomy bulk merge, media folders and EXIF, then complete content i18n
+  (locale, translation groups, language URLs, hreflang).
 - **Batch 6 — frontend**: server-side rendering with hydration across the
   themes; dialog focus trap, `aria-label` sweep, RTL, `Intl` formatting.
 - **Batch 7 — quality**: Playwright smoke tests over the critical path

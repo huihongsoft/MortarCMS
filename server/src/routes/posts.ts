@@ -9,6 +9,7 @@ import { SiteRequest } from '../middleware/site';
 import { slugify, uniqueSlug, postUrl } from '../utils/slug';
 import { likeContains } from '../utils/sqlLike';
 import { recordMovedPath } from '../utils/redirects';
+import { buildMatchQuery, matchJoin, matchClause, matchOrder } from '../utils/searchIndex';
 import { rateLimitStore } from '../utils/rateLimitStore';
 import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
 import { applyFilters, doAction } from '../utils/hooks';
@@ -221,8 +222,17 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     const category = req.query.category as string;
     const tag = req.query.tag as string;
     const type = (req.query.type as string) || 'post';
-    let sql = 'SELECT DISTINCT p.* FROM Post p';
+    // Full-text search when the index can answer this query, LIKE otherwise.
+    // `buildMatchQuery` returns null for MySQL/Postgres (no FTS5) and for terms
+    // shorter than a trigram — a two-character CJK word cannot be matched by the
+    // index at all, and returning nothing for it would be worse than a scan.
+    const match = search ? buildMatchQuery(search) : null;
+    // The FTS join is 1:1 on postId, so DISTINCT is unnecessary for it; the
+    // category/tag joins are 1:1 too (the filter names a single slug), and
+    // DISTINCT cannot be combined with an ORDER BY on bm25 anyway.
+    let sql = match ? 'SELECT p.* FROM Post p' : 'SELECT DISTINCT p.* FROM Post p';
     const params: any[] = [];
+    if (match) sql += matchJoin();
     if (category) { sql += ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId'; }
     if (tag) { sql += ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId'; }
     const now = new Date().toISOString();
@@ -231,14 +241,21 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     if (req.siteId) { sql += ' AND (p.siteId IS NULL OR p.siteId = ?)'; params.push(req.siteId); }
     if (!isLoggedIn(req)) sql += MEMBERS_ONLY_EXCLUDE;
     if (search) {
-      const sp = likeContains(search);
-      sql += " AND (p.title LIKE ? ESCAPE '\\' OR p.content LIKE ? ESCAPE '\\' OR p.excerpt LIKE ? ESCAPE '\\')";
-      params.push(sp, sp, sp);
+      if (match) { sql += ' AND' + matchClause(); params.push(match); }
+      else {
+        const sp = likeContains(search);
+        sql += " AND (p.title LIKE ? ESCAPE '\\' OR p.content LIKE ? ESCAPE '\\' OR p.excerpt LIKE ? ESCAPE '\\')";
+        params.push(sp, sp, sp);
+      }
     }
     if (category) { sql += ' AND c.slug = ?'; params.push(category); }
     if (tag) { sql += ' AND t.slug = ?'; params.push(tag); }
-    // Relevance: title matches rank above body matches
-    if (search) {
+    // Relevance: bm25 when the index ranked it, otherwise the old heuristic
+    // (a title hit above a body hit).
+    if (match) {
+      sql += ' ORDER BY ' + matchOrder() + ', p.sticky DESC, p.publishedAt DESC LIMIT ? OFFSET ?';
+      params.push(limit, (page - 1) * limit);
+    } else if (search) {
       const sp = likeContains(search);
       sql += " ORDER BY p.sticky DESC, CASE WHEN p.title LIKE ? ESCAPE '\\' THEN 0 ELSE 1 END, p.publishedAt DESC LIMIT ? OFFSET ?";
       params.push(sp, limit, (page - 1) * limit);
@@ -247,10 +264,13 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
       params.push(limit, (page - 1) * limit);
     }
     const postsData = db.prepare(sql).all(...params) as any[];
-    const countSql = 'SELECT COUNT(DISTINCT p.id) as cnt FROM Post p' + (category ? ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId' : '') + (tag ? ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId' : '') + ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + (req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '') + (!isLoggedIn(req) ? MEMBERS_ONLY_EXCLUDE : '') + (search ? " AND (p.title LIKE ? ESCAPE '\\' OR p.content LIKE ? ESCAPE '\\' OR p.excerpt LIKE ? ESCAPE '\\')" : '') + (category ? ' AND c.slug = ?' : '') + (tag ? ' AND t.slug = ?' : '');
+    const countSql = 'SELECT COUNT(DISTINCT p.id) as cnt FROM Post p' + (match ? matchJoin() : '') + (category ? ' JOIN PostCategory pc ON pc.postId = p.id JOIN Category c ON c.id = pc.categoryId' : '') + (tag ? ' JOIN PostTag pt ON pt.postId = p.id JOIN Tag t ON t.id = pt.tagId' : '') + ' WHERE p.type = ? AND p.status = ? AND (p.publishedAt IS NULL OR p.publishedAt <= ?)' + (req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '') + (!isLoggedIn(req) ? MEMBERS_ONLY_EXCLUDE : '') + (search ? (match ? ' AND' + matchClause() : " AND (p.title LIKE ? ESCAPE '\\' OR p.content LIKE ? ESCAPE '\\' OR p.excerpt LIKE ? ESCAPE '\\')") : '') + (category ? ' AND c.slug = ?' : '') + (tag ? ' AND t.slug = ?' : '');
     const countParams: any[] = [type, 'published', now];
     if (req.siteId) countParams.push(req.siteId);
-    if (search) { const sp = likeContains(search); countParams.push(sp, sp, sp); }
+    if (search) {
+      if (match) countParams.push(match);
+      else { const sp = likeContains(search); countParams.push(sp, sp, sp); }
+    }
     if (category) countParams.push(category);
     if (tag) countParams.push(tag);
     const total = (db.prepare(countSql).get(...countParams) as any)?.cnt || 0;

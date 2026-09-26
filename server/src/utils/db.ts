@@ -891,6 +891,43 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
     },
   },
   {
+    version: 23,
+    name: 'post-full-text-index',
+    up: () => {
+      // FTS5 is SQLite-only (and MySQL/PG keep the LIKE path — see
+      // utils/searchIndex.ts). The trigram tokenizer, not the default unicode61:
+      // this CMS publishes CJK content, and unicode61 has no word boundaries to
+      // find in Chinese. Trigram needs three characters, so shorter queries fall
+      // back to LIKE rather than silently matching nothing.
+      if (db.driver !== 'sqlite') {
+        console.log('[DB] Skipping the full-text index: FTS5 is SQLite-only (search stays on LIKE)');
+        return;
+      }
+      try {
+        db.exec("CREATE VIRTUAL TABLE IF NOT EXISTS PostSearch USING fts5(postId UNINDEXED, title, content, excerpt, tokenize='trigram')");
+        // Backfill, guarded so re-running the migration cannot duplicate rows (an
+        // FTS table has no unique constraint to lean on).
+        db.exec('INSERT INTO PostSearch (postId, title, content, excerpt) SELECT id, title, content, excerpt FROM Post WHERE NOT EXISTS (SELECT 1 FROM PostSearch s WHERE s.postId = Post.id)');
+        // Triggers keep it in step, so no write path — including the bulk
+        // operations — has to remember to update the index.
+        db.exec(`CREATE TRIGGER IF NOT EXISTS post_search_ai AFTER INSERT ON Post BEGIN
+          INSERT INTO PostSearch (postId, title, content, excerpt) VALUES (new.id, new.title, new.content, new.excerpt);
+        END`);
+        db.exec(`CREATE TRIGGER IF NOT EXISTS post_search_au AFTER UPDATE ON Post BEGIN
+          DELETE FROM PostSearch WHERE postId = old.id;
+          INSERT INTO PostSearch (postId, title, content, excerpt) VALUES (new.id, new.title, new.content, new.excerpt);
+        END`);
+        db.exec(`CREATE TRIGGER IF NOT EXISTS post_search_ad AFTER DELETE ON Post BEGIN
+          DELETE FROM PostSearch WHERE postId = old.id;
+        END`);
+      } catch (err: any) {
+        // A SQLite build without FTS5 must not refuse to boot over search
+        // quality: log it and leave the LIKE path in place.
+        console.warn('[DB] Full-text index unavailable (' + (err?.message || err) + ') — search falls back to LIKE');
+      }
+    },
+  },
+  {
     version: 15,
     name: 'role-capability-alignment',
     up: () => {
