@@ -5,17 +5,27 @@ production-grade CMS, plus the plan and its progress. Written after auditing the
 codebase (not from the feature list): every claim here was checked against the
 source.
 
-**Where it stands.** Feature density is above most self-built CMSs — content and
-revisions, multi-site, roles and capabilities, a block editor, media with
-variants and S3, comments, menus, forms, newsletter, webhooks, feeds, SEO meta +
-sitemap, GDPR tools and an AI assistant. The blockers are not feature count:
-they were licensing, single-instance architecture, a half-real remote-database
-story, unreliable backup/restore and zero frontend test coverage.
+**Where it stood.** Feature density was already above most self-built CMSs —
+content and revisions, multi-site, roles and capabilities, a block editor, media
+with variants and S3, comments, menus, forms, newsletter, webhooks, feeds, SEO
+meta + sitemap, GDPR tools and an AI assistant. The blockers were never feature
+count: they were licensing, single-instance architecture, a half-real
+remote-database story, unreliable backup/restore, no content i18n, a
+client-rendered frontend, and zero tests of the frontend or of the seams between
+the three apps.
+
+**Where it stands now.** Everything in that list except the license and the
+remote-database story has been addressed and is in 0.1.3 (see the status table and
+the verdict below). The two that remain are both *decisions* rather than
+oversights: the licence is the maintainer's to make, and MySQL/PostgreSQL support
+was deferred deliberately — its impact is spelled out under A3, because "we chose
+not to" and "we did not notice" must not read the same way in a document like
+this.
 
 **Not addressed here:** the license. `LICENSE` is **CC BY-NC-SA 4.0** — non-
 commercial only, with a share-alike obligation. Any commercial or business use
 requires a different license (MIT / Apache-2.0 / GPL) and that is a decision for
-the maintainer, not a code change. Everything else below is in scope.
+the maintainer, not a code change.
 
 ## Status
 
@@ -23,7 +33,7 @@ the maintainer, not a code change. Everything else below is in scope.
 |---|---|---|
 | A1 | License blocks commercial use | **open** — maintainer decision |
 | A2 | Single-instance only: in-memory caches, rate limits, scheduler | **done in 0.1.3** (safe by default; `SHARED_CACHE=1` / `REDIS_URL` for replicas) |
-| A3 | MySQL/PostgreSQL are experimental, not real support | planned, batch 4 |
+| A3 | MySQL/PostgreSQL are experimental, not real support | **deferred by decision** — the impact is itemised below; SQLite is the supported driver |
 | A4 | Backup/restore unreliable (DB only, retention bug, no pre-upgrade copy) | **done in 0.1.3** |
 | A5 | Versions drift from tags, no changelog, no release job | **done in 0.1.3** |
 | B1 | No redirect manager (slug changes break URLs) | **done in 0.1.3** |
@@ -40,6 +50,53 @@ the maintainer, not a code change. Everything else below is in scope.
 | C | 2FA secret plaintext, no recovery codes, no failed-login audit, no app-wide CSP, process-local limits, unsigned plugins | **done in 0.1.3** (CSP ships report-only; see the known gaps) |
 | D | Operator docs (troubleshooting, hardening, upgrade/rollback, monitoring) | **done in 0.1.3** |
 | E | No frontend/admin/e2e tests, near-floor coverage gates, soft lint | **done in 0.1.3** — Playwright smoke over the publishing path, coverage ratcheted to the real baseline, `no-unused-vars` an error, bundle budgets in CI |
+
+## Verdict
+
+Measured against the original question — *what is missing for this to be a
+mainstream production-grade CMS* — after the work in 0.1.3:
+
+**Closed.** Backups you can actually restore (including uploads, and a
+pre-migration snapshot); version/changelog/release discipline; redirects and slug
+editing; content i18n with translated URLs and hreflang; full-text search on
+SQLite; local anti-spam; the review workflow with notifications and a queue;
+taxonomy merge; media folders with metadata; a scheduler screen; a hardened
+2FA/login/CSP story; operator documentation; server-rendered public pages;
+accessibility basics; and actual test gates (710 server tests, a Playwright smoke
+over the publishing path, coverage and bundle budgets enforced in CI).
+
+**Remaining, in the order they would matter to a real deployment:**
+
+1. **A1 — license (open).** CC BY-NC-SA 4.0 forbids commercial use. No amount of
+   code changes this; it is the single thing that decides whether the project can
+   be adopted at all by a business.
+2. **A3 — MySQL/PostgreSQL (deferred on purpose).** SQLite is the supported
+   driver. Installing on MySQL or PostgreSQL today means: **backup and restore are
+   refused outright** (`routes/dbTools.ts` answers 400 for any non-SQLite driver),
+   the admin Database page fails (its queries hardcode `sqlite_master`), the driver
+   bridge answers one query at a time so a remote database has poor concurrency,
+   and a couple of call sites still use `INSERT OR REPLACE`, which those engines
+   reject. So: an install can *run* on them, but it has no in-product way to back
+   it up — which is why the honest label is "experimental", not "supported". If
+   any target environment mandates a managed MySQL/PostgreSQL, this moves to the
+   top of the list and is the largest remaining piece of work.
+3. **RTL (not implemented).** Both SPAs assume a left-to-right layout. A site
+   whose primary language is Arabic or Hebrew would be usable but wrong-way-round.
+   Needs a logical-property sweep of both codebases, not a patch.
+4. **Server rendering covers the built-in themes only.** An installed theme from
+   elsewhere (its bundle imports bare `react` specifiers Node cannot resolve)
+   falls back to the client-rendered shell — correct, but without the crawler and
+   first-paint benefit.
+5. **CSP enforcement is still off.** The frontend is ready; the admin is not (an
+   inline dark-mode script without a nonce, Font Awesome from a CDN, plugin
+   screens injecting inline scripts). The checklist is in
+   `docs/security-hardening.md`.
+
+**Answer.** For a single-instance, SQLite-backed, permissively-licensed
+deployment, the gaps that would have blocked production use are closed. The two
+items that still stand between this and *mainstream* adoption are both outside
+what code alone can settle: the licence, and whether MySQL/PostgreSQL support is
+required by the target environments. RTL is the one functional gap left.
 
 ## Done in 0.1.3
 
@@ -152,10 +209,14 @@ the maintainer, not a code change. Everything else below is in scope.
 
 Each batch ends with the full test suite, all three builds and lint green.
 
-- **Batch 4 — remote databases**: pool + multi-thread the worker bridge (keeping
-  the synchronous `db.prepare()` call sites), finish the dialect coverage
+- **Batch 4 — remote databases** — **the only batch still outstanding, and
+  deliberately skipped**: pool + multi-thread the worker bridge (keeping the
+  synchronous `db.prepare()` call sites), finish the dialect coverage
   (`INSERT OR REPLACE`, `sqlite_master`/`PRAGMA` guards), logical backup and
-  restore for MySQL/PostgreSQL, three-driver CI matrix.
+  restore for MySQL/PostgreSQL, three-driver CI matrix. Its impact is itemised
+  under A3 in the verdict above: until it lands, MySQL/PostgreSQL installs are
+  labelled experimental, and the reason that label is not merely conservative is
+  that they have no working backup path.
 - ~~**Batch 5 — content features**~~ **done in 0.1.3**: redirects with automatic
   301s, local anti-spam, SQLite full-text search, the notification table and
   review queue, taxonomy merge, media folders with per-image metadata, and

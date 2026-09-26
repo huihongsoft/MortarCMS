@@ -201,8 +201,11 @@ for the full list with priorities.
   the database and the login lockout is shared, but the page cache coherence
   poller, the express-rate-limit windows and the role/site caches are per-process
   unless `SHARED_CACHE=1` / `RATE_LIMIT_STORE=db` (or `REDIS_URL`) is set.
-- MySQL/PostgreSQL remain experimental: pooled concurrency, full dialect
-  coverage and logical backups for those drivers are not in yet.
+- MySQL/PostgreSQL remain experimental by decision: they can run a site, but
+  backup and restore are refused for them, the admin database page is
+  SQLite-only, the driver bridge answers one query at a time, and a couple of
+  call sites still use `INSERT OR REPLACE`. The impact is itemised in
+  `docs/production-readiness.md` (A3).
 - Content languages cover posts and pages (the two types with a public URL);
   categories, tags and menus have no per-language variant, and there is no
   bulk translation screen — translations are created one at a time from the
