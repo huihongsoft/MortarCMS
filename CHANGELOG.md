@@ -33,8 +33,8 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
   and the API schema dropped it, so changing a post's URL was silently a no-op.
   Slugs are editable now, and a published post or page that changes slug gets a
   301 automatically so the old URL keeps working. The screen adds 301/302,
-  search, hit counts and a CSV import; the responses admin still lists dead links
-  rather than fixing them, which is what this is for.
+  search, hit counts, a CSV import and an "automatic" marker for the rows the
+  slug-change path writes.
 - **Two-factor auth that works**: TOTP secrets are base32 (an authenticator app
   can enrol them — the previous base64 secret could not be), encrypted at rest,
   and paired with ten single-use recovery codes. Existing secrets keep working.
@@ -117,8 +117,10 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 Tracked here so an upgrade is not a surprise; see `docs/production-readiness.md`
 for the full list with priorities.
 
-- Single-instance by design: caches, rate limiters and the scheduler keep state
-  in process memory (`docs/deployment.md`).
+- Multi-instance needs configuration: the scheduler's lock and last run are in
+  the database and the login lockout is shared, but the page cache coherence
+  poller, the express-rate-limit windows and the role/site caches are per-process
+  unless `SHARED_CACHE=1` / `RATE_LIMIT_STORE=db` (or `REDIS_URL`) is set.
 - MySQL/PostgreSQL remain experimental: pooled concurrency, full dialect
   coverage and logical backups for those drivers are not in yet.
 - Content is single-language: no per-post locale, translation grouping or
@@ -131,3 +133,5 @@ for the full list with priorities.
   with inline scripts are the thing to check before flipping it.
 - Plugin and market packages carry a SHA-256 but are not signed, and plugins run
   unsandboxed with full server privileges (`docs/plugins.md`).
+- MySQL/PostgreSQL remain experimental: the dialect gaps and the SQLite-only
+  backup path are known, and the sync driver bridge answers one query at a time.
