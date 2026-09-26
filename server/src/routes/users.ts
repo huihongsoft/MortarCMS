@@ -91,7 +91,7 @@ router.delete('/:id', authenticate, requireCap('manage_users'), (req: AuthReques
       db.prepare('DELETE FROM AppPassword WHERE userId = ?').run(req.params.id);
       db.prepare('DELETE FROM AiMemory WHERE userId = ?').run(req.params.id);
       db.prepare('DELETE FROM AiUsage WHERE userId = ?').run(req.params.id);
-      db.prepare('DELETE FROM AiNotification WHERE userId = ?').run(req.params.id);
+      db.prepare('DELETE FROM Notification WHERE userId = ?').run(req.params.id);
       db.prepare('DELETE FROM AiTask WHERE userId = ?').run(req.params.id);
       db.prepare('DELETE FROM AiSession WHERE userId = ?').run(req.params.id);
       db.prepare('DELETE FROM AiAudit WHERE userId = ?').run(req.params.id);

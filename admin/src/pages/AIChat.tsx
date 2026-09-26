@@ -410,8 +410,8 @@ export default function AIChat() {
   const notifRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    api.get('/ai/notifications').then(r => { setNotifications(r.data.notifications || []); setUnread(r.data.unread || 0); }).catch(() => {});
-    const iv = setInterval(() => { api.get('/ai/notifications').then(r => { setNotifications(r.data.notifications || []); setUnread(r.data.unread || 0); }).catch(() => {}); }, 15000);
+    api.get('/notifications').then(r => { setNotifications(r.data.notifications || []); setUnread(r.data.unread || 0); }).catch(() => {});
+    const iv = setInterval(() => { api.get('/notifications').then(r => { setNotifications(r.data.notifications || []); setUnread(r.data.unread || 0); }).catch(() => {}); }, 15000);
     return () => clearInterval(iv);
   }, []);
 
@@ -424,7 +424,7 @@ export default function AIChat() {
   async function openNotification(n: any) {
     setNotifOpen(false);
     if (n.taskId) { setTab('tasks'); openTask(n.taskId); }
-    await api.post('/ai/notifications/read-all');
+    await api.post('/notifications/read-all');
     setUnread(0);
   }
   const abortRef = useRef<AbortController | null>(null);

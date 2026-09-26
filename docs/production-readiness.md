@@ -30,7 +30,7 @@ the maintainer, not a code change. Everything else below is in scope.
 | B2 | No content i18n (no locale, translation groups, hreflang) | planned, batch 5 |
 | B3 | Search is `LIKE`, no full-text index | **done in 0.1.3** (SQLite FTS5 trigram; MySQL/PG keep LIKE) |
 | B4 | No CAPTCHA or submission limits on public forms | **done in 0.1.3** (local signals; no external CAPTCHA) |
-| B5 | Review workflow has no email, no queue screen | planned, batch 5 |
+| B5 | Review workflow has no email, no queue screen | **done in 0.1.3** |
 | B6 | No taxonomy bulk merge/rename | planned, batch 5 |
 | B7 | No media folders, no EXIF, no video transcoding | planned, batch 5 |
 | B8 | Scheduler has a backend but no admin screen | **done in 0.1.3** |
@@ -66,6 +66,12 @@ the maintainer, not a code change. Everything else below is in scope.
 - **Data integrity**: media deletion removes the row before the files (it was the
   other way round, so a mid-way failure left a broken image reference and a bulk
   delete could stop half-applied).
+- **Workflow notifications**: a general `Notification` table (migration 24) that
+  absorbed the AI assistant's, so an author's "your submission was approved" no
+  longer arrives in the assistant's inbox. Approval and rejection now email the
+  author as well as notifying them in-app, the notification carries a link to the
+  post, and the review queue has a screen of its own instead of being a status
+  filter on the posts list.
 - **Full-text search** on SQLite: FTS5 with the **trigram** tokenizer (the
   default tokenizer has no word boundaries to find in Chinese, which this CMS
   publishes), maintained by triggers so no write path can forget it, ranked by
@@ -117,9 +123,9 @@ Each batch ends with the full test suite, all three builds and lint green.
   the synchronous `db.prepare()` call sites), finish the dialect coverage
   (`INSERT OR REPLACE`, `sqlite_master`/`PRAGMA` guards), logical backup and
   restore for MySQL/PostgreSQL, three-driver CI matrix.
-- **Batch 5 — content features**: workflow email + a real notification table,
-  taxonomy bulk merge, media folders and EXIF, then complete content i18n
-  (locale, translation groups, language URLs, hreflang).
+- **Batch 5 — content features**: taxonomy bulk merge, media folders and EXIF,
+  then complete content i18n (locale, translation groups, language URLs,
+  hreflang).
 - **Batch 6 — frontend**: server-side rendering with hydration across the
   themes; dialog focus trap, `aria-label` sweep, RTL, `Intl` formatting.
 - **Batch 7 — quality**: Playwright smoke tests over the critical path

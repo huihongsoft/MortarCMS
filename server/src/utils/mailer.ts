@@ -166,6 +166,16 @@ const TEMPLATES: MailTemplate[] = [
     render: (v) => layout(v.site_title, '<p>A new comment was posted on <strong>' + v.post_title + '</strong>:</p><blockquote style="margin:12px 0;padding:12px 16px;background:#f3f4f6;border-left:4px solid #2563eb;border-radius:6px;">' + v.comment + '</blockquote><p><a href="' + v.site_url + '/admin#/comments" style="color:#2563eb;">Review in the admin panel</a></p>', 'Sent by ' + v.site_title),
   },
   {
+    name: 'post_review',
+    subject: '投稿审核结果：{{post_title}}',
+    desc: 'Sent to an author when their submission is approved or sent back',
+    render: (v) => layout(v.site_title,
+      '<p>您好，</p><p>您的投稿《<strong>' + v.post_title + '</strong>》' + v.review_result + '。</p>' +
+      (v.review_reason ? '<p style="margin:12px 0;padding:12px 16px;background:#f3f4f6;border-left:4px solid #f59e0b;border-radius:6px;">原因：' + v.review_reason + '</p>' : '') +
+      '<p><a href="' + v.site_url + '/admin#/posts" style="color:#2563eb;">前往后台查看文章</a></p>',
+      'Sent by ' + v.site_title),
+  },
+  {
     name: 'form_notification',
     subject: 'New form submission: {{form_name}}',
     desc: 'Notifies the form owner when a visitor submits a form',
@@ -246,7 +256,11 @@ export function getTemplateOverride(name: string): { subject: string; body: stri
 function sampleVars(name: string): Record<string, string> {
   const site = (db.prepare("SELECT value FROM Setting WHERE key = 'site_title'").get() as any)?.value || 'Mortar CMS';
   const url = (db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || 'http://localhost:3001';
-  const base: Record<string, string> = { site_title: site, site_url: url, username: 'John', post_title: 'Hello world', comment: 'Great post, thanks for sharing!', reset_link: url + '/admin#/reset?token=DEMO_TOKEN' };
+  const base: Record<string, string> = {
+    site_title: site, site_url: url, username: 'John', post_title: 'Hello world',
+    comment: 'Great post, thanks for sharing!', reset_link: url + '/admin#/reset?token=DEMO_TOKEN',
+    review_result: '未通过审核', review_reason: '内容与本站主题不符',
+  };
   return base;
 }
 

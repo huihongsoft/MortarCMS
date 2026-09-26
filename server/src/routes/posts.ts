@@ -9,6 +9,7 @@ import { SiteRequest } from '../middleware/site';
 import { slugify, uniqueSlug, postUrl } from '../utils/slug';
 import { likeContains } from '../utils/sqlLike';
 import { recordMovedPath } from '../utils/redirects';
+import { notify } from '../utils/notifications';
 import { buildMatchQuery, matchJoin, matchClause, matchOrder } from '../utils/searchIndex';
 import { rateLimitStore } from '../utils/rateLimitStore';
 import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
@@ -19,6 +20,13 @@ import { normalizeSeoField } from '../utils/seoFields';
 import { siteScopeForFilter, mayWriteSite, userMayAccessSite, assignedSites } from '../utils/userSites';
 import { trackView } from '../utils/views';
 import { loadCustomTypes } from './customPostTypes';
+import { renderTemplate, sendEmail } from '../utils/mailer';
+
+// Same rule as the comment and form emails: values that reach an email body are
+// escaped here, never interpolated raw.
+function esc(v: unknown): string {
+  return String(v ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
 
 const router = Router();
 // Protected-post password guessing is brute-forced per IP
@@ -965,20 +973,34 @@ router.post('/:id/review', authenticate, requireCap('review_posts'), (req: AuthR
     if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
     if (post.status !== 'pending') { res.status(400).json({ error: 'Post is not pending review' }); return; }
     const now = new Date().toISOString();
+    const reason = String(req.body?.reason || '').trim().slice(0, 500);
     if (action === 'approve') {
       db.prepare("UPDATE Post SET status = 'published', publishedAt = ?, updatedAt = ? WHERE id = ?").run(now, now, post.id);
       try { doAction('post_published', post.id); } catch {}
     } else {
-      const reason = String(req.body?.reason || '').trim().slice(0, 500);
       db.prepare("UPDATE Post SET status = 'draft', updatedAt = ? WHERE id = ?").run(now, post.id);
-      // In-app notification for the author (reuses the AiNotification table —
-      // userId/message/read are generic enough to double as a notification box)
-      if (post.authorId) {
-        const msg = reason
-          ? '您的投稿《' + post.title + '》未通过审核：' + reason
-          : '您的投稿《' + post.title + '》未通过审核，请修改后重新提交';
-        try { db.prepare('INSERT INTO AiNotification (id, userId, message, read, createdAt) VALUES (?, ?, ?, 0, ?)').run(cuid(), post.authorId, msg, now); } catch {}
-      }
+    }
+    // Tell the author, in the app and by email. The in-app note used to be written
+    // into the AI assistant's table, and there was no email at all — a contributor
+    // who submitted through the public form heard nothing back unless they
+    // happened to open the admin and notice the bell.
+    if (post.authorId) {
+      const approved = action === 'approve';
+      const msg = approved
+        ? '您的投稿《' + post.title + '》已通过审核并发布'
+        : (reason ? '您的投稿《' + post.title + '》未通过审核：' + reason : '您的投稿《' + post.title + '》未通过审核，请修改后重新提交');
+      notify({ userId: post.authorId, kind: 'review', message: msg, link: '/posts/' + post.id + '/edit' });
+      try {
+        const author = db.prepare('SELECT email FROM User WHERE id = ?').get(post.authorId) as any;
+        if (author?.email) {
+          const tpl = renderTemplate('post_review', {
+            post_title: esc(post.title),
+            review_result: approved ? '已通过审核并发布' : '未通过审核',
+            review_reason: approved ? '' : esc(reason || '未提供原因'),
+          });
+          if (tpl) void sendEmail(author.email, tpl.subject, tpl.html);
+        }
+      } catch { /* the review must not fail because the email did not go out */ }
     }
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }

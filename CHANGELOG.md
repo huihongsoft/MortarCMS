@@ -29,6 +29,11 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 - Admin **My Profile** page (bio, avatar, password, 2FA, application passwords),
   an unsaved-changes guard for the editors, and a "no permission" screen instead
   of a page that fails on every request.
+- **Editorial workflow**: a general `Notification` table replaces the AI
+  assistant's (the review flow used to write into it, so an author's approval
+  arrived in the assistant's inbox), approval and rejection email the author,
+  notifications link to what they are about, and the review queue has its own
+  screen instead of being a filter on the posts list.
 - **Full-text search** (SQLite): FTS5 with the trigram tokenizer — the default
   tokenizer cannot find word boundaries in Chinese, which this CMS publishes —
   kept in step by triggers and ranked by bm25. Queries shorter than three
@@ -140,8 +145,6 @@ for the full list with priorities.
 - Search is full-text on SQLite only; MySQL and PostgreSQL still scan with LIKE.
 - The frontend is a client-rendered SPA with a crawler fallback rather than
   server rendering.
-- No CAPTCHA or submission rate limit on public forms; comment spam filtering
-  relies on a honeypot plus the optional AI review.
 - The app-wide CSP is report-only until `CSP_ENFORCE=1` is set; plugin screens
   with inline scripts are the thing to check before flipping it.
 - Plugin and market packages carry a SHA-256 but are not signed, and plugins run

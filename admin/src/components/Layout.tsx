@@ -75,7 +75,7 @@ export default function Layout() {
   // array reference every 30s would otherwise re-render the whole admin shell).
   const notifsRef = useRef<any[] | null>(null);
   const loadNotifs = () => {
-    api.get('/ai/notifications').then(r => {
+    api.get('/notifications').then(r => {
       const list = r.data.notifications || [];
       const un = r.data.unread || 0;
       const prev = notifsRef.current;
@@ -178,7 +178,7 @@ export default function Layout() {
               React.createElement('div', { className: 'px-3 py-2 border-b border-gray-100 dark:border-gray-700 flex items-center justify-between' },
                 React.createElement('p', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100' }, t('notifications', getLang())),
                 React.createElement('button', {
-                  onClick: () => { api.post('/ai/notifications/read-all').then(loadNotifs); },
+                  onClick: () => { api.post('/notifications/read-all').then(loadNotifs); },
                   className: 'text-xs text-primary-600 hover:text-primary-700',
                 }, t('mark all read', getLang())),
               React.createElement('div', { className: 'max-h-80 overflow-y-auto' },
@@ -187,7 +187,14 @@ export default function Layout() {
                   : notifs.map((n: any) =>
                       React.createElement('button', {
                         key: n.id,
-                        onClick: () => { if (!n.read) api.post('/ai/notifications/' + n.id + '/read').then(loadNotifs); },
+                        // A notification now carries where to go (a review result
+                        // points at the post), so opening it lands on the thing it
+                        // is about instead of closing the panel and hunting.
+                        onClick: () => {
+                          if (!n.read) api.post('/notifications/' + n.id + '/read').then(loadNotifs).catch(() => {});
+                          setNotifOpen(false);
+                          if (n.link) navigate(n.link);
+                        },
                         className: 'w-full text-left px-3 py-2.5 border-b border-gray-50 dark:border-gray-800 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/50 flex gap-2',
                       },
                         React.createElement('span', { className: 'mt-1.5 w-1.5 h-1.5 rounded-full shrink-0 ' + (n.read ? 'bg-gray-200 dark:bg-gray-600' : 'bg-primary-500') }),

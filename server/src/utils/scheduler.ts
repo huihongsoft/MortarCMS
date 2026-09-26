@@ -9,6 +9,7 @@ import { purgeContentCaches, purgeAllCaches } from './cache';
 import { postUrl } from './slug';
 import { createBackupArchive, pruneBackups } from './backup';
 import { sharedStore } from './sharedStore';
+import { pruneRead } from './notifications';
 
 export interface TaskDef {
   id: string;
@@ -267,7 +268,7 @@ export function registerBuiltinTasks(): void {
       try {
         const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString();
         const audit = db.prepare('DELETE FROM AiAudit WHERE createdAt < ?').run(daysAgo(90)).changes;
-        const notes = db.prepare('DELETE FROM AiNotification WHERE read = 1 AND createdAt < ?').run(daysAgo(30)).changes;
+        const notes = pruneRead(daysAgo(30));
         const sessions = db.prepare('DELETE FROM AiSession WHERE updatedAt < ?').run(daysAgo(365)).changes;
         // Expired share links: they used to stay readable forever, and they live
         // in the Setting table where they bloat every settings read. Rows written

@@ -29,6 +29,7 @@ const ActivityPage = React.lazy(() => import('./pages/Activity'));
 const LoginAudit = React.lazy(() => import('./pages/LoginAudit'));
 const SystemTasks = React.lazy(() => import('./pages/SystemTasks'));
 const Redirects = React.lazy(() => import('./pages/Redirects'));
+const ReviewQueue = React.lazy(() => import('./pages/ReviewQueue'));
 const CustomTypes = React.lazy(() => import('./pages/CustomTypes'));
 const Import = React.lazy(() => import('./pages/Import'));
 const Plugins = React.lazy(() => import('./pages/Plugins'));
@@ -124,6 +125,7 @@ function AnimatedRoutes() {
       // Screens registered by plugins (see server/src/utils/pluginApi.ts)
       screen('/plugin/:plugin/:page', React.createElement(PluginPage)),
       screen('/sites', React.createElement(Sites)),
+      screen('/review', React.createElement(ReviewQueue)),
       screen('/redirects', React.createElement(Redirects)),
       screen('/categories', React.createElement(Categories)),
       screen('/tags', React.createElement(Tags)),

@@ -17,7 +17,7 @@ function collectUserData(userId: string): any {
     formSubmissions: db.prepare('SELECT data, ip, createdAt FROM FormSubmission WHERE userId = ?').all(userId),
     newsletterSubscriptions: db.prepare("SELECT email, status, confirmed, createdAt FROM Subscriber WHERE email IN (SELECT email FROM User WHERE id = ?)").all(userId),
     aiUsage: db.prepare('SELECT kind, model, tokens, createdAt FROM AiUsage WHERE userId = ?').all(userId),
-    aiNotifications: db.prepare('SELECT message, createdAt FROM AiNotification WHERE userId = ?').all(userId),
+    notifications: db.prepare('SELECT kind, message, createdAt FROM Notification WHERE userId = ?').all(userId),
     activity: db.prepare('SELECT action, detail, createdAt FROM Activity WHERE userId = ?').all(userId),
   };
 }
@@ -51,7 +51,7 @@ function eraseUserData(userId: string): { mediaDeleted: number } {
     if (userEmail?.email) db.prepare('DELETE FROM Subscriber WHERE email = ?').run(userEmail.email);
     db.prepare('DELETE FROM AiMemory WHERE userId = ?').run(userId);
     db.prepare('DELETE FROM AiUsage WHERE userId = ?').run(userId);
-    db.prepare('DELETE FROM AiNotification WHERE userId = ?').run(userId);
+    db.prepare('DELETE FROM Notification WHERE userId = ?').run(userId);
     db.prepare('DELETE FROM AiTask WHERE userId = ?').run(userId);
     db.prepare('DELETE FROM AiSession WHERE userId = ?').run(userId);
     db.prepare('DELETE FROM AiAudit WHERE userId = ?').run(userId);

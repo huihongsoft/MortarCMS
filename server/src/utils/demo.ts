@@ -15,7 +15,7 @@ import { UPLOADS_DIR as uploadsDir } from './paths';
 const CONTENT_TABLES = [
   'PostCategory', 'PostTag', 'PostMeta', 'Revision', 'Comment',
   'Post', 'Category', 'Tag', 'Media', 'Menu', 'Link', 'LinkCategory', 'FriendLink',
-  'AiSession', 'AiTask', 'AiMemory', 'AiAudit', 'AiUsage', 'AiNotification', 'Activity', 'Visit',
+  'AiSession', 'AiTask', 'AiMemory', 'AiAudit', 'AiUsage', 'Notification', 'Activity', 'Visit',
 ];
 
 // Settings written by the demo data — removed by resetSite() so the site

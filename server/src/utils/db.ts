@@ -928,6 +928,41 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
     },
   },
   {
+    version: 24,
+    name: 'notifications',
+    up: () => {
+      // Workflow notifications had no table of their own: the post review flow
+      // wrote into AiNotification, so an author's "your submission was approved"
+      // arrived in the AI assistant's inbox and the bell had to explain both.
+      // This is that table, generalised, with the AI rows moved over.
+      //
+      // `message` keeps its name so the AI readers and writers change as little
+      // as possible; `kind` and `link` are what the workflow needs (which screen
+      // to open, and what sort of event it was).
+      db.exec(`CREATE TABLE IF NOT EXISTS Notification (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        kind TEXT NOT NULL DEFAULT 'system',
+        message TEXT NOT NULL,
+        link TEXT DEFAULT '',
+        taskId TEXT,
+        read INTEGER NOT NULL DEFAULT 0,
+        createdAt TEXT NOT NULL
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_notification_user_created ON Notification (userId, createdAt DESC)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_notification_unread ON Notification (userId, read)');
+      db.exec('CREATE INDEX IF NOT EXISTS idx_notification_task ON Notification (taskId)');
+      // Move the existing rows. Guarded on the old table existing so a fresh
+      // install (where it was just created empty by the schema) is a no-op.
+      try {
+        db.exec("INSERT INTO Notification (id, userId, kind, message, link, taskId, read, createdAt) SELECT id, userId, CASE WHEN taskId IS NULL THEN 'ai' ELSE 'ai_task' END, message, '', taskId, read, createdAt FROM AiNotification WHERE NOT EXISTS (SELECT 1 FROM Notification n WHERE n.id = AiNotification.id)");
+        db.exec('DROP TABLE AiNotification');
+      } catch (err: any) {
+        console.warn('[DB] Could not move AiNotification rows: ' + (err?.message || err));
+      }
+    },
+  },
+  {
     version: 15,
     name: 'role-capability-alignment',
     up: () => {

@@ -20,6 +20,7 @@ import { mdToHtml } from '../utils/markdown';
 import { purgeContentCaches } from '../utils/cache';
 import { fetchUrlGuarded } from '../utils/ssrf';
 import { SiteRequest } from '../middleware/site';
+import { notify, removeForTask } from '../utils/notifications';
 
 const router = Router();
 
@@ -559,8 +560,7 @@ function checkUsageAlert(): void {
     db.prepare("INSERT INTO Setting (id, key, value) VALUES ('ai_usage_warned_date', 'ai_usage_warned_date', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(today);
     const admins = db.prepare("SELECT id FROM User WHERE role = 'admin'").all() as any[];
     for (const a of admins) {
-      db.prepare('INSERT INTO AiNotification (id, userId, message, read, createdAt) VALUES (?, ?, ?, 0, ?)')
-        .run(cuid(), a.id, '⚠️ 今日 AI 用量已达 ' + Math.round(used / 1000) + 'K tokens（限额 ' + Math.round(limit / 1000) + 'K）', new Date().toISOString());
+      notify({ userId: a.id, kind: 'ai', message: '⚠️ 今日 AI 用量已达 ' + Math.round(used / 1000) + 'K tokens（限额 ' + Math.round(limit / 1000) + 'K）', link: '/ai/settings' });
     }
   } catch {}
 }
@@ -736,34 +736,13 @@ function notifyTaskFinished(taskId: string, userId: string, status: string, summ
       ? '✅ AI 任务完成: ' + (task?.prompt || '').slice(0, 40)
       : '❌ AI 任务失败: ' + (task?.prompt || '').slice(0, 40);
     const msg = summary ? head + '\n' + String(summary).replace(/\s+/g, ' ').slice(0, 80) : head;
-    db.prepare('INSERT INTO AiNotification (id, userId, message, taskId, read, createdAt) VALUES (?, ?, ?, ?, 0, ?)')
-      .run(cuid(), userId, msg, taskId, new Date().toISOString());
+    notify({ userId, kind: 'ai_task', message: msg, taskId, link: '/ai' });
   } catch {}
 }
 
-// Notifications
-router.get('/notifications', authenticate, (req: AuthRequest, res: Response) => {
-  try {
-    const list = db.prepare('SELECT * FROM AiNotification WHERE userId = ? ORDER BY createdAt DESC LIMIT 20').all(req.user!.userId);
-    const unread = (db.prepare('SELECT COUNT(*) as c FROM AiNotification WHERE userId = ? AND read = 0').get(req.user!.userId) as any)?.c || 0;
-    res.json({ notifications: list, unread });
-  } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
-});
-
-// Mark a single notification as read
-router.post('/notifications/:id/read', authenticate, (req: AuthRequest, res: Response) => {
-  try {
-    db.prepare('UPDATE AiNotification SET read = 1 WHERE id = ? AND userId = ?').run(req.params.id, req.user!.userId);
-    res.json({ success: true });
-  } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
-});
-
-router.post('/notifications/read-all', authenticate, (req: AuthRequest, res: Response) => {
-  try {
-    db.prepare('UPDATE AiNotification SET read = 1 WHERE userId = ?').run(req.user!.userId);
-    res.json({ success: true });
-  } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
-});
+// Notifications moved to /api/notifications (see routes/notifications.ts) — the
+// same list now carries review results, so the path follows the data rather than
+// staying under the assistant that used to own the table.
 
 router.post('/task', authenticate, requireCap('ai_use'), enforceUsageLimit, (req: AuthRequest & SiteRequest, res: Response) => {
   try {
@@ -1360,7 +1339,7 @@ router.delete('/tasks/:id', authenticate, (req: AuthRequest, res: Response) => {
     if (!task) { res.status(404).json({ error: 'Task not found' }); return; }
     if (req.user!.role !== 'admin' && task.userId !== req.user!.userId) { res.status(403).json({ error: 'Not allowed to delete this task' }); return; }
     withTransaction(() => {
-      db.prepare('DELETE FROM AiNotification WHERE taskId = ?').run(req.params.id);
+      removeForTask(req.params.id);
       db.prepare('DELETE FROM AiTask WHERE id = ?').run(req.params.id);
     });
     res.json({ success: true });

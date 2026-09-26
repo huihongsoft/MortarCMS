@@ -43,6 +43,7 @@ import tasksRoutes from './routes/tasks';
 import { registerBuiltinTasks, startScheduler, stopScheduler, runTaskNow } from './utils/scheduler';
 import metricsRoutes from './routes/metrics';
 import redirectRoutes from './routes/redirects';
+import notificationRoutes from './routes/notifications';
 import { schemaVersion } from './utils/db';
 import { cacheGet, cacheSet, cacheConfigure, purgeContentCaches, purgeAllCaches, startCacheCoherence } from './utils/cache';
 import importRoutes from './routes/import';
@@ -424,6 +425,7 @@ app.use('/api', cacheAdminRoutes);
 app.use('/api', mailerRoutes);
 app.use('/api', tasksRoutes);
 app.use('/api/redirects', redirectRoutes);
+app.use('/api/notifications', notificationRoutes);
 // Prometheus exposition (aggregate only, unauthenticated — see the route).
 app.use('/metrics', metricsRoutes);
 
