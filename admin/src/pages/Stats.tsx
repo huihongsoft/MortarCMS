@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
 import { BarChart3, TrendingUp, Eye, Users } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 import { postPath, usePermalinkPrefix } from '../lib/permalink';
@@ -13,7 +12,6 @@ const RANGE_KEYS: Record<string, string> = { '7d': 'last 7 days', '14d': 'last 1
 
 export default function Stats() {
   const permalink = usePermalinkPrefix();
-  const navigate = useNavigate();
   const [range, setRange] = useState('14d');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);

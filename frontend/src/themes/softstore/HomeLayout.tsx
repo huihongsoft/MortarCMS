@@ -10,7 +10,7 @@ import { IconCarousel, TagBar, CategoryTabs, SoftListRow, CategorySection, SideT
 //  → two-column second list. Page background is white (the reference has none),
 //  so the cards read by their 1px #dedede border rather than by contrast.
 export default function SoftstoreHomeLayout(props: any) {
-  const { settings, posts, total, page, setPage, loadError, catSlug, categories } = props;
+  const { settings, posts, total, page, setPage, loadError: _loadError, catSlug, categories } = props;
 
   // The tab bar switches between category panes (like the reference — it has no
   // "all" tab); the first category is shown until one is clicked. Arriving on

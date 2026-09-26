@@ -4,7 +4,7 @@ import { AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { effectiveSetting } from '../utils/siteSettings';
 import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
-import { postUrl, getPermalinkPrefix } from '../utils/slug';
+import { getPermalinkPrefix } from '../utils/slug';
 import { defaultLang, postPathForLang, pagePathForLang } from '../utils/contentLang';
 
 const router = Router();

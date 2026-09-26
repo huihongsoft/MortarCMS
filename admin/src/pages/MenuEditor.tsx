@@ -12,7 +12,7 @@ export default function MenuEditor() {
   const [items, setItems] = useState<any[]>([]);
   const [pages, setPages] = useState<any[]>([]);
   const [categories, setCategories] = useState<any[]>([]);
-  const [showAdd, setShowAdd] = useState(false);
+  const [, setShowAdd] = useState(false);
   const [linkCats, setLinkCats] = useState<any[]>([]);
   const [newItem, setNewItem] = useState<{ type: string; label: string; url: string; pageId: string; categoryId: string; linkCategoryId: string; parentId: string }>({ type: 'page', label: '', url: '', pageId: '', categoryId: '', linkCategoryId: '', parentId: '' });
 

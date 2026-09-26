@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Save, ArrowLeft, Palette, FileText, Settings2, X, Eye, Sparkles, PanelRightClose, Languages } from 'lucide-react';
+import { Save, ArrowLeft, Palette, FileText, Sparkles, PanelRightClose, Languages } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { useToast } from '../lib/toast';
 import RichEditor from '../components/RichEditor';

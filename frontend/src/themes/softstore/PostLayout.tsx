@@ -15,7 +15,7 @@ import { SideTabs, NoticeBar, TagPill, formatDate } from './Shared';
 // Software detail page in huirj style: white content block on a light-gray
 // page, breadcrumb, meta bar, cover, prose content, tags, comments.
 export default function SoftstorePostLayout(props: any) {
-  const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug, replyTo, startReply, cancelReply } = props;
+  const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug: _slug, replyTo, startReply, cancelReply } = props;
   const contentRef = useRef<HTMLDivElement>(null);
   const author = post.author;
   const category = post.categories?.[0];

@@ -1,7 +1,5 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
-import fs from 'fs';
-import path from 'path';
 import db, { cuid, initDB, reconfigureDb, withTransaction } from '../utils/db';
 import { parseSiteUrl } from '../utils/siteUrl';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';

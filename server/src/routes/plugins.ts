@@ -5,7 +5,7 @@ import db from '../utils/db';
 import { listHooks } from '../utils/hooks';
 import { purgeAllCaches } from '../utils/cache';
 import { listPlugins, listMarket, installPlugin, installFromUrl, uninstallPlugin, setPluginActive, validatePluginSettings, PluginMeta } from '../plugins/manager';
-import { authenticate, requireCap, authorize, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 

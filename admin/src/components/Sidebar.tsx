@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, UserCircle, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, ShieldAlert, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3, Webhook, ClipboardList, Mail, CalendarDays, ArrowRightLeft, ClipboardCheck } from 'lucide-react';
-import CommentBadge from './CommentBadge';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { t, getLang } from '../lib/i18n';
@@ -78,8 +77,8 @@ const groups: { title: string; items: { to: string; icon: any; label: string; de
   },
 ];
 
-export default function Sidebar({ open = true, onClose }: { open?: boolean; onClose?: () => void }) {
-  const { user, logout, can } = useAuth();
+export default function Sidebar({ open = true, onClose: _onClose }: { open?: boolean; onClose?: () => void }) {
+  const { user, can } = useAuth();
   // Screens registered by plugins (addAdminPage). Fetched rather than hardcoded
   // so activating a plugin adds its entry without a rebuild.
   const [pluginPages, setPluginPages] = useState<{ plugin: string; id: string; title: string; path: string }[]>([]);

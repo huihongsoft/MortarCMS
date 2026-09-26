@@ -3,7 +3,6 @@ import fs from 'fs';
 import path from 'path';
 import db from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
-import { UPLOADS_DIR as uploadsDir } from '../utils/paths';
 import { likeContains } from '../utils/sqlLike';
 
 const router = Router();

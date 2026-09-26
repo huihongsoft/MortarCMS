@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { formatDate, formatNumber } from '../lib/format';
-import { FileText, Files, MessageSquare, Users, Image, Tag as TagIcon, PenLine, Sparkles, Clock, AlertCircle, Trash2, ArrowRight } from 'lucide-react';
+import { FileText, Files, MessageSquare, Users, Image, Tag as TagIcon, PenLine, Clock, AlertCircle, Trash2, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { t, getLang } from '../lib/i18n';
 import RecentActivity from '../components/RecentActivity';

@@ -1733,7 +1733,7 @@ router.post('/webhook/wechat/:token', webhookLimiter, require('express').text({ 
     if (!msg.content) { res.type('application/xml').send(buildWechatReplyXml(msg.toUser, msg.fromUser, '消息为空')); return; }
     const reply = await runWebhookReply(binding, msg.content);
     res.type('application/xml').send(buildWechatReplyXml(msg.toUser, msg.fromUser, reply));
-  } catch (err: any) {
+  } catch {
     res.status(500).type('application/xml').send(buildWechatReplyXml('', '', '服务暂时不可用'));
   }
 });

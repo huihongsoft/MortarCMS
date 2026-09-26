@@ -16,7 +16,8 @@
     "build:admin": "cd admin && npm run build",
     "build:frontend": "cd frontend && npm run build",
     "start": "cd server && npm start",
-    "lint": "eslint \"server/src/**/*.ts\" \"admin/src/**/*.{ts,tsx}\" \"frontend/src/**/*.{ts,tsx}\""
+    "lint": "eslint \"server/src/**/*.ts\" \"admin/src/**/*.{ts,tsx}\" \"frontend/src/**/*.{ts,tsx}\"",
+    "check:bundle": "node scripts/check-bundle-size.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

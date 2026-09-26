@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Pencil, Trash2, Eye, Inbox, Copy, ChevronRight } from 'lucide-react';
+import { Plus, Pencil, Trash2, Inbox, Copy, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';

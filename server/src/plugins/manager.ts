@@ -11,7 +11,7 @@ import { verifyArtifact } from '../utils/artifact';
 import { isPrivateIp } from '../utils/ssrf';
 import { APP_VERSION } from '../utils/config';
 import { doAction, withHookSource, removeHooksBySource } from '../utils/hooks';
-import { purgeContentCaches, purgeAllCaches } from '../utils/cache';
+import { purgeContentCaches } from '../utils/cache';
 import { removeShortcodesBySource } from '../utils/shortcodes';
 import { removeToolsBySource } from '../utils/aiTools';
 import { setPluginContext, removePluginRegistrations, clearPluginIntervals } from '../utils/pluginApi';

@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useRef } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { Calendar, Folder, Tag, Clock, MessageSquare, ChevronLeft } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';

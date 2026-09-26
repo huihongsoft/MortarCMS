@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { formatDateTime } from '../lib/format';
 import StatusBar from './StatusBar';
 import { Outlet, useLocation } from 'react-router-dom';
-import { Globe, Moon, Sun, ExternalLink, LogOut, ChevronDown, Bot, Menu, X, Bell } from 'lucide-react';
+import { Globe, Moon, Sun, ExternalLink, LogOut, ChevronDown, Bot, Menu, Bell } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import { useAuth } from '../lib/auth';
@@ -63,7 +63,7 @@ export default function Layout() {
   }, [navigate]);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [primary, setPrimary] = useState('');
+  const [, setPrimary] = useState('');
   const [notifOpen, setNotifOpen] = useState(false);
   const [notifs, setNotifs] = useState<any[]>([]);
   const [unread, setUnread] = useState(0);

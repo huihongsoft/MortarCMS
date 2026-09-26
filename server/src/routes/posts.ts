@@ -3,15 +3,14 @@ import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, requireCap, resolveOptionalUser, userCan, AuthRequest } from '../middleware/auth';
-import { verifyToken } from '../utils/jwt';
 import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
 import { SiteRequest } from '../middleware/site';
-import { slugify, uniqueSlug, postUrl, getPermalinkPrefix } from '../utils/slug';
+import { slugify, uniqueSlug, getPermalinkPrefix } from '../utils/slug';
 import { likeContains } from '../utils/sqlLike';
 import { recordMovedPath } from '../utils/redirects';
 import { notify } from '../utils/notifications';
 import { buildMatchQuery, matchJoin, matchClause, matchOrder } from '../utils/searchIndex';
-import { normalizeLang, defaultLang, contentLangs, translationsOf, postPathForLang, pagePathForLang } from '../utils/contentLang';
+import { normalizeLang, defaultLang, contentLangs, translationsOf, postPathForLang } from '../utils/contentLang';
 import { rateLimitStore } from '../utils/rateLimitStore';
 import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
 import { applyFilters, doAction } from '../utils/hooks';
@@ -65,7 +64,7 @@ function publicShape(posts: any[], canBypass: boolean): any[] {
     // enrichPosts embeds the author row it fetched (id, username, email, avatar).
     // The email is not public data and was shipping to anonymous visitors.
     if (rest.author && typeof rest.author === 'object' && !canBypass) {
-      const { email, ...author } = rest.author;
+      const { email: _email, ...author } = rest.author;
       rest.author = author;
     }
     return rest;
@@ -935,7 +934,6 @@ router.post('/:id/clone', authenticate, requireCap('edit_posts'), (req: AuthRequ
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
     if (!userCan(req.user!, 'edit_others_posts') && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot clone another author\'s post' }); return; }
     const id = cuid();
-    const now = new Date().toISOString();
     withTransaction(() => {
       db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, featured, password, format, authorId, parentId, menuOrder, sticky) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
         id, existing.title + ' (Copy)', existing.slug + '-copy', existing.content, existing.excerpt, 'draft', existing.type, existing.featured, '', existing.format || 'standard', req.user!.userId, null, existing.menuOrder, 0
@@ -1023,7 +1021,6 @@ router.post('/:id/translate', authenticate, requireCap('edit_posts'), (req: Auth
     const allSlugs = (db.prepare('SELECT slug FROM Post').all() as any[]).map((s: any) => s.slug);
     const slug = uniqueSlug(source.slug + '-' + lang, allSlugs);
     const id = cuid();
-    const now = new Date().toISOString();
     db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, featured, password, authorId, parentId, menuOrder, publishedAt, siteId, type, lang, translationGroup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
       .run(id, source.title, slug, source.content || '', source.excerpt || '', 'draft', source.featured || null, '', req.user!.userId, null, 0, null, source.siteId || null, source.type, lang, group);
     // Relations travel with the copy: a translation of a post filed under

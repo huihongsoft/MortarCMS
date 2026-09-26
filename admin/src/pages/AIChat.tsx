@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { formatDateTime } from '../lib/format';
-import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Loader2, CheckCircle2, XCircle, Ban, Bell, Download, Settings2, Share2, Mic, BookOpen, X, Upload, Menu, Rocket, MoreHorizontal, LayoutTemplate, Bookmark } from 'lucide-react';
+import { Send, Bot, User, Sparkles, Wand2, FileText, BarChart3, MessageSquare, Copy, RotateCcw, Square, Check, Plus, Trash2, ListChecks, Bell, Download, Settings2, Share2, Mic, BookOpen, X, Upload, Menu, Rocket, MoreHorizontal, LayoutTemplate, Bookmark } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang, serverMessage, serverCallSummary } from '../lib/i18n';
 import Select from '../components/Select';
@@ -454,17 +454,6 @@ export default function AIChat() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, busy]);
-
-  function startRename(id: string, current: string) {
-    setRenamingId(id); setRenameValue(current);
-  }
-
-  function commitRename() {
-    if (renamingId && renameValue.trim()) {
-      updateSession(renamingId, x => ({ ...x, title: renameValue.trim().slice(0, 40) }));
-    }
-    setRenamingId(null);
-  }
 
   // Poll task detail while it is running
   useEffect(() => {

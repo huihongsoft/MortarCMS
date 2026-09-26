@@ -203,11 +203,9 @@ export default function Media() {
 
   async function uploadPasted(files: File[]) {
     setUploading(true);
-    let done = 0;
     for (const file of files) {
       const form = new FormData(); form.append('file', file);
       try { await api.post('/media/upload', form); } catch {}
-      done++;
     }
     setUploading(false);
     const r = await api.get('/media'); setMedia(r.data.media);

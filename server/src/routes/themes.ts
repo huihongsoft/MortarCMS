@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import fs from 'fs';
 import path from 'path';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, requireCap, authorize, resolveOptionalUser, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { upload } from '../middleware/upload';
 import { purgeAllCaches } from '../utils/cache';

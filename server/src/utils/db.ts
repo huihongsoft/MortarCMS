@@ -1098,7 +1098,6 @@ function seedBuiltinRoles(): void {
  * code — which a readiness probe should treat as "not ready to serve".
  */
 export function schemaVersion(): { applied: number; latest: number } {
-  const latest = MIGRATIONS.length ? Math.max(...MIGRATIONS.map((m) => m.version)) : 0;
   let appliedVersions: number[] = [];
   try {
     appliedVersions = (db.prepare('SELECT version FROM _SchemaMigration').all() as any[]).map((r) => Number(r.version));

@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import { z } from 'zod';
 import db, { withTransaction } from '../utils/db';
-import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { passwordOk } from './auth';
 import { getUserSiteIds, setUserSites } from '../utils/userSites';
 import { doAction } from '../utils/hooks';

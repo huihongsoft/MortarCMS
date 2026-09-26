@@ -2,7 +2,7 @@ import db from './db';
 import { effectiveSetting } from './siteSettings';
 import { defaultLang, contentLangs, requestLang, postPathForLang, pagePathForLang } from './contentLang';
 import { PUBLIC_POST_CONDITIONS } from './publicPosts';
-import { postUrl, getPermalinkPrefix, getPermalinkStructure } from './slug';
+import { getPermalinkPrefix, getPermalinkStructure } from './slug';
 
 // Server-side SEO meta for the SPA shell.
 //

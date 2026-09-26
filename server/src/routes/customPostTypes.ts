@@ -1,5 +1,5 @@
 import { Router, Response } from 'express';
-import db, { cuid } from '../utils/db';
+import db from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { purgeContentCaches } from '../utils/cache';
 

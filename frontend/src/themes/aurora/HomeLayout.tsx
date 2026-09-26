@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Link } from 'react-router-dom';
 import { sanitizeHtml } from '../../lib/sanitizeHtml';
 import { Calendar, User, Folder } from 'lucide-react';

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Pencil, Check, X, FolderTree, Merge } from 'lucide-react';
+import { Trash2, Pencil, Check, X, FolderTree, Merge } from 'lucide-react';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';

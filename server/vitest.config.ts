@@ -10,10 +10,13 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
-      // Ratchet thresholds: set below the current baseline (with headroom for
-      // cross-platform/line-count variance) so coverage can't regress
-      // silently. Raise them as tests are added.
-      thresholds: { statements: 15, branches: 8, functions: 17, lines: 18 },
+      // Ratchet thresholds, a couple of points below the measured baseline
+      // (50.2 / 44.7 / 58.3 / 55.9 when they were raised) so ordinary
+      // cross-platform variance does not fail a build while a real regression
+      // does. They used to sit at 15/8/17/18: a floor low enough that whole
+      // features could lose their tests unnoticed, which is what a threshold
+      // nobody dares raise is worth.
+      thresholds: { statements: 48, branches: 42, functions: 55, lines: 53 },
     },
   },
 });

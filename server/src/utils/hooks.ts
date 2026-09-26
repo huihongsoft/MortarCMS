@@ -130,7 +130,6 @@ export function listHooks(): { actions: HookInfo[]; filters: HookInfo[] } {
 }
 
 // Built-in hooks
-import db from './db';
 
 addAction('init', () => { console.log('[Hook] System initialized'); });
 
@@ -142,11 +141,11 @@ addAction('post_published', (postId: string) => {
   console.log('[Hook] Post published: ' + postId);
 });
 
-addAction('post_created', (postId: string, status: string) => {
+addAction('post_created', (_postId: string, _status: string) => {
   // Plugins can hook post creation here
 });
 
-addAction('post_updated', (postId: string) => {
+addAction('post_updated', (_postId: string) => {
   // Plugins can hook post updates here
 });
 

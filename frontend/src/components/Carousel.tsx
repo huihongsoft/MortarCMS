@@ -13,7 +13,7 @@ export interface CarouselItem {
 }
 
 // Modern hero carousel: auto-play, fade/slide, dots + arrows, pause on hover
-export default function Carousel({ items, settings }: { items: CarouselItem[]; settings?: Record<string, string> }) {
+export default function Carousel({ items, settings: _settings }: { items: CarouselItem[]; settings?: Record<string, string> }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const timerRef = useRef<any>(null);

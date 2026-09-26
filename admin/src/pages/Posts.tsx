@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { formatDate } from '../lib/format';
 import { Link, useNavigate } from 'react-router-dom';
-import { Plus, Edit2, Trash2, Eye, Pin, Trash, Copy, FileText, Languages, Search, X } from 'lucide-react';
+import { Plus, Edit2, Trash2, Eye, Pin, Trash, FileText, Languages, Search, X } from 'lucide-react';
 import EmptyState from '../components/EmptyState';
 import { useToast } from '../lib/toast';
 import api from '../lib/api';
@@ -26,12 +26,9 @@ export default function Posts() {
   const canBulk = can('edit_others_posts');
   const canBulkDelete = can('delete_others_posts');
   const canDelete = can('delete_posts');
-  const [quickEdit, setQuickEdit] = useState<any>(null);
   const [batchLang, setBatchLang] = useState('English');
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchResults, setBatchResults] = useState<any[] | null>(null);
-  const [qeTitle, setQeTitle] = useState('');
-  const [qeStatus, setQeStatus] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortDir, setSortDir] = useState('desc');
@@ -73,15 +70,6 @@ export default function Posts() {
   }
 
   async function deletePost(id: string) { if (!(await dialog.confirm(t('delete this post', getLang()), { danger: true }))) return; await api.delete(`/posts/${id}`); fetchPosts(); }
-
-  async function quickSave() {
-    if (!quickEdit) return;
-    await api.put('/posts/' + quickEdit.id, { title: qeTitle, status: qeStatus });
-    toast.toast(t('post updated', getLang()));
-    setQuickEdit(null);
-    fetchPosts();
-  }
-  function openQuickEdit(p: any) { setQuickEdit(p); setQeTitle(p.title); setQeStatus(p.status); }
 
   // The server can only act on rows inside the sites this user is assigned to;
   // it reports the rest as skipped. Say so rather than claiming they all went.
@@ -136,12 +124,6 @@ export default function Posts() {
   async function toggleSticky(id: string) {
     const r = await api.put(`/posts/${id}/sticky`);
     toast.toast(r.data.sticky ? t('post pinned', getLang()) : t('post unpinned', getLang()));
-    fetchPosts();
-  }
-
-  async function clonePost(id: string) {
-    await api.post('/posts/' + id + '/clone');
-    toast.toast(t('post cloned', getLang()));
     fetchPosts();
   }
 

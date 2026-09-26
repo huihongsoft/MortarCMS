@@ -29,7 +29,7 @@ export function formatDate(value: unknown): string {
 // The reference ships no CSS for this block at all (18 stylesheets, no .notice
 // rule), so the bar's look follows its rendered page: full-width white box,
 // 1px #dedede border, 5px radius, icon + one line.
-export function NoticeBar({ settings }: { settings: Record<string, string> }) {
+export function NoticeBar({ settings: _settings }: { settings: Record<string, string> }) {
   const [posts, setPosts] = useState<any[]>([]);
   const [index, setIndex] = useState(0);
   const [sliding, setSliding] = useState(false);
@@ -417,7 +417,7 @@ export function SoftListRow({ p, settings }: { p: any; settings: Record<string, 
 // ---- Ranking rows (reference .rank_box .rank_li): title left, category right ----
 // Row 35px / dashed #ccc / 4px gap; inner .title is 29px tall at 14px, offset 3px,
 // with the category floated right at 28% width.
-export function RankRow({ p, settings }: { p: any; settings: Record<string, string> }) {
+export function RankRow({ p, settings: _settings }: { p: any; settings: Record<string, string> }) {
   const cat = p.categories?.[0];
   return React.createElement('li', { className: 'h-[35px] leading-[35px] border-b border-dashed border-[#ccc] mb-[4px] last:border-b-0 last:mb-0' },
     React.createElement(Link, { to: postPath(p.slug), className: 'relative left-[3px] flex items-center h-[29px] leading-[29px] text-[14px] overflow-hidden' },

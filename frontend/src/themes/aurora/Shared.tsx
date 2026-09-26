@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar, User, Folder } from 'lucide-react';
 import { cdnUrl } from '../../lib/cdn';
-import { timeAgo, readingTime, useTimeTick } from '../../lib/time';
+import { timeAgo, useTimeTick } from '../../lib/time';
 import { t } from '../../lib/i18n';
 import { postPath } from '../../lib/permalink';
 

@@ -868,7 +868,7 @@ register('get_post', '获取单篇文章的完整内容，通过 id 或 slug', {
     return { error: '无权查看该文章' };
   }
   // Never leak the protection password back into the AI conversation
-  const { password, ...safe } = row;
+  const { password: _password, ...safe } = row;
   return safe;
 });
 

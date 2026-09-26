@@ -10,7 +10,7 @@ export default function SubmitPost() {
   // A browser-only read, so it is guarded rather than moved into an effect:
   // these pages are never server-rendered, and deferring it would show a
   // signed-in visitor the signed-out screen for a frame.
-  const [loggedIn, setLoggedIn] = useState(() => typeof window !== 'undefined' && !!localStorage.getItem('mortar_token'));
+  const [loggedIn] = useState(() => typeof window !== 'undefined' && !!localStorage.getItem('mortar_token'));
   const [form, setForm] = useState({ title: '', excerpt: '', content: '' });
   const [categories, setCategories] = useState<any[]>([]);
   const [selected, setSelected] = useState<string[]>([]);

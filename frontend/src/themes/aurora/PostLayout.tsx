@@ -3,7 +3,6 @@ import { Link } from 'react-router-dom';
 import { Calendar, User, Clock, MessageSquare, Folder, Tag as TagIcon  } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import CommentThread, { CommentReplyBanner, CommentClasses } from '../../components/CommentThread';
-import RelatedPosts from '../../components/RelatedPosts';
 import SocialShare from '../../components/SocialShare';
 import Toc from '../../components/Toc';
 import { cdnUrl, cdnHtml } from '../../lib/cdn';
@@ -20,7 +19,7 @@ import { postPath } from '../../lib/permalink';
 // Aurora post: centered, large type, editorial prose
 export default function PostLayout(props: any) {
   useTimeTick();
-  const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug, replyTo, startReply, cancelReply } = props;
+  const { settings, post, comments, submitted, commentForm, submitComment, setCommentForm, commentError, slug: _slug, replyTo, startReply, cancelReply } = props;
   const contentRef = useRef<HTMLDivElement>(null);
   const author = post.author;
   const inputCls = 'w-full px-4 py-3 rounded-xl border border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400 text-sm transition-shadow';

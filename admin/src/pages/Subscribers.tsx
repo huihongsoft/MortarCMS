@@ -68,7 +68,6 @@ export default function Subscribers() {
     finally { setSending(false); }
   };
 
-  const pages = Math.max(1, Math.ceil(total / 15));
 
   return React.createElement('div', null,
     // Header

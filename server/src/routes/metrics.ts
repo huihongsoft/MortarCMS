@@ -40,7 +40,7 @@ router.get('/', (_req, res: Response) => {
     res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8');
     res.setHeader('Cache-Control', 'no-store');
     res.send(renderMetrics());
-  } catch (err: any) {
+  } catch {
     // Never leak internals in a scrape response.
     res.status(500).type('text/plain').send('# metrics unavailable\n');
   }

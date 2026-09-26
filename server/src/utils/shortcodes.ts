@@ -86,7 +86,7 @@ function parseAttrs(raw: string): Record<string, string> {
 // ---- Built-in shortcodes ----
 
 // [gallery ids="1,2,3" columns="3" size="thumb"] -> responsive image grid (lightbox-ready)
-addShortcode('gallery', (attrs, _content, ctx) => {
+addShortcode('gallery', (attrs, _content, _ctx) => {
   const ids = (attrs.ids || '').split(',').map(s => s.trim()).filter(Boolean);
   const columns = Math.min(parseInt(attrs.columns || '3') || 3, 6);
   const useThumb = attrs.size === 'thumb' || !attrs.size;

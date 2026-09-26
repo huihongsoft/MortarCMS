@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { formatNumber } from '../lib/format';
-import { Plus, Trash2, Pencil, Check, X, Tag as TagIcon, Merge } from 'lucide-react';
+import { Trash2, Pencil, Check, X, Tag as TagIcon, Merge } from 'lucide-react';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';

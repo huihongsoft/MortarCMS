@@ -1,16 +1,14 @@
 import React, { useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { ChevronLeft  } from 'lucide-react';
 import Breadcrumbs from '../../components/Breadcrumbs';
 import { t } from '../../lib/i18n';
-import { cdnUrl, cdnHtml } from '../../lib/cdn';
+import { cdnHtml } from '../../lib/cdn';
 import { embedContent } from '../../lib/embed';
 import { sanitizeCss } from '../../lib/safeCss';
 import { purify } from '../../lib/purify';
 
 // Aurora page: centered, clean, minimal
 export default function PageLayout(props: any) {
-  const { settings, page, submitted, commentForm, setCommentForm, submitComment, commentError } = props;
+  const { settings, page, submitted: _submitted, commentForm: _commentForm, setCommentForm: _setCommentForm, submitComment: _submitComment, commentError: _commentError } = props;
   const contentRef = useRef<HTMLDivElement>(null);
 
   return React.createElement('div', { className: 'max-w-5xl mx-auto px-6 py-14' },

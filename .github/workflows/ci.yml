@@ -73,6 +73,11 @@ jobs:
       - name: Compile server (production build)
         run: cd server && npx tsc
 
+      - name: Bundle-size budget
+        # gzip budget per app, so a convenient import cannot quietly double the
+        # first paint. Run after the builds above.
+        run: npm run check:bundle
+
       - name: Install script syntax check
         run: bash -n install.sh
 

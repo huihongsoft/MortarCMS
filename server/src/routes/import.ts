@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import multer from 'multer';
 import fs from 'fs';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { slugify, uniqueSlug } from '../utils/slug';
 import { parseFrontmatter, mdToHtml } from '../utils/markdown';
 import { sanitizeHtml } from '../utils/sanitize';
@@ -10,7 +10,6 @@ import { sanitizeHtml } from '../utils/sanitize';
 const router = Router();
 const upload = multer({ dest: 'uploads/import-tmp/', limits: { fileSize: 50 * 1024 * 1024 } });
 
-function esc(s: string): string { return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
 function unesc(s: string): string { return s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#039;/g, "'"); }
 
 // Admin: import WordPress WXR XML file
@@ -135,7 +134,6 @@ router.post('/wxr', authenticate, requireCap('import'), upload.single('file'), (
     }
 
     // Comments are embedded in items; parse separately
-    const commentRe = /<wp:comment>([\s\S]*?)<\/wp:comment>/g;
     const commentItems = [...xml.matchAll(/<item>([\s\S]*?)<\/item>/g)];
     for (const ci of commentItems) {
       const body = ci[1];

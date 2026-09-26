@@ -4,7 +4,7 @@ import api from '../lib/api';
 import { t } from '../lib/i18n';
 import { postPath } from '../lib/permalink';
 
-export default function RelatedPosts({ postId, slug }: { postId?: string; slug?: string }) {
+export default function RelatedPosts({ postId, slug: _slug }: { postId?: string; slug?: string }) {
   const [posts, setPosts] = useState<any[]>([]);
   useEffect(() => {
     if (!postId) return;

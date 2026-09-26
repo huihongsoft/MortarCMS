@@ -1,6 +1,9 @@
 // Flat config for the whole repo (server / admin / frontend).
-// `no-explicit-any` and `no-unused-vars` are warnings for now: the codebase
-// has legacy debt that needs incremental typing, and CI must not be blocked.
+// `no-unused-vars` is an **error**: a dead import or variable is how a codebase
+// rots, it is cheap to fix, and a warning nobody reads is not a gate. It was
+// promoted after the backlog was cleared, so a new one is a regression.
+// `no-explicit-any` stays a warning — that typing debt is real and incremental,
+// and two thousand errors would simply be switched off.
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
@@ -18,7 +21,7 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-explicit-any': 'warn',
-      '@typescript-eslint/no-unused-vars': ['warn', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-unused-vars': 'off', // TS rule handles it
       'no-undef': 'off', // TS handles it
       '@typescript-eslint/no-require-imports': 'off', // legacy dynamic requires in server

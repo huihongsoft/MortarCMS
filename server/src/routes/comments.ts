@@ -1,7 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, authorize, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { SiteRequest } from '../middleware/site';
 import { siteScopeForFilter, userMayAccessSite } from '../utils/userSites';
 import { applyFilters, doAction } from '../utils/hooks';

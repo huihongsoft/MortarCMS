@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import db, { withTransaction } from '../utils/db';
-import { authenticate, authorize, requireCap, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { sanitizeHtml } from '../utils/sanitize';
 
 const router = Router();

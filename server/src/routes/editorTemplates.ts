@@ -32,7 +32,7 @@ router.get('/canvas-css', authenticate, requireCap('edit_posts'), (_req: AuthReq
     const html = fs.readFileSync(indexHtml, 'utf8');
     const styles = [...html.matchAll(/href="([^"]*\.css)"/g)].map(m => m[1]);
     res.json({ styles });
-  } catch (err: any) { res.json({ styles: [] }); }
+  } catch { res.json({ styles: [] }); }
 });
 
 // Public: live preview HTML for a CMS data block (used by the visual editor canvas)
@@ -103,7 +103,7 @@ router.delete('/templates/:id', authenticate, requireCap('manage_options'), (req
 // Admin: export custom templates as JSON download
 router.get('/templates/export', authenticate, requireCap('manage_options'), (_req: AuthRequest, res: Response) => {
   try {
-    const templates = loadTemplates().map(({ id, createdAt, ...rest }: any) => rest);
+    const templates = loadTemplates().map(({ id: _id, createdAt: _createdAt, ...rest }: any) => rest);
     res.setHeader('Content-Disposition', 'attachment; filename="mortar-templates.json"');
     res.type('application/json');
     res.send(JSON.stringify({ version: 1, templates }, null, 2));

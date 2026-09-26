@@ -53,7 +53,6 @@ export default function BrokenLinks() {
     } catch (e: any) { toast(e?.response?.data?.error || String(e), 'error'); }
   };
 
-  const pages = Math.max(1, Math.ceil(total / 15));
 
   return React.createElement('div', null,
     // Header

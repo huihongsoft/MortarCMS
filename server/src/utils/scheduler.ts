@@ -2,7 +2,6 @@
 // runs due tasks, and admins can trigger/disable them from the tools panel.
 // Enabled state persists in the Setting table; run stats live in memory.
 import fs from 'fs';
-import path from 'path';
 import db, { cuid, DB_PATH } from './db';
 import { doAction } from './hooks';
 import { purgeContentCaches, purgeAllCaches } from './cache';
@@ -434,7 +433,7 @@ export function registerBuiltinTasks(): void {
     intervalMs: 86_400_000,
     fn: async () => {
       try {
-        const { getStorageConfig, storeFile, keyFromUrl } = await import('./storage');
+        const { getStorageConfig, storeFile } = await import('./storage');
         const cfg = getStorageConfig();
         if (cfg.provider !== 's3') return;
         const rows = db.prepare("SELECT id, url, thumbnail, srcset, mimeType FROM Media WHERE url LIKE '/uploads/%' ORDER BY createdAt DESC LIMIT 200").all() as any[];

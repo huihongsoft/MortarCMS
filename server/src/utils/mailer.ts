@@ -253,7 +253,7 @@ export function getTemplateOverride(name: string): { subject: string; body: stri
   return ov;
 }
 
-function sampleVars(name: string): Record<string, string> {
+function sampleVars(_name: string): Record<string, string> {
   const site = (db.prepare("SELECT value FROM Setting WHERE key = 'site_title'").get() as any)?.value || 'Mortar CMS';
   const url = (db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || 'http://localhost:3001';
   const base: Record<string, string> = {
