@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Trash2, Pencil, Check, X, Tag as TagIcon } from 'lucide-react';
+import { Plus, Trash2, Pencil, Check, X, Tag as TagIcon, Merge } from 'lucide-react';
 import { t, getLang } from '../lib/i18n';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { dialog } from '../lib/dialog';
+import Select from '../components/Select';
 
 export default function Tags() {
   const [tags, setTags] = useState<any[]>([]);
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [editing, setEditing] = useState<any>(null);
+  // Which row is choosing a merge target (null = none).
+  const [merging, setMerging] = useState<string>('');
+  const [mergeInto, setMergeInto] = useState<string>('');
   const toast = useToast();
 
   useEffect(() => { fetchTags(); }, []);
@@ -27,6 +31,19 @@ export default function Tags() {
 
   function reset() { setName(''); setSlug(''); setEditing(null); }
   function startEdit(tg: any) { setEditing(tg); setName(tg.name); setSlug(tg.slug); }
+
+  // "javascript" and "JavaScript" are the same tag; merging moves the posts to
+  // the target before the source goes, which deleting did not.
+  async function merge(tag: any) {
+    if (!mergeInto) return;
+    const target = tags.find((x: any) => x.id === mergeInto);
+    if (!(await dialog.confirm(t('merge confirm', getLang()).replace('{from}', tag.name).replace('{into}', target?.name || ''), { danger: true }))) return;
+    try {
+      const r = await api.post('/tags/' + tag.id + '/merge', { intoId: mergeInto });
+      toast.toast(t('merged', getLang()).replace('{n}', String(r.data?.moved ?? 0)).replace('{into}', target?.name || ''));
+      setMerging(''); setMergeInto(''); fetchTags();
+    } catch (e: any) { toast.toast(e.response?.data?.error || t('merge failed', getLang()), 'error'); }
+  }
 
   async function del(tg: any) {
     if (!(await dialog.confirm(t('delete tag', getLang()) + ' "' + tg.name + '"?', { danger: true }))) return;
@@ -71,9 +88,18 @@ export default function Tags() {
                   React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, tg._count?.posts || 0),
                   React.createElement('td', { className: 'px-4 py-3 text-sm text-gray-500' }, (tg._count?.views || 0).toLocaleString()),
                   React.createElement('td', { className: 'px-4 py-3' },
-                    React.createElement('div', { className: 'flex justify-end gap-1' },
-                      React.createElement('button', { onClick: () => startEdit(tg), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),
-                      React.createElement('button', { onClick: () => del(tg), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 }))
+                    React.createElement('div', { className: 'flex justify-end items-center gap-1' },
+                      merging === tg.id
+                        ? React.createElement(React.Fragment, null,
+                            React.createElement(Select, { value: mergeInto, onChange: (v: string) => setMergeInto(v), className: 'input-field text-xs w-40' },
+                              React.createElement('option', { value: '' }, t('merge into', getLang()) + '…'),
+                              tags.filter((x: any) => x.id !== tg.id).map((x: any) => React.createElement('option', { key: x.id, value: x.id }, x.name))),
+                            React.createElement('button', { onClick: () => merge(tg), disabled: !mergeInto, className: 'p-1.5 text-gray-400 hover:text-primary-600 disabled:opacity-40', title: t('merge', getLang()) }, React.createElement(Check, { size: 16 })),
+                            React.createElement('button', { onClick: () => { setMerging(''); setMergeInto(''); }, className: 'p-1.5 text-gray-400 hover:text-gray-700', title: t('cancel', getLang()) }, React.createElement(X, { size: 16 })))
+                        : React.createElement(React.Fragment, null,
+                            React.createElement('button', { onClick: () => { setMerging(tg.id); setMergeInto(''); }, className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('merge into', getLang()) }, React.createElement(Merge, { size: 16 })),
+                            React.createElement('button', { onClick: () => startEdit(tg), className: 'p-1.5 text-gray-400 hover:text-primary-600', title: t('edit', getLang()) }, React.createElement(Pencil, { size: 16 })),
+                            React.createElement('button', { onClick: () => del(tg), className: 'p-1.5 text-gray-400 hover:text-red-600', title: t('delete', getLang()) }, React.createElement(Trash2, { size: 16 })))
                     )
                   )
                 )

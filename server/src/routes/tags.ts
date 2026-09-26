@@ -3,6 +3,7 @@ import { z } from 'zod';
 import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { slugify } from '../utils/slug';
+import { purgeContentCaches } from '../utils/cache';
 
 const router = Router();
 const tagSchema = z.object({ name: z.string().min(1).max(50) });
@@ -59,6 +60,32 @@ router.post('/bulk-delete', authenticate, requireCap('manage_tags'), (req: AuthR
       for (const id of ids.slice(0, 1000)) { db.prepare('DELETE FROM Tag WHERE id = ?').run(id); }
     });
     res.json({ success: true, count: Math.min(ids.length, 1000) });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: merge a tag into another one ("javascript" and "JavaScript" are the same
+// tag; deleting one used to be the only tool). Posts move first, then the source
+// goes, so no post loses the tag it was filed under.
+router.post('/:id/merge', authenticate, requireCap('manage_tags'), (req: AuthRequest, res: Response) => {
+  try {
+    const into = String(req.body?.intoId || '');
+    const from = req.params.id;
+    if (!into) { res.status(400).json({ error: 'intoId required' }); return; }
+    if (into === from) { res.status(400).json({ error: '不能合并到自身' }); return; }
+    const source = db.prepare('SELECT * FROM Tag WHERE id = ?').get(from) as any;
+    const target = db.prepare('SELECT * FROM Tag WHERE id = ?').get(into) as any;
+    if (!source || !target) { res.status(404).json({ error: '标签不存在' }); return; }
+    let moved = 0;
+    withTransaction(() => {
+      const posts = db.prepare('SELECT postId FROM PostTag WHERE tagId = ?').all(from) as any[];
+      for (const { postId } of posts) {
+        const r = db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(postId, into);
+        moved += r.changes || 0;
+      }
+      db.prepare('DELETE FROM Tag WHERE id = ?').run(from);
+    });
+    purgeContentCaches();
+    res.json({ success: true, moved, into: { id: target.id, name: target.name } });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

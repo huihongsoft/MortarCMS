@@ -3,6 +3,7 @@ import { z } from 'zod';
 import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { slugify } from '../utils/slug';
+import { purgeContentCaches } from '../utils/cache';
 
 const router = Router();
 // parentId must accept null — the admin UI sends null for "no parent"
@@ -57,6 +58,36 @@ router.post('/bulk-delete', authenticate, requireCap('manage_categories'), (req:
       for (const id of ids.slice(0, 1000)) { db.prepare('DELETE FROM Category WHERE id = ?').run(id); }
     });
     res.json({ success: true, count: Math.min(ids.length, 1000) });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: merge a category into another one.
+//
+// "Delete" was the only way to get rid of a duplicate, and deleting a category
+// used to take its posts with it (or leave them uncategorized) — merging moves the
+// posts first, so consolidating "News" and "News " does not silently drop what
+// they were attached to. Deleting the source afterwards cascades its join rows.
+router.post('/:id/merge', authenticate, requireCap('manage_categories'), (req: AuthRequest, res: Response) => {
+  try {
+    const into = String(req.body?.intoId || '');
+    const from = req.params.id;
+    if (!into) { res.status(400).json({ error: 'intoId required' }); return; }
+    if (into === from) { res.status(400).json({ error: '不能合并到自身' }); return; }
+    const source = db.prepare('SELECT * FROM Category WHERE id = ?').get(from) as any;
+    const target = db.prepare('SELECT * FROM Category WHERE id = ?').get(into) as any;
+    if (!source || !target) { res.status(404).json({ error: '分类不存在' }); return; }
+    let moved = 0;
+    withTransaction(() => {
+      const posts = db.prepare('SELECT postId FROM PostCategory WHERE categoryId = ?').all(from) as any[];
+      for (const { postId } of posts) {
+        // OR IGNORE: a post already in both categories must not get a duplicate row.
+        const r = db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(postId, into);
+        moved += r.changes || 0;
+      }
+      db.prepare('DELETE FROM Category WHERE id = ?').run(from);
+    });
+    purgeContentCaches();
+    res.json({ success: true, moved, into: { id: target.id, name: target.name } });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
