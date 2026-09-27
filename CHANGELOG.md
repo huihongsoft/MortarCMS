@@ -132,6 +132,20 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 
 ### Fixed
 
+- **The newsletter digest could never send anything.** Its cursor
+  (`newsletter_last_sent_at`) is written *only after* a send, and the task returned
+  early when the cursor was absent — so nothing ever set it, on any install, while
+  the run still reported success and the screen said "task ran (0ms)". The comment
+  above the guard described the opposite behaviour. The first run now covers the
+  last week (not the whole archive) and sets the cursor, which then gates the next
+  one. Two more faults in the same task: a *failed* delivery used to advance the
+  cursor, so misconfigured SMTP would silently put those posts outside every later
+  window and the subscribers would never see them; and the whole body was wrapped
+  in `catch {}`, so none of this was visible anywhere.
+- Every scheduled task's outcome now goes to the structured log rather than
+  `console.log` — the same reason as the item above: a task that did nothing and a
+  task that failed both looked like "task ran".
+
 - LIKE wildcards are escaped on every search, not just the public post list:
   searching "100%" or "a_b" in the admin posts list, media, activity, newsletter
   or the AI tools matched far more rows than the user typed, and a wildcard-only
@@ -168,6 +182,20 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
   the block editor's vendor bundle.
 
 ### Fixed
+
+- **The newsletter digest could never send anything.** Its cursor
+  (`newsletter_last_sent_at`) is written *only after* a send, and the task returned
+  early when the cursor was absent — so nothing ever set it, on any install, while
+  the run still reported success and the screen said "task ran (0ms)". The comment
+  above the guard described the opposite behaviour. The first run now covers the
+  last week (not the whole archive) and sets the cursor, which then gates the next
+  one. Two more faults in the same task: a *failed* delivery used to advance the
+  cursor, so misconfigured SMTP would silently put those posts outside every later
+  window and the subscribers would never see them; and the whole body was wrapped
+  in `catch {}`, so none of this was visible anywhere.
+- Every scheduled task's outcome now goes to the structured log rather than
+  `console.log` — the same reason as the item above: a task that did nothing and a
+  task that failed both looked like "task ran".
 
 - **The task list was only half translated.** The screen's own labels went
   through `t()`, but the per-task detail — name, description, and the source

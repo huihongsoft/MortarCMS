@@ -8,6 +8,7 @@ import { purgeContentCaches, purgeAllCaches } from './cache';
 import { postUrl } from './slug';
 import { createBackupArchive, pruneBackups } from './backup';
 import { sharedStore } from './sharedStore';
+import { logger } from './logger';
 import { pruneRead } from './notifications';
 
 export interface TaskDef {
@@ -174,7 +175,7 @@ export function registerBuiltinTasks(): void {
       db.prepare("UPDATE Post SET status = 'published', publishedAt = ? WHERE status = 'scheduled' AND publishedAt <= ?").run(now, now);
       rows.forEach((r: any) => { try { doAction('post_published', r.id); } catch {} });
       purgeContentCaches();
-      console.log('[Task] Published ' + rows.length + ' scheduled posts');
+      logger.info({ count: rows.length }, 'scheduled posts published');
     },
   });
 
@@ -188,7 +189,7 @@ export function registerBuiltinTasks(): void {
       const r = db.prepare("DELETE FROM Post WHERE status = 'trash' AND updatedAt < ?").run(cutoff);
       if (r.changes > 0) {
         purgeContentCaches();
-        console.log('[Task] Purged ' + r.changes + ' trashed items');
+        logger.info({ count: r.changes }, 'trashed items purged');
       }
     },
   });
@@ -201,7 +202,7 @@ export function registerBuiltinTasks(): void {
     fn: () => {
       const cutoff = new Date(Date.now() - 90 * 86_400_000).toISOString();
       const r = db.prepare('DELETE FROM Activity WHERE createdAt < ?').run(cutoff);
-      if (r.changes > 0) console.log('[Task] Pruned ' + r.changes + ' activity entries');
+      if (r.changes > 0) logger.info({ count: r.changes }, 'activity entries pruned');
     },
   });
 
@@ -247,7 +248,7 @@ export function registerBuiltinTasks(): void {
         }
         db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
           .run(sentKey, sentKey, new Date().toISOString());
-        console.log('[Task] AI usage report sent to ' + admins.length + ' admin(s)');
+        logger.info({ count: admins.length }, 'AI usage report sent');
       } catch {}
     },
   });
@@ -285,7 +286,7 @@ export function registerBuiltinTasks(): void {
           }
         } catch { /* pruning must never break the task */ }
         if (audit || notes || sessions || shares) {
-          console.log('[Task] Pruned AI records: audit=' + audit + ' notifications=' + notes + ' sessions=' + sessions + ' shares=' + shares);
+          logger.info({ audit, notifications: notes, sessions, shares }, 'AI records pruned');
         }
       } catch { /* pruning must never break the scheduler */ }
     },
@@ -307,7 +308,7 @@ export function registerBuiltinTasks(): void {
           const r = db.prepare('DELETE FROM Revision WHERE postId = ? AND id NOT IN (' + marks + ')').run(postId, ...keep);
           pruned += r.changes;
         }
-        if (pruned > 0) console.log('[Task] Pruned ' + pruned + ' old revisions');
+        if (pruned > 0) logger.info({ count: pruned }, 'old revisions pruned');
       } catch {}
     },
   });
@@ -320,7 +321,7 @@ export function registerBuiltinTasks(): void {
     fn: async () => {
       // Use the real database path: a hardcoded server/data/mortar.db would
       // silently back up nothing when MORTAR_DB_PATH is customised.
-      if (!fs.existsSync(DB_PATH)) { console.log('[Task] Backup skipped: database file not found at ' + DB_PATH); return; }
+      if (!fs.existsSync(DB_PATH)) { logger.warn({ dbPath: DB_PATH }, 'backup skipped: database file not found'); return; }
       let retention = 10;
       try {
         retention = Math.max(1, parseInt((db.prepare("SELECT value FROM Setting WHERE key = 'backup_retention'").get() as any)?.value || '10') || 10);
@@ -342,13 +343,13 @@ export function registerBuiltinTasks(): void {
             const old = keys.shift() as string;
             try { await deleteRemoteFile(old); } catch {}
           }
-          console.log('[Task] Backup mirrored to object storage (retention ' + retention + ')');
+          logger.info({ retention }, 'backup mirrored to object storage');
         }
-      } catch (e: any) { console.log('[Task] Backup mirror to object storage failed: ' + e.message); }
+      } catch (e: any) { logger.warn({ err: e.message }, 'backup mirror to object storage failed'); }
       try {
         db.prepare("INSERT INTO Setting (id, key, value) VALUES ('db_last_backup', 'db_last_backup', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date().toISOString());
       } catch {}
-      console.log('[Task] Backup created: ' + entry.name + ' (' + entry.bytes + ' bytes, retention ' + retention + ')');
+      logger.info({ file: entry.name, bytes: entry.bytes, retention }, 'backup created');
       try { doAction('backup_completed', entry.path); } catch {}
     },
   });
@@ -362,14 +363,14 @@ export function registerBuiltinTasks(): void {
       try {
         const cutoff = new Date(Date.now() - 90 * 86_400_000).toISOString();
         const r = db.prepare("DELETE FROM AiTask WHERE status IN ('done','failed','cancelled') AND createdAt < ?").run(cutoff);
-        if (r.changes > 0) console.log('[Task] Pruned ' + r.changes + ' old AI tasks');
+        if (r.changes > 0) logger.info({ count: r.changes }, 'old AI tasks pruned');
         // Hard cap on total history rows (running tasks are never removed)
         const extra = db.prepare("SELECT COUNT(*) as c FROM AiTask WHERE status IN ('done','failed','cancelled')").get() as any;
         const excess = ((extra?.c || 0) - 500);
         if (excess > 0) {
           const ids = db.prepare("SELECT id FROM AiTask WHERE status IN ('done','failed','cancelled') ORDER BY createdAt ASC LIMIT ?").all(excess) as any[];
           for (const row of ids) db.prepare('DELETE FROM AiTask WHERE id = ?').run(row.id);
-          console.log('[Task] Trimmed ' + ids.length + ' AI task records (cap 500)');
+          logger.info({ count: ids.length }, 'AI task records trimmed');
         }
       } catch {}
     },
@@ -387,9 +388,13 @@ export function registerBuiltinTasks(): void {
         const lastSent = lastRaw ? new Date(lastRaw).getTime() : 0;
         const nowMs = Date.now();
         if (freq === 'weekly' && lastSent && nowMs - lastSent < 7 * 86_400_000) return; // not due yet
-        // Only the first run (no cursor) sends — afterwards the cursor gates it
-        if (!lastRaw) return;
-        const since = new Date(lastSent).toISOString();
+        // The window is "since the last digest", and the first run has no cursor:
+        // it covers the last week rather than everything ever published, so a site
+        // whose owner clicks "run now" does not mail its whole archive. The cursor
+        // is written only *after* a send, so the guard that used to return when the
+        // cursor was absent meant nothing ever set it — the digest could not send
+        // at all, on any install, while the run still reported success.
+        const since = new Date(lastSent || nowMs - 7 * 86_400_000).toISOString();
         const posts = db.prepare("SELECT id, title, slug, excerpt FROM Post WHERE type = 'post' AND status = 'published' AND publishedAt > ? ORDER BY publishedAt DESC LIMIT 10").all(since) as any[];
         if (posts.length === 0) return;
         const subs = db.prepare("SELECT id, email, confirmToken FROM Subscriber WHERE status = 'subscribed' AND confirmed = 1 AND email != ''").all() as any[];
@@ -404,6 +409,7 @@ export function registerBuiltinTasks(): void {
           '<div style="margin-bottom:16px;"><a href="' + base + postUrl(p.slug) + '" style="font-size:16px;font-weight:600;color:#2563eb;text-decoration:none;">' + String(p.title).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</a>' +
           (p.excerpt ? '<p style="margin:4px 0 0;font-size:13px;color:#4b5563;">' + String(p.excerpt).substring(0, 200).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>' : '') + '</div>').join('');
         let sent = 0;
+        let failed = 0;
         for (const s of subs) {
           try {
             const tpl = sendEmailMod.renderTemplate('newsletter_digest', {
@@ -414,15 +420,28 @@ export function registerBuiltinTasks(): void {
             });
             if (tpl) {
               const r = await sendEmailMod.sendEmail(s.email, tpl.subject, tpl.html);
-              if (r.ok) sent++;
+              if (r.ok) sent++; else failed++;
             }
-          } catch {}
+          } catch { failed++; }
+        }
+        if (sent === 0) {
+          // Nothing was delivered — almost always SMTP not configured or down. The
+          // cursor must NOT advance: these posts would then fall outside every
+          // later window and the subscribers would never see them, with the run
+          // still reporting success. Leaving it unset retries the same window next
+          // time, and the warning is the only signal an operator gets here.
+          logger.warn({ attempted: subs.length, failed }, 'newsletter digest sent nothing; cursor left unset');
+          return;
         }
         db.prepare("INSERT INTO Setting (id, key, value) VALUES ('newsletter_last_sent_at', 'newsletter_last_sent_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date(nowMs).toISOString());
         // Served by the cached /api/settings.
         try { purgeAllCaches(); } catch { /* cache maintenance must not fail the task */ }
-        if (sent > 0) console.log('[Task] Newsletter digest sent to ' + sent + ' subscriber(s)');
-      } catch {}
+        logger.info({ count: sent, failed }, 'newsletter digest sent');
+      } catch (err: any) {
+        // Swallowed before, which is how a digest that never sent anything looked
+        // like a task that ran fine.
+        logger.warn({ err: err?.message }, 'newsletter digest failed');
+      }
     },
   });
 
@@ -475,9 +494,9 @@ export function registerBuiltinTasks(): void {
             }
             db.prepare('UPDATE Media SET url = ?, thumbnail = ?, srcset = ? WHERE id = ?').run(url, thumb, srcset, m.id);
             migrated++;
-          } catch (e: any) { console.log('[Task] media migrate failed for ' + m.id + ': ' + e.message); }
+          } catch (e: any) { logger.warn({ err: e.message, mediaId: m.id }, 'media migrate failed'); }
         }
-        if (migrated > 0) console.log('[Task] Migrated ' + migrated + ' media item(s) to object storage');
+        if (migrated > 0) logger.info({ count: migrated }, 'media migrated to object storage');
       } catch {}
     },
   });
@@ -536,7 +555,7 @@ export function registerBuiltinTasks(): void {
             checked++;
           } catch {}
         }
-        if (checked > 0) console.log('[Task] Checked ' + checked + ' outbound link(s)');
+        if (checked > 0) logger.info({ count: checked }, 'outbound links checked');
       } catch {}
     },
   });
@@ -550,7 +569,7 @@ export function registerBuiltinTasks(): void {
       try {
         const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
         const r = db.prepare('DELETE FROM SearchLog WHERE createdAt < ?').run(cutoff);
-        if (r.changes > 0) console.log('[Task] Pruned ' + r.changes + ' old search-log entries');
+        if (r.changes > 0) logger.info({ count: r.changes }, 'search-log entries pruned');
       } catch {}
     },
   });
@@ -568,7 +587,7 @@ export function registerBuiltinTasks(): void {
         } catch {}
         const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString().slice(0, 10);
         const r = db.prepare('DELETE FROM Visit WHERE date < ?').run(cutoff);
-        if (r.changes > 0) console.log('[Task] Pruned ' + r.changes + ' visit records (retention ' + retentionDays + 'd)');
+        if (r.changes > 0) logger.info({ count: r.changes, retentionDays }, 'visit records pruned');
       } catch {}
     },
   });
