@@ -73,10 +73,18 @@ export default function SystemTasks() {
               React.createElement('tbody', null, tasks.map((task: any) =>
                 React.createElement('tr', { key: task.id, className: 'border-b border-gray-50 dark:border-gray-800' },
                   React.createElement('td', { className: 'px-4 py-3' },
-                    React.createElement('p', { className: 'text-sm text-gray-800 dark:text-gray-100 font-medium' }, task.name),
-                    React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' }, task.desc),
-                    React.createElement('p', { className: 'text-[10px] text-gray-400 font-mono mt-0.5' }, task.id + ' · ' + task.source),
-                    task.lastStatus === 'error' && React.createElement('p', { className: 'text-[11px] text-red-500 mt-1 break-all' }, task.lastError)),
+                    // Through t(): the API sends the English name/description and the
+                    // dictionary is keyed by them, so a plugin task with a name nobody
+                    // translated simply falls back to its own text.
+                    React.createElement('p', { className: 'text-sm text-gray-800 dark:text-gray-100 font-medium' }, t(task.name, getLang())),
+                    React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' }, t(task.desc, getLang())),
+                    React.createElement('p', { className: 'text-[10px] text-gray-400 font-mono mt-0.5' }, task.id + ' · ' + t(task.source, getLang())),
+                    // The raw failure text stays visible — this screen exists so an
+                    // operator can find the task that stopped working — but it is
+                    // labelled in their language, and only manage_options can read
+                    // the endpoint at all. The same failure is in the server log.
+                    task.lastStatus === 'error' && task.lastError && React.createElement('p', { className: 'text-[11px] text-red-500 mt-1 break-all' },
+                      t('last error', getLang()) + ': ' + task.lastError)),
                   React.createElement('td', { className: 'px-4 py-3 text-xs text-gray-500 whitespace-nowrap' }, humanInterval(task.intervalMs)),
                   React.createElement('td', { className: 'px-4 py-3 text-xs text-gray-500 whitespace-nowrap' },
                     task.lastRun ? formatDateTime(task.lastRun) : t('never', getLang()),

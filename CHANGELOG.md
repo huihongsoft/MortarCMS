@@ -169,6 +169,14 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 
 ### Fixed
 
+- **The task list was only half translated.** The screen's own labels went
+  through `t()`, but the per-task detail — name, description, and the source
+  column — came straight from the API, which sends English. Six task names, seven
+  descriptions and the word "core" had no entry at all (the same gap existed in the
+  Settings card before it), so a Chinese admin read English in the one column that
+  explains what each job does. All of it goes through `t()` now, every entry exists,
+  the failure line is labelled, and a test reads the task registry and the
+  dictionary and fails when a task is registered without its translations.
 - **Scheduled tasks were listed twice.** A dedicated screen (sidebar → scheduled
   tasks) and a card inside Settings → Tools both listed them, with the same
   run/enable controls — and the card could not show next-run, last-error or
