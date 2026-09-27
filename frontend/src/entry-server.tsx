@@ -141,5 +141,4 @@ export function render(options: RenderOptions): RenderResult {
   return { html, payload };
 }
 
-export function __debugEager() { return { registry: (globalThis as any).__eagerProbe ? (globalThis as any).__eagerProbe() : null, lazyHit: (globalThis as any).__lazyHit || null }; }
 export default { render };

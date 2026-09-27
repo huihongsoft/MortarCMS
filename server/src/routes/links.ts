@@ -70,13 +70,30 @@ function isAdminReq(req: AuthRequest): boolean {
   return caps.includes('*') || caps.includes('manage_links');
 }
 
+
+// A link list renders the titles of the posts attached to it, so an unchecked id
+// would pull another site's content into this site's link screen. Ids the caller
+// cannot reach are dropped and counted, the same way the bulk media routes skip
+// rows outside their scope rather than failing the whole request.
+function attachablePostIds(req: AuthRequest, raw: unknown): { ids: string[]; skipped: number } {
+  const wanted = (Array.isArray(raw) ? raw : []).map(String).slice(0, 500);
+  if (wanted.length === 0) return { ids: [], skipped: 0 };
+  const reachable = new Set<string>();
+  for (let i = 0; i < wanted.length; i += 400) {
+    const chunk = wanted.slice(i, i + 400);
+    (db.prepare('SELECT id, siteId FROM Post WHERE id IN (' + chunk.map(() => '?').join(',') + ')').all(...chunk) as any[])
+      .forEach((p: any) => { if (userMayAccessSite(req.user!.userId, req.user!.role, p.siteId || undefined)) reachable.add(p.id); });
+  }
+  return { ids: wanted.filter((id) => reachable.has(id)), skipped: wanted.filter((id) => !reachable.has(id)).length };
+}
+
 // Admin: create link
 router.post('/', authenticate, requireCap('manage_links'), (req: AuthRequest, res: Response) => {
   try {
     const { name, url, description, avatar, icon, categoryId, menuOrder, active } = req.body || {};
     if (!name || !url) { res.status(400).json({ error: 'name and url required' }); return; }
     const id = cuid();
-    const postIds = Array.isArray(req.body?.postIds) ? req.body.postIds : [];
+    const { ids: postIds, skipped } = attachablePostIds(req, req.body?.postIds);
     withTransaction(() => {
       if (categoryId && !belongsInCategory(req, categoryId)) { res.status(403).json({ error: '无权操作该站点的链接' }); return; }
       db.prepare('INSERT INTO Link (id, name, url, description, avatar, icon, categoryId, menuOrder, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -84,7 +101,7 @@ router.post('/', authenticate, requireCap('manage_links'), (req: AuthRequest, re
       // Link-post associations
       for (const pid of postIds) db.prepare('INSERT OR IGNORE INTO LinkPost (linkId, postId) VALUES (?, ?)').run(id, pid);
     });
-    res.status(201).json(enrichLinks([db.prepare('SELECT * FROM Link WHERE id = ?').get(id)])[0]);
+    res.status(201).json({ ...enrichLinks([db.prepare('SELECT * FROM Link WHERE id = ?').get(id)])[0], skippedPosts: skipped });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -132,8 +149,9 @@ router.put('/:id', authenticate, requireCap('manage_links'), (req: AuthRequest, 
       if (sets.length > 0) { vals.push(req.params.id); db.prepare('UPDATE Link SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals); }
       // Link-post associations (full replace)
       if (Array.isArray(req.body?.postIds)) {
+        const { ids } = attachablePostIds(req, req.body.postIds);
         db.prepare('DELETE FROM LinkPost WHERE linkId = ?').run(req.params.id);
-        for (const pid of req.body.postIds) db.prepare('INSERT OR IGNORE INTO LinkPost (linkId, postId) VALUES (?, ?)').run(req.params.id, pid);
+        for (const pid of ids) db.prepare('INSERT OR IGNORE INTO LinkPost (linkId, postId) VALUES (?, ?)').run(req.params.id, pid);
       }
     });
     res.json(enrichLinks([db.prepare('SELECT * FROM Link WHERE id = ?').get(req.params.id)])[0]);

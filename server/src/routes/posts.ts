@@ -849,9 +849,11 @@ router.put('/:id/sticky', authenticate, requireCap('edit_others_posts'), (req: A
 // Admin: get revisions for a post
 router.get('/:id/revisions', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
   try {
-    const existing = db.prepare('SELECT authorId FROM Post WHERE id = ?').get(req.params.id) as any;
+    const existing = db.prepare('SELECT authorId, siteId FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
-    if (!userCan(req.user!, 'edit_others_posts') && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot view another author\'s revisions' }); return; }
+    // mayTouchPost is site access *and* ownership; checking only the second let a
+    // site-restricted editor read another site's revision history.
+    if (!mayTouchPost(req.user!, existing)) { res.status(403).json({ error: 'Cannot view another author\'s revisions' }); return; }
     const revisions = db.prepare('SELECT id, title, content, excerpt, createdAt FROM Revision WHERE postId = ? ORDER BY createdAt DESC LIMIT 20').all(req.params.id) as any[];
     res.json(revisions);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -864,7 +866,7 @@ router.put('/:id/revisions/:revId/restore', authenticate, requireCap('edit_posts
     if (!rev) { res.status(404).json({ error: 'Revision not found' }); return; }
     const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
-    if (!userCan(req.user!, 'edit_others_posts') && post.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot restore another author\'s revisions' }); return; }
+    if (!mayTouchPost(req.user!, post)) { res.status(403).json({ error: 'Cannot restore another author\'s revisions' }); return; }
     const now = new Date().toISOString();
     // Keep a revision of the current state before overwriting (restore itself leaves a trace)
     db.prepare('INSERT INTO Revision (id, postId, title, content, excerpt, createdAt) VALUES (?, ?, ?, ?, ?, ?)').run(
@@ -898,11 +900,11 @@ router.get('/:id/related', (req: AuthRequest & SiteRequest, res: Response) => {
 // Admin: lock post for editing
 router.post('/:id/lock', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
   try {
-    const existing = db.prepare('SELECT id, lockedAt, lockedBy, authorId FROM Post WHERE id = ?').get(req.params.id) as any;
+    const existing = db.prepare('SELECT id, lockedAt, lockedBy, authorId, siteId FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
-    // A caller who cannot edit other people's posts may only lock their own;
-    // otherwise anyone could block another author's editing for 5 minutes.
-    if (!userCan(req.user!, 'edit_others_posts') && existing.authorId !== req.user!.userId) {
+    // Site access *and* ownership; ownership alone let an editor block another
+    // site's author from editing for 5 minutes.
+    if (!mayTouchPost(req.user!, existing)) {
       res.status(403).json({ error: 'Cannot lock another user\'s post' });
       return;
     }
@@ -922,6 +924,10 @@ router.post('/:id/lock', authenticate, requireCap('edit_posts'), (req: AuthReque
 // Admin: unlock post
 router.post('/:id/unlock', authenticate, requireCap('edit_others_posts'), (req: AuthRequest, res: Response) => {
   try {
+    // Loads the row first: this cleared the lock for any id at all, so an editor
+    // scoped to one site could release another site's edit lock.
+    const existing = db.prepare('SELECT id, authorId, siteId FROM Post WHERE id = ?').get(req.params.id) as any;
+    if (!existing || !mayTouchPost(req.user!, existing)) { res.status(404).json({ error: 'Post not found' }); return; }
     db.prepare('UPDATE Post SET lockedAt = ?, lockedBy = ? WHERE id = ?').run('', '', req.params.id);
     res.json({ success: true });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -932,11 +938,15 @@ router.post('/:id/clone', authenticate, requireCap('edit_posts'), (req: AuthRequ
   try {
     const existing = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!existing) { res.status(404).json({ error: 'Post not found' }); return; }
-    if (!userCan(req.user!, 'edit_others_posts') && existing.authorId !== req.user!.userId) { res.status(403).json({ error: 'Cannot clone another author\'s post' }); return; }
+    if (!mayTouchPost(req.user!, existing)) { res.status(403).json({ error: 'Cannot clone another author\'s post' }); return; }
     const id = cuid();
     withTransaction(() => {
-      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, featured, password, format, authorId, parentId, menuOrder, sticky) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
-        id, existing.title + ' (Copy)', existing.slug + '-copy', existing.content, existing.excerpt, 'draft', existing.type, existing.featured, '', existing.format || 'standard', req.user!.userId, null, existing.menuOrder, 0
+      // siteId and lang travel with the copy: without them the clone landed as
+      // global (visible to every site) and as default-language content, whatever
+      // the original was. translationGroup deliberately does not: a copy is a new
+      // piece of content, not another language of the same one.
+      db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, featured, password, format, authorId, parentId, menuOrder, sticky, siteId, lang) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(
+        id, existing.title + ' (Copy)', existing.slug + '-copy', existing.content, existing.excerpt, 'draft', existing.type, existing.featured, '', existing.format || 'standard', req.user!.userId, null, existing.menuOrder, 0, existing.siteId || null, existing.lang || ''
       );
       // Copy categories
       const cats = db.prepare('SELECT categoryId FROM PostCategory WHERE postId = ?').all(req.params.id) as any[];
@@ -993,7 +1003,11 @@ router.get('/mine', authenticate, (req: AuthRequest, res: Response) => {
 
 router.get('/:id/translations', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
   try {
-    const post = db.prepare('SELECT id, lang, translationGroup FROM Post WHERE id = ?').get(req.params.id) as any;
+    const post = db.prepare('SELECT id, lang, translationGroup, siteId, authorId FROM Post WHERE id = ?').get(req.params.id) as any;
+    if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
+    // The siblings it returns carry titles and slugs from the group, so the same
+    // scope test the detail routes use applies.
+    if (!mayTouchPost(req.user!, post)) { res.status(403).json({ error: '无权查看该文章的翻译' }); return; }
     if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
     const rows = post.translationGroup
       ? db.prepare('SELECT id, lang, title, status, slug FROM Post WHERE translationGroup = ? ORDER BY lang').all(post.translationGroup) as any[]
@@ -1040,6 +1054,10 @@ router.post('/:id/review', authenticate, requireCap('review_posts'), (req: AuthR
     if (action !== 'approve' && action !== 'reject') { res.status(400).json({ error: 'action must be approve or reject' }); return; }
     const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
+    // Reviewing someone else's submission is the point, so ownership is not the
+    // test here — but the *site* is: a reviewer must not approve another site's
+    // queue.
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, post.siteId || undefined)) { res.status(403).json({ error: '无权审核该站点的内容' }); return; }
     if (post.status !== 'pending') { res.status(400).json({ error: 'Post is not pending review' }); return; }
     const now = new Date().toISOString();
     const reason = String(req.body?.reason || '').trim().slice(0, 500);

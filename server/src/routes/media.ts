@@ -129,11 +129,15 @@ router.get('/folders', authenticate, requireCap('upload_files'), (req: AuthReque
     const sf = siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId, 'f.siteId');
     if (sf.denied) { res.status(403).json({ error: '无权访问该站点' }); return; }
     const folders = db.prepare('SELECT f.* FROM MediaFolder f WHERE 1=1' + sf.clause + ' ORDER BY f.name ASC').all(...sf.params) as any[];
+    // The counts are aggregated in one query and matched in memory; asking per
+    // folder would be a query each. The unfiled count is the same scope clause
+    // against the media table, computed once rather than rebuilt per call.
     const counts = db.prepare('SELECT folderId, COUNT(*) as c FROM Media WHERE folderId IS NOT NULL GROUP BY folderId').all() as any[];
     const countMap: Record<string, number> = {};
     counts.forEach((r: any) => { countMap[r.folderId] = r.c; });
-    const unfiled = (db.prepare('SELECT COUNT(*) as c FROM Media m WHERE m.folderId IS NULL' + siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId, 'm.siteId').clause)
-      .get(...siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId, 'm.siteId').params) as any)?.c || 0;
+    const mediaScope = siteScopeForFilter(req.user!.userId, req.user!.role, req.query.siteId, 'm.siteId');
+    const unfiled = (db.prepare('SELECT COUNT(*) as c FROM Media m WHERE m.folderId IS NULL' + mediaScope.clause)
+      .get(...mediaScope.params) as any)?.c || 0;
     res.json({ folders: folders.map((f) => ({ ...f, count: countMap[f.id] || 0 })), unfiled });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

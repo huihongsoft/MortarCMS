@@ -33,6 +33,17 @@ export function notify(input: NotifyInput): string | null {
   }
 }
 
+// An empty result is also what a user with no notifications gets, so a broken
+// table would look like "nothing new" forever. Logged once per call site per
+// process: enough to be found, not enough to flood the log on a hot path (the
+// bell polls unreadCount).
+const warned = new Set<string>();
+function warnOnce(where: string, err: any): void {
+  if (warned.has(where)) return;
+  warned.add(where);
+  logger.warn({ err: err?.message }, 'notification query failed: ' + where);
+}
+
 export interface NotificationRow {
   id: string;
   kind: string;
@@ -47,13 +58,13 @@ export function listFor(userId: string, limit = 20): NotificationRow[] {
   try {
     return db.prepare('SELECT id, kind, message, link, read, taskId, createdAt FROM Notification WHERE userId = ? ORDER BY createdAt DESC, id DESC LIMIT ?')
       .all(userId, Math.min(Math.max(1, limit), 100)) as NotificationRow[];
-  } catch { return []; }
+  } catch (err: any) { warnOnce('listFor', err); return []; }
 }
 
 export function unreadCount(userId: string): number {
   try {
     return (db.prepare('SELECT COUNT(*) as c FROM Notification WHERE userId = ? AND read = 0').get(userId) as any)?.c || 0;
-  } catch { return 0; }
+  } catch (err: any) { warnOnce('listFor', err); return 0; }
 }
 
 /**
@@ -63,13 +74,13 @@ export function unreadCount(userId: string): number {
 export function markRead(userId: string, id: string): boolean {
   try {
     return db.prepare('UPDATE Notification SET read = 1 WHERE id = ? AND userId = ?').run(id, userId).changes > 0;
-  } catch { return false; }
+  } catch (err: any) { warnOnce('listFor', err); return false; }
 }
 
 export function markAllRead(userId: string): number {
   try {
     return db.prepare('UPDATE Notification SET read = 1 WHERE userId = ? AND read = 0').run(userId).changes || 0;
-  } catch { return 0; }
+  } catch (err: any) { warnOnce('unreadCount', err); return 0; }
 }
 
 export function removeForUser(userId: string): void {

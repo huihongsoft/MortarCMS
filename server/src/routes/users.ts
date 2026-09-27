@@ -6,6 +6,7 @@ import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { passwordOk } from './auth';
 import { getUserSiteIds, setUserSites } from '../utils/userSites';
 import { doAction } from '../utils/hooks';
+import { removeForUser } from '../utils/notifications';
 
 const router = Router();
 const updateUserSchema = z.object({
@@ -91,7 +92,7 @@ router.delete('/:id', authenticate, requireCap('manage_users'), (req: AuthReques
       db.prepare('DELETE FROM AppPassword WHERE userId = ?').run(req.params.id);
       db.prepare('DELETE FROM AiMemory WHERE userId = ?').run(req.params.id);
       db.prepare('DELETE FROM AiUsage WHERE userId = ?').run(req.params.id);
-      db.prepare('DELETE FROM Notification WHERE userId = ?').run(req.params.id);
+      removeForUser(req.params.id);
       db.prepare('DELETE FROM AiTask WHERE userId = ?').run(req.params.id);
       db.prepare('DELETE FROM AiSession WHERE userId = ?').run(req.params.id);
       db.prepare('DELETE FROM AiAudit WHERE userId = ?').run(req.params.id);

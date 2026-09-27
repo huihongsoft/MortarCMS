@@ -177,6 +177,16 @@ npm run dev            # watch mode: server (3001) + admin (3002) + frontend (30
 (cd server && NODE_ENV=production node dist/index.js)
 ```
 
+Before calling a change done (`docs/deployment.md` → Checks has the detail):
+
+```bash
+cd server && npm run test:coverage   # tests + the coverage ratchet
+npm run build                        # server, admin, frontend, and the SSR bundle
+npm run lint                         # 0 errors
+npm run check:bundle                 # gzip budgets per app
+npm run e2e                          # Playwright publishing-path smoke (build first)
+```
+
 ### First run — install wizard
 
 Visit `http://localhost:3001/install` on first launch:

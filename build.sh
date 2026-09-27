@@ -24,6 +24,11 @@ for t in $THEMES; do
 done
 # Rebuild so public/ esm files land in dist
 npx vite build
+# Server renderer (frontend/dist-ssr). Must be the LAST frontend build: the server
+# refuses to render with a bundle older than dist/index.html, so building it
+# earlier would silently disable prerendering instead of failing.
+echo "=== Building Server Renderer (SSR) ==="
+npx vite build --config vite.ssr.config.ts
 echo "=== Restarting Server ==="
 kill $(lsof -ti:3001) 2>/dev/null || true
 sleep 1

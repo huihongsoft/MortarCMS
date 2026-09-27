@@ -35,8 +35,3 @@ export function serverTheme(name?: string): Theme | null {
   const key = String(name || 'default').trim() || 'default';
   return registry[key] || null;
 }
-
-/** Names the renderer supports, for diagnostics. */
-export function serverThemeNames(): string[] {
-  return Object.keys(registry);
-}

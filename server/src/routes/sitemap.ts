@@ -55,9 +55,11 @@ router.get('/sitemap.xml', (req: AuthRequest & SiteRequest, res: Response) => {
     // The xhtml namespace is what carries the hreflang alternates below.
     let xml = '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">';
     xml += '<url><loc>' + siteUrl + '</loc><changefreq>daily</changefreq><priority>1.0</priority></url>';
-    // One prefix read for the whole loop: this walks every post, and postUrl
-    // would otherwise re-read the Setting row per post.
+    // One read each for the whole loop: this walks every post, and both helpers
+    // would otherwise re-read their Setting row per URL (a round trip per post on
+    // the MySQL/Postgres drivers).
     const prefix = getPermalinkPrefix();
+    const def = defaultLang();
     // Translations of the same content are grouped so each entry can advertise the
     // others; a single-language site has no groups and nothing changes.
     const groups = new Map<string, { lang: string; url: string }[]>();
@@ -73,15 +75,15 @@ router.get('/sitemap.xml', (req: AuthRequest & SiteRequest, res: Response) => {
       return list.map((a) => '<xhtml:link rel="alternate" hreflang="' + esc(a.lang) + '" href="' + esc(a.url) + '"/>').join('');
     };
     // First pass: know every member of each group before writing any entry.
-    for (const p of posts) collect(p, siteUrl + postPathForLang(p.slug, p.lang, prefix));
-    for (const p of pages) collect(p, siteUrl + pagePathForLang(p.slug, p.lang));
+    for (const p of posts) collect(p, siteUrl + postPathForLang(p.slug, p.lang, prefix, def));
+    for (const p of pages) collect(p, siteUrl + pagePathForLang(p.slug, p.lang, def));
 
     for (const p of posts) {
-      const url = siteUrl + postPathForLang(p.slug, p.lang, prefix);
+      const url = siteUrl + postPathForLang(p.slug, p.lang, prefix, def);
       xml += '<url><loc>' + esc(url) + '</loc>' + alternates(p) + '<lastmod>' + p.date + '</lastmod><changefreq>monthly</changefreq><priority>0.8</priority></url>';
     }
     for (const p of pages) {
-      const url = siteUrl + pagePathForLang(p.slug, p.lang);
+      const url = siteUrl + pagePathForLang(p.slug, p.lang, def);
       xml += '<url><loc>' + esc(url) + '</loc>' + alternates(p) + '<lastmod>' + p.date + '</lastmod><changefreq>monthly</changefreq><priority>0.6</priority></url>';
     }
     for (const c of categories) xml += '<url><loc>' + siteUrl + '/category/' + esc(c.slug) + '</loc><changefreq>weekly</changefreq><priority>0.5</priority></url>';

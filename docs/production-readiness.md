@@ -91,6 +91,15 @@ over the publishing path, coverage and bundle budgets enforced in CI).
    inline dark-mode script without a nonce, Font Awesome from a CDN, plugin
    screens injecting inline scripts). The checklist is in
    `docs/security-hardening.md`.
+6. **Public submissions trust the Host header.** `POST /api/posts/frontend/submit-post`
+   attributes a submission to whichever site the request's `Host` resolves to,
+   with no check that the submitter is allowed that site — so a logged-in
+   subscriber assigned to one site can send `Host: other-site` and land a pending
+   post in the other site's moderation queue. It is a queue nuisance rather than a
+   data leak (the post is a draft awaiting review, and the public site is
+   reachable at that Host anyway), and comments have the same shape. Left as
+   documented behaviour rather than changed: closing it means deciding what a
+   *public* write means on a multi-site install, which is a product decision.
 
 **Answer.** For a single-instance, SQLite-backed, permissively-licensed
 deployment, the gaps that would have blocked production use are closed. The two

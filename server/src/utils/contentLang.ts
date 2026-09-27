@@ -46,10 +46,17 @@ export function isPrefixedLang(lang: string): boolean {
   return !!lang && lang !== defaultLang();
 }
 
-/** `/<lang>` for a prefixed language, '' for the default. */
-export function langPrefix(lang: string): string {
+/**
+ * `/<lang>` for a prefixed language, '' for the default.
+ *
+ * `defaultLanguage` lets a loop read the setting once instead of once per row —
+ * the same reason `slug.postUrl` takes its prefix as an argument: these read the
+ * Setting table, which is a round trip on the MySQL/Postgres drivers. Callers
+ * building a single URL omit it.
+ */
+export function langPrefix(lang: string, defaultLanguage: string = defaultLang()): string {
   const l = normalizeLang(lang);
-  return l && isPrefixedLang(l) ? '/' + l : '';
+  return l && l !== defaultLanguage ? '/' + l : '';
 }
 
 /**
@@ -95,13 +102,13 @@ export function requestLang(rawPath: string): { lang: string; rest: string } {
 }
 
 /** The public path of a post in a given language. */
-export function postPathForLang(slug: unknown, lang: unknown, prefix: string): string {
-  return langPrefix(String(lang || '')) + prefix + String(slug ?? '');
+export function postPathForLang(slug: unknown, lang: unknown, prefix: string, defaultLanguage: string = defaultLang()): string {
+  return langPrefix(String(lang || ''), defaultLanguage) + prefix + String(slug ?? '');
 }
 
 /** The public path of a page in a given language. */
-export function pagePathForLang(slug: unknown, lang: unknown): string {
-  return langPrefix(String(lang || '')) + '/page/' + String(slug ?? '');
+export function pagePathForLang(slug: unknown, lang: unknown, defaultLanguage: string = defaultLang()): string {
+  return langPrefix(String(lang || ''), defaultLanguage) + '/page/' + String(slug ?? '');
 }
 
 /**
@@ -114,8 +121,10 @@ export function translationsOf(post: any): { lang: string; path: string }[] {
   if (!post?.translationGroup) return [];
   try {
     const prefix = getPermalinkPrefix();
+    // Both settings are read once for the whole group, not per row (see langPrefix).
+    const def = defaultLang();
     const rows = db.prepare("SELECT slug, lang, type FROM Post WHERE translationGroup = ? AND status = 'published' ORDER BY lang").all(post.translationGroup) as any[];
-    return rows.map((r) => ({ lang: r.lang || defaultLang(), path: r.type === 'page' ? pagePathForLang(r.slug, r.lang) : postPathForLang(r.slug, r.lang, prefix) }));
+    return rows.map((r) => ({ lang: r.lang || def, path: r.type === 'page' ? pagePathForLang(r.slug, r.lang, def) : postPathForLang(r.slug, r.lang, prefix, def) }));
   } catch {
     return [];
   }

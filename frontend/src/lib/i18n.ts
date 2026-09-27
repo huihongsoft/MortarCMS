@@ -233,6 +233,8 @@ const zh: Record<string, string> = {
   'your submission is pending review': '您的投稿已进入审核队列，审核通过后将自动发布',
   'submission failed': '提交失败',
   'my submissions': '我的投稿',
+  'published': '已发布',
+  'draft': '草稿',
   'pending review': '待审核',
   'login to submit': '请先登录后投稿',
 

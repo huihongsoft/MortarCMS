@@ -382,9 +382,11 @@ export function buildCrawlerFallback(pathname: string, siteId: string | undefine
   const listing = listingFor(path, siteId, siteName, lang);
   if (!listing) return null;
   if (!listing.posts.length) return null;
+  // One read for the whole list; see the note on langPrefix.
   const prefix = getPermalinkPrefix();
+  const def = defaultLang();
   return '<main><h1>' + esc(listing.title) + '</h1><ul>'
-    + listing.posts.map((p) => '<li><a href="' + esc(postPathForLang(p.slug, p.lang, prefix)) + '">' + esc(p.title) + '</a>'
+    + listing.posts.map((p) => '<li><a href="' + esc(postPathForLang(p.slug, p.lang, prefix, def)) + '">' + esc(p.title) + '</a>'
         + (p.excerpt ? '<p>' + esc(toPlainText(p.excerpt).slice(0, 200)) + '</p>' : '')
         + '</li>').join('')
     + '</ul></main>';
@@ -492,11 +494,12 @@ function alternatesFor(post: any, siteUrl: string): { lang: string; url: string 
   if (!post?.translationGroup) return [];
   try {
     const prefix = getPermalinkPrefix();
+    const def = defaultLang();
     const rows = db.prepare("SELECT slug, lang, type FROM Post WHERE translationGroup = ? AND status = 'published' ORDER BY lang").all(post.translationGroup) as any[];
     if (rows.length < 2) return [];
     return rows.map((r) => ({
-      lang: r.lang || defaultLang(),
-      url: siteUrl + (r.type === 'page' ? pagePathForLang(r.slug, r.lang) : postPathForLang(r.slug, r.lang, prefix)),
+      lang: r.lang || def,
+      url: siteUrl + (r.type === 'page' ? pagePathForLang(r.slug, r.lang, def) : postPathForLang(r.slug, r.lang, prefix, def)),
     }));
   } catch { return []; }
 }

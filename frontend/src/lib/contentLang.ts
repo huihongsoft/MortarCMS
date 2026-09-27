@@ -99,7 +99,7 @@ export function parseLangFromPath(rawPath: string): { lang: string; rest: string
 
 /** The language the address bar is currently asking for ('' = default). */
 export function currentLang(): string {
-  return currentLangFrom(locationPath());
+  return parseLangFromPath(locationPath()).lang;
 }
 
 // The path being rendered. On the client that is the address bar; on the server
@@ -111,20 +111,10 @@ function locationPath(): string {
   return seeded || '/';
 }
 
-/** Same as currentLang() but for an explicit path (used by the renderer's tests). */
-export function currentLangFrom(path: string): string {
-  return parseLangFromPath(path).lang;
-}
-
 /** `/<lang>` for the current page's language, '' for the default one. */
 export function currentLangPrefix(): string {
   const lang = currentLang();
   return lang ? '/' + lang : '';
-}
-
-/** Prefix a path for the language the visitor is currently reading. */
-export function inCurrentLang(path: string): string {
-  return currentLangPrefix() + path;
 }
 
 /** Prefix a path for a *specific* language (a page's own, not the URL's). */

@@ -177,6 +177,34 @@ describe('translation groups', () => {
 });
 
 describe('the sitemap', () => {
+  it('does not read the language settings once per post', async () => {
+    // The URL helpers read the Setting table, so a loop that passes nothing
+    // re-reads it per row — invisible on SQLite, a round trip per post on
+    // MySQL/Postgres. Counting the reads is the only way to keep that from
+    // creeping back in through the next loop someone writes.
+    const real = db.prepare.bind(db);
+    const settingReads = () => {
+      let n = 0;
+      (db as any).prepare = (sql: string) => { if (/FROM Setting/.test(sql)) n++; return real(sql); };
+      return () => { (db as any).prepare = real; return n; };
+    };
+
+    await createPost({ title: 'One', slug: 'one', status: 'published' });
+    let stop = settingReads();
+    await fetch(base + '/api/sitemap.xml');
+    const onePost = stop();
+    // Cache off, so each request really re-renders.
+    invalidateSitemapCache();
+
+    for (let i = 2; i <= 12; i++) await createPost({ title: 'P' + i, slug: 'p' + i, status: 'published' });
+    invalidateSitemapCache();
+    stop = settingReads();
+    await fetch(base + '/api/sitemap.xml');
+    const twelvePosts = stop();
+
+    expect(twelvePosts).toBe(onePost);
+  });
+
   it('lists both languages and links them with hreflang', async () => {
     const source = await createPost({ title: 'Hello world', status: 'published' });
     const en = await (await fetch(base + '/api/posts/' + source.id + '/translate', { method: 'POST', headers: token('u1', 'admin'), body: JSON.stringify({ lang: 'en' }) })).json();

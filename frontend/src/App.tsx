@@ -33,10 +33,8 @@ const eagerRoutes: Record<string, React.ComponentType<any>> = {};
 export function registerEagerRoutes(components: Record<string, React.ComponentType<any>>): void {
   Object.assign(eagerRoutes, components);
 }
-(globalThis as any).__eagerProbe = () => Object.keys(eagerRoutes).map(k => k + ':' + typeof (eagerRoutes as any)[k]);
-
 function routeComponent(name: string, factory: () => Promise<{ default: React.ComponentType<any> }>) {
-  const Lazy = lazy(() => { (globalThis as any).__lazyHit = ((globalThis as any).__lazyHit||[]).concat(name); return factory(); });
+  const Lazy = lazy(factory);
   return function RouteComponent(props: any) {
     return React.createElement(eagerRoutes[name] || Lazy, props);
   };

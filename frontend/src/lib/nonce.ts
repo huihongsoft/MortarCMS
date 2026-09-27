@@ -13,10 +13,6 @@ export function detectScriptNonce(): void {
   value = el?.getAttribute('nonce') || '';
 }
 
-export function scriptNonce(): string {
-  return value;
-}
-
 /** Stamp a script element this code is about to insert. */
 export function applyNonce(el: HTMLScriptElement): void {
   if (value) el.setAttribute('nonce', value);

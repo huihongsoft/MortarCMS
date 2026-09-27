@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import db, { withTransaction } from '../utils/db';
 import { resolveUploadUrl } from '../utils/paths';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
+import { removeForUser } from '../utils/notifications';
 
 const router = Router();
 
@@ -57,7 +58,7 @@ function eraseUserData(userId: string): { mediaDeleted: number } {
     if (originalEmail) db.prepare('DELETE FROM Subscriber WHERE email = ?').run(originalEmail);
     db.prepare('DELETE FROM AiMemory WHERE userId = ?').run(userId);
     db.prepare('DELETE FROM AiUsage WHERE userId = ?').run(userId);
-    db.prepare('DELETE FROM Notification WHERE userId = ?').run(userId);
+    removeForUser(userId);
     db.prepare('DELETE FROM AiTask WHERE userId = ?').run(userId);
     db.prepare('DELETE FROM AiSession WHERE userId = ?').run(userId);
     db.prepare('DELETE FROM AiAudit WHERE userId = ?').run(userId);

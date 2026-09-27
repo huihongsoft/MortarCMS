@@ -169,6 +169,20 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 
 ### Fixed
 
+- **The multi-site boundary on the admin API.** A review sweep after the media
+  folder fix found the same class of hole elsewhere — routes that checked a
+  capability, or ownership, and stopped there, while the *site* dimension was
+  simply absent. For a site-assigned editor (the built-in editor role holds all
+  the capabilities involved) that meant reaching another site's rows:
+  post revisions could be read and restored, translations enumerated, a pending
+  submission approved or rejected, an author's edit lock taken or cleared, a post
+  cloned — and the clone landed as *global* content in the default language,
+  whatever the original was. Pages revisions were readable with no post lookup at
+  all, link attachments accepted any post id (and the link screen renders those
+  posts' titles), and **redirects had no scoping anywhere** in the routes added
+  earlier in this release: list, create, retarget, delete. All of them now use the
+  same helpers as the rest of the admin API; a row in a site the caller cannot
+  reach answers 404 rather than 403, so its existence is not leaked.
 - **Media folders ignored the site boundary.** Renaming, deleting, nesting under,
   or filing uploads *into* a folder are all writes to a row that carries a
   `siteId`, but only the media rows were scoped — an editor assigned to one site
@@ -191,6 +205,16 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
   real hole rather than a hardening step: with `CSP_ENFORCE=1` the importmap was
   blocked, and a blocked importmap means no module resolution — the frontend never
   booted. Report-only mode had been hiding it.
+- The renderer's own API fetches are bounded by a timeout (3s). They sit on the
+  visitor's request path, so without one a stalled loopback request would hold the
+  HTML response open instead of falling back to the client-rendered shell.
+- Hook listener failures go to the structured log rather than `console.error`; a
+  plugin's broken listener is now visible where the ops docs say to look. The
+  notification read helpers log the first failure per call site, because an empty
+  list is also what "no notifications" looks like.
+- The server's HTML fallback logs its reason, and the render promise has a catch:
+  an unhandled rejection is fatal on current Node, and a failure there was
+  invisible (the visitor simply saw the shell).
 - Admin accessibility: the dialog traps Tab, restores focus to whatever opened it
   and exposes `aria-describedby`; 104 icon-only buttons gained an accessible name
   (they had a hover tooltip and nothing else); dates and counters go through one

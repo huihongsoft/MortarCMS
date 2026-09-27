@@ -107,6 +107,7 @@ npx esbuild esm/router.js --bundle --format=esm --external:react --external:reac
 for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen softstore; do THEME_NAME=$t npx vite build --config vite.themes.config.ts >/dev/null 2>&1; done
 for t in default magazine aurora twentytwentyfour twentytwentyone twentynineteen twentyseventeen softstore; do cp dist/themes/$t.js ../server/themes/$t/theme.js; done
 npx vite build >/dev/null 2>&1   # final dist incl. ESM bundles
+npx vite build --config vite.ssr.config.ts   # server renderer (see the note)
 cd ..
 
 # 3. Server
@@ -115,6 +116,30 @@ cd server && npm run build && cd ..
 
 > Note: the theme bundles step is required — `server/themes/*/theme.js` drives
 > the frontend theme system; without them themes silently fall back to default.
+>
+> Note: the SSR bundle (`frontend/dist-ssr`) is what lets the server hand a
+> crawler a rendered page instead of an empty shell. It has to be the **last**
+> frontend build: the server refuses a renderer older than `frontend/dist/index.html`
+> (a stale one disagrees with the client bundle and surfaces as React hydration
+> errors), so building it earlier silently disables prerendering. `install.sh`,
+> `build.sh` and the Dockerfile all do it in this order; `npm run build` in
+> `frontend/` also builds both, in order. Verify with
+> `curl -s localhost:3001/api/health/ready` — it reports `ssr: true|false`.
+
+## Checks
+
+Run before calling a change done — all of these run in CI, so a red one here is a
+red build there:
+
+```bash
+cd server && npm run test:coverage   # tests + the coverage ratchet
+npm run build                        # server tsc, admin, frontend (incl. dist-ssr)
+npm run lint                         # 0 errors (warnings: `any` only)
+npm run check:bundle                 # gzip budget per app + the big bundles
+npm run e2e                          # Playwright: the publishing path + the
+                                     # HTML a crawler gets (needs `npm run e2e:install`
+                                     # once, and a build first)
+```
 
 ## Environment
 

@@ -697,8 +697,16 @@ if (fs.existsSync(frontendDist)) {
       // anonymous visitors: a signed-in visitor's page is personalized, and the
       // renderer fetches content anonymously anyway (see utils/ssr.ts).
       const wantsSsr = !missing && !meta.noindex && !req.headers.authorization;
-      void serveHtml(req, res, shell, meta, missing, wantsSsr, origin, siteId);
-    } catch {
+      // serveHtml catches its own failures; this catch is for the promise itself.
+      // An unhandled rejection is fatal on current Node, so a future edit that
+      // throws outside its try must not be able to take the process down — and it
+      // would otherwise be invisible, since the visitor just sees the shell.
+      serveHtml(req, res, shell, meta, missing, wantsSsr, origin, siteId).catch((err: any) => {
+        logger.error({ err: err?.message, url: req.originalUrl }, 'HTML response failed; serving the shell');
+        try { res.sendFile(frontendIndexHtml); } catch { /* already sent */ }
+      });
+    } catch (err: any) {
+      logger.error({ err: err?.message, url: req.originalUrl }, 'HTML response failed; serving the shell');
       res.sendFile(frontendIndexHtml);
     }
   });

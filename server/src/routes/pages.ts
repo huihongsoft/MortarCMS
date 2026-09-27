@@ -270,6 +270,10 @@ router.put('/:id', authenticate, requireCap('edit_pages'), async (req: AuthReque
 // Admin: list revisions for a page (history)
 router.get('/:id/revisions', authenticate, requireCap('edit_pages'), (req: AuthRequest, res: Response) => {
   try {
+    // The page is loaded first: this read the Revision table by postId with no
+    // check at all, so any editor could pull any page's revision bodies by id.
+    const page = db.prepare('SELECT id, siteId FROM Post WHERE id = ? AND type = ?').get(req.params.id, 'page') as any;
+    if (!page || !userMayAccessSite(req.user!.userId, req.user!.role, page.siteId || undefined)) { res.status(404).json({ error: 'Page not found' }); return; }
     const revisions = db.prepare('SELECT id, title, content, excerpt, createdAt FROM Revision WHERE postId = ? ORDER BY createdAt DESC LIMIT 20').all(req.params.id) as any[];
     res.json(revisions);
   } catch (err: any) { res.status(500).json({ error: err.message }); }

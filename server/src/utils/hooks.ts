@@ -1,3 +1,4 @@
+import { logger } from './logger';
 // Simple hook system (actions + filters) with priorities and source tracking.
 // Listeners with lower priority numbers run first (plugin/theme convention).
 type HookFn = (...args: any[]) => any;
@@ -80,11 +81,13 @@ const MAX_HOOK_DEPTH = 25;
 let hookDepth = 0;
 
 function runListeners(list: HookListener[], args: any[], apply: (l: HookListener) => any): void {
-  if (hookDepth >= MAX_HOOK_DEPTH) { console.error('[Hooks] recursion depth exceeded'); return; }
+  if (hookDepth >= MAX_HOOK_DEPTH) { logger.error({ hookDepth }, 'hook recursion depth exceeded'); return; }
   hookDepth++;
   try {
     for (const l of [...list]) {
-      try { apply(l); } catch (e) { console.error('[Hooks] listener error:', e); }
+      // To the structured log, not the console: this is where a plugin's listener
+      // failure shows up, and the console is not what the ops docs tell anyone to read.
+      try { apply(l); } catch (e: any) { logger.error({ err: e?.message, source: l.source }, 'hook listener failed'); }
     }
   } finally { hookDepth--; }
 }

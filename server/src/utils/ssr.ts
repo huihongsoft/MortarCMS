@@ -9,7 +9,6 @@
 // ran the SSR build), an unknown theme, a content fetch that errors — returns null
 // and the caller serves the plain client-rendered shell it served before. A
 // prerender must never be able to take the site down.
-import { JSDOM } from 'jsdom';
 import { isKnownRoute } from './seoMeta';
 import { logger } from './logger';
 
@@ -43,8 +42,27 @@ interface RendererModule {
 
 let renderer: RendererModule | null | undefined;
 let loading: Promise<RendererModule | null> | null = null;
-// One DOM for the process: DOMPurify builds its instance once per window.
-const domWindow = new JSDOM('<!doctype html><html><body></body></html>').window;
+
+// One DOM for the process: the renderer builds its DOMPurify instance once per
+// window. Created on first use rather than at import: jsdom costs ~0.5s to load
+// plus a window to build, and this module is on the server's boot path — an
+// install that never prerenders (no bundle, or a theme the renderer does not
+// have) should not pay for it before serving its first request.
+let domWindow: any = null;
+let domFailed = false;
+function purifierWindow(): any {
+  if (domWindow || domFailed) return domWindow;
+  try {
+    const { JSDOM } = require('jsdom');
+    domWindow = new JSDOM('<!doctype html><html><body></body></html>').window;
+  } catch (err: any) {
+    // A dependency that is missing at runtime means no sanitizer, and a render
+    // without one must not happen. Remembered, so this logs once, not per request.
+    domFailed = true;
+    logger.warn({ err: err?.message }, 'jsdom unavailable; server rendering disabled');
+  }
+  return domWindow;
+}
 
 /**
  * Is the renderer older than the client bundle it is supposed to match?
@@ -103,6 +121,10 @@ export async function ssrAvailable(): Promise<boolean> {
  * What content this path needs, in the shape the frontend pages read.
  * Returns null when the path is not a content page (the layout still renders).
  */
+// How long the renderer waits for its own API before giving up and letting the
+// client render the page instead.
+const RENDER_FETCH_TIMEOUT_MS = 3000;
+
 const LANG_PREFIX = /^\/([a-z]{2}(?:-[a-z0-9]{2,8})?)(\/.*)$/i;
 
 /**
@@ -137,22 +159,21 @@ export async function fetchOwnJson(origin: string, host: string | undefined, pat
   try {
     const headers: Record<string, string> = { accept: 'application/json' };
     if (host) headers.host = host;
-    const res = await fetch(origin.replace(/\/$/, '') + path, { headers, redirect: 'manual' });
+    // A timeout, because this fetch is on the *visitor's* request path: without
+    // one, a loopback request that never answers (a stalled pool, a blocked
+    // worker) would hold the HTML response open rather than falling back to the
+    // client-rendered shell. The renderer is an optimisation; it must not be able
+    // to hang a page.
+    const res = await fetch(origin.replace(/\/$/, '') + path, {
+      headers,
+      redirect: 'manual',
+      signal: AbortSignal.timeout(RENDER_FETCH_TIMEOUT_MS),
+    });
     if (!res.ok) return null;
     return await res.json();
   } catch {
     return null;
   }
-}
-
-async function fetchJson(url: string, host: string | undefined): Promise<any> {
-  try {
-    const headers: Record<string, string> = { accept: 'application/json' };
-    if (host) headers.host = host;
-    const res = await fetch(url, { headers, redirect: 'manual' });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch { return null; }
 }
 
 export async function renderPath(input: SsrRenderInput): Promise<SsrResult | null> {
@@ -174,7 +195,7 @@ export async function renderPath(input: SsrRenderInput): Promise<SsrResult | nul
     const want = contentRequestFor(rest);
     if (want) {
       const suffix = lang ? '?lang=' + encodeURIComponent(lang) : '';
-      const body = await fetchJson(apiBase + want.api + suffix, input.host);
+      const body = await fetchOwnJson(apiBase, input.host, want.api + suffix);
       if (!body) return null; // 404 / private / gated: let the client render it
       data[want.key] = body;
     } else if (rest === '/' || rest === '' || /^\/(category|tag|type)\//.test(rest)) {
@@ -186,12 +207,16 @@ export async function renderPath(input: SsrRenderInput): Promise<SsrResult | nul
       const m = /^\/(category|tag|type)\/([^/]+)$/.exec(rest);
       if (m) params.set(m[1], decodeURIComponent(m[2]));
       const [list, categories] = await Promise.all([
-        fetchJson(apiBase + '/api/posts?' + params.toString(), input.host),
-        fetchJson(apiBase + '/api/categories', input.host),
+        fetchOwnJson(apiBase, input.host, '/api/posts?' + params.toString()),
+        fetchOwnJson(apiBase, input.host, '/api/categories'),
       ]);
       if (!list) return null;
       data.home = { posts: list.posts || [], total: list.total || 0, categories: categories || [] };
     }
+
+    // jsdom loads here, on the first render that actually needs a sanitizer.
+    const window = purifierWindow();
+    if (!window) return null;
 
     const out = mod.render({
       url,
@@ -200,7 +225,7 @@ export async function renderPath(input: SsrRenderInput): Promise<SsrResult | nul
       contentLangs: input.contentLangs,
       origin: input.origin,
       data,
-      domWindow,
+      domWindow: window,
     });
     if (!out?.html) return null;
     return { html: out.html, payload: out.payload };
