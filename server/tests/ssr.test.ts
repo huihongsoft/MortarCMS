@@ -1,9 +1,11 @@
-import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { JSDOM } from 'jsdom';
 import { injectSeoMeta, injectSsrRoot, buildSeoMeta, stampInlineScripts, applyNonce, NONCE_PLACEHOLDER } from '../src/utils/seoMeta';
+import { fileIsOlderThan } from '../src/utils/ssr';
 import { cacheSet, cacheGet, purgeContentCaches } from '../src/utils/cache';
 
 // Server-side rendering.
@@ -176,27 +178,30 @@ describe('the CSP nonce on inline scripts', () => {
 });
 
 describe('the renderer staleness guard', () => {
-  it('treats a renderer older than the client build as unavailable', async () => {
-    // Simulated by mtime, which is exactly how the guard decides: rather than
-    // render markup the client bundle disagrees with (React #418/#422 — a page
-    // that looks fine until you open the console), the server serves the
-    // client-rendered shell.
-    const bundle = path.join(__dirname, '../../frontend/dist-ssr/entry-server.js');
-    const shell = path.join(__dirname, '../../frontend/dist/index.html');
-    if (!fs.existsSync(bundle) || !fs.existsSync(shell)) return; // not built here
-
-    const shellMtime = fs.statSync(shell).mtimeMs;
+  it('treats a renderer older than the client build as stale', async () => {
+    // Compared against two throwaway files rather than the real build outputs:
+    // an earlier version of this test moved frontend/dist/index.html's mtime, so
+    // a run interrupted between the change and the restore left the renderer
+    // looking stale for everything that followed.
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mortar-ssr-stale-'));
+    const bundle = path.join(dir, 'entry-server.js');
+    const shell = path.join(dir, 'index.html');
+    fs.writeFileSync(bundle, 'x');
+    fs.writeFileSync(shell, 'y');
     try {
-      const future = new Date(Date.now() + 60_000);
-      fs.utimesSync(shell, future, future);
-      // A fresh module instance: the renderer is cached after the first load, so
-      // a stale verdict has to be asked for before anything has loaded it.
-      vi.resetModules();
-      const mod = await import('../src/utils/ssr');
-      expect(await mod.ssrAvailable()).toBe(false);
+      const older = new Date(Date.now() - 60_000);
+      const newer = new Date();
+      fs.utimesSync(bundle, older, older);
+      fs.utimesSync(shell, newer, newer);
+      expect(fileIsOlderThan(bundle, shell)).toBe(true);
+      // Rebuilt in the right order: the renderer is the newest of the two.
+      fs.utimesSync(bundle, newer, newer);
+      expect(fileIsOlderThan(bundle, shell)).toBe(false);
+      // A missing file is not a staleness signal (an install with no bundle at
+      // all falls back for a different reason).
+      expect(fileIsOlderThan(path.join(dir, 'nope'), shell)).toBe(false);
     } finally {
-      fs.utimesSync(shell, new Date(shellMtime), new Date(shellMtime));
-      vi.resetModules();
+      fs.rmSync(dir, { recursive: true, force: true });
     }
   });
 });

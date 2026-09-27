@@ -56,6 +56,7 @@ export default function SystemTasks() {
       React.createElement('h2', { className: 'text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2' },
         React.createElement(Workflow, { size: 22, className: 'text-primary-500' }), t('scheduled tasks', getLang())),
       React.createElement('button', { onClick: load, className: 'btn-secondary text-sm' }, React.createElement(RefreshCw, { size: 14 }), t('refresh', getLang()))),
+    React.createElement('p', { className: 'text-sm text-gray-500 dark:text-gray-400 mb-4' }, t('recurring maintenance jobs run in the background; trigger any of them manually here.', getLang())),
 
     React.createElement('div', { className: 'card overflow-hidden' },
       loading && tasks.length === 0
@@ -67,6 +68,7 @@ export default function SystemTasks() {
                 React.createElement('th', { className: 'px-4 py-3 text-[11px] uppercase text-gray-400 font-medium' }, t('interval', getLang())),
                 React.createElement('th', { className: 'px-4 py-3 text-[11px] uppercase text-gray-400 font-medium' }, t('last run', getLang())),
                 React.createElement('th', { className: 'px-4 py-3 text-[11px] uppercase text-gray-400 font-medium' }, t('next run', getLang())),
+                React.createElement('th', { className: 'px-4 py-3 text-[11px] uppercase text-gray-400 font-medium' }, t('run count', getLang())),
                 React.createElement('th', { className: 'px-4 py-3 text-[11px] uppercase text-gray-400 font-medium text-right' }, t('actions', getLang())))),
               React.createElement('tbody', null, tasks.map((task: any) =>
                 React.createElement('tr', { key: task.id, className: 'border-b border-gray-50 dark:border-gray-800' },
@@ -81,6 +83,7 @@ export default function SystemTasks() {
                     task.lastDurationMs != null && React.createElement('span', { className: 'text-gray-400' }, ' · ' + task.lastDurationMs + 'ms')),
                   React.createElement('td', { className: 'px-4 py-3 text-xs whitespace-nowrap ' + (task.due ? 'text-amber-600' : 'text-gray-500') },
                     task.enabled ? (task.nextRun ? formatDateTime(task.nextRun) : t('as soon as possible', getLang())) : t('disabled', getLang())),
+                  React.createElement('td', { className: 'px-4 py-3 text-xs text-gray-500 whitespace-nowrap' }, String(task.runCount ?? 0)),
                   React.createElement('td', { className: 'px-4 py-3 text-right whitespace-nowrap' },
                     React.createElement('button', {
                       onClick: () => runNow(task), disabled: busy === task.id,

@@ -75,12 +75,24 @@ function purifierWindow(): any {
  * honest answer: the client-rendered shell always works.
  */
 function rendererIsStale(rendererFile: string): boolean {
+  return fileIsOlderThan(rendererFile, require('path').join(__dirname, '../../../frontend/dist/index.html'));
+}
+
+/**
+ * True when `file` was written before `other`.
+ *
+ * Exported so the comparison can be tested against two throwaway files: the
+ * version of this test that moved a *build artifact's* mtime around made the
+ * suite order-dependent — a run interrupted between the change and the restore
+ * left the renderer looking stale for every later run, which quietly disabled
+ * server rendering in the tests that followed.
+ */
+export function fileIsOlderThan(file: string, other: string): boolean {
   try {
     const fs = require('fs');
-    const shell = require('path').join(__dirname, '../../../frontend/dist/index.html');
-    return fs.statSync(rendererFile).mtimeMs < fs.statSync(shell).mtimeMs;
+    return fs.statSync(file).mtimeMs < fs.statSync(other).mtimeMs;
   } catch {
-    return false; // no shell to compare against: not a staleness signal
+    return false; // missing file is not a staleness signal
   }
 }
 

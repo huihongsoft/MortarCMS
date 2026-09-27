@@ -144,3 +144,31 @@ test('sign in, publish a post, rename it, and roll it back', async ({ page }) =>
   await expect(page.locator('#login-email')).toBeVisible();
   expect(await page.evaluate(() => localStorage.getItem('mortar_token'))).toBeNull();
 });
+
+test('the scheduled-task screen is the only place tasks are managed', async ({ page }) => {
+  // They used to be listed twice: a dedicated screen (sidebar → scheduled tasks)
+  // and a card inside Settings → Tools. The card is now a pointer, so this pins
+  // that the duplicate does not come back — the two lists could drift, and the
+  // card could not show next-run, last-error or source.
+  await signIn(page);
+
+  await page.goto('/admin/system-tasks');
+  const table = page.getByRole('table');
+  await expect(table).toBeVisible();
+  // The columns the dedicated screen exists for.
+  for (const column of [/task/i, /interval/i, /last run/i, /next run/i, /run count/i]) {
+    await expect(table.getByRole('columnheader', { name: column })).toBeVisible();
+  }
+  // And it offers the controls.
+  await expect(table.getByRole('button', { name: /run now/i }).first()).toBeVisible();
+
+  // Settings → Tools points here instead of listing the tasks again.
+  await page.goto('/admin/settings');
+  await page.getByRole('button', { name: /^tools$/i }).click();
+  // Scoped to the content: the sidebar has a link with the same name.
+  const pointer = page.getByRole('main').getByRole('link', { name: /scheduled tasks/i });
+  await expect(pointer).toBeVisible();
+  await expect(pointer).toHaveAttribute('href', /system-tasks/);
+  // No second run-now control on that tab.
+  await expect(page.getByRole('button', { name: /^run now$/i })).toHaveCount(0);
+});

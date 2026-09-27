@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { formatDateTime, formatDate } from '../lib/format';
 import DOMPurify from 'dompurify';
-import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson, Trash2, Edit, HardDrive, Sparkles } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { Save, Download, Upload, Mail, ShieldCheck, Wrench, Settings2, FileJson, Trash2, Edit, HardDrive, Sparkles, ArrowRight } from 'lucide-react';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import Select from '../components/Select';
 import api, { downloadFile } from '../lib/api';
 import { t, getLang, serverMessage } from '../lib/i18n';
@@ -47,7 +47,6 @@ export default function Settings() {
       refreshTemplates();
     } catch (e: any) { dialog.alert(e.response?.data?.error || t('save failed', getLang())); }
   };
-  const [tasks, setTasks] = useState<any[]>([]);
   const [dbStatus, setDbStatus] = useState<any>(null);
   const [dbCheck, setDbCheck] = useState<any>(null);
   const [gdprUsers, setGdprUsers] = useState<any[]>([]);
@@ -60,21 +59,9 @@ export default function Settings() {
     api.get('/system/cache').then(r => { setCacheInfo(r.data); setCacheTtl(r.data?.ttlSeconds || 60); }).catch(() => {});
     api.get('/mailer/templates').then(r => setMailTemplates(r.data?.templates || [])).catch(() => {});
     api.get('/users').then(r => setGdprUsers(r.data || [])).catch(() => {});
-    loadTasks();
     api.get('/db/status').then(r => setDbStatus(r.data)).catch(() => {});
     loadBackups();
   }, []);
-
-  async function loadTasks() { api.get('/system/tasks').then(r => setTasks(r.data?.tasks || [])).catch(() => {}); }
-  async function runTask(id: string) { await api.post('/system/tasks/' + id + '/run'); loadTasks(); }
-  async function toggleTask(t: any) { await api.put('/system/tasks/' + t.id + '/enabled', { enabled: !t.enabled }); loadTasks(); }
-
-  const fmtInterval = (ms: number) => {
-    if (ms >= 7 * 86400000) return t('weekly', getLang());
-    if (ms >= 86400000) return t('daily', getLang());
-    if (ms >= 3600000) return Math.round(ms / 3600000) + 'h';
-    return Math.round(ms / 60000) + 'm';
-  };
 
   async function saveCache() {
     try {
@@ -546,30 +533,14 @@ export default function Settings() {
           React.createElement('button', { onClick: purgeCache, className: 'btn-secondary text-sm' }, t('purge cache', getLang())),
         )
       ),
+      // The task list lives on its own screen now (sidebar → scheduled tasks):
+      // it needs next-run, last-error and source, which a card inside Settings
+      // could not show. Pointing at it keeps the Tools tab from looking like the
+      // feature disappeared.
       React.createElement('div', { className: 'card p-6' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3' }, t('scheduled tasks', getLang())),
-        React.createElement('p', { className: 'text-sm text-gray-500 dark:text-gray-400 mb-4' }, t('recurring maintenance jobs run in the background; trigger any of them manually here.', getLang())),
-        tasks.length === 0
-          ? React.createElement('p', { className: 'text-sm text-gray-400' }, t('loading', getLang()) + '…')
-          : React.createElement('div', { className: 'space-y-2' },
-              tasks.map((tk: any) =>
-                React.createElement('div', { key: tk.id, className: 'flex items-center gap-3 py-2 border-b border-gray-50 dark:border-gray-800 last:border-0 flex-wrap' },
-                  React.createElement('div', { className: 'flex-1 min-w-0' },
-                    React.createElement('div', { className: 'flex items-center gap-2' },
-                      React.createElement('span', { className: 'text-sm font-medium text-gray-900 dark:text-gray-100' }, t(tk.name, getLang())),
-                      tk.enabled ? React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-green-100 text-green-700' }, t('enabled', getLang())) : React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500' }, t('disabled', getLang())),
-                      tk.lastStatus === 'error' && React.createElement('span', { className: 'text-[10px] px-1.5 py-0.5 rounded bg-red-100 text-red-700', title: tk.lastError || '' }, t('error', getLang()))
-                    ),
-                    React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' }, t(tk.desc, getLang())),
-                    React.createElement('p', { className: 'text-[10px] text-gray-400 mt-0.5' },
-                      t('interval', getLang()) + ': ' + fmtInterval(tk.intervalMs) + ' · ' + t('last run', getLang()) + ': ' + (tk.lastRun ? formatDateTime(tk.lastRun) : t('never', getLang())) + ' · ' + t('run count', getLang()) + ': ' + tk.runCount + (tk.lastDurationMs != null ? ' · ' + tk.lastDurationMs + 'ms' : ''))
-                  ),
-                  React.createElement('button', { onClick: () => runTask(tk.id), disabled: tk.running, className: 'btn-secondary text-xs disabled:opacity-40' }, t('run now', getLang())),
-                  React.createElement('label', { className: 'flex items-center gap-1.5 cursor-pointer text-xs text-gray-500' },
-                    React.createElement('input', { type: 'checkbox', checked: tk.enabled, onChange: () => toggleTask(tk), className: 'rounded border-gray-300 text-primary-600' }), t('enabled', getLang()))
-                )
-              )
-            )
+        React.createElement('p', { className: 'text-sm text-gray-500 dark:text-gray-400 mb-3' }, t('recurring maintenance jobs run in the background; trigger any of them manually here.', getLang())),
+        React.createElement(Link, { to: '/system-tasks', className: 'text-sm text-primary-600 hover:text-primary-700 inline-flex items-center gap-1' }, t('go to scheduled tasks', getLang()), React.createElement(ArrowRight, { size: 14 }))
       ),
       React.createElement('div', { className: 'card p-6' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 dark:text-gray-100 mb-3' }, t('content', getLang())),

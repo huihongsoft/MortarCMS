@@ -169,6 +169,13 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 
 ### Fixed
 
+- **Scheduled tasks were listed twice.** A dedicated screen (sidebar → scheduled
+  tasks) and a card inside Settings → Tools both listed them, with the same
+  run/enable controls — and the card could not show next-run, last-error or
+  source, so the two were already drifting. The card is now a pointer to the
+  screen, and the screen gained the run count the card had. The e2e suite asserts
+  it stays that way: no second list, and the link goes to the screen that has the
+  columns the feature needs.
 - **The multi-site boundary on the admin API.** A review sweep after the media
   folder fix found the same class of hole elsewhere — routes that checked a
   capability, or ownership, and stopped there, while the *site* dimension was
