@@ -11,12 +11,36 @@ import { sharedStore } from './sharedStore';
 import { logger } from './logger';
 import { pruneRead } from './notifications';
 
+/**
+ * What a task accomplished, as a *code* rather than a sentence.
+ *
+ * The task runs on the server, which has no idea what language the operator reads,
+ * so it reports `{ code: 'published scheduled posts', count: 3 }` and the admin
+ * turns that into "已发布 3 篇定时文章". The codes are the keys of the admin
+ * dictionary entries (prefixed with
+ * `task result `), and `tests/taskI18n.test.ts` fails when one has no entry — the
+ * same guard the task names needed, for the same reason: a missing translation
+ * renders the raw code in a Chinese admin and nothing errors.
+ */
+export interface TaskOutcome {
+  /** Stable identifier, e.g. 'published', 'nothing to do'. */
+  code: string;
+  /** Optional counter the message interpolates as {n}. */
+  count?: number;
+}
+
 export interface TaskDef {
   id: string;
   name: string;
   desc: string;
   intervalMs: number;
-  fn: () => void | Promise<void>;
+  /**
+   * The work itself. Returning an outcome is what makes the screen able to say
+   * what happened — a task that reports `{code:'nothing to do'}` is telling the
+   * operator something very different from one that silently returned, and only
+   * the task knows which it was.
+   */
+  fn: () => TaskOutcome | void | Promise<TaskOutcome | void>;
   source?: string;
 }
 
@@ -28,6 +52,8 @@ interface TaskState {
   lastError?: string;
   lastDurationMs?: number;
   runCount: number;
+  /** Outcome of the last run; in memory like the rest of the run stats. */
+  lastResult?: TaskOutcome;
 }
 
 const tasks = new Map<string, { def: TaskDef; state: TaskState }>();
@@ -80,6 +106,7 @@ export function listTasks(): any[] {
     lastError: state.lastError,
     lastDurationMs: state.lastDurationMs,
     runCount: state.runCount,
+    lastResult: state.lastResult || null,
     nextRun: state.enabled && state.lastRun !== null ? state.lastRun + def.intervalMs : null,
     due: state.enabled && (state.lastRun === null || now - state.lastRun >= def.intervalMs),
   }));
@@ -92,7 +119,7 @@ export function listTasks(): any[] {
 // task being blocked forever by a crashed holder.
 const TASK_LOCK_TTL_MS = 15 * 60_000;
 
-export async function runTaskNow(id: string): Promise<{ ok: boolean; error?: string; ms: number; skipped?: boolean }> {
+export async function runTaskNow(id: string): Promise<{ ok: boolean; error?: string; ms: number; skipped?: boolean; result?: TaskOutcome }> {
   const t = tasks.get(id);
   if (!t) return { ok: false, error: 'Unknown task', ms: 0 };
   if (t.state.running) return { ok: false, error: 'Task is already running', ms: 0, skipped: true };
@@ -108,10 +135,15 @@ export async function runTaskNow(id: string): Promise<{ ok: boolean; error?: str
   const t0 = Date.now();
   t.state.running = true;
   try {
-    await t.def.fn();
+    // A task may return nothing (its work is self-evident or it has nothing new to
+    // report); the previous outcome is cleared either way, so a stale "已清理 3 条"
+    // never sits next to a run that did something else.
+    const outcome = await t.def.fn();
+    t.state.lastResult = outcome || undefined;
     t.state.lastStatus = 'ok';
     t.state.lastError = undefined;
   } catch (e: any) {
+    t.state.lastResult = undefined;
     t.state.lastStatus = 'error';
     t.state.lastError = e?.message || String(e);
   }
@@ -123,7 +155,12 @@ export async function runTaskNow(id: string): Promise<{ ok: boolean; error?: str
   await release().catch(() => {});
   // Plugins/webhooks can report or alert on scheduled work (failures included).
   try { doAction('task_run', id, t.state.lastStatus === 'ok', t.state.lastError || '', t.state.lastDurationMs); } catch {}
-  return { ok: t.state.lastStatus === 'ok', error: t.state.lastError, ms: t.state.lastDurationMs };
+  return {
+    ok: t.state.lastStatus === 'ok',
+    error: t.state.lastError,
+    ms: t.state.lastDurationMs,
+    result: t.state.lastResult,
+  };
 }
 
 export function setTaskEnabled(id: string, enabled: boolean): void {
@@ -171,11 +208,12 @@ export function registerBuiltinTasks(): void {
     fn: () => {
       const now = new Date().toISOString();
       const rows = db.prepare("SELECT id FROM Post WHERE status = 'scheduled' AND publishedAt <= ?").all(now) as any[];
-      if (rows.length === 0) return;
+      if (rows.length === 0) return { code: 'nothing to do' };
       db.prepare("UPDATE Post SET status = 'published', publishedAt = ? WHERE status = 'scheduled' AND publishedAt <= ?").run(now, now);
       rows.forEach((r: any) => { try { doAction('post_published', r.id); } catch {} });
       purgeContentCaches();
       logger.info({ count: rows.length }, 'scheduled posts published');
+      return { code: 'published scheduled posts', count: rows.length };
     },
   });
 
@@ -187,10 +225,10 @@ export function registerBuiltinTasks(): void {
     fn: () => {
       const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
       const r = db.prepare("DELETE FROM Post WHERE status = 'trash' AND updatedAt < ?").run(cutoff);
-      if (r.changes > 0) {
-        purgeContentCaches();
-        logger.info({ count: r.changes }, 'trashed items purged');
-      }
+      if (r.changes === 0) return { code: 'nothing to do' };
+      purgeContentCaches();
+      logger.info({ count: r.changes }, 'trashed items purged');
+      return { code: 'purged trashed items', count: r.changes };
     },
   });
 
@@ -202,7 +240,9 @@ export function registerBuiltinTasks(): void {
     fn: () => {
       const cutoff = new Date(Date.now() - 90 * 86_400_000).toISOString();
       const r = db.prepare('DELETE FROM Activity WHERE createdAt < ?').run(cutoff);
-      if (r.changes > 0) logger.info({ count: r.changes }, 'activity entries pruned');
+      if (r.changes === 0) return { code: 'nothing to do' };
+      logger.info({ count: r.changes }, 'activity entries pruned');
+      return { code: 'pruned activity entries', count: r.changes };
     },
   });
 
@@ -212,7 +252,8 @@ export function registerBuiltinTasks(): void {
     desc: 'Runs a WAL checkpoint weekly to keep the database compact',
     intervalMs: 7 * 86_400_000,
     fn: () => {
-      try { db.raw?.pragma('wal_checkpoint(TRUNCATE)'); } catch {}
+      try { db.raw?.pragma('wal_checkpoint(TRUNCATE)'); } catch { return { code: 'maintenance skipped' }; }
+      return { code: 'optimized database' };
     },
   });
 
@@ -229,13 +270,13 @@ export function registerBuiltinTasks(): void {
       try {
         const sentKey = 'ai_usage_report_last_sent';
         const lastSent = (db.prepare('SELECT value FROM Setting WHERE key = ?').get(sentKey) as any)?.value;
-        if (lastSent && Date.now() - new Date(lastSent).getTime() < 7 * 86_400_000) return;
+        if (lastSent && Date.now() - new Date(lastSent).getTime() < 7 * 86_400_000) return { code: 'not due yet' };
         const admins = db.prepare("SELECT email FROM User WHERE role = 'admin' AND email != ''").all() as any[];
         const sendEmailMod = await import('./mailer');
         const since = new Date(Date.now() - 7 * 86_400_000).toISOString().slice(0, 10);
         const rows = db.prepare("SELECT kind, COUNT(*) as c, COALESCE(SUM(tokens),0) as t FROM AiUsage WHERE date(createdAt) >= ? GROUP BY kind").all(since) as any[];
         const total = (db.prepare("SELECT COALESCE(SUM(tokens),0) as t FROM AiUsage WHERE date(createdAt) >= ?").get(since) as any)?.t || 0;
-        if (rows.length === 0 || admins.length === 0) return; // nothing to report
+        if (rows.length === 0 || admins.length === 0) return { code: 'nothing to do' }; // nothing to report
         const lines = rows.map((r: any) => '<tr><td>' + r.kind + '</td><td>' + r.c + '</td><td>' + r.t + '</td></tr>').join('');
         const siteTitle = (db.prepare("SELECT value FROM Setting WHERE key = 'site_title'").get() as any)?.value || 'Mortar';
         const html = '<div style="font-family:sans-serif;max-width:520px;margin:0 auto;">' +
@@ -249,6 +290,7 @@ export function registerBuiltinTasks(): void {
         db.prepare('INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
           .run(sentKey, sentKey, new Date().toISOString());
         logger.info({ count: admins.length }, 'AI usage report sent');
+        return { code: 'sent AI usage report', count: admins.length };
       } catch {}
     },
   });
@@ -285,9 +327,10 @@ export function registerBuiltinTasks(): void {
             if (stale) shares += db.prepare('DELETE FROM Setting WHERE key = ?').run(r.key).changes;
           }
         } catch { /* pruning must never break the task */ }
-        if (audit || notes || sessions || shares) {
-          logger.info({ audit, notifications: notes, sessions, shares }, 'AI records pruned');
-        }
+        const total = audit + notes + sessions + shares;
+        if (total === 0) return { code: 'nothing to do' };
+        logger.info({ audit, notifications: notes, sessions, shares }, 'AI records pruned');
+        return { code: 'pruned AI records', count: total };
       } catch { /* pruning must never break the scheduler */ }
     },
   });
@@ -308,7 +351,9 @@ export function registerBuiltinTasks(): void {
           const r = db.prepare('DELETE FROM Revision WHERE postId = ? AND id NOT IN (' + marks + ')').run(postId, ...keep);
           pruned += r.changes;
         }
-        if (pruned > 0) logger.info({ count: pruned }, 'old revisions pruned');
+        if (pruned === 0) return { code: 'nothing to do' };
+        logger.info({ count: pruned }, 'old revisions pruned');
+        return { code: 'pruned old revisions', count: pruned };
       } catch {}
     },
   });
@@ -321,7 +366,7 @@ export function registerBuiltinTasks(): void {
     fn: async () => {
       // Use the real database path: a hardcoded server/data/mortar.db would
       // silently back up nothing when MORTAR_DB_PATH is customised.
-      if (!fs.existsSync(DB_PATH)) { logger.warn({ dbPath: DB_PATH }, 'backup skipped: database file not found'); return; }
+      if (!fs.existsSync(DB_PATH)) { logger.warn({ dbPath: DB_PATH }, 'backup skipped: database file not found'); return { code: 'backup skipped' }; }
       let retention = 10;
       try {
         retention = Math.max(1, parseInt((db.prepare("SELECT value FROM Setting WHERE key = 'backup_retention'").get() as any)?.value || '10') || 10);
@@ -351,6 +396,7 @@ export function registerBuiltinTasks(): void {
       } catch {}
       logger.info({ file: entry.name, bytes: entry.bytes, retention }, 'backup created');
       try { doAction('backup_completed', entry.path); } catch {}
+      return { code: 'created backup' };
     },
   });
 
@@ -367,11 +413,15 @@ export function registerBuiltinTasks(): void {
         // Hard cap on total history rows (running tasks are never removed)
         const extra = db.prepare("SELECT COUNT(*) as c FROM AiTask WHERE status IN ('done','failed','cancelled')").get() as any;
         const excess = ((extra?.c || 0) - 500);
+        let trimmed = 0;
         if (excess > 0) {
           const ids = db.prepare("SELECT id FROM AiTask WHERE status IN ('done','failed','cancelled') ORDER BY createdAt ASC LIMIT ?").all(excess) as any[];
           for (const row of ids) db.prepare('DELETE FROM AiTask WHERE id = ?').run(row.id);
-          logger.info({ count: ids.length }, 'AI task records trimmed');
+          trimmed = ids.length;
+          logger.info({ count: trimmed }, 'AI task records trimmed');
         }
+        const removed = (r.changes || 0) + trimmed;
+        return removed > 0 ? { code: 'pruned AI tasks', count: removed } : { code: 'nothing to do' };
       } catch {}
     },
   });
@@ -387,7 +437,7 @@ export function registerBuiltinTasks(): void {
         const lastRaw = (db.prepare("SELECT value FROM Setting WHERE key = 'newsletter_last_sent_at'").get() as any)?.value || '';
         const lastSent = lastRaw ? new Date(lastRaw).getTime() : 0;
         const nowMs = Date.now();
-        if (freq === 'weekly' && lastSent && nowMs - lastSent < 7 * 86_400_000) return; // not due yet
+        if (freq === 'weekly' && lastSent && nowMs - lastSent < 7 * 86_400_000) return { code: 'not due yet' };
         // The window is "since the last digest", and the first run has no cursor:
         // it covers the last week rather than everything ever published, so a site
         // whose owner clicks "run now" does not mail its whole archive. The cursor
@@ -396,9 +446,9 @@ export function registerBuiltinTasks(): void {
         // at all, on any install, while the run still reported success.
         const since = new Date(lastSent || nowMs - 7 * 86_400_000).toISOString();
         const posts = db.prepare("SELECT id, title, slug, excerpt FROM Post WHERE type = 'post' AND status = 'published' AND publishedAt > ? ORDER BY publishedAt DESC LIMIT 10").all(since) as any[];
-        if (posts.length === 0) return;
+        if (posts.length === 0) return { code: 'no new posts to send' };
         const subs = db.prepare("SELECT id, email, confirmToken FROM Subscriber WHERE status = 'subscribed' AND confirmed = 1 AND email != ''").all() as any[];
-        if (subs.length === 0) return;
+        if (subs.length === 0) return { code: 'no confirmed subscribers' };
         const sendEmailMod = await import('./mailer');
         const info = {
           title: (db.prepare("SELECT value FROM Setting WHERE key = 'site_title'").get() as any)?.value || 'Mortar',
@@ -431,12 +481,13 @@ export function registerBuiltinTasks(): void {
           // still reporting success. Leaving it unset retries the same window next
           // time, and the warning is the only signal an operator gets here.
           logger.warn({ attempted: subs.length, failed }, 'newsletter digest sent nothing; cursor left unset');
-          return;
+          return { code: 'email delivery failed' };
         }
         db.prepare("INSERT INTO Setting (id, key, value) VALUES ('newsletter_last_sent_at', 'newsletter_last_sent_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date(nowMs).toISOString());
         // Served by the cached /api/settings.
         try { purgeAllCaches(); } catch { /* cache maintenance must not fail the task */ }
         logger.info({ count: sent, failed }, 'newsletter digest sent');
+        return { code: 'sent newsletter digest', count: sent };
       } catch (err: any) {
         // Swallowed before, which is how a digest that never sent anything looked
         // like a task that ran fine.
@@ -454,9 +505,9 @@ export function registerBuiltinTasks(): void {
       try {
         const { getStorageConfig, storeFile } = await import('./storage');
         const cfg = getStorageConfig();
-        if (cfg.provider !== 's3') return;
+        if (cfg.provider !== 's3') return { code: 'no object storage configured' };
         const rows = db.prepare("SELECT id, url, thumbnail, srcset, mimeType FROM Media WHERE url LIKE '/uploads/%' ORDER BY createdAt DESC LIMIT 200").all() as any[];
-        if (rows.length === 0) return;
+        if (rows.length === 0) return { code: 'nothing to do' };
         const fsMod = await import('fs');
         const pathMod = await import('path');
         const readLocal = (p: string): Buffer | null => {
@@ -496,7 +547,9 @@ export function registerBuiltinTasks(): void {
             migrated++;
           } catch (e: any) { logger.warn({ err: e.message, mediaId: m.id }, 'media migrate failed'); }
         }
-        if (migrated > 0) logger.info({ count: migrated }, 'media migrated to object storage');
+        if (migrated === 0) return { code: 'nothing to do' };
+        logger.info({ count: migrated }, 'media migrated to object storage');
+        return { code: 'migrated media', count: migrated };
       } catch {}
     },
   });
@@ -536,7 +589,7 @@ export function registerBuiltinTasks(): void {
           }
           if (toCheck.length >= 50) break;
         }
-        if (toCheck.length === 0) return;
+        if (toCheck.length === 0) return { code: 'nothing to do' };
         let checked = 0;
         for (const c of toCheck) {
           const now = new Date().toISOString();
@@ -555,7 +608,9 @@ export function registerBuiltinTasks(): void {
             checked++;
           } catch {}
         }
-        if (checked > 0) logger.info({ count: checked }, 'outbound links checked');
+        if (checked === 0) return { code: 'nothing to do' };
+        logger.info({ count: checked }, 'outbound links checked');
+        return { code: 'checked outbound links', count: checked };
       } catch {}
     },
   });
@@ -569,7 +624,9 @@ export function registerBuiltinTasks(): void {
       try {
         const cutoff = new Date(Date.now() - 30 * 86_400_000).toISOString();
         const r = db.prepare('DELETE FROM SearchLog WHERE createdAt < ?').run(cutoff);
-        if (r.changes > 0) logger.info({ count: r.changes }, 'search-log entries pruned');
+        if (r.changes === 0) return { code: 'nothing to do' };
+        logger.info({ count: r.changes }, 'search-log entries pruned');
+        return { code: 'pruned search log', count: r.changes };
       } catch {}
     },
   });
@@ -587,7 +644,9 @@ export function registerBuiltinTasks(): void {
         } catch {}
         const cutoff = new Date(Date.now() - retentionDays * 86_400_000).toISOString().slice(0, 10);
         const r = db.prepare('DELETE FROM Visit WHERE date < ?').run(cutoff);
-        if (r.changes > 0) logger.info({ count: r.changes, retentionDays }, 'visit records pruned');
+        if (r.changes === 0) return { code: 'nothing to do' };
+        logger.info({ count: r.changes, retentionDays }, 'visit records pruned');
+        return { code: 'pruned visit records', count: r.changes };
       } catch {}
     },
   });

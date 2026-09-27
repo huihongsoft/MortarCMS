@@ -156,3 +156,46 @@ describe('the task list', () => {
     expect(r.error).toBe('Unknown task');
   });
 });
+
+describe('run outcomes', () => {
+  it('says what it did, not just that it ran', async () => {
+    // The task list used to report only ok + duration, which is how a task that
+    // did nothing and a task that silently failed looked identical.
+    db.prepare("INSERT OR REPLACE INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt) VALUES ('s1','S','s','','','scheduled','post','u1',?)")
+      .run(new Date(Date.now() - 60_000).toISOString());
+    const r = await runTaskNow('publish_scheduled');
+    expect(r.ok).toBe(true);
+    expect(r.result).toEqual({ code: 'published scheduled posts', count: 1 });
+    // And the list carries it, so the screen can show it without a second call.
+    expect((listTasks().find((t: any) => t.id === 'publish_scheduled') || {}).lastResult).toEqual({ code: 'published scheduled posts', count: 1 });
+  });
+
+  it('distinguishes "nothing to do" from doing nothing silently', async () => {
+    // Nothing is old enough to prune: an outcome the operator can act on, rather
+    // than an empty success.
+    const r = await runTaskNow('prune_activity');
+    expect(r.ok).toBe(true);
+    expect(r.result).toEqual({ code: 'nothing to do' });
+  });
+
+  it('clears the previous outcome when a run fails', async () => {
+    // A stale "已清理 3 条" beside a failed run would be worse than no result.
+    db.prepare("INSERT OR REPLACE INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt) VALUES ('s1','S','s','','','scheduled','post','u1',?)")
+      .run(new Date(Date.now() - 60_000).toISOString());
+    await runTaskNow('publish_scheduled');
+    expect((listTasks().find((t: any) => t.id === 'publish_scheduled') || {}).lastResult).toBeTruthy();
+
+    // Force a failure by making the task's table unavailable to it.
+    const realPrepare = db.prepare.bind(db);
+    (db as any).prepare = (sql: string) => {
+      if (/FROM Post WHERE status = 'scheduled'/.test(sql)) throw new Error('boom');
+      return realPrepare(sql);
+    };
+    try {
+      const r = await runTaskNow('publish_scheduled');
+      expect(r.ok).toBe(false);
+      expect(r.result).toBeUndefined();
+      expect((listTasks().find((t: any) => t.id === 'publish_scheduled') || {}).lastResult).toBeNull();
+    } finally { (db as any).prepare = realPrepare; }
+  });
+});

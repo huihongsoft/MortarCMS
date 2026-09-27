@@ -4,6 +4,7 @@ import { Workflow, Play, RefreshCw } from 'lucide-react';
 import api from '../lib/api';
 import { t, getLang } from '../lib/i18n';
 import { useToast } from '../lib/toast';
+import { taskResultText } from '../lib/taskResult';
 
 // Scheduled tasks: the backend has registered and run these for a while, but the
 // only way to see them was the API. A task that stopped running, or one whose
@@ -43,8 +44,11 @@ export default function SystemTasks() {
     try {
       const r = await api.post('/system/tasks/' + encodeURIComponent(task.id) + '/run');
       const body = r.data || {};
+      // Lead with what it did: "task ran" alone is exactly the message that made a
+      // working task and a no-op task look the same.
+      const did = taskResultText(body.result);
       if (body.skipped) toast.toast(t('task skipped', getLang()) + ': ' + (body.error || ''), 'error');
-      else if (body.success) toast.toast(t('task ran', getLang()) + ' (' + (body.ms || 0) + 'ms)');
+      else if (body.success) toast.toast((did || t('task ran', getLang())) + ' (' + (body.ms || 0) + 'ms)');
       else toast.toast(t('task failed', getLang()) + ': ' + (body.error || ''), 'error');
       await load();
     } catch (e: any) { toast.toast(e.response?.data?.error || t('run failed', getLang()), 'error'); }
@@ -78,6 +82,11 @@ export default function SystemTasks() {
                     // translated simply falls back to its own text.
                     React.createElement('p', { className: 'text-sm text-gray-800 dark:text-gray-100 font-medium' }, t(task.name, getLang())),
                     React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' }, t(task.desc, getLang())),
+                    // What the last run actually accomplished — including "nothing
+                    // to do", which is the answer an operator is looking for when a
+                    // task appears to have done nothing.
+                    taskResultText(task.lastResult) && React.createElement('p', { className: 'text-xs text-gray-600 dark:text-gray-300 mt-1' },
+                      t('last result', getLang()) + ': ' + taskResultText(task.lastResult)),
                     React.createElement('p', { className: 'text-[10px] text-gray-400 font-mono mt-0.5' }, task.id + ' · ' + t(task.source, getLang())),
                     // The raw failure text stays visible — this screen exists so an
                     // operator can find the task that stopped working — but it is

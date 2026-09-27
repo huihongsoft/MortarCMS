@@ -142,6 +142,16 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
   cursor, so misconfigured SMTP would silently put those posts outside every later
   window and the subscribers would never see them; and the whole body was wrapped
   in `catch {}`, so none of this was visible anywhere.
+- A scheduled task now **reports what it accomplished**, and the screen shows it
+  ("上次结果: 已清理 3 条活动日志"), in the run toast as well as on the row. The task
+  returns a *code* plus an optional count rather than a sentence, because it runs on
+  the server and the operator's language is the admin's business: `{code:'nothing to
+  do'}` becomes 本次无需处理 or "nothing to do" on the client. "Nothing to do" is a
+  reportable outcome on purpose — a prune task finding nothing to prune and a task
+  that silently failed used to look identical. Every code has a Chinese entry (and,
+  unusually for this dictionary, an explicit English one, since a namespaced key is
+  not readable prose), and `tests/taskI18n.test.ts` fails when a new outcome is
+  added without one.
 - Every scheduled task's outcome now goes to the structured log rather than
   `console.log` — the same reason as the item above: a task that did nothing and a
   task that failed both looked like "task ran".
@@ -193,6 +203,16 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
   cursor, so misconfigured SMTP would silently put those posts outside every later
   window and the subscribers would never see them; and the whole body was wrapped
   in `catch {}`, so none of this was visible anywhere.
+- A scheduled task now **reports what it accomplished**, and the screen shows it
+  ("上次结果: 已清理 3 条活动日志"), in the run toast as well as on the row. The task
+  returns a *code* plus an optional count rather than a sentence, because it runs on
+  the server and the operator's language is the admin's business: `{code:'nothing to
+  do'}` becomes 本次无需处理 or "nothing to do" on the client. "Nothing to do" is a
+  reportable outcome on purpose — a prune task finding nothing to prune and a task
+  that silently failed used to look identical. Every code has a Chinese entry (and,
+  unusually for this dictionary, an explicit English one, since a namespaced key is
+  not readable prose), and `tests/taskI18n.test.ts` fails when a new outcome is
+  added without one.
 - Every scheduled task's outcome now goes to the structured log rather than
   `console.log` — the same reason as the item above: a task that did nothing and a
   task that failed both looked like "task ran".

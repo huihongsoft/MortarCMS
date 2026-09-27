@@ -30,6 +30,14 @@ function registeredTasks(): { id: string; name: string; desc: string }[] {
   return out;
 }
 
+/** Every outcome code `registerBuiltinTasks` can return. */
+function outcomeCodes(): string[] {
+  // Comments carry code examples, so strip them before scanning — otherwise the
+  // documentation block itself would demand a translation.
+  const source = scheduler.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+  return [...new Set([...source.matchAll(/code:\s*'([^']+)'/g)].map((m) => m[1]))];
+}
+
 /** Is this English string a key in the admin dictionary? */
 function translated(key: string): boolean {
   const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -51,6 +59,16 @@ describe('scheduled task translations', () => {
       ...(translated(desc) ? [] : [{ id, field: 'desc', text: desc }]),
     ]);
     expect(missing, 'untranslated task metadata: ' + JSON.stringify(missing, null, 1)).toEqual([]);
+  });
+
+  it('has a Chinese entry for every outcome a task can report', () => {
+    // The screen renders `t('task result ' + code)`; a missing entry shows the raw
+    // code, which is the same silent failure the task names had.
+    const codes = outcomeCodes();
+    expect(codes.length).toBeGreaterThanOrEqual(15);
+    expect(codes).toContain('nothing to do');
+    const missing = codes.filter((c) => !translated('task result ' + c));
+    expect(missing, 'untranslated task outcomes: ' + JSON.stringify(missing)).toEqual([]);
   });
 
   it('translates the word the task source column shows', () => {

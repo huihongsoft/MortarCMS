@@ -62,8 +62,9 @@ test.describe.configure({ mode: 'serial' });
 
 test.beforeEach(async ({ page }) => {
   // The admin follows localStorage; pin it so the text selectors below are stable
-  // regardless of the machine's or the site's language.
-  await page.addInitScript(() => { try { localStorage.setItem('mortar_lang', 'en'); } catch {} });
+  // regardless of the machine's or the site's language. Only when unset — a test
+  // that switches language itself must not have it overwritten on the next load.
+  await page.addInitScript(() => { try { if (!localStorage.getItem('mortar_lang')) localStorage.setItem('mortar_lang', 'en'); } catch {} });
   await ensureInstalled(page);
 });
 
@@ -171,4 +172,51 @@ test('the scheduled-task screen is the only place tasks are managed', async ({ p
   await expect(pointer).toHaveAttribute('href', /system-tasks/);
   // No second run-now control on that tab.
   await expect(page.getByRole('button', { name: /^run now$/i })).toHaveCount(0);
+});
+
+test('running a task reports what it did, in both languages', async ({ page }) => {
+  // "task ran (0ms)" was the whole story before: a task that pruned nothing and a
+  // task that silently failed read identically. Each run now carries an outcome,
+  // shown on the row and in the toast.
+  await signIn(page);
+  await page.goto('/admin/system-tasks');
+  const row = page.getByRole('row', { name: /Prune visit logs/i });
+  await expect(row).toBeVisible();
+  // No outcome until it has run once in this process.
+  await expect(row.getByText(/last result/i)).toHaveCount(0);
+
+  await row.getByRole('button', { name: /run now/i }).click();
+
+  // English: the row says what happened, and the toast leads with it.
+  await expect(row.getByText(/last result: nothing to do/i)).toBeVisible();
+  await expect(page.getByText(/nothing to do \(\d+ms\)/)).toBeVisible();
+
+  // A second run keeps reporting, rather than falling back to the empty message.
+  await row.getByRole('button', { name: /run now/i }).click();
+  await expect(row.getByText(/last result: nothing to do/i)).toBeVisible();
+
+  // A task that did something reports *how much* — the {n} the message carries.
+  // Created through the API: a post whose scheduled time has already passed.
+  // The admin's session lives in localStorage, which page.request does not share,
+  // so the token travels explicitly.
+  const token = await page.evaluate(() => localStorage.getItem('mortar_token'));
+  const created = await page.request.post('/api/posts', {
+    headers: { Authorization: 'Bearer ' + token, 'content-type': 'application/json' },
+    data: { title: 'Scheduled for the task test', slug: 'sched-' + Date.now(), status: 'scheduled', publishedAt: new Date(Date.now() - 60_000).toISOString() },
+  });
+  expect(created.ok(), await created.text()).toBeTruthy();
+  await page.reload();
+  const publishRow = page.getByRole('row', { name: /Publish scheduled posts/i });
+  await publishRow.getByRole('button', { name: /run now/i }).click();
+  await expect(publishRow.getByText(/last result: 1 scheduled post\(s\) published/)).toBeVisible();
+  await expect(page.getByText(/1 scheduled post\(s\) published \(\d+ms\)/)).toBeVisible();
+
+  // Chinese: same outcome, translated — the server reports a code, not a sentence,
+  // which is what makes this possible at all.
+  await page.evaluate(() => localStorage.setItem('mortar_lang', 'zh'));
+  await page.reload();
+  const zhRow = page.getByRole('row', { name: /清理访问日志/i });
+  await expect(zhRow).toBeVisible();
+  await expect(zhRow.getByText(/上次结果[:：]\s*本次无需处理/)).toBeVisible();
+  await expect(zhRow.getByText('task result', { exact: false })).toHaveCount(0);
 });
