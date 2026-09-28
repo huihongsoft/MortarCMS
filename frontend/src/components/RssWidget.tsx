@@ -1,11 +1,11 @@
+import Widget from './Widget';
 import React from 'react';
 import { Rss } from 'lucide-react';
 import { t } from '../lib/i18n';
 
 // RSS subscription link (WordPress-style widget)
 export default function RssWidget() {
-  return React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
-    React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider' }, t('subscribe')),
+  return React.createElement(Widget, { title: t('subscribe') },
     React.createElement('a', {
       href: '/api/feed/rss',
       target: '_blank',

@@ -1,3 +1,4 @@
+import Widget from './Widget';
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { MessageSquare } from 'lucide-react';
@@ -10,8 +11,7 @@ export default function RecentCommentsWidget() {
   const [comments, setComments] = useState<any[]>([]);
   useEffect(() => { api.get('/comments/recent?limit=5').then(r => setComments(r.data || [])).catch(() => {}); }, []);
   if (comments.length === 0) return null;
-  return React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
-    React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider flex items-center gap-1.5' }, React.createElement(MessageSquare, { size: 14, className: 'text-gray-400' }), t('recent comments')),
+  return React.createElement(Widget, { title: t('recent comments'), icon: MessageSquare },
     React.createElement('ul', { className: 'space-y-2' },
       comments.map((c: any) => React.createElement('li', { key: c.id, className: 'text-xs text-gray-600 leading-snug' },
         React.createElement('span', { className: 'font-medium text-gray-800' }, c.author || t('anonymous')),

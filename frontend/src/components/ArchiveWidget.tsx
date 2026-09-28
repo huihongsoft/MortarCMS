@@ -1,3 +1,4 @@
+import Widget from './Widget';
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
@@ -12,8 +13,7 @@ export default function ArchiveWidget() {
 
   const monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-  return React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
-    React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider' }, t('archives')),
+  return React.createElement(Widget, { title: t('archives') },
     React.createElement('ul', { className: 'space-y-1' },
       months.map((m: any) => {
         const [y, mo] = m.month.split('-');

@@ -1,3 +1,4 @@
+import Widget from './Widget';
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { TrendingUp } from 'lucide-react';
@@ -14,8 +15,7 @@ export default function PopularPostsWidget() {
 
   if (posts.length === 0) return null;
 
-  return React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
-    React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider flex items-center gap-1.5' }, React.createElement(TrendingUp, { size: 14 }), t('popular posts')),
+  return React.createElement(Widget, { title: t('popular posts'), icon: TrendingUp },
     React.createElement('ul', { className: 'space-y-2' },
       posts.map((p: any, i: number) =>
         React.createElement('li', { key: p.id, className: 'flex items-start gap-2' },

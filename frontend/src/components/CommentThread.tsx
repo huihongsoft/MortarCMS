@@ -11,8 +11,14 @@ import { formatDate } from '../lib/time';
 export interface CommentClasses {
   /** Wrapper for one comment (card / row). */
   item: string;
-  /** Wrapper around a comment's replies (indent + connector). */
-  nested: string;
+  /**
+   * Wrapper around a comment's replies (indent + connector).
+   * Optional: the default indents the thread, and only a theme that wants a
+   * different treatment (aurora drops the connector rule) needs to say so —
+   * the default theme and softstore were spelling out two variants of the same
+   * thing in their own files.
+   */
+  nested?: string;
   avatar: string;
   avatarSmall: string;
   author: string;
@@ -23,6 +29,9 @@ export interface CommentClasses {
    *  of a gravatar image (softstore / aurora style). Defaults to 'gravatar'. */
   avatarMode?: 'gravatar' | 'initial';
 }
+
+/** Replies are indented with a connector rule; see CommentClasses.nested. */
+const DEFAULT_NESTED = 'ml-8 mt-3 pl-4 border-l-2 border-gray-100 space-y-3';
 
 const INDENT_LIMIT = 3;   // deeper threads stop indenting further (server caps depth too)
 
@@ -53,7 +62,7 @@ export default function CommentThread({ comment, classes, settings, onReply, dep
           onClick: () => onReply(comment),
           className: classes.reply,
         }, t('reply', settings)))),
-    children.length > 0 && React.createElement('div', { className: depth < INDENT_LIMIT ? classes.nested : '' },
+    children.length > 0 && React.createElement('div', { className: depth < INDENT_LIMIT ? (classes.nested ?? DEFAULT_NESTED) : '' },
       children.map((child: any) => React.createElement(CommentThread, {
         key: child.id, comment: child, classes, settings, onReply,
         depth: depth < INDENT_LIMIT ? depth + 1 : depth,

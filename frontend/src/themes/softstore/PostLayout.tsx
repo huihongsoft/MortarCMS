@@ -23,7 +23,6 @@ export default function SoftstorePostLayout(props: any) {
 
   const commentClasses: CommentClasses = {
     item: 'py-5 border-b border-[#eee] last:border-b-0',
-    nested: 'ml-8 mt-3 pl-4 border-l-2 border-[#eee] space-y-3',
     avatar: 'w-8 h-8 rounded-full bg-[#f1f1f1] flex items-center justify-center text-sm font-medium text-[#888]',
     avatarSmall: 'w-7 h-7 rounded-full bg-[#f1f1f1] flex items-center justify-center text-xs font-medium text-[#888]',
     author: 'font-medium text-sm text-[#333]',

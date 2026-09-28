@@ -47,7 +47,6 @@ export default function PostLayout(props: any) {
   // row); styling stays in this theme via the class map.
   const commentClasses: CommentClasses = {
     item: 'mb-5 p-5 rounded-2xl border border-gray-100',
-    nested: 'ml-8 mt-3 pl-4 border-l-2 border-gray-100 space-y-3',
     avatar: 'w-8 h-8 rounded-full',
     avatarSmall: 'w-6 h-6 rounded-full',
     author: 'font-medium text-sm text-gray-900',

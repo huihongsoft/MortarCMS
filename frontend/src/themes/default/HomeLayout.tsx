@@ -90,14 +90,14 @@ export default function HomeLayout(props: any) {
               has('calendar') && React.createElement(CalendarWidget),
               has('pages') && React.createElement(PagesWidget),
               has('rss') && React.createElement(RssWidget),
-              has('html') && cfg.html?.html && React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
-                cfg.html.title && React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider' }, cfg.html.title),
+              has('html') && cfg.html?.html && React.createElement('div', { className: 'card' },
+                cfg.html.title && React.createElement('h3', { className: 'widget-title' }, cfg.html.title),
                 React.createElement('div', { dangerouslySetInnerHTML: { __html: sanitizeHtml(cfg.html.html) } })
               ),
             );
           })(),
-          React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
-            React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider' }, t('categories', settings)),
+          React.createElement('div', { className: 'card' },
+            React.createElement('h3', { className: 'widget-title' }, t('categories', settings)),
             categories.length === 0
               ? React.createElement('p', { className: 'text-sm text-gray-500' }, t('no categories yet', settings))
               : React.createElement('ul', { className: 'space-y-1' }, categories.map((c: any) => React.createElement('li', { key: c.id },

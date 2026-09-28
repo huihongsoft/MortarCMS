@@ -1,3 +1,4 @@
+import Widget from './Widget';
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Calendar as CalendarIcon } from 'lucide-react';
@@ -25,8 +26,7 @@ export default function CalendarWidget() {
       title: t('view monthly archive'),
     }, d));
   }
-  return React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
-    React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider flex items-center gap-1.5' }, React.createElement(CalendarIcon, { size: 14, className: 'text-gray-400' }), t('calendar')),
+  return React.createElement(Widget, { title: t('calendar'), icon: CalendarIcon },
     React.createElement('div', { className: 'grid grid-cols-7 gap-0.5 text-center' },
       weekdayNames.map((w, i) => React.createElement('div', { key: i, className: 'text-[10px] text-gray-400 py-1' }, w)),
       cells

@@ -97,6 +97,13 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
   follows the setting. The server bakes the palette into the HTML it renders, so
   the first paint is themed too — that also removes the flash `--primary-color`
   used to have while an effect applied it.
+- Sidebar widgets share their shell: the same card string was copied into 15 files
+  and the same heading into 10, so `components/Widget.tsx` owns the markup and
+  `index.css` owns the two class names (`.card`, `.widget-title`) that the default
+  theme layouts now use instead of a third copy. The three near-identical comment
+  indents collapse to one default in `CommentThread` (aurora keeps its own, which
+  really is a different treatment). Two rules nothing referenced are gone
+  (`.comment-reply`, `.no-print`).
 - Default installs look the same: the fallbacks in `index.css` are the blue ramp
   the palette used before, and the derived ramp lands within a step of it.
 

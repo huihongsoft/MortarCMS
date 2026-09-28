@@ -1,3 +1,4 @@
+import Widget from './Widget';
 import React, { useEffect, useState } from 'react';
 import api from '../lib/api';
 import { t } from '../lib/i18n';
@@ -9,8 +10,7 @@ export default function LinksWidget() {
   const [links, setLinks] = useState<any[]>([]);
   useEffect(() => { api.get('/friend-links').then(r => setLinks(r.data || [])).catch(() => {}); }, []);
   if (links.length === 0) return null;
-  return React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
-    React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider' }, t('friend links')),
+  return React.createElement(Widget, { title: t('friend links') },
     React.createElement('ul', { className: 'space-y-1.5' },
       links.map((l: any) =>
         React.createElement('li', { key: l.id },

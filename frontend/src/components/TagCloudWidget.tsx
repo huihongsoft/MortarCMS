@@ -1,3 +1,4 @@
+import Widget from './Widget';
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
@@ -12,8 +13,7 @@ export default function TagCloudWidget() {
   // stays in the tooltip.
   const sorted = [...tags].sort((a: any, b: any) => (b._count?.views || 0) - (a._count?.views || 0));
   const max = Math.max(...sorted.map((tag: any) => tag._count?.views || 0), 1);
-  return React.createElement('div', { className: 'rounded-lg border border-gray-200 p-4' },
-    React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider' }, t('tag cloud')),
+  return React.createElement(Widget, { title: t('tag cloud') },
     React.createElement('div', { className: 'flex flex-wrap gap-1.5' },
       sorted.map((tag: any) => {
         const size = 0.65 + ((tag._count?.views || 0) / max) * 0.35;

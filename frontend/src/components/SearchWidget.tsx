@@ -1,3 +1,4 @@
+import Widget from './Widget';
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Search, FileText, File } from 'lucide-react';
@@ -49,8 +50,7 @@ export default function SearchWidget() {
     navigate(s.type === 'page' ? '/page/' + s.slug : postPath(s.slug));
   };
 
-  return React.createElement('div', { ref: boxRef, className: 'rounded-lg border border-gray-200 p-4 relative' },
-    React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 uppercase tracking-wider' }, t('search')),
+  return React.createElement(Widget, { innerRef: boxRef, className: 'relative', title: t('search') },
     React.createElement('form', { onSubmit: handleSubmit, className: 'flex gap-2' },
       React.createElement('input', {
         type: 'text',
