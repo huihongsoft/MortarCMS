@@ -15,7 +15,7 @@ import { renderToString } from 'react-dom/server';
 import { StaticRouter } from 'react-router-dom';
 import createDOMPurify from 'dompurify';
 import App, { registerEagerRoutes } from './App';
-import { ThemeProvider } from './themes';
+import { seedTheme } from './themes';
 import { serverTheme } from './themes/registry';
 import { setPermalinkPrefix } from './lib/permalink';
 import { setPurifyInstance } from './lib/purify';
@@ -134,14 +134,12 @@ export function render(options: RenderOptions): RenderResult {
   setSsrPayload(payload);
   setPermalinkPrefix(options.settings.permalink_structure);
 
+  // The app builds its own ThemeProvider from `loadedTheme()`, so the resolved
+  // theme is seeded into that cache rather than handed to a second provider around
+  // the app — which the inner one silently overrode.
+  seedTheme(theme.name, theme);
   const html = renderToString(
-    React.createElement(StaticRouter, { location: options.url },
-      React.createElement(ThemeProvider, {
-        themeName: theme.name,
-        initialTheme: theme,
-        children: React.createElement(App),
-      })
-    )
+    React.createElement(StaticRouter, { location: options.url }, React.createElement(App))
   );
   return { html, payload };
 }

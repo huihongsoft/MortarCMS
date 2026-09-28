@@ -20,11 +20,14 @@ import magazine from './magazine';
 import softstore from './softstore';
 import twentynineteen from './twentynineteen';
 import twentyseventeen from './twentyseventeen';
-import twentytyone from './twentytwentyone';
+import twentytwentyone from './twentytwentyone';
 import twentytwentyfour from './twentytwentyfour';
 
+// Keyed by the theme's own name — the key *is* the name the settings store, so a
+// local variable spelling (this read `twentytyone` once) makes a theme reachable
+// only under a name nobody uses, and the renderer silently refuses that theme.
 const builtIn: Record<string, any> = {
-  aurora, magazine, softstore, twentynineteen, twentyseventeen, twentytyone, twentytwentyfour,
+  aurora, magazine, softstore, twentynineteen, twentyseventeen, twentytwentyone, twentytwentyfour,
 };
 
 const registry: Record<string, Theme> = { default: defaultTheme };

@@ -103,6 +103,20 @@ export function loadTheme(name?: string): Promise<Theme> {
   return loading[key];
 }
 
+/**
+ * Register an already-resolved theme under its name.
+ *
+ * The server renderer uses this: it resolves the theme from source (see
+ * themes/registry.ts) and then renders the app, which builds its own ThemeProvider
+ * from `loadedTheme()`. Handing the theme to a *second* provider wrapped around the
+ * app looked like it worked and did not — the app's inner provider won, found
+ * nothing loaded, and drew the default theme. So every non-default site prerendered
+ * the wrong design and then mismatched when hydrating.
+ */
+export function seedTheme(name: string, theme: Theme): void {
+  if (name) cache[name] = theme;
+}
+
 /** A theme that is already resolved, or null. No import is triggered. */
 export function loadedTheme(name?: string): Theme | null {
   return cache[name || 'default'] || null;
