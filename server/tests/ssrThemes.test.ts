@@ -23,8 +23,11 @@ const themes = await import(pathToFileURL(path.join(__dirname, '../dist/utils/ss
 
 describe('the theme registry', () => {
   const registry = fs.readFileSync(path.join(root, 'frontend/src/themes/registry.ts'), 'utf8');
+  // Themes have an index.ts; `shared/` holds the layout factory they share and is
+  // not a theme anyone selects.
   const dirs = fs.readdirSync(path.join(root, 'frontend/src/themes'), { withFileTypes: true })
-    .filter((d) => d.isDirectory()).map((d) => d.name);
+    .filter((d) => d.isDirectory() && fs.existsSync(path.join(root, 'frontend/src/themes', d.name, 'index.ts')))
+    .map((d) => d.name);
 
   it('is keyed by the theme name, one entry per theme directory', () => {
     // The key is what the settings store as the active theme, so a key that does
@@ -67,6 +70,20 @@ describe.skipIf(!fs.existsSync(BUNDLE))('the renderer and the active theme', () 
     domWindow,
   });
 
+  /** The same, with one post, for anything that asserts on a post's markup. */
+  const renderThemeWithPost = (theme: string) => render({
+    url: '/', themeName: theme, origin: 'https://x.test',
+    settings: { site_title: 'T', site_lang: 'en', permalink_structure: '/post/%slug%', theme_name: theme },
+    data: {
+      home: {
+        posts: [{ id: 'p1', title: 'Post', slug: 'post', excerpt: 'Excerpt', featured: '', status: 'published', type: 'post', lang: '',
+          createdAt: '2026-09-01T00:00:00.000Z', publishedAt: '2026-09-01T00:00:00.000Z', categories: [{ name: 'News', slug: 'news' }], tags: [], translations: [] }],
+        total: 1, categories: [],
+      },
+    },
+    domWindow,
+  });
+
   it('draws the requested theme, not the default one', () => {
     const def = renderTheme('default');
     const aurora = renderTheme('aurora');
@@ -86,6 +103,20 @@ describe.skipIf(!fs.existsSync(BUNDLE))('the renderer and the active theme', () 
       expect(r.html, name + ' did not render').toBeTruthy();
       expect(r.payload.themeName, name + ' resolved to another theme').toBe(name);
     }
+  });
+
+  it('keeps the two list-style themes on one shared layout', () => {
+    // twentyseventeen and twentytwentyone are the same homepage in different
+    // clothes; the structure lives in themes/shared/listHome.tsx and these are the
+    // tokens. This is the guard against them drifting back into two copies.
+    const ts17 = renderThemeWithPost('twentyseventeen').html || '';
+    const tt1 = renderThemeWithPost('twentytwentyone').html || '';
+    // Shared structure…
+    for (const html of [ts17, tt1]) expect(html).toContain('lg:col-span-2');
+    // …and the tokens that make each its own theme.
+    expect(ts17).toContain('pb-8 border-b border-gray-200');
+    expect(tt1).toContain('rounded-3xl');
+    expect(ts17).not.toContain('rounded-3xl');
   });
 
   it('still refuses a theme it does not have, rather than drawing the wrong one', () => {

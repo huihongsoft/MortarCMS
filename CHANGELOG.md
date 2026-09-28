@@ -104,6 +104,15 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
   indents collapse to one default in `CommentThread` (aurora keeps its own, which
   really is a different treatment). Two rules nothing referenced are gone
   (`.comment-reply`, `.no-print`).
+- Two of the small themes were the same homepage in different clothes:
+  twentyseventeen and twentytwentyone were 86% identical, differing in class strings
+  only (card vs flat list, orange vs grey accent, `py-12` vs `py-10`). The structure
+  now lives once in `themes/shared/listHome.tsx` and each theme passes its tokens —
+  verified byte-for-byte: both themes render *identical* HTML before and after, home
+  and paginated category pages. The three others are not merged on purpose:
+  twentynineteen has a hero with a rule, twentytwentyfour a two-column grid,
+  magazine a masthead — different layouts, and a factory wide enough to hold them
+  would describe them worse than three files do.
 - Default installs look the same: the fallbacks in `index.css` are the blue ramp
   the palette used before, and the derived ramp lands within a step of it.
 
