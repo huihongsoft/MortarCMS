@@ -49,7 +49,7 @@ export default function SoftstoreHeader({ settings = {} }: { settings?: Record<s
       'aria-label': t('search', settings),
       className: 'w-full h-[55px] pl-[15px] pr-[35px] text-[14px] text-[#666] bg-white border border-[#edeef2] rounded-[5px] outline-none',
     }),
-    React.createElement('button', { type: 'submit', 'aria-label': t('search', settings), className: 'absolute top-1/2 right-[15px] -translate-y-1/2 text-[#5066e1]' },
+    React.createElement('button', { type: 'submit', 'aria-label': t('search', settings), className: 'absolute top-1/2 right-[15px] -translate-y-1/2 text-primary-600' },
       React.createElement(Search, { size: 16 }))
   );
 
@@ -59,14 +59,14 @@ export default function SoftstoreHeader({ settings = {} }: { settings?: Record<s
       // vertical padding (.main-menu ul li a), which makes the bar ~82px.
       React.createElement('div', { className: 'flex items-center gap-4' },
         React.createElement(Link, { to: '/', className: 'flex items-center gap-2 shrink-0' },
-          React.createElement('span', { className: 'w-9 h-9 rounded-xl flex items-center justify-center text-white text-lg font-bold', style: { background: '#5066e1' } }, (settings.site_title || 'M')[0].toUpperCase()),
+          React.createElement('span', { className: 'w-9 h-9 rounded-xl flex items-center justify-center text-white text-lg font-bold', style: { background: 'var(--primary-color, #5066e1)' } }, (settings.site_title || 'M')[0].toUpperCase()),
           React.createElement('span', { className: 'text-[18px] font-bold text-[#222] truncate max-w-[8rem] sm:max-w-none' }, settings.site_title || 'Mortar')),
         // Center nav (desktop): home + categories. Reference .main-menu ul li a:
         // 18px medium #1D1D1D, 32px vertical padding, items 18px apart.
         React.createElement('nav', { className: 'hidden md:flex items-center ml-8 flex-1 min-w-0 overflow-x-auto' },
-          React.createElement(Link, { to: '/', className: 'mx-[18px] first:ml-0 py-[32px] text-[18px] font-medium text-[#1d1d1d] hover:text-[#5066e1] whitespace-nowrap' }, t('home', settings)),
+          React.createElement(Link, { to: '/', className: 'mx-[18px] first:ml-0 py-[32px] text-[18px] font-medium text-[#1d1d1d] hover:text-primary-600 whitespace-nowrap' }, t('home', settings)),
           categories.map((c: any) =>
-            React.createElement(Link, { key: c.id, to: '/category/' + c.slug, className: 'mx-[18px] py-[32px] text-[18px] font-medium text-[#1d1d1d] hover:text-[#5066e1] whitespace-nowrap transition-colors' }, c.name)
+            React.createElement(Link, { key: c.id, to: '/category/' + c.slug, className: 'mx-[18px] py-[32px] text-[18px] font-medium text-[#1d1d1d] hover:text-primary-600 whitespace-nowrap transition-colors' }, c.name)
           )
         ),
         // Right: CTA + hamburger (reference .duheader-btn + .side-toggle).
@@ -76,7 +76,7 @@ export default function SoftstoreHeader({ settings = {} }: { settings?: Record<s
         React.createElement('div', { className: 'flex items-center ml-auto' },
           React.createElement('a', {
             href: ctaUrl,
-            className: 'hidden sm:inline-block h-[40px] leading-[40px] px-[28px] text-[15px] font-medium text-[#5066e1] border border-[#5066e1] rounded-[15px] transition-all duration-300 ease-out hover:bg-[#5066e1] hover:text-white whitespace-nowrap',
+            className: 'hidden sm:inline-block h-[40px] leading-[40px] px-[28px] text-[15px] font-medium text-primary-600 border border-primary-600 rounded-[15px] transition-all duration-300 ease-out hover:bg-primary-600 hover:text-white whitespace-nowrap',
           }, ctaLabel),
           React.createElement('button', {
             type: 'button', onClick: () => setOpen(true),
@@ -102,21 +102,21 @@ export default function SoftstoreHeader({ settings = {} }: { settings?: Record<s
     },
       React.createElement('div', { className: 'flex items-start justify-between mb-8' },
         React.createElement(Link, { to: '/', onClick: () => setOpen(false), className: 'flex items-center gap-2' },
-          React.createElement('span', { className: 'w-9 h-9 rounded-xl flex items-center justify-center text-white text-lg font-bold', style: { background: '#5066e1' } }, (settings.site_title || 'M')[0].toUpperCase()),
+          React.createElement('span', { className: 'w-9 h-9 rounded-xl flex items-center justify-center text-white text-lg font-bold', style: { background: 'var(--primary-color, #5066e1)' } }, (settings.site_title || 'M')[0].toUpperCase()),
           React.createElement('span', { className: 'text-[17px] font-bold text-[#222]' }, settings.site_title || 'Mortar')),
         React.createElement('button', { type: 'button', onClick: () => setOpen(false), 'aria-label': t('close', settings), className: 'text-[#1d1d1d] p-1' },
           React.createElement(X, { size: 20 }))),
       React.createElement('div', { className: 'mb-8' }, searchForm),
       // The reference's drawer repeats the primary nav (its mobile menu)
       React.createElement('nav', { className: 'mb-8' },
-        React.createElement(Link, { to: '/', onClick: () => setOpen(false), className: 'block py-2 text-[16px] text-[#333] hover:text-[#5066e1]' }, t('home', settings)),
+        React.createElement(Link, { to: '/', onClick: () => setOpen(false), className: 'block py-2 text-[16px] text-[#333] hover:text-primary-600' }, t('home', settings)),
         categories.map((c: any) =>
-          React.createElement(Link, { key: c.id, to: '/category/' + c.slug, onClick: () => setOpen(false), className: 'block py-2 text-[16px] text-[#555] hover:text-[#5066e1]' }, c.name))),
+          React.createElement(Link, { key: c.id, to: '/category/' + c.slug, onClick: () => setOpen(false), className: 'block py-2 text-[16px] text-[#555] hover:text-primary-600' }, c.name))),
       settings.site_description && React.createElement('p', { className: 'text-[14px] leading-[24px] text-[#777] mb-8' }, settings.site_description),
       React.createElement('a', {
         href: ctaUrl,
         className: 'inline-block h-[35px] leading-[35px] px-[8px] rounded-[5px] text-[14px] font-light text-white whitespace-nowrap',
-        style: { background: '#5066e1' },
+        style: { background: 'var(--primary-color, #5066e1)' },
       }, ctaLabel)
     )
   );

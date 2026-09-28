@@ -6,9 +6,6 @@ import { cdnUrl } from '../../lib/cdn';
 import { t } from '../../lib/i18n';
 import { postPath } from '../../lib/permalink';
 
-// huirj.cn precise replica tokens
-const PRIMARY = '#5066e1';
-
 // Dates the way the reference prints them: absolute, zero-padded YYYY-MM-DD
 // (its list rows and .post-meta both read "2022-11-15"). toLocaleDateString()
 // produced "2026/9/18" — wrong separator and no padding.
@@ -73,7 +70,7 @@ export function NoticeBar({ settings: _settings }: { settings: Record<string, st
   // mt matches the reference page wrapper's top padding (.blog-area pt-20), which
   // is what keeps the bar off the header.
   return React.createElement('div', { className: 'bg-white border border-[#dedede] rounded-[5px] px-[15px] py-[1px] mt-[20px] mb-[15px] flex items-center gap-[10px]' },
-    React.createElement(Volume2, { size: 16, className: 'shrink-0 text-[#5066e1]' }),
+    React.createElement(Volume2, { size: 16, className: 'shrink-0 text-primary-600' }),
     React.createElement('div', { className: 'flex-1 min-w-0 overflow-hidden', style: { height: LINE_H } },
       React.createElement('ul', {
         style: {
@@ -84,7 +81,7 @@ export function NoticeBar({ settings: _settings }: { settings: Record<string, st
       },
         rows.map((p: any, i: number) =>
           React.createElement('li', { key: p.id + '-' + i, className: 'truncate', style: { height: LINE_H, lineHeight: LINE_H + 'px' } },
-            React.createElement(Link, { to: postPath(p.slug), className: 'text-[15px] text-[#666] hover:text-[#5066e1]' }, p.title)))
+            React.createElement(Link, { to: postPath(p.slug), className: 'text-[15px] text-[#666] hover:text-primary-600' }, p.title)))
       )
     )
   );
@@ -184,7 +181,7 @@ export function IconCarousel({ settings }: { settings: Record<string, string> })
             React.createElement('p', { className: 'text-[14px] text-[#999] truncate' }, p.title),
             React.createElement('p', { className: 'text-[14px] text-[#999] truncate' }, cat?.name || ''),
           ),
-          React.createElement('span', { className: 'hidden group-hover:block mt-[12px] h-[30px] leading-[30px] text-center text-[14px] text-white', style: { background: PRIMARY } }, t('download now', settings)),
+          React.createElement('span', { className: 'hidden group-hover:block mt-[12px] h-[30px] leading-[30px] text-center text-[14px] text-white', style: { background: 'var(--primary-color, #5066e1)' } }, t('download now', settings)),
         );
       })
     )
@@ -198,7 +195,7 @@ export function IconCarousel({ settings }: { settings: Record<string, string> })
 export function TagPill({ tag, shrink = true }: { tag: any; shrink?: boolean }) {
   return React.createElement(Link, {
     to: '/tag/' + tag.slug,
-    className: 'inline-block h-[27px] leading-[26px] px-[13px] text-[14px] font-bold text-[#666] border border-[#e8e7ec] rounded-[6px] mr-[8px] mb-[10px] hover:text-white hover:bg-[#5066e1] hover:border-[#5066e1] transition-colors' + (shrink ? ' shrink-0' : ''),
+    className: 'inline-block h-[27px] leading-[26px] px-[13px] text-[14px] font-bold text-[#666] border border-[#e8e7ec] rounded-[6px] mr-[8px] mb-[10px] hover:text-white hover:bg-primary-600 hover:border-primary-600 transition-colors' + (shrink ? ' shrink-0' : ''),
   }, tag.name);
 }
 
@@ -272,7 +269,7 @@ export function CategorySection({ settings = {}, categories }: { settings?: Reco
       React.createElement('div', { className: 'h-[55px] border-b-2 border-[#dadada] mb-[20px] flex items-center overflow-hidden' },
         React.createElement(AppWindow, { size: 20, className: 'shrink-0 mr-[9px] text-[#666]' }),
         React.createElement('span', { className: 'text-[24px] text-[#333] leading-[55px] truncate' }, category ? category.name : t('latest software', settings)),
-        category && React.createElement(Link, { to: '/category/' + category.slug, className: 'ml-auto shrink-0 text-[16px] text-[#777] leading-[60px] hover:text-[#5066e1] flex items-center' },
+        category && React.createElement(Link, { to: '/category/' + category.slug, className: 'ml-auto shrink-0 text-[16px] text-[#777] leading-[60px] hover:text-primary-600 flex items-center' },
           t('more apps', settings), React.createElement(List, { size: 19, className: 'ml-[6px]' }))),
       tags.length > 0 && React.createElement('div', { className: 'overflow-hidden whitespace-nowrap text-ellipsis' },
         React.createElement('span', { className: 'text-[18px] font-bold text-[#666] mr-[5px]' }, t('tags', settings) + ' :'),
@@ -293,7 +290,7 @@ export function CategorySection({ settings = {}, categories }: { settings?: Reco
                 React.createElement(Link, { to: postPath(p.slug), className: 'mr-[10px]' }, React.createElement(SoftThumb, { p, settings })),
                 React.createElement('div', { className: 'min-w-0 flex-1' },
                   React.createElement(Link, { to: postPath(p.slug), className: 'block' },
-                    React.createElement('h4', { className: 'text-[15px] font-bold text-[#333] leading-[22px] h-[45px] overflow-hidden text-center group-hover:text-[#5066e1]' }, p.title)),
+                    React.createElement('h4', { className: 'text-[15px] font-bold text-[#333] leading-[22px] h-[45px] overflow-hidden text-center group-hover:text-primary-600' }, p.title)),
                   p.excerpt && React.createElement('p', { className: 'text-[14px] leading-[20px] text-[#888] mt-[8px] pt-[10px] border-t border-dashed border-[#dedede] line-clamp-2' }, p.excerpt)))
             )))),
       React.createElement('aside', { className: 'lg:col-span-3 min-w-0' },
@@ -367,8 +364,8 @@ export function CategoryTabs({ tabs: listed, active, onSelect }: { tabs: any[]; 
         onClick: () => onSelect(key),
         onMouseEnter: () => hoverSwitch(key),
         onMouseLeave: cancelHover,
-        className: 'relative shrink-0 text-center truncate px-2 transition-colors ' + (isOn ? 'font-bold' : 'hover:text-[#5066e1]'),
-        style: isOn ? { width: fit.width, color: PRIMARY, borderBottom: '3px solid ' + PRIMARY, background: '#fff' } : { width: fit.width },
+        className: 'relative shrink-0 text-center truncate px-2 transition-colors ' + (isOn ? 'font-bold' : 'hover:text-primary-600'),
+        style: isOn ? { width: fit.width, color: 'var(--primary-color, #5066e1)', borderBottom: '3px solid var(--primary-color, #5066e1)', background: '#fff' } : { width: fit.width },
         // a truncated tag still shows its full name on hover
         title: c.name,
       },
@@ -397,7 +394,7 @@ export function SoftListRow({ p, settings }: { p: any; settings: Record<string, 
     React.createElement(Link, { to: postPath(p.slug), className: 'mr-[10px]' }, React.createElement(SoftThumb, { p, settings })),
     React.createElement('div', { className: 'flex-1 min-w-0' },
       React.createElement(Link, { to: postPath(p.slug), className: 'block' },
-        React.createElement('h4', { className: 'text-[18px] font-bold text-[#333] leading-[35px] h-[36px] truncate hover:text-[#5066e1]' }, p.title)),
+        React.createElement('h4', { className: 'text-[18px] font-bold text-[#333] leading-[35px] h-[36px] truncate hover:text-primary-600' }, p.title)),
       // reference .auth: 14px, 31px box. Date then comment count — the count is
       // printed even at 0, as the reference does.
       React.createElement('p', { className: 'text-[14px] text-[#666] h-[31px] leading-[29px]' },
@@ -409,7 +406,7 @@ export function SoftListRow({ p, settings }: { p: any; settings: Record<string, 
     // Action button: always visible, theme-colored on row hover (reference .down-link)
     React.createElement(Link, {
       to: postPath(p.slug),
-      className: 'absolute bottom-[15px] right-[6px] w-[90px] h-[26px] leading-[26px] text-center text-[12px] tracking-wider text-[#666] bg-white border border-[#ddd] rounded-sm transition-colors group-hover:bg-[#5066e1] group-hover:text-white group-hover:border-[#5066e1]',
+      className: 'absolute bottom-[15px] right-[6px] w-[90px] h-[26px] leading-[26px] text-center text-[12px] tracking-wider text-[#666] bg-white border border-[#ddd] rounded-sm transition-colors group-hover:bg-primary-600 group-hover:text-white group-hover:border-primary-600',
     }, t('read more', settings)),
   );
 }
@@ -421,7 +418,7 @@ export function RankRow({ p, settings: _settings }: { p: any; settings: Record<s
   const cat = p.categories?.[0];
   return React.createElement('li', { className: 'h-[35px] leading-[35px] border-b border-dashed border-[#ccc] mb-[4px] last:border-b-0 last:mb-0' },
     React.createElement(Link, { to: postPath(p.slug), className: 'relative left-[3px] flex items-center h-[29px] leading-[29px] text-[14px] overflow-hidden' },
-      React.createElement('span', { className: 'flex-1 truncate text-[#555] hover:text-[#5066e1] hover:underline' }, p.title),
+      React.createElement('span', { className: 'flex-1 truncate text-[#555] hover:text-primary-600 hover:underline' }, p.title),
       cat && React.createElement('span', { className: 'shrink-0 w-[28%] text-right text-[#858585] truncate' }, cat.name))
   );
 }
@@ -464,8 +461,8 @@ export function SideTabs({ settings, fill, category }: { settings: Record<string
         key: k,
         onClick: () => setTab(k as 'hot' | 'latest'),
         onMouseEnter: () => setTab(k as 'hot' | 'latest'),
-        className: 'px-[23px] py-2 text-[15px] font-medium transition-colors ' + (tab === k ? 'text-[#1d1d1d] border-b-2' : 'text-[#666] hover:text-[#5066e1] border-b-2 border-transparent'),
-        style: tab === k ? { borderBottomColor: PRIMARY } : undefined,
+        className: 'px-[23px] py-2 text-[15px] font-medium transition-colors ' + (tab === k ? 'text-[#1d1d1d] border-b-2' : 'text-[#666] hover:text-primary-600 border-b-2 border-transparent'),
+        style: tab === k ? { borderBottomColor: 'var(--primary-color, #5066e1)' } : undefined,
       }, k === 'hot' ? t('hot ranking', settings) : t('latest posts', settings)))
     ),
     React.createElement('ul', { className: 'px-[15px] pt-[13px] pb-[15px]' },

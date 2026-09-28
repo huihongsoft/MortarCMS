@@ -17,6 +17,7 @@ import { isEnabledLang, setContentLangs } from './lib/contentLang';
 import { ssrPayload } from './lib/ssr';
 import { applyStoredLang } from './lib/i18n';
 import { installCmsForms } from './lib/cmsForms';
+import { themeVarsCss } from './lib/themeColor';
 import { applyNonce } from './lib/nonce';
 
 // Route components, code-split in the browser.
@@ -229,7 +230,7 @@ export default function App() {
         serif: 'Georgia, "Times New Roman", serif',
         mono: 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace',
       };
-      const themeKeys = ['primary_color', 'background', 'text_color', 'link_color', 'heading_font', 'body_font'];
+      const themeKeys = ['background', 'text_color', 'link_color', 'heading_font', 'body_font'];
       const vars = themeKeys
         .map(k => {
           const v = r.data['theme_' + k];
@@ -244,10 +245,16 @@ export default function App() {
           return '--' + k.replace(/_/g, '-') + ':' + v;
         })
         .filter(Boolean).join(';');
-      if (vars) {
+      // The palette (--primary-50…900 and --primary-color) is generated from the
+      // one theme colour by themeVarsCss: every `*-primary-*` utility resolves
+      // through those variables, so this is what makes the Appearance setting
+      // reach the whole UI instead of only the buttons. The server renderer bakes
+      // the same block into the HTML, so the first paint is already themed.
+      const palette = themeVarsCss(r.data);
+      if (vars || palette) {
         let el = document.getElementById('mortar-theme-vars') as HTMLStyleElement | null;
         if (!el) { el = document.createElement('style'); el.id = 'mortar-theme-vars'; document.head.appendChild(el); }
-        el.textContent = ':root{' + vars + '}';
+        el.textContent = (vars ? ':root{' + vars + '}' : '') + palette;
       }
       // Flag dark themes on <body data-theme="dark"> so global CSS can adapt
       // Tailwind light surfaces/text (bg-gray-50, text-gray-900, ...) to dark.

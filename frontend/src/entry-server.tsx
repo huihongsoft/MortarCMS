@@ -20,6 +20,7 @@ import { serverTheme } from './themes/registry';
 import { setPermalinkPrefix } from './lib/permalink';
 import { setPurifyInstance } from './lib/purify';
 import { setSsrPayload, type SsrPayload } from './lib/ssr';
+import { themeVarsCss } from './lib/themeColor';
 
 // DOMPurify needs a DOM. Without one it exports the createDOMPurify *factory*, and
 // calling `.sanitize()` on that throws — inside the route's Suspense boundary,
@@ -112,6 +113,10 @@ export function render(options: RenderOptions): RenderResult {
     now: Date.now(),
     data: options.data || {},
     contentLangs: options.contentLangs,
+    // The theme's palette, for the shell's <head>: App.tsx would otherwise apply
+    // it in an effect, which is a visible flash of the default blue on the first
+    // paint of every page.
+    themeCss: themeVarsCss(options.settings) || undefined,
     rendered: true,
   };
 

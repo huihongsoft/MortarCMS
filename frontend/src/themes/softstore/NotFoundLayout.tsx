@@ -14,7 +14,7 @@ export default function NotFoundLayout({ settings }: { settings?: Record<string,
         React.createElement(Link, {
           to: '/',
           className: 'inline-block px-[22px] py-[9px] rounded-[4px] text-white text-sm transition-opacity hover:opacity-90',
-          style: { background: '#5066e1' },
+          style: { background: 'var(--primary-color, #5066e1)' },
         }, t('back to home', settings))
       )
     )

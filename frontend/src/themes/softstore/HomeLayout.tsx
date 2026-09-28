@@ -74,11 +74,11 @@ export default function SoftstoreHomeLayout(props: any) {
               loading && React.createElement('div', { className: 'flex items-center justify-center py-10 text-[#999]' }, React.createElement(Loader2, { size: 20, className: 'animate-spin' })),
               // pagination — only for the plain stream (no categories to tab through)
               !isTab && total > perPage && React.createElement('div', { className: 'flex items-center justify-center gap-2 py-5' },
-                page > 1 && React.createElement('button', { onClick: () => setPage(page - 1), className: 'px-4 py-1.5 rounded text-sm border border-[#ddd] text-[#555] hover:border-[#5066e1] hover:text-[#5066e1]' }, t('previous', settings)),
+                page > 1 && React.createElement('button', { onClick: () => setPage(page - 1), className: 'px-4 py-1.5 rounded text-sm border border-[#ddd] text-[#555] hover:border-primary-600 hover:text-primary-600' }, t('previous', settings)),
                 React.createElement('span', { className: 'text-sm text-[#999]' }, t('page', settings) + ' ' + page + ' / ' + Math.ceil(total / perPage)),
-                page < Math.ceil(total / perPage) && React.createElement('button', { onClick: () => setPage(page + 1), className: 'px-4 py-1.5 rounded text-sm border border-[#ddd] text-[#555] hover:border-[#5066e1] hover:text-[#5066e1]' }, t('next', settings))),
+                page < Math.ceil(total / perPage) && React.createElement('button', { onClick: () => setPage(page + 1), className: 'px-4 py-1.5 rounded text-sm border border-[#ddd] text-[#555] hover:border-primary-600 hover:text-primary-600' }, t('next', settings))),
               isTab && !tabLoading && shown.length > 0 && React.createElement('div', { className: 'text-center py-4' },
-                React.createElement(Link, { to: '/category/' + activeSlug, className: 'text-sm text-[#5066e1] hover:underline' }, t('browse all posts', settings)))
+                React.createElement(Link, { to: '/category/' + activeSlug, className: 'text-sm text-primary-600 hover:underline' }, t('browse all posts', settings)))
             )
           )
         ),

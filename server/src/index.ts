@@ -11,7 +11,7 @@ import db, { initDB, closeDb } from './utils/db';
 import { logger } from './utils/logger';
 import { countRequest, startMetrics } from './utils/metrics';
 import { flushViews } from './utils/views';
-import { buildSeoMeta, injectSeoMeta, injectSsrRoot, stampInlineScripts, applyNonce, NONCE_PLACEHOLDER, isKnownRoute, buildRobotsTxt, buildCrawlerFallback } from './utils/seoMeta';
+import { buildSeoMeta, injectSeoMeta, injectSsrRoot, injectThemeCss, stampInlineScripts, applyNonce, NONCE_PLACEHOLDER, isKnownRoute, buildRobotsTxt, buildCrawlerFallback } from './utils/seoMeta';
 import { renderPath, fetchOwnJson, ssrAvailable } from './utils/ssr';
 import { activeThemeName } from './routes/themes';
 import { contentLangs } from './utils/contentLang';
@@ -639,6 +639,9 @@ if (fs.existsSync(frontendDist)) {
     const shellDoc = (fallback: string | null, appHtml?: string, payload?: unknown): string => {
       let html = injectSeoMeta(shell, meta, fallback);
       if (appHtml !== undefined) html = injectSsrRoot(html, appHtml, payload);
+      // The palette the server rendered with, so the first paint is themed rather
+      // than defaulting to the CSS fallbacks until the app's effect runs.
+      html = injectThemeCss(html, (payload as any)?.themeCss);
       return stampInlineScripts(html, NONCE_PLACEHOLDER);
     };
     try {

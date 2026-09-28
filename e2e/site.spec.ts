@@ -60,6 +60,63 @@ test.describe('the server-rendered document', () => {
   });
 });
 
+test.describe('the theme colour', () => {
+  // One colour, one palette. The `*-primary-*` utilities used to resolve to ten
+  // hard-coded values in tailwind.config.js, so the colour an operator sets in
+  // Appearance recoloured `.btn-primary` and left ~120 palette utilities blue —
+  // measured on the rendered page, not inferred from the source.
+  test('reaches the palette utilities, not just the buttons', async ({ page }) => {
+    const status = await (await page.request.get('/api/install/status')).json();
+    if (!status.installed) {
+      const r = await page.request.post('/api/install', { data: { siteTitle: 'Colour', adminEmail: 'e2e@mortar.test', adminPassword: 'e2e-password-1', adminUsername: 'e2e', sampleData: false } });
+      expect(r.ok(), await r.text()).toBeTruthy();
+    }
+    const login = await (await page.request.post('/api/auth/login', { data: { email: 'e2e@mortar.test', password: 'e2e-password-1' } })).json();
+    const auth = { Authorization: 'Bearer ' + login.token, 'content-type': 'application/json' };
+
+    // A rose that shares no channel with the default blue, so "it followed" cannot
+    // be a coincidence. Written per active theme, which is what the Appearance
+    // panel does — a per-theme override wins over the install-wide default.
+    const themes = await (await page.request.get('/api/themes', { headers: auth })).json();
+    const active = themes.active;
+    const put = await page.request.put('/api/settings', { headers: auth, data: { ['theme_' + active + '_primary_color']: '#e11d48' } });
+    expect(put.ok(), await put.text()).toBeTruthy();
+    try {
+      // The shell itself carries the generated palette, so the first paint is
+      // already themed (App.tsx would otherwise apply it in an effect).
+      const shell = await (await page.request.get('/')).text();
+      const block = /<style id="mortar-theme-vars">([^<]*)<\/style>/.exec(shell)?.[1] || '';
+      expect(block).toContain('--primary-600:225 29 72');
+
+      await page.goto('/');
+      await page.waitForTimeout(500);
+      const painted = await page.evaluate(() => {
+        const out: string[] = [];
+        for (const el of Array.from(document.querySelectorAll('[class*="primary-"]')).slice(0, 300) as HTMLElement[]) {
+          const s = getComputedStyle(el);
+          out.push(s.color, s.backgroundColor, s.borderTopColor);
+        }
+        return out.filter((c) => c && c !== 'rgba(0, 0, 0, 0)');
+      });
+      expect(painted.length, 'no element uses a palette utility on the homepage').toBeGreaterThan(0);
+      // The palette used to be fixed hexes, so every one of these painted the same
+      // blue whatever the setting said. None may still.
+      expect(painted.filter((c) => c === 'rgb(59, 130, 246)')).toEqual([]);
+
+      // And the configured rose has to actually appear — one of its derived
+      // shades (#e11d48 = rgb(225, 29, 72) at 600, lighter at 500, and so on).
+      const rgb = (c: string) => (c.match(/\d+/g) || []).map(Number);
+      const followed = painted.filter((c) => {
+        const [r, g, b] = rgb(c);
+        return r >= 200 && g <= 90 && b >= 60 && b <= 140;
+      });
+      expect(followed.length, 'nothing followed the theme colour; painted: ' + painted.slice(0, 8).join(' | ')).toBeGreaterThan(0);
+    } finally {
+      await page.request.put('/api/settings', { headers: auth, data: { ['theme_' + active + '_primary_color']: '' } });
+    }
+  });
+});
+
 test.describe('the hydrated page', () => {
   test('boots without console errors and keeps the rendered content', async ({ page }) => {
     const errors: string[] = [];

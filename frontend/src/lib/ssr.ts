@@ -33,6 +33,8 @@ export interface SsrPayload {
   rendered?: boolean;
   /** The client's own UI language, when the visitor overrode the site default. */
   uiLang?: string;
+  /** `:root{…}` block for the theme palette, injected into the shell's head. */
+  themeCss?: string;
 }
 
 let payload: SsrPayload = {};

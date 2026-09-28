@@ -19,7 +19,7 @@ export default function SoftstorePostLayout(props: any) {
   const contentRef = useRef<HTMLDivElement>(null);
   const author = post.author;
   const category = post.categories?.[0];
-  const inputCls = 'w-full px-3.5 py-2.5 border border-[#ddd] rounded text-sm outline-none focus:border-[#5066e1] bg-white';
+  const inputCls = 'w-full px-3.5 py-2.5 border border-[#ddd] rounded text-sm outline-none focus:border-primary-600 bg-white';
 
   const commentClasses: CommentClasses = {
     item: 'py-5 border-b border-[#eee] last:border-b-0',
@@ -29,7 +29,7 @@ export default function SoftstorePostLayout(props: any) {
     author: 'font-medium text-sm text-[#333]',
     date: 'text-xs text-[#999]',
     body: 'text-sm text-[#555] leading-relaxed',
-    reply: 'text-xs text-[#999] hover:text-[#5066e1]',
+    reply: 'text-xs text-[#999] hover:text-primary-600',
     avatarMode: 'initial',
   };
   const commentList = comments.map((c: any) =>
@@ -45,7 +45,7 @@ export default function SoftstorePostLayout(props: any) {
       React.createElement('input', { value: commentForm.author, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCommentForm({ ...commentForm, author: e.target.value }), placeholder: t('name', settings), 'aria-label': t('name', settings), className: inputCls, autoComplete: 'name' }),
       React.createElement('input', { value: commentForm.email, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCommentForm({ ...commentForm, email: e.target.value }), placeholder: t('email', settings), type: 'email', 'aria-label': t('email', settings), className: inputCls, autoComplete: 'email' })),
     React.createElement('textarea', { value: commentForm.content, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => setCommentForm({ ...commentForm, content: e.target.value }), placeholder: t('your comment', settings) + '...', 'aria-label': t('your comment', settings), className: inputCls, rows: 3, required: true }),
-    React.createElement('button', { type: 'submit', className: 'w-full py-2.5 rounded text-white text-sm font-medium transition-opacity hover:opacity-90', style: { background: '#5066e1' } }, t('submit comment', settings))
+    React.createElement('button', { type: 'submit', className: 'w-full py-2.5 rounded text-white text-sm font-medium transition-opacity hover:opacity-90', style: { background: 'var(--primary-color, #5066e1)' } }, t('submit comment', settings))
   );
 
   const meta = (icon: React.ReactNode, children: React.ReactNode) =>
@@ -84,8 +84,8 @@ export default function SoftstorePostLayout(props: any) {
           // underneath rather than the boxed border this used to have.
           React.createElement('div', { className: 'flex flex-wrap items-center gap-x-[10px] gap-y-1 text-[15px] font-medium text-[#666] border-b border-dashed border-[#dedede] pb-[6px] mb-[12px]' },
             meta(React.createElement(Calendar, { size: 15 }), formatDate(post.publishedAt || post.createdAt)),
-            author?.username && meta(React.createElement(User, { size: 15 }), React.createElement(Link, { to: '/author/' + author.username, className: 'hover:text-[#5066e1]' }, author.username)),
-            category && meta(React.createElement(Folder, { size: 15 }), React.createElement(Link, { to: '/category/' + category.slug, className: 'hover:text-[#5066e1]' }, category.name)),
+            author?.username && meta(React.createElement(User, { size: 15 }), React.createElement(Link, { to: '/author/' + author.username, className: 'hover:text-primary-600' }, author.username)),
+            category && meta(React.createElement(Folder, { size: 15 }), React.createElement(Link, { to: '/category/' + category.slug, className: 'hover:text-primary-600' }, category.name)),
             meta(React.createElement(Eye, { size: 15 }), String(post.views || 0)),
             meta(React.createElement(MessageSquare, { size: 15 }), String(post.commentCount || 0)),
             meta(React.createElement(Clock, { size: 15 }), readingTime(post.content || ''))),

@@ -589,6 +589,22 @@ export function injectSsrRoot(html: string, appHtml: string, payload: unknown): 
 }
 
 /**
+ * Put the theme's palette into the shell's <head>.
+ *
+ * It has to be the head, not the render payload inside #root: a <style> there
+ * would be part of the markup React compares while hydrating, and the client
+ * renders its own copy (App.tsx updates this same element by id).
+ *
+ * The CSS is generated from one hex colour by lib/themeColor.ts, so nothing
+ * operator-supplied reaches it — but a `</style>` in the value would end the
+ * element early, so it is refused rather than escaped.
+ */
+export function injectThemeCss(html: string, css: string | undefined): string {
+  if (!css || /<\/style/i.test(css)) return html;
+  return html.replace('</head>', () => '<style id="mortar-theme-vars">' + css + '</style>\n  </head>');
+}
+
+/**
  * Give every inline script in the document the response's CSP nonce.
  *
  * Both inline scripts a document can carry are written by us — the importmap in

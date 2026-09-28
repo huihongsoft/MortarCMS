@@ -40,7 +40,7 @@ export default function SoftstoreFooter({ settings = {} }: { settings?: Record<s
           // 1) about
           React.createElement('div', null,
             React.createElement('div', { className: 'flex items-center gap-2 mb-[30px]' },
-              React.createElement('span', { className: 'w-9 h-9 rounded-xl flex items-center justify-center text-white text-lg font-bold', style: { background: '#5066e1' } }, (settings.site_title || 'M')[0].toUpperCase()),
+              React.createElement('span', { className: 'w-9 h-9 rounded-xl flex items-center justify-center text-white text-lg font-bold', style: { background: 'var(--primary-color, #5066e1)' } }, (settings.site_title || 'M')[0].toUpperCase()),
               React.createElement('span', { className: 'text-[18px] font-bold text-[#222]' }, settings.site_title || 'Mortar')),
             React.createElement('p', { className: 'text-[14px] leading-[24px] text-[#666]' },
               settings.site_description || settings.footer_text || '')),
@@ -50,7 +50,7 @@ export default function SoftstoreFooter({ settings = {} }: { settings?: Record<s
             React.createElement('ul', null,
               categories.map((c: any) =>
                 React.createElement('li', { key: c.id, className: 'mb-[7px]' },
-                  React.createElement(Link, { to: '/category/' + c.slug, className: 'text-[15px] text-[#666] hover:text-[#5066e1] transition-colors' }, c.name))))),
+                  React.createElement(Link, { to: '/category/' + c.slug, className: 'text-[15px] text-[#666] hover:text-primary-600 transition-colors' }, c.name))))),
           // 3) newsletter (reference "Newsletter")
           React.createElement('div', null,
             title(t('Newsletter', settings)),
@@ -60,7 +60,7 @@ export default function SoftstoreFooter({ settings = {} }: { settings?: Record<s
                 placeholder: t('your email', settings), 'aria-label': t('your email', settings), required: true,
                 className: 'w-full h-[60px] pl-[20px] pr-[50px] text-[14px] text-[#666] bg-white border border-transparent rounded-[5px] outline-none',
               }),
-              React.createElement('button', { type: 'submit', disabled: state === 'sending', 'aria-label': t('subscribe', settings), className: 'absolute top-[16px] right-[25px] text-[#5066e1] disabled:opacity-50' },
+              React.createElement('button', { type: 'submit', disabled: state === 'sending', 'aria-label': t('subscribe', settings), className: 'absolute top-[16px] right-[25px] text-primary-600 disabled:opacity-50' },
                 React.createElement(ArrowRight, { size: 18 }))),
             state !== 'idle' && React.createElement('p', { className: 'mt-2 text-[13px] ' + (state === 'error' ? 'text-red-600' : 'text-[#666]') },
               state === 'sending' ? t('sending', settings) + '…' : state === 'done' ? t('check your inbox to confirm', settings) : t('subscription failed', settings)))

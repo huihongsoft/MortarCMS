@@ -19,13 +19,13 @@ function BlogCard({ p, settings }: { p: any; settings: Record<string, string> })
   return React.createElement('article', { className: 'bg-white rounded-[5px] border border-[#dedede] mb-[15px] transition-shadow hover:shadow-[0_2px_6px_rgba(0,0,0,0.08)]' },
     React.createElement('div', { className: 'px-[25px] py-[20px]' },
       React.createElement('h3', { className: 'text-[24px] leading-[34px] font-bold text-[#1d1d1d] mb-[10px]' },
-        React.createElement(Link, { to: postPath(p.slug), className: 'hover:text-[#5066e1]' }, p.title)),
+        React.createElement(Link, { to: postPath(p.slug), className: 'hover:text-primary-600' }, p.title)),
       // reference .post-meta: 15px/500 #666 with a dashed rule under it, showing
       // date, author, views and comment count — the last two even at 0.
       React.createElement('div', { className: 'flex flex-wrap items-center gap-x-[10px] text-[15px] font-medium text-[#666] border-b border-dashed border-[#dedede] pb-[6px] mb-[8px]' },
         React.createElement('span', null, formatDate(p.publishedAt || p.createdAt)),
         p.author?.username && React.createElement('span', null,
-          React.createElement(Link, { to: '/author/' + p.author.username, className: 'hover:text-[#5066e1]' }, p.author.username)),
+          React.createElement(Link, { to: '/author/' + p.author.username, className: 'hover:text-primary-600' }, p.author.username)),
         React.createElement('span', { className: 'inline-flex items-center gap-1' }, React.createElement(Eye, { size: 15 }), String(p.views || 0)),
         React.createElement('span', { className: 'inline-flex items-center gap-1' }, React.createElement(MessageSquare, { size: 15 }), String(p.commentCount || 0))),
       p.excerpt && React.createElement('div', { className: 'pt-[12px] text-[15px] leading-[26px] text-[#666]' }, p.excerpt),
@@ -73,7 +73,7 @@ function TitleList({ posts }: { posts: any[] }) {
   return React.createElement('ul', null,
     posts.map((p: any) =>
       React.createElement('li', { key: p.id, className: 'border-b border-dashed border-[#ccc] last:border-b-0 mb-[8px] last:mb-0 pb-[5px]' },
-        React.createElement(Link, { to: postPath(p.slug), className: 'block text-[14px] leading-[1.4] text-[#666] truncate hover:text-[#5066e1]' }, p.title))));
+        React.createElement(Link, { to: postPath(p.slug), className: 'block text-[14px] leading-[1.4] text-[#666] truncate hover:text-primary-600' }, p.title))));
 }
 
 // ---- Category list with counts (reference 分类目录) ----
@@ -89,7 +89,7 @@ function CategoryList({ categories }: { categories: any[] }) {
   return React.createElement('ul', null,
     categories.map((c: any) =>
       React.createElement('li', { key: c.id, className: 'mb-[8px] last:mb-0 flex items-center justify-between' },
-        React.createElement(Link, { to: '/category/' + c.slug, className: 'text-[15px] text-[#666] hover:text-[#5066e1]' }, c.name),
+        React.createElement(Link, { to: '/category/' + c.slug, className: 'text-[15px] text-[#666] hover:text-primary-600' }, c.name),
         React.createElement('span', { className: 'text-[15px] text-[#999]' }, String(counts[c.slug] ?? '')))));
 }
 
@@ -128,8 +128,8 @@ function Pager({ page, total, perPage, setPage }: { page: number; total: number;
         i > 0 && n - uniq[i - 1] > 1 ? React.createElement('li', null, React.createElement('span', { className: PAGE_BTN + ' bg-[#f1f1f1] text-[#1d1d1d]' }, '…')) : null,
         React.createElement('li', null,
           n === page
-            ? React.createElement('span', { className: PAGE_BTN + ' bg-[#5066e1] text-white' }, String(n))
-            : React.createElement('button', { type: 'button', onClick: () => setPage(n), className: PAGE_BTN + ' bg-[#f1f1f1] text-[#1d1d1d] hover:bg-[#5066e1] hover:text-white' }, String(n)))))));
+            ? React.createElement('span', { className: PAGE_BTN + ' bg-primary-600 text-white' }, String(n))
+            : React.createElement('button', { type: 'button', onClick: () => setPage(n), className: PAGE_BTN + ' bg-[#f1f1f1] text-[#1d1d1d] hover:bg-primary-600 hover:text-white' }, String(n)))))));
 }
 
 // ---- The archive page itself ----

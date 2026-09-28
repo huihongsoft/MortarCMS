@@ -86,6 +86,20 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 
 ### Changed
 
+- **One theme colour, one palette.** The `*-primary-*` utilities (about 120 uses
+  across the themes, widgets and components) resolved to ten hard-coded values in
+  `tailwind.config.js`, so the colour an operator set in Appearance recoloured
+  `.btn-primary` and the focus rings — the ~120 palette utilities stayed blue. The
+  palette now resolves through CSS variables (`rgb(var(--primary-600) / <alpha-value>)`,
+  which keeps Tailwind's opacity modifiers working), and the ten shades are
+  generated from the one configured colour. softstore's own indigo stopped being a
+  constant plus 41 literals and uses the same variable, so it keeps its look and
+  follows the setting. The server bakes the palette into the HTML it renders, so
+  the first paint is themed too — that also removes the flash `--primary-color`
+  used to have while an effect applied it.
+- Default installs look the same: the fallbacks in `index.css` are the blue ramp
+  the palette used before, and the derived ramp lands within a step of it.
+
 - **Public pages are server-rendered.** The frontend builds a second bundle
   (`frontend/dist-ssr/entry-server.js`) that the server loads and calls per
   request, so a visitor and a crawler get the real page — title, body, post list,
