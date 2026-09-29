@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRightLeft, Plus, Trash2, Search, Upload, RefreshCw } from 'lucide-react';
 import api from '../lib/api';
-import { t, getLang } from '../lib/i18n';
+import { t, getLang, serverMessage } from '../lib/i18n';
 import { useToast } from '../lib/toast';
 import { dialog } from '../lib/dialog';
 import Select from '../components/Select';
@@ -41,14 +41,14 @@ export default function Redirects() {
       setFrom(''); setTo('');
       setPage(1); load();
       toast.toast(t('saved', getLang()));
-    } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('save failed', getLang()), 'error'); }
     finally { setBusy(false); }
   }
 
   async function remove(id: string) {
     if (!(await dialog.confirm(t('delete this redirect?', getLang()), { danger: true }))) return;
     try { await api.delete('/redirects/' + id); load(); }
-    catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
+    catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('delete failed', getLang()), 'error'); }
   }
 
   async function runImport() {
@@ -59,7 +59,7 @@ export default function Redirects() {
       const d = r.data || {};
       toast.toast(t('imported', getLang()) + ': ' + (d.created || 0) + ' / ' + t('skipped', getLang()) + ' ' + (d.skipped || 0) + (d.errorCount ? ' / ' + t('errors', getLang()) + ' ' + d.errorCount : ''));
       setCsv(''); setImportOpen(false); setPage(1); load();
-    } catch (e: any) { toast.toast(e.response?.data?.error || t('import failed', getLang()), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('import failed', getLang()), 'error'); }
     finally { setBusy(false); }
   }
 

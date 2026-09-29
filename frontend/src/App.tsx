@@ -14,7 +14,7 @@ import api from './lib/api';
 import { initLightbox } from './lib/lightbox';
 import { setPermalinkPrefix, postRoutePath, permalinkFromShell } from './lib/permalink';
 import { isEnabledLang, setContentLangs } from './lib/contentLang';
-import { ssrPayload } from './lib/ssr';
+import { ssrPayload, markClientLive } from './lib/ssr';
 import { applyStoredLang } from './lib/i18n';
 import { installCmsForms } from './lib/cmsForms';
 import { themeVarsCss } from './lib/themeColor';
@@ -192,6 +192,11 @@ export default function App() {
   // read — so it is applied here, after the first render has already matched the
   // server's, rather than inside it.
   useEffect(() => { if (applyStoredLang()) setLangVersion(v => v + 1); }, []);
+
+  // This effect runs after the first render has committed, on both the hydrate path
+  // and the plain client render: from here on a render may use the real clock
+  // (lib/ssr.renderNow), instead of the server's timestamp the first one used.
+  useEffect(() => { markClientLive(); }, []);
 
   useEffect(() => {
     setPreviewTheme(new URLSearchParams(window.location.search).get('theme') || '');

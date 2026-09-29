@@ -287,6 +287,20 @@ describe('the server route table mirrors the SPA', () => {
     }
   });
 
+  it('keeps the per-user pages out of the index, and out of the prerenderer', () => {
+    // noindex is what turns server rendering off for these (index.ts's wantsSsr
+    // reads meta.noindex), and it has to: the server has no token, so prerendering
+    // them drew the signed-out state while a signed-in visitor's first render drew
+    // the signed-in one — a hydration mismatch on every visit.
+    for (const p of ['/my-posts', '/profile', '/submit-post', '/login', '/register', '/install', '/search', '/newsletter/confirm']) {
+      expect(build(p).noindex, p + ' must not be indexed').toBe(true);
+    }
+    // …while the pages that earn their crawl stay eligible.
+    for (const p of ['/', '/post/hello', '/page/about', '/category/news']) {
+      expect(build(p).noindex, p).toBeFalsy();
+    }
+  });
+
   it('rejects paths the SPA has no route for', () => {
     for (const p of ['/nope', '/post/a/b', '/admin-ish', '/assets/missing.js', '/favicon.ico']) {
       expect(isKnownRoute(p), p).toBe(false);

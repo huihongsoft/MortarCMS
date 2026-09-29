@@ -211,6 +211,9 @@ export async function renderPath(input: SsrRenderInput): Promise<SsrResult | nul
       if (!body) return null; // 404 / private / gated: let the client render it
       data[want.key] = body;
     } else if (rest === '/' || rest === '' || /^\/(category|tag|type)\//.test(rest)) {
+      // A static front page is a page, not a list: seed it the same way so the
+      // first paint (and the crawler) get its body rather than an empty main.
+      const onFront = rest === '/' && input.settings.show_on_front === 'page' && input.settings.page_on_front;
       // Listing pages (the homepage and the taxonomy archives): the first page of
       // the list plus the taxonomy names. Same query the client makes, so the
       // prerendered list and the hydrated one agree.
@@ -218,12 +221,16 @@ export async function renderPath(input: SsrRenderInput): Promise<SsrResult | nul
       if (lang) params.set('lang', lang);
       const m = /^\/(category|tag|type)\/([^/]+)$/.exec(rest);
       if (m) params.set(m[1], decodeURIComponent(m[2]));
-      const [list, categories] = await Promise.all([
+      const [list, categories, frontPage] = await Promise.all([
         fetchOwnJson(apiBase, input.host, '/api/posts?' + params.toString()),
         fetchOwnJson(apiBase, input.host, '/api/categories'),
+        onFront ? fetchOwnJson(apiBase, input.host, '/api/pages/slug/' + encodeURIComponent(String(onFront)) + (lang ? '?lang=' + encodeURIComponent(lang) : '')) : Promise.resolve(null),
       ]);
       if (!list) return null;
-      data.home = { posts: list.posts || [], total: list.total || 0, categories: categories || [] };
+      data.home = {
+        posts: list.posts || [], total: list.total || 0, categories: categories || [],
+        ...(frontPage ? { frontPage } : {}),
+      };
     }
 
     // jsdom loads here, on the first render that actually needs a sanitizer.

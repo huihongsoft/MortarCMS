@@ -13,7 +13,11 @@ export function formatDate(value: unknown): string {
   const d = new Date(String(value || ''));
   if (isNaN(d.getTime())) return '';
   const pad = (n: number) => String(n).padStart(2, '0');
-  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+  // UTC, not local: this renders during the server render too, and a server in UTC
+  // and a reader west of it disagree on the day for part of every day — which
+  // React reports as a hydration mismatch. The reference this theme reproduces
+  // prints plain YYYY-MM-DD, so a fixed timezone is also the honest reading of it.
+  return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate());
 }
 
 // ---- Notice strip (reference #notice): one 34px line at a time inside a

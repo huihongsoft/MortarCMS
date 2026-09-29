@@ -262,8 +262,17 @@ export function buildSeoMeta(pathname: string, opts: { siteId?: string; origin: 
     contentLangs: contentLangs().join(',') || undefined,
   };
 
-  // Pages that exist only as UI state and must never be indexed.
-  if (/^\/search(\/|$)/.test(path) || /^\/404(\/|$)/.test(path) || /^\/share\//.test(path)) {
+  // Pages that must never be indexed, either because they are UI state (search,
+  // 404, a share view) or because what they show depends on who is asking.
+  //
+  // The account pages are here for a second reason: noindex also turns off server
+  // rendering (see the wantsSsr check in index.ts), and they cannot be prerendered
+  // correctly — the server has no token, so it drew the signed-out state while a
+  // signed-in visitor's first render drew the signed-in one. That was a hydration
+  // mismatch (React #418/#422) on every visit to /my-posts, /profile and
+  // /submit-post, which is also why prerendering them bought nothing.
+  const NOINDEX = /^\/(search|404|install|login|register|submit-post|my-posts|profile)(\/|$)|^\/share\/|^\/newsletter\//;
+  if (NOINDEX.test(path)) {
     return { ...base, noindex: true };
   }
 
@@ -584,8 +593,19 @@ function injectRoot(html: string, inner: string): string {
  * document would be parsed as markup — the classic JSON-in-HTML breakout.
  */
 export function injectSsrRoot(html: string, appHtml: string, payload: unknown): string {
-  const json = JSON.stringify(payload ?? null).replace(/</g, '\\u003c');
-  return injectRoot(html, appHtml + '<script>window.__MORTAR_SSR__=' + json + '</script>');
+  // U+2028/2029 are line terminators to a pre-ES2019 parser, which would end the
+  // statement early; `<` covers the `</script>` and `<!--` breaks.
+  const json = JSON.stringify(payload ?? null)
+    .replace(/</g, '\\u003c')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+  // The payload goes *after* #root closes, not inside it: React hydrates the
+  // container's children, and an extra non-React child there is the "unexpected
+  // server HTML in the container" case. Injecting it in the same replacement is
+  // what makes that exact — matching the app markup afterwards with a regex lands
+  // on the first nested </div> instead of the container's own.
+  return html.replace(/(<div id="root">)\s*(<\/div>)/, (_m, open: string) =>
+    open + appHtml + '</div><script>window.__MORTAR_SSR__=' + json + '</script>');
 }
 
 /**

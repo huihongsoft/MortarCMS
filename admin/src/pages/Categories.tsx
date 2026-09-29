@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Trash2, Pencil, Check, X, FolderTree, Merge } from 'lucide-react';
-import { t, getLang } from '../lib/i18n';
+import { t, getLang, serverMessage } from '../lib/i18n';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import Select from '../components/Select';
@@ -30,7 +30,7 @@ export default function Categories() {
       else { await api.post('/categories', { name, slug, description, parentId: parentId || null }); }
       toast.toast(editing ? t('category updated', getLang()) : t('category created', getLang()));
       reset(); fetchCats();
-    } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('save failed', getLang()), 'error'); }
   }
 
   function reset() { setName(''); setSlug(''); setDescription(''); setParentId(''); setEditing(null); }
@@ -47,13 +47,13 @@ export default function Categories() {
       const r = await api.post('/categories/' + c.id + '/merge', { intoId: mergeInto });
       toast.toast(t('merged', getLang()).replace('{n}', String(r.data?.moved ?? 0)).replace('{into}', target?.name || ''));
       setMerging(''); setMergeInto(''); fetchCats();
-    } catch (e: any) { toast.toast(e.response?.data?.error || t('merge failed', getLang()), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('merge failed', getLang()), 'error'); }
   }
 
   async function del(c: any) {
     if (!(await dialog.confirm(t('delete category', getLang()) + ' "' + c.name + '"?', { danger: true }))) return;
     try { await api.delete('/categories/' + c.id); toast.toast(t('category deleted', getLang())); fetchCats(); }
-    catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
+    catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('delete failed', getLang()), 'error'); }
   }
 
   return React.createElement('div', null,

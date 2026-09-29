@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { formatNumber } from '../lib/format';
 import { Trash2, Pencil, Check, X, Tag as TagIcon, Merge } from 'lucide-react';
-import { t, getLang } from '../lib/i18n';
+import { t, getLang, serverMessage } from '../lib/i18n';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
 import { dialog } from '../lib/dialog';
@@ -27,7 +27,7 @@ export default function Tags() {
       else { await api.post('/tags', { name, slug }); }
       toast.toast(editing ? t('tag updated', getLang()) : t('tag created', getLang()));
       reset(); fetchTags();
-    } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('save failed', getLang()), 'error'); }
   }
 
   function reset() { setName(''); setSlug(''); setEditing(null); }
@@ -43,13 +43,13 @@ export default function Tags() {
       const r = await api.post('/tags/' + tag.id + '/merge', { intoId: mergeInto });
       toast.toast(t('merged', getLang()).replace('{n}', String(r.data?.moved ?? 0)).replace('{into}', target?.name || ''));
       setMerging(''); setMergeInto(''); fetchTags();
-    } catch (e: any) { toast.toast(e.response?.data?.error || t('merge failed', getLang()), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('merge failed', getLang()), 'error'); }
   }
 
   async function del(tg: any) {
     if (!(await dialog.confirm(t('delete tag', getLang()) + ' "' + tg.name + '"?', { danger: true }))) return;
     try { await api.delete('/tags/' + tg.id); toast.toast(t('tag deleted', getLang())); fetchTags(); }
-    catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
+    catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('delete failed', getLang()), 'error'); }
   }
 
   return React.createElement('div', null,

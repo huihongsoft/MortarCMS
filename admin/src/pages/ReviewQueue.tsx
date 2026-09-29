@@ -3,7 +3,7 @@ import { formatDateTime } from '../lib/format';
 import { ClipboardCheck, Check, X, RefreshCw, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api';
-import { t, getLang } from '../lib/i18n';
+import { t, getLang, serverMessage } from '../lib/i18n';
 import { useToast } from '../lib/toast';
 import { dialog } from '../lib/dialog';
 
@@ -43,7 +43,7 @@ export default function ReviewQueue() {
       await api.post('/posts/' + post.id + '/review', { action, reason });
       toast.toast(action === 'approve' ? t('post approved', getLang()) : t('post rejected', getLang()));
       setPosts((list) => list.filter((p) => p.id !== post.id));
-    } catch (e: any) { toast.toast(e.response?.data?.error || t('review failed', getLang()), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('review failed', getLang()), 'error'); }
     finally { setBusy(''); }
   }
 

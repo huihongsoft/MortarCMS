@@ -162,6 +162,29 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
 
 ### Fixed
 
+- **The account pages were prerendered, and mismatched on every visit.** The server
+  has no token, so `/my-posts`, `/profile` and `/submit-post` were rendered in the
+  signed-out state while a signed-in visitor's first render drew the signed-in one —
+  React #418/#422, on every page load, for every signed-in user. They are per-user
+  pages, so they are noindex now, which is also what turns server rendering off for
+  them. The e2e suite missed it because it only ever loaded the homepage; it asserts
+  both halves now (no payload in the HTML, and a clean console).
+- The hydration payload was injected *inside* `#root` as a sibling of the app
+  markup, which is the "unexpected server HTML in the container" case React reports.
+  It goes after the container now — and the first attempt at that was caught by the
+  e2e suite, because matching the app markup with a regex lands on the first nested
+  `</div>` rather than the container's own, which put the script in the middle of the
+  page.
+- softstore's date formatter read a UTC timestamp with local getters, so the server
+  and a reader west of it disagreed on the day — a hydration mismatch in that theme.
+- A static front page (`show_on_front: page`) was never seeded, so the prerendered
+  homepage had an empty main and no body for a crawler.
+- `markClientLive()` ran right after `hydrateRoot` returned, racing React's first
+  commit; it runs from the app's mount effect now, which is the point where the first
+  render has actually committed.
+
+### Security
+
 - **The newsletter digest could never send anything.** Its cursor
   (`newsletter_last_sent_at`) is written *only after* a send, and the task returned
   early when the cursor was absent — so nothing ever set it, on any install, while
@@ -222,6 +245,29 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
   the block editor's vendor bundle.
 
 ### Fixed
+
+- **The account pages were prerendered, and mismatched on every visit.** The server
+  has no token, so `/my-posts`, `/profile` and `/submit-post` were rendered in the
+  signed-out state while a signed-in visitor's first render drew the signed-in one —
+  React #418/#422, on every page load, for every signed-in user. They are per-user
+  pages, so they are noindex now, which is also what turns server rendering off for
+  them. The e2e suite missed it because it only ever loaded the homepage; it asserts
+  both halves now (no payload in the HTML, and a clean console).
+- The hydration payload was injected *inside* `#root` as a sibling of the app
+  markup, which is the "unexpected server HTML in the container" case React reports.
+  It goes after the container now — and the first attempt at that was caught by the
+  e2e suite, because matching the app markup with a regex lands on the first nested
+  `</div>` rather than the container's own, which put the script in the middle of the
+  page.
+- softstore's date formatter read a UTC timestamp with local getters, so the server
+  and a reader west of it disagreed on the day — a hydration mismatch in that theme.
+- A static front page (`show_on_front: page`) was never seeded, so the prerendered
+  homepage had an empty main and no body for a crawler.
+- `markClientLive()` ran right after `hydrateRoot` returned, racing React's first
+  commit; it runs from the app's mount effect now, which is the point where the first
+  render has actually committed.
+
+### Security
 
 - **The newsletter digest could never send anything.** Its cursor
   (`newsletter_last_sent_at`) is written *only after* a send, and the task returned
@@ -298,6 +344,12 @@ checks). Release tags are `v<version>`, always with the `v` prefix; the
   real hole rather than a hardening step: with `CSP_ENFORCE=1` the importmap was
   blocked, and a blocked importmap means no module resolution — the frontend never
   booted. Report-only mode had been hiding it.
+- The admin's toasts show server messages through `serverMessage()` (as the settings
+  and editor screens already did) instead of printing the raw string, which put
+  Chinese server text in front of an English operator. Five pages were doing that.
+- The rate-limit store logged nothing when its counters could not be written — the
+  comment claimed it must not "silently disable the limit" and then did. The login
+  lockout rides on that store, so the first failure per process is logged now.
 - The renderer's own API fetches are bounded by a timeout (3s). They sit on the
   visitor's request path, so without one a stalled loopback request would hold the
   HTML response open instead of falling back to the client-rendered shell.

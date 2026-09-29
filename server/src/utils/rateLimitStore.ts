@@ -1,4 +1,5 @@
 import db from './db';
+import { logger } from './logger';
 import type { Store, Options, ClientRateLimitInfo, IncrementResponse } from 'express-rate-limit';
 
 // Rate-limit counters that survive a restart and are shared by every process
@@ -22,6 +23,9 @@ import type { Store, Options, ClientRateLimitInfo, IncrementResponse } from 'exp
 //
 // Keyed by a caller-supplied string; the table is pruned opportunistically so it
 // cannot grow without bound.
+
+// One warning per process for a failing counter table; see the catch in increment().
+let storeFailureLogged = false;
 
 export class DbRateLimitStore implements Store {
   windowMs: number;
@@ -71,9 +75,16 @@ export class DbRateLimitStore implements Store {
         ).run(full, resetAt);
       }
       if (Math.random() < 0.01) this.prune();
-    } catch {
-      // A counter that cannot be written must not take the request down (nor
-      // silently disable the limit): fall through with the in-process value of 1.
+    } catch (err: any) {
+      // A counter that cannot be written must not take the request down — the
+      // original comment claimed it must not disable the limit silently either,
+      // and then did exactly that: the login lockout rides on this store, so a
+      // failing write means brute-force protection is off. Logged once per
+      // process: a broken table would otherwise log on every request.
+      if (!storeFailureLogged) {
+        storeFailureLogged = true;
+        logger.warn({ err: err?.message }, 'rate-limit counters cannot be written; limits are per-process only');
+      }
       hits = 1;
     }
     return { totalHits: hits, resetTime: new Date(resetAt) };

@@ -3,7 +3,7 @@ import { createRoot, hydrateRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { loadTheme, loadedTheme } from './themes';
-import { markClientLive, setSsrPayload, ssrRendered } from './lib/ssr';
+import { setSsrPayload, ssrRendered } from './lib/ssr';
 import { detectScriptNonce } from './lib/nonce';
 import './index.css';
 
@@ -36,7 +36,6 @@ async function start(): Promise<void> {
         // to a plain client render.
         try {
           hydrateRoot(root, tree);
-          markClientLive();
           return;
         } catch { /* fall through to a client render */ }
       }
@@ -47,7 +46,6 @@ async function start(): Promise<void> {
 
   root.replaceChildren();
   createRoot(root).render(tree);
-  markClientLive();
 }
 
 void start();

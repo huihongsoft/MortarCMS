@@ -146,6 +146,27 @@ test('sign in, publish a post, rename it, and roll it back', async ({ page }) =>
   expect(await page.evaluate(() => localStorage.getItem('mortar_token'))).toBeNull();
 });
 
+test('the account pages are not prerendered, and hydrate cleanly', async ({ page }) => {
+  // They used to be: the server has no token, so it drew the signed-out state and a
+  // signed-in visitor's first render drew the signed-in one — React #418/#422 on
+  // every visit to /my-posts and /profile. They are per-user pages, so they are
+  // noindex (which is also what turns server rendering off for them), and this
+  // pins both halves: no payload in the HTML, and no React error in the console.
+  const errors: string[] = [];
+  page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text().slice(0, 140)); });
+  page.on('pageerror', (e) => errors.push('pageerror: ' + e.message.slice(0, 140)));
+  await signIn(page);
+  for (const path of ['/my-posts', '/profile', '/submit-post']) {
+    const html = await (await page.request.get(path)).text();
+    expect(html, path + ' was prerendered').not.toContain('__MORTAR_SSR__');
+    await page.goto(path);
+    await page.waitForTimeout(400);
+    // The page really rendered (not a blank shell) and the visitor is still signed in.
+    await expect(page.locator('main')).toBeVisible();
+  }
+  expect(errors, 'console errors: ' + errors.join(' | ')).toEqual([]);
+});
+
 test('the scheduled-task screen is the only place tasks are managed', async ({ page }) => {
   // They used to be listed twice: a dedicated screen (sidebar → scheduled tasks)
   // and a card inside Settings → Tools. The card is now a pointer, so this pins

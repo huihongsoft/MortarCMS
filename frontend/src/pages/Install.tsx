@@ -158,7 +158,7 @@ export default function Install() {
             React.createElement('div', null, React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('site description')), React.createElement('input', { value: site.siteDescription, onChange: e => setSite({ ...site, siteDescription: e.target.value }), className: 'input-field', placeholder: t('a short tagline') })),
             React.createElement('div', null,
               React.createElement('label', { className: 'block text-xs font-medium text-gray-600 mb-1' }, t('site url')),
-              React.createElement('input', { value: site.siteUrl, onChange: e => setSite({ ...site, siteUrl: e.target.value }), className: 'input-field', placeholder: t('https://example.com') }),
+              React.createElement('input', { value: site.siteUrl, onChange: e => setSite({ ...site, siteUrl: e.target.value }), className: 'input-field', placeholder: 'https://example.com' }),
               React.createElement('p', { className: 'text-xs text-gray-400 mt-1' }, t('the public address of your site — used in canonical links, sitemaps and emails')),
               derivedDomain && React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' }, t('domain to register') + ': ' + derivedDomain),
               !siteUrlOk && React.createElement('p', { className: 'text-xs text-red-500 mt-1' }, t('enter a valid http(s) url without a path')),

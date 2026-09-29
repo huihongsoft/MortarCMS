@@ -5,7 +5,7 @@ import EmptyState from '../components/EmptyState';
 import Select from '../components/Select';
 import api from '../lib/api';
 import { useToast } from '../lib/toast';
-import { t, getLang } from '../lib/i18n';
+import { t, getLang, serverMessage } from '../lib/i18n';
 import { dialog } from '../lib/dialog';
 import { useAuth } from '../lib/auth';
 
@@ -146,14 +146,14 @@ export default function Media() {
     const name = await dialog.prompt({ message: t('folder name', getLang()) });
     if (!name || !name.trim()) return;
     try { await api.post('/media/folders', { name: name.trim() }); toast.toast(t('folder created', getLang())); loadFolders(); }
-    catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+    catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('save failed', getLang()), 'error'); }
   }
 
   async function renameFolder(f: any) {
     const name = await dialog.prompt({ message: t('folder name', getLang()), value: f.name } as any);
     if (!name || !name.trim()) return;
     try { await api.put('/media/folders/' + f.id, { name: name.trim() }); loadFolders(); }
-    catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
+    catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('save failed', getLang()), 'error'); }
   }
 
   async function deleteFolder(f: any) {
@@ -162,7 +162,7 @@ export default function Media() {
       await api.delete('/media/folders/' + f.id);
       if (folderFilter === f.id) { setFolderFilter(''); await loadMedia(''); }
       loadFolders();
-    } catch (e: any) { toast.toast(e.response?.data?.error || t('delete failed', getLang()), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('delete failed', getLang()), 'error'); }
   }
 
   async function moveToFolder() {
@@ -171,7 +171,7 @@ export default function Media() {
       const r = await api.post('/media/bulk-move', { ids: Array.from(selected), folderId: bulkFolder || null });
       toast.toast(t('moved files', getLang()).replace('{n}', String(r.data?.moved ?? 0)));
       setSelected(new Set()); setBulkFolder(''); await loadMedia(); loadFolders();
-    } catch (e: any) { toast.toast(e.response?.data?.error || t('move failed', getLang()), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('move failed', getLang()), 'error'); }
   }
 
   const [bulkTitle, setBulkTitle] = useState('');
@@ -185,7 +185,7 @@ export default function Media() {
       setBulkTitle(''); setBulkAlt(''); setSelected(new Set());
       const r = await api.get('/media'); setMedia(r.data.media);
       toast.toast(t('bulk edit applied', getLang()));
-    } catch (e: any) { toast.toast(e.response?.data?.error || t('bulk edit failed', getLang()), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e.response?.data?.error || '', getLang()) || t('bulk edit failed', getLang()), 'error'); }
   }
 
   async function del(id: string) { if (!(await dialog.confirm(t('delete?', getLang()), { danger: true }))) return; await api.delete('/media/' + id); setPreview(null); const r = await api.get('/media'); setMedia(r.data.media); }
