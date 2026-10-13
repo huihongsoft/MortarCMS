@@ -15,6 +15,7 @@ const zh: Record<string, string> = {
   'block comments': '评论',
   'block container': '容器',
   'block divider': '分隔线',
+  'block field': '自定义字段',
   'block hero': 'Hero 横幅',
   'block image-caption': '图片加说明',
   'block list': '列表',
@@ -125,6 +126,10 @@ const zh: Record<string, string> = {
 'options comma separated': '选项，用逗号分隔',
 'default value': '默认值',
 'field hint': '填写提示（显示在输入框下方）',
+'members only': '仅登录会员可见',
+'members only hint': '勾选后匿名访客看不到这篇文章（文章过期插件会自动勾选）。取消勾选即可重新对所有人公开。',
+'private field': '私有字段（仅编辑可见）',
+'private field hint': '私有字段照常保存，但不会出现在任何人可见的接口返回里，[field] 短代码也不会输出它的值。',
 'required': '必填',
 'no field groups yet': '还没有字段分组',
 'delete field group confirm': '删除这个字段分组？已填写的内容不会被删除。',
@@ -1036,6 +1041,22 @@ const zh: Record<string, string> = {
 // Saved views (content list filter sets)
 'saved views': '保存的视图',
 'chat platform hint': '在平台侧把这个地址填为回调 / Webhook 地址（含令牌，请勿外泄）：',
+// Semantic retrieval
+'semantic retrieval': '语义检索',
+// Scheduled task: content embeddings (server/src/utils/scheduler.ts)
+'Content embeddings': '内容向量索引',
+'Keeps the semantic index current for published posts (needs an embedding model in AI settings)': '为已发布文章维护语义索引（需在 AI 设置中配置向量模型）',
+'task result embeddings not configured': '未配置向量模型，已跳过',
+'task result nothing to embed': '没有需要更新的文章',
+'task result embedded posts': '已更新 {n} 篇文章的向量（失败 {failed}，清理 {pruned}）',
+'semantic retrieval hint': '填一个向量模型名即可开启：文章发布后会异步建立向量索引，用于「相关文章」（按含义而非分类）与语义搜索。留空则保持原来的关键词搜索与按分类的相关文章。OpenAI 兼容的 /embeddings 接口均可，如 text-embedding-3-small；本地 Ollama 用 nomic-embed-text。',
+'embedding model placeholder': '向量模型名，如 text-embedding-3-small（留空=关闭）',
+'default provider': '默认服务商',
+// Media / AI assistance
+'ai describe images': 'AI 生成描述',
+'ai describe hint': '为选中的图片生成 alt 描述；已有描述的不会被覆盖，单次最多 10 张。',
+'descriptions generated': '已生成 {n} 条描述',
+'already described': '{n} 张已有描述，已跳过',
 'save view': '保存当前视图',
 'delete this view': '删除该视图',
 'view name prompt': '给这个视图起个名字',
@@ -2142,6 +2163,34 @@ const serverMsgEn: Record<string, string> = {
 // Messages that carry a status code, a count or a name, matched by shape so the
 // number survives translation.
 const serverMsgPatterns: [RegExp, string][] = [
+  // Custom fields (server/src/utils/fieldSchema.ts). The label is the field's,
+  // which is content and stays as the author typed it.
+  [/^(.+) 必须是数字$/, '$1 must be a number'],
+  [/^(.+) 必须是有效日期$/, '$1 must be a valid date'],
+  [/^(.+) 的值不在选项中$/, '$1 must be one of the listed options'],
+  [/^(.+) 为必填$/, '$1 is required'],
+  [/^meta 必须是对象$/, 'Field values must be an object'],
+  [/^meta 字段名不能为空$/, 'A field key cannot be empty'],
+  [/^不允许写入系统字段: (.+)$/, 'Not allowed to write the system key: $1'],
+  [/^fields 必须是数组$/, 'fields must be an array'],
+  [/^字段名不合法（.*）: (.+)$/, 'Invalid field key: $1 — start with a lowercase letter; the `_` prefix is reserved'],
+  [/^字段名重复: (.+)$/, 'Duplicate field key: $1'],
+  [/^未知字段类型: (.+)$/, 'Unknown field type: $1'],
+  [/^字段分组不存在$/, 'Field group not found'],
+  [/^未知的内容类型: (.+)$/, 'Unknown content type: $1'],
+  // Saved views
+  [/^视图不存在$/, 'View not found'],
+  [/^无权修改该视图$/, 'Not allowed to change that view'],
+  [/^无权删除该视图$/, 'Not allowed to delete that view'],
+  [/^保存的视图过多（上限 (\d+) 个），请先删除一些$/, 'Too many saved views (limit $1) — delete some first'],
+  // Bulk edit
+  [/^无权修改发布状态.*$/, 'Not allowed to change the publish status — draft is the only status you can set'],
+  [/^无权修改文章作者$/, 'Not allowed to change the post author'],
+  // Preview links (the editor shows a generic toast, but the API can be used directly)
+  [/^回收站中的文章无法预览$/, 'A trashed post cannot be previewed'],
+  [/^页面暂不支持预览链接$/, 'Preview links are not available for pages'],
+  [/^无权预览他人文章$/, "Not allowed to preview someone else's post"],
+  [/^无权预览该站点的内容$/, 'Not allowed to preview content on that site'],
   [/^没有权限使用该工具: (.+)$/, 'Not allowed to use the tool: $1'],
   [/^未知工具: (.+)$/, 'Unknown tool: $1'],
   [/^AI 请求失败 \((\d{3})\)$/, 'AI request failed ($1)'],

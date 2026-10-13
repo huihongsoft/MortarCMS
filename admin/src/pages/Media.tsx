@@ -83,6 +83,7 @@ export default function Media() {
   const [media, setMedia] = useState<any[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [describing, setDescribing] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<any>(null);
   const [previewFailed, setPreviewFailed] = useState(false);
@@ -189,6 +190,23 @@ export default function Media() {
   }
 
   async function del(id: string) { if (!(await dialog.confirm(t('delete?', getLang()), { danger: true }))) return; await api.delete('/media/' + id); setPreview(null); const r = await api.get('/media'); setMedia(r.data.media); }
+  // Descriptions for images that have none; the server skips the rest, so a
+  // mixed selection is safe to send.
+  async function describeSelected() {
+    if (selected.size === 0 || describing) return;
+    setDescribing(true);
+    try {
+      const r = await api.post('/ai/alt-text', { ids: Array.from(selected) });
+      const results: any[] = r.data?.results || [];
+      const ok = results.filter(x => x.status === 'ok').length;
+      const kept = results.filter(x => x.status === 'skipped' && x.reason === 'has-alt').length;
+      toast.toast(t('descriptions generated', getLang()).replace('{n}', String(ok)) + (kept ? ' · ' + t('already described', getLang()).replace('{n}', String(kept)) : ''));
+      const fresh = await api.get('/media');
+      setMedia(fresh.data.media);
+    } catch (e: any) { toast.toast(serverMessage(e?.response?.data?.error || '', getLang()) || t('request failed', getLang()), 'error'); }
+    finally { setDescribing(false); }
+  }
+
   async function bulkDelete() { if (selected.size === 0) return; if (!(await dialog.confirm(t('delete selected confirm', getLang()), { danger: true }))) return; await api.post('/media/bulk-delete', { ids: Array.from(selected) }); setSelected(new Set()); const r = await api.get('/media'); setMedia(r.data.media); }
 
   // Paste-to-upload: paste an image from the clipboard
@@ -299,6 +317,9 @@ export default function Media() {
       React.createElement('input', { value: bulkTitle, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setBulkTitle(e.target.value), placeholder: t('set title', getLang()), className: 'input-field w-44 text-sm' }),
       React.createElement('input', { value: bulkAlt, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setBulkAlt(e.target.value), placeholder: t('set alt text', getLang()), className: 'input-field w-44 text-sm' }),
       React.createElement('button', { onClick: bulkEdit, disabled: !bulkTitle.trim() && !bulkAlt.trim(), className: 'btn-primary text-xs disabled:opacity-40' }, t('apply', getLang())),
+      // Fills alt for the images that have none, through the vision model.
+      React.createElement('button', { onClick: describeSelected, disabled: describing, className: 'btn-secondary text-xs disabled:opacity-40', title: t('ai describe hint', getLang()) },
+        React.createElement(Sparkles, { size: 13 }), describing ? t('generating', getLang()) + '…' : t('ai describe images', getLang())),
       React.createElement('div', { className: 'flex items-center gap-1 ml-auto' },
         React.createElement(Select, { value: bulkFolder, onChange: (v: string) => setBulkFolder(v), className: 'input-field text-xs w-44' },
           React.createElement('option', { value: '' }, t('no folder', getLang())),

@@ -178,6 +178,21 @@ export function getToolPermissions(): Record<string, string[]> {
 // inside that tool, not here.
 const ADMIN_ONLY = new Set(['update_site_settings', 'delete_posts', 'update_user_roles', 'apply_theme_style']);
 
+// Tools that cannot change anything. Default-deny on purpose: a name missing
+// from this list — one a plugin registered, or one added later — needs a
+// full-scope credential. Forgetting to classify a new READ tool costs an
+// over-strict error; forgetting to classify a new WRITE tool would hand a
+// read-only credential the ability to write.
+const READ_ONLY_TOOLS = new Set([
+  'get_site_stats', 'get_post_analytics', 'list_posts', 'get_post', 'search_site_content',
+  'web_search', 'analyze_web_theme', 'analyze_image', 'list_comments',
+  'get_categories', 'list_tags', 'get_site_settings', 'recall',
+]);
+
+export function isReadOnlyTool(name: string): boolean {
+  return READ_ONLY_TOOLS.has(name);
+}
+
 export function canUseTool(role: string, toolName: string): boolean {
   if (role === 'admin') return true;
   if (ADMIN_ONLY.has(toolName)) return false;
@@ -1499,7 +1514,12 @@ register('analyze_image', '分析媒体库中的一张图片：描述内容、�
     } catch { /* not a URL — falls through to refusal below */ }
   }
   if (!localPath) return { error: '仅支持本站 /uploads/ 目录中的图片' };
-  const filePath = path.join(__dirname, '../..', localPath);
+  // Resolved against the configured uploads directory, not against this file's
+  // location: with UPLOADS_DIR set (a documented deployment option, and how the
+  // test suite runs) the two are different, and every image was then refused as
+  // "not in /uploads". `resolve` normalises `..` so the containment check below
+  // still catches a traversal attempt.
+  const filePath = path.resolve(uploadsDir, localPath.replace(/^\/uploads\//, ''));
   // Boundary-aware prefix check: "uploads" must not match "uploads2/…"
   const inUploads = filePath === uploadsDir || filePath.startsWith(uploadsDir + path.sep);
   if (!inUploads) return { error: '仅支持本站 /uploads/ 目录中的图片' };

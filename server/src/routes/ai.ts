@@ -5,7 +5,7 @@ import { uniqueSlug, postUrl } from '../utils/slug';
 import { authenticate, requireCap, userCan, AuthRequest } from '../middleware/auth';
 import { rateLimitStore } from '../utils/rateLimitStore';
 import {
-  AIProvider, PROVIDER_PRESETS, getProviders, saveProviders, getDefaultProvider,
+  AIProvider, PROVIDER_PRESETS, getProviders, saveProviders, getDefaultProvider, chatCompleteWithFallback,
   setDefaultProvider, chatComplete, pushAssistantWithTools, pushToolResults, testProvider,
   encryptSecretJson, decryptSecretJson, isEncryptedSecret, userFacingAiError,
 } from '../utils/ai';
@@ -19,10 +19,12 @@ import { effectiveSetting } from '../utils/siteSettings';
 import { mdToHtml } from '../utils/markdown';
 import { purgeContentCaches } from '../utils/cache';
 import { fetchUrlGuarded } from '../utils/ssrf';
+import { absoluteSiteUrl } from '../utils/absoluteUrl';
 import { ADAPTERS, PLATFORM_IDS } from '../utils/chatAdapters';
 import { logger } from '../utils/logger';
 import { SiteRequest } from '../middleware/site';
 import { notify, removeForTask } from '../utils/notifications';
+import { defaultLang } from '../utils/contentLang';
 
 const router = Router();
 
@@ -95,6 +97,11 @@ router.get('/settings', authenticate, requireCap('ai_manage'), (req: AuthRequest
       // it was a manual database write.
       usageLimitPerUser: (db.prepare("SELECT value FROM Setting WHERE key = 'ai_usage_limit_daily_per_user'").get() as any)?.value || '',
       allowUnattendedRisky: (db.prepare("SELECT value FROM Setting WHERE key = 'ai_allow_unattended_risky'").get() as any)?.value === '1',
+      // Semantic retrieval is off until a model is named here: an install
+      // without one keeps the keyword search and the category-based related
+      // posts it always had.
+      embeddingModel: (db.prepare("SELECT value FROM Setting WHERE key = 'ai_embedding_model'").get() as any)?.value || '',
+      embeddingProvider: (db.prepare("SELECT value FROM Setting WHERE key = 'ai_embedding_provider'").get() as any)?.value || '',
     });
   } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
 });
@@ -141,6 +148,21 @@ router.put('/settings', authenticate, requireCap('manage_system'), (req: AuthReq
       db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, 'ai_allow_unattended_risky', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
         .run('ai_allow_unattended_risky', req.body.allowUnattendedRisky ? '1' : '0');
     }
+    // Semantic retrieval: the model name is the switch. The provider is optional
+    // (an Anthropic install points this at an OpenAI-compatible endpoint instead).
+    if (req.body?.embeddingModel !== undefined) {
+      db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, 'ai_embedding_model', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        .run('ai_embedding_model', String(req.body.embeddingModel || '').trim().slice(0, 80));
+    }
+    if (req.body?.embeddingProvider !== undefined) {
+      const pid = String(req.body.embeddingProvider || '');
+      // Only an existing provider id, so a typo cannot silently disable the
+      // feature by pointing at nothing.
+      const known = !pid || getProviders().some((p: any) => p.id === pid);
+      if (!known) { res.status(400).json({ error: '未知的服务商' }); return; }
+      db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, 'ai_embedding_provider', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+        .run('ai_embedding_provider', pid);
+    }
     // Per-user daily cap; '' or 0 disables it (admins are exempt either way).
     if (req.body?.usageLimitPerUser !== undefined) {
       const v = String(req.body.usageLimitPerUser || '').replace(/[^\d]/g, '');
@@ -179,11 +201,11 @@ router.post('/chat', authenticate, requireCap('ai_use'), enforceUsageLimit, asyn
     if (!provider) { res.status(400).json({ error: '尚未配置 AI 服务商，请先在 AI 设置中配置' }); return; }
     const { messages } = req.body;
     if (!Array.isArray(messages) || messages.length === 0) { res.status(400).json({ error: 'messages required' }); return; }
-    const result = await chatComplete(provider, [
+    const { result, provider: used } = await chatCompleteWithFallback([
       { role: 'system', content: SYSTEM_PROMPT },
       ...messages.map((m: any) => m.role === 'user' ? { ...m, content: guardUserMessage(m.content) } : m),
     ]);
-    recordUsage(req.user!.userId, 'chat', result.content, provider.model);
+    recordUsage(req.user!.userId, 'chat', result.content, used.model);
     res.json({ content: result.content });
   } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
 });
@@ -198,11 +220,11 @@ router.post('/summarize', authenticate, requireCap('ai_use'), enforceUsageLimit,
     if (!text) { res.status(400).json({ error: 'text required' }); return; }
     const provider = getDefaultProvider();
     if (!provider) { res.status(400).json({ error: '未配置 AI 服务商' }); return; }
-    const result = await chatComplete(provider, [
+    const { result, provider: used } = await chatCompleteWithFallback([
       { role: 'system', content: '你是对话压缩器。把给定的聊天记录压缩成简洁的要点摘要，保留关键信息、结论、用户偏好和已执行的操作。使用中文，150 字以内，只输出摘要本身。' },
       { role: 'user', content: String(text).slice(0, 12000) },
     ], { maxTokens: 400 });
-    recordUsage(req.user!.userId, 'summarize', result.content, provider.model);
+    recordUsage(req.user!.userId, 'summarize', result.content, used.model);
     res.json({ summary: result.content });
   } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
 });
@@ -285,9 +307,14 @@ router.post('/assistant', authenticate, requireCap('ai_use'), enforceUsageLimit,
 
     const onDelta = (text: string) => send({ type: 'delta', text });
     let finalText = '';
+    // The provider that actually served the turn: the chain may move to a
+    // configured spare when the first one is unreachable, and the usage record
+    // has to name the model that ran.
+    let servedBy = provider;
 
     for (let i = 0; i < MAX_ITER; i++) {
-      const result = await chatComplete(provider, msgs, { ...opts, onDelta: i === 0 ? onDelta : undefined });
+      const { result, provider: used } = await chatCompleteWithFallback(msgs, { ...opts, onDelta: i === 0 ? onDelta : undefined });
+      servedBy = used;
       finalText = result.content;
       if (!result.toolCalls.length) break;
 
@@ -363,13 +390,14 @@ router.post('/assistant', authenticate, requireCap('ai_use'), enforceUsageLimit,
         // Mirrors the wrap-up runTask already does for background tasks.
         try {
           msgs.push({ role: 'system', content: '工具调用次数已达上限。请立即用自然语言总结：已完成的工作、产出（如文章标题/链接/ID）、以及未能完成的部分。不要再调用任何工具。' });
-          const wrap = await chatComplete(provider, msgs, { temperature: opts.temperature, maxTokens: opts.maxTokens, onDelta });
+          const { result: wrap, provider: used } = await chatCompleteWithFallback(msgs, { temperature: opts.temperature, maxTokens: opts.maxTokens, onDelta });
+          servedBy = used;
           finalText = wrap.content || '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。';
         } catch { finalText = '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。'; }
       }
     }
 
-    recordUsage(req.user!.userId, 'assistant', finalText, provider.model);
+    recordUsage(req.user!.userId, 'assistant', finalText, servedBy.model);
     send({ type: 'done', content: finalText });
     res.end();
   } catch (err: any) {
@@ -495,7 +523,7 @@ router.post('/generate', authenticate, requireCap('ai_use'), enforceUsageLimit, 
       prompt = '结合站点已有内容（最近文章: ' + recent + '；分类: ' + cats + '），推荐 5 个适合本博客的新选题。每个选题输出格式：\n## 选题标题\n- 切入角度：...\n- 目标读者：...\n- 建议分类：...';
     }
 
-    const result = await chatComplete(provider, [
+    const { result, provider: used } = await chatCompleteWithFallback([
       { role: 'system', content: WRITER },
       { role: 'user', content: guardUserMessage(prompt) },
     ]);
@@ -644,6 +672,7 @@ async function runTask(taskId: string, userId: string, role: string, username: s
   try {
     const provider = getDefaultProvider();
     if (!provider) { updateTask(taskId, { status: 'failed', error: '尚未配置 AI 服务商', finishedAt: new Date().toISOString() }); return; }
+    let servedBy = provider;
     const tools = listToolSchemas(role);
     const msgs: any[] = [
       // siteId is whatever the job carries: a task started from a request
@@ -664,7 +693,7 @@ async function runTask(taskId: string, userId: string, role: string, username: s
       // user sees the outcome without opening the task detail
       const summary = (status === 'done' ? finalText : patch.error) || '';
       notifyTaskFinished(taskId, userId, status, summary);
-      recordUsage(userId, 'task', finalText || taskId, provider.model);
+      recordUsage(userId, 'task', finalText || taskId, servedBy.model);
     };
 
     // Hard timeout so a hung tool call can never block a task forever
@@ -695,7 +724,8 @@ async function runTask(taskId: string, userId: string, role: string, username: s
         return;
       }
 
-      const result = await chatComplete(provider, msgs, { tools });
+      const { result, provider: used } = await chatCompleteWithFallback(msgs, { tools });
+      servedBy = used;
       finalText = result.content;
       if (result.content) steps.push({ type: 'think', content: result.content.slice(0, 160), ts: Date.now() });
       updateTask(taskId, { steps: JSON.stringify(steps) });
@@ -718,7 +748,8 @@ async function runTask(taskId: string, userId: string, role: string, username: s
         // a bare "limit reached" message.
         try {
           msgs.push({ role: 'system', content: '工具调用次数已达上限。请立即用自然语言总结：已完成的工作、产出（如文章标题/链接/ID）、以及未能完成的部分。不要再调用任何工具。' });
-          const wrap = await chatComplete(provider, msgs, {});
+          const { result: wrap, provider: used } = await chatCompleteWithFallback(msgs, {});
+          servedBy = used;
           finalText = wrap.content || '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。';
         } catch { finalText = '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。'; }
         break;
@@ -855,31 +886,6 @@ function actingSiteId(req: AuthRequest & SiteRequest): string | undefined {
   return userMayAccessSite(req.user!.userId, req.user!.role, siteId) ? siteId : undefined;
 }
 
-// Absolute URL for a path this server hands out to be copied (share links).
-//
-// Order: the site this request resolved to, else the primary site; then that
-// site's configured `site_url` (per-site override first — the same resolution the
-// sitemap and feeds use), then its registered domain, and only then the request's
-// own origin. Without this a share link copied during local setup was published
-// as localhost, and on a multi-site install it followed whichever host the admin
-// happened to be browsing.
-function absoluteSiteUrl(req: AuthRequest & SiteRequest, path: string): string {
-  let siteId = req.siteId || undefined;
-  try {
-    if (!siteId) siteId = (db.prepare('SELECT id FROM Site WHERE isPrimary = 1 AND active = 1 LIMIT 1').get() as any)?.id;
-  } catch { /* no Site table: fall through to the request origin */ }
-  let base = '';
-  try { base = effectiveSetting(siteId, 'site_url') || ''; } catch { /* ignore */ }
-  if (!base && siteId) {
-    try {
-      const domain = (db.prepare('SELECT domain FROM Site WHERE id = ?').get(siteId) as any)?.domain;
-      if (domain) base = (req.protocol || 'http') + '://' + domain;
-    } catch { /* ignore */ }
-  }
-  if (!base) base = (req.protocol || 'http') + '://' + (req.headers.host || 'localhost');
-  return base.replace(/\/+$/, '') + path;
-}
-
 // Which site a persisted AI job may be bound to. Naming a site is an
 // admin/editor privilege: the tool layer trusts ctx.siteId for isolation, so if
 // any user could set it, scoping a job to another site would hand them that
@@ -996,7 +1002,7 @@ router.post('/review-comments', authenticate, requireCap('ai_use'), enforceUsage
     if (!comments.length) { res.json({ verdicts: [] }); return; }
 
     const list = comments.map((c: any) => c.id + '|' + c.author + '|' + c.content.slice(0, 200)).join('\n');
-    const result = await chatComplete(provider, [
+    const { result } = await chatCompleteWithFallback([
       { role: 'system', content: '你是评论审核员。对每条评论判断 spam（垃圾/广告/恶意）或 approved（正常）。严格按格式逐行输出：评论ID|spam或approved|一句话理由。' },
       { role: 'user', content: guardUserMessage(list) },
     ]);
@@ -1059,7 +1065,7 @@ router.post('/batch-translate', authenticate, requireCap('ai_use'), enforceUsage
     for (const post of posts) {
       try {
         const plain = (post.content || '').replace(/<[^>]*>/g, '').slice(0, 6000);
-        const r = await chatComplete(provider, [
+        const { result: r } = await chatCompleteWithFallback([
           { role: 'system', content: '你是专业译者。把文章翻译成 ' + lang + '，输出 Markdown，标题用 # 开头。' },
           { role: 'user', content: guardUserMessage('标题: ' + post.title + '\n\n' + plain) },
         ]);
@@ -1297,6 +1303,92 @@ function throttledAiRequest(userId: string, kind: string): boolean {
   lastAiRequest.set(key, now);
   return false;
 }
+
+// ---- Media assistance: alt text and term suggestions ----
+//
+// Both reuse the plumbing above rather than calling the provider directly: the
+// vision one goes through `analyze_image` (so the provider capability check and
+// the SSRF guard on local uploads apply), and both record usage against the same
+// budgets.
+
+// A description written for a screen reader, not a caption. The language follows
+// the site's default so the alt text is in the language the page is written in.
+function altTextQuestion(): string {
+  return defaultLang().startsWith('zh')
+    ? '用一句不超过 60 字的中文描述这张图，作为网页的 alt 文本（供屏幕阅读器朗读）。直接给出描述，不要以“图片中”“这是一张”开头，不要加引号或句号结尾。'
+    : 'Describe this image in one sentence of at most 120 characters, for use as a web alt text read aloud by screen readers. Output the description only — do not start with "image of" or "this is", and do not add quotes.';
+}
+
+// Fill in alt text for images that have none. Never overwrites: alt text a human
+// wrote is the one thing the AI must not touch.
+router.post('/alt-text', authenticate, imageLimiter, enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
+  try {
+    if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: '无权限' }); return; }
+    // Whoever may upload may describe their own uploads; editing the library is
+    // the wider permission.
+    if (!userCan(req.user!, 'upload_files') && !userCan(req.user!, 'edit_media')) { res.status(403).json({ error: '无权修改媒体信息' }); return; }
+    if (throttledAiRequest(req.user!.userId, 'alt-text')) { res.status(429).json({ error: '请求太频繁，请稍等几秒再试' }); return; }
+    // Capped: each id is a vision call, and a selection can be hundreds of rows.
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(String).slice(0, 10);
+    if (ids.length === 0) { res.status(400).json({ error: 'ids required' }); return; }
+    const provider = getDefaultProvider();
+    if (!provider) { res.status(400).json({ error: '未配置 AI 服务商' }); return; }
+
+    const siteId = actingSiteId(req);
+    const ctx = { userId: req.user!.userId, role: req.user!.role, siteId };
+    const results: any[] = [];
+    for (const id of ids) {
+      const m = db.prepare('SELECT id, url, alt, siteId FROM Media WHERE id = ?').get(id) as any;
+      if (!m) { results.push({ id, status: 'error', reason: 'not-found' }); continue; }
+      if (String(m.alt || '').trim()) { results.push({ id, status: 'skipped', reason: 'has-alt' }); continue; }
+      // The media table is global; a site-scoped caller only reaches rows that
+      // belong to their site (or to no site).
+      if (siteId && m.siteId && m.siteId !== siteId) { results.push({ id, status: 'skipped', reason: 'other-site' }); continue; }
+
+      const out = await executeTool('analyze_image', { url: m.url, question: altTextQuestion() }, ctx);
+      const text = String(out?.analysis || out?.text || '').trim().replace(/^["“]|["”]$/g, '');
+      if (out?.error || !text) { results.push({ id, status: 'error', reason: 'no-description' }); continue; }
+      const alt = text.slice(0, 200);
+      db.prepare('UPDATE Media SET alt = ? WHERE id = ?').run(alt, id);
+      recordUsage(req.user!.userId, 'alt-text', alt, provider.model, IMAGE_TOKEN_EQUIVALENT);
+      results.push({ id, status: 'ok', alt });
+    }
+    res.json({ results });
+  } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
+});
+
+// Tag and category suggestions for a draft. Returned, never applied: the author
+// decides, and the editor's existing inputs are where they decide.
+router.post('/suggest-terms', authenticate, requireCap('ai_use'), enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
+  try {
+    if (throttledAiRequest(req.user!.userId, 'suggest-terms')) { res.status(429).json({ error: '请求太频繁，请稍等几秒再试' }); return; }
+    const title = String(req.body?.title || '').trim().slice(0, 300);
+    const body = String(req.body?.content || '').slice(0, 6000);
+    if (!title && !body) { res.status(400).json({ error: 'title or content required' }); return; }
+    const provider = getDefaultProvider();
+    if (!provider) { res.status(400).json({ error: '未配置 AI 服务商' }); return; }
+
+    // The existing vocabulary is what makes a suggestion usable — a brand new
+    // tag nobody browses is worse than no tag.
+    const cats = (db.prepare('SELECT name FROM Category LIMIT 100').all() as any[]).map(r => r.name);
+    const tags = (db.prepare('SELECT name FROM Tag LIMIT 200').all() as any[]).map(r => r.name);
+    const { result, provider: used } = await chatCompleteWithFallback([
+      { role: 'system', content: '你是内容编辑。根据标题与正文，为这篇文章挑选最合适的分类与标签：优先复用已有词表，确有需要才提出新标签。只输出 JSON，形如 {"categories":["..."],"tags":["..."]}，各不超过 4 个，不要任何解释或代码块标记。' },
+      { role: 'user', content: '已有分类：' + (cats.join('、') || '（无）') + '\n已有标签：' + (tags.join('、') || '（无）') + '\n\n标题：' + title + '\n\n正文：' + body },
+    ], { maxTokens: 300 });
+    recordUsage(req.user!.userId, 'suggest-terms', result.content, used.model);
+
+    // The model is asked for JSON but is not required to produce it; a fence or a
+    // stray sentence must not turn into a 500.
+    const pick = (v: any) => (Array.isArray(v) ? v.map(x => String(x).trim()).filter(Boolean).slice(0, 4) : []);
+    let parsed: any = {};
+    try {
+      const raw = String(result.content || '').replace(/```json|```/gi, '').trim();
+      parsed = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1));
+    } catch { parsed = {}; }
+    res.json({ categories: pick(parsed.categories), tags: pick(parsed.tags) });
+  } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
+});
 
 router.post('/vision', authenticate, imageLimiter, enforceUsageLimit, async (req: AuthRequest & SiteRequest, res: Response) => {
   try {
@@ -1597,6 +1689,7 @@ async function runWebhookReply(binding: Binding, message: string): Promise<strin
 
   const provider = getDefaultProvider();
   if (!provider) return 'AI 服务商尚未配置，请联系管理员。';
+  let servedBy = provider;
   if (!isRoleAllowed(user.role)) return '你的角色无权使用 AI 功能。';
   // All three callback routes (generic / dingtalk / wechat) funnel through here,
   // and this path used to skip the daily budget entirely — a bound bot was a free
@@ -1621,7 +1714,8 @@ async function runWebhookReply(binding: Binding, message: string): Promise<strin
 
   let reply = '';
   for (let i = 0; i < MAX_ITER; i++) {
-    const result = await chatComplete(provider, msgs, { tools });
+    const { result, provider: used } = await chatCompleteWithFallback(msgs, { tools });
+    servedBy = used;
     reply = result.content;
     if (!result.toolCalls.length) break;
     pushAssistantWithTools(msgs, result.content, result.toolCalls, provider.type);
@@ -1636,13 +1730,14 @@ async function runWebhookReply(binding: Binding, message: string): Promise<strin
       // answer with a summary instead of a bare limit line the bot would relay.
       try {
         msgs.push({ role: 'system', content: '工具调用次数已达上限。请立即用自然语言总结：已完成的工作、产出（如文章标题/链接/ID）、以及未能完成的部分。不要再调用任何工具。' });
-        const wrap = await chatComplete(provider, msgs, {});
+        const { result: wrap, provider: used } = await chatCompleteWithFallback(msgs, {});
+        servedBy = used;
         reply = wrap.content || '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。';
       } catch { reply = '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。'; }
     }
   }
 
-  recordUsage(user.id, 'webhook', reply, provider.model);
+  recordUsage(user.id, 'webhook', reply, servedBy.model);
   return reply;
 }
 

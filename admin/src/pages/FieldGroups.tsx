@@ -10,7 +10,7 @@ import { dialog } from '../lib/dialog';
 
 const FIELD_TYPES = ['text', 'textarea', 'richtext', 'number', 'boolean', 'date', 'select', 'media', 'relation'];
 
-interface FieldDef { key: string; label: string; type: string; required?: boolean; options?: string[]; hint?: string; default?: string }
+interface FieldDef { key: string; label: string; type: string; required?: boolean; options?: string[]; hint?: string; default?: string; private?: boolean }
 interface Draft { id: string | null; typeSlug: string; name: string; fields: FieldDef[] }
 
 const emptyDraft = (typeSlug: string): Draft => ({ id: null, typeSlug, name: '', fields: [] });
@@ -74,7 +74,12 @@ export default function FieldGroups() {
       React.createElement('input', { value: f.default || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => updateField(i, { default: e.target.value }), placeholder: t('default value', getLang()), className: 'input-field text-sm col-span-4' }),
       React.createElement('label', { className: 'col-span-3 flex items-center gap-1 text-[11px] text-gray-500' },
         React.createElement('input', { type: 'checkbox', checked: !!f.required, onChange: (e: React.ChangeEvent<HTMLInputElement>) => updateField(i, { required: e.target.checked }) }),
-        t('required', getLang()))
+        t('required', getLang())),
+      // A private field keeps its value for editors but is stripped from every
+      // anonymous payload, including the [field] shortcode's output.
+      React.createElement('label', { className: 'col-span-12 flex items-center gap-1 text-[11px] text-gray-500', title: t('private field hint', getLang()) },
+        React.createElement('input', { type: 'checkbox', checked: !!f.private, onChange: (e: React.ChangeEvent<HTMLInputElement>) => updateField(i, { private: e.target.checked }) }),
+        t('private field', getLang()))
     ),
     React.createElement('input', { value: f.hint || '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => updateField(i, { hint: e.target.value }), placeholder: t('field hint', getLang()), className: 'input-field text-xs' })
   );

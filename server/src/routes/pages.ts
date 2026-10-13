@@ -2,7 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import db, { cuid, withTransaction } from '../utils/db';
-import { authenticate, requireCap, userCan, AuthRequest } from '../middleware/auth';
+import { authenticate, requireCap, userCan, resolveOptionalUser, AuthRequest } from '../middleware/auth';
 import { rateLimitStore } from '../utils/rateLimitStore';
 import { SiteRequest } from '../middleware/site';
 import { uniqueSlug } from '../utils/slug';
@@ -10,7 +10,7 @@ import { normalizeLang, translationsOf, pagePathForLang } from '../utils/content
 import { recordMovedPath } from '../utils/redirects';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 import { writePostMeta } from '../utils/postMeta';
-import { validateAndCoerceMeta } from '../utils/fieldSchema';
+import { validateAndCoerceMeta, buildFields, stripPrivateMeta } from '../utils/fieldSchema';
 import { siteScopeForFilter, mayWriteSite, userMayAccessSite } from '../utils/userSites';
 import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
 import { doAction } from '../utils/hooks';
@@ -58,15 +58,28 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
       ? db.prepare('SELECT * FROM Post WHERE slug = ? AND type = ? AND (siteId IS NULL OR siteId = ?)').get(req.params.slug, 'page', req.siteId)
       : db.prepare('SELECT * FROM Post WHERE slug = ? AND type = ?').get(req.params.slug, 'page')) as any;
     if (!page || page.status === 'trash') { res.status(404).json({ error: 'Page not found' }); return; }
-    const isAdmin = !!req.user && ['admin', 'editor'].includes(req.user.role);
+    // This route is public, so it never runs `authenticate` and `req.user` is
+    // empty — the caller has to be resolved the way the other public routes do
+    // it, or the bypass is false for everyone and an editor cannot even view
+    // the draft page they are working on.
+    const viewer = req.user || resolveOptionalUser(req);
+    // The same rule the post routes use, expressed as a capability rather than a
+    // role name: matching on 'admin'|'editor' ignored capability changes, so an
+    // editor stripped of edit_others_posts still bypassed a page's protection,
+    // while a custom role granted it could not open its own drafts.
+    const mayManage = !!viewer && (userCan(viewer, 'edit_others_posts') || page.authorId === viewer.userId);
+    // The password gate uses the narrower rule the post route uses: knowing the
+    // password is what unlocks a protected post, and being its author is not a
+    // substitute there either. Draft/private visibility is the wider one above.
+    const mayBypassPassword = !!viewer && userCan(viewer, 'edit_others_posts');
     // Draft pages are never public (WordPress behavior).
-    if (page.status === 'draft' && !isAdmin) { res.status(404).json({ error: 'Page not found' }); return; }
+    if (page.status === 'draft' && !mayManage) { res.status(404).json({ error: 'Page not found' }); return; }
     // Password protection only applies to published pages (WordPress model).
     // A private page with a leftover password must still behave as private.
     const protectedPage = page.status === 'published' && page.password ? true : false;
 
     // Password protected — cookie must match, admins bypass.
-    if (protectedPage && !isAdmin) {
+    if (protectedPage && !mayBypassPassword) {
       const cookieVal = getPassCookie(req, page.id);
       if (!contentUnlockMatches(cookieVal, page.id, page.password)) {
         const safe = { id: page.id, title: page.title, slug: page.slug, status: 'published', protected: true };
@@ -76,7 +89,7 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
     }
 
     // Truly private page — logged-in staff only.
-    if (page.status === 'private' && !isAdmin) {
+    if (page.status === 'private' && !mayManage) {
       res.status(403).json({ error: 'This page is private', private: true, title: page.title, slug: page.slug });
       return;
     }
@@ -86,11 +99,19 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
     const metaRows = db.prepare('SELECT key, value FROM PostMeta WHERE postId = ?').all(page.id) as any[];
     page.meta = {};
     metaRows.forEach((r: any) => { page.meta[r.key] = r.value; });
+    // Typed view of the same values, and the same public filter the post routes
+    // apply: a private field, and the application's own `_` keys the frontend
+    // does not read, stay out of an anonymous payload.
+    page.fields = buildFields('page', page.meta);
+    if (!mayManage) {
+      page.fields = page.fields.filter((f: any) => !f.private);
+      stripPrivateMeta(page.meta, 'page');
+    }
     delete page.password;
     // Other languages of this page, so the client can offer a switcher and the
     // injected head can emit hreflang alternates.
     page.translations = translationsOf(page);
-    page.content = renderCmsBlocks(applyShortcodes(page.content || '', { siteId: req.siteId }), { siteId: req.siteId });
+    page.content = renderCmsBlocks(applyShortcodes(page.content || '', { siteId: req.siteId, post: page }), { siteId: req.siteId, post: page });
     res.json(page);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

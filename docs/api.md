@@ -75,6 +75,19 @@ DELETE /api/posts/:id             delete
 PUT    /api/posts/:id/restore
 PUT    /api/posts/:id/sticky
 POST   /api/posts/bulk-trash | /bulk-restore | /bulk-status | /bulk-delete
+POST   /api/posts/bulk-edit       edit_posts: change a field across many posts —
+                                  { ids, changes{status,categoryIds,tagNames,tagMode,
+                                  featured,authorId,meta}, dryRun? }. Per-post
+                                  capability checks, per-post savepoint, and a
+                                  per-post result list. Without `publish_posts`
+                                  the only status a caller may set is `draft`
+                                  (the same rule the single-post PUT applies).
+GET    /api/posts/:id/preview-link  edit_posts: a signed URL (24h) showing this one
+                                  unpublished post on the real theme to a reviewer
+                                  with no account. Never cached, never indexed;
+                                  revoked by the session version or a change to the
+                                  owner's site assignments, and refused for pages
+                                  (their route has no preview support).
 POST   /api/posts/:id/lock | /unlock | /clone
 GET    /api/posts/:id/revisions | /related
 PUT    /api/posts/:id/revisions/:revId/restore
@@ -268,11 +281,18 @@ GET    /api/ai/sessions | POST | PUT /:id | DELETE [/:id]    server-side chat se
                                                 (cross-device; DELETE without id clears all)
 GET    /api/ai/usage                usage statistics (admin)
 GET    /api/ai/audit                sandbox audit trail (admin)
-GET    /api/ai/bindings | POST | PUT | DELETE   WeChat/DingTalk bindings
+GET    /api/ai/bindings | POST | PUT | DELETE   chat bindings (WeChat/DingTalk/Telegram/Slack)
+GET    /api/ai/binding-platforms         the platforms a binding may use, with the
+                                         credential fields each one needs (the admin
+                                         form is rendered from this)
 POST   /api/ai/webhook/:token            generic bot entry — acts as the bound user
 GET    /api/ai/webhook/wechat/:token     WeChat MP URL verification (echostr)
 POST   /api/ai/webhook/wechat/:token     WeChat MP text message (XML) → AI reply
 POST   /api/ai/webhook/dingtalk/:token   DingTalk enterprise-bot callback (encrypted)
+POST   /api/ai/webhook/telegram/:token   Telegram update; the delivery must carry the
+                                         X-Telegram-Bot-Api-Secret-Token set at setWebhook
+POST   /api/ai/webhook/slack/:token      Slack Events API (url_verification + events);
+                                         signed with the app's Signing Secret
 POST   /api/ai/bindings/:id/test-group   push a test message to a DingTalk group robot
 POST   /api/ai/review-comments      AI spam/approve classification
 POST   /api/ai/batch-translate      translate up to 10 posts (creates drafts)
@@ -296,9 +316,49 @@ DELETE /api/roles/:slug             delete custom role (system/in-use protected)
 
 ```
 GET    /api/post-types              public: built-in (post/page) + registered types
+GET    /api/post-types/:slug/fields  public: the field schema for a type (key, label,
+                                    type, required, options, private) — definitions
+                                    only, never values
 POST   /api/post-types              admin: register { slug, label, supports[] }
 PUT    /api/post-types/:slug        admin: edit label/supports (slug is immutable)
 DELETE /api/post-types/:slug        admin: unregister (existing content is kept)
+```
+
+## Custom fields
+
+A field group defines typed fields for one content type. The values live in
+`PostMeta` and are readable as `post.fields` (typed, definition order) or
+`post.meta[key]`; `[field name="key"]` outputs one in content. A field marked
+`private` keeps its value for editors but is stripped from every anonymous
+payload — list, single post, page — and the shortcode refuses to emit it.
+
+```
+GET    /api/field-groups            edit_posts: all groups
+GET    /api/field-groups/for/:type  edit_posts: flat field list for one type
+POST   /api/field-groups            manage_system: create
+PUT    /api/field-groups/:id        manage_system: update
+DELETE /api/field-groups/:id        manage_system: delete (stored values are kept)
+```
+
+Writes to `PostMeta` may only name the application's own `_` keys through a
+short allowlist — the SEO/CSS fields the editor owns, plus `_members_only`
+(a publishing setting a human has to be able to clear); any other `_`-prefixed
+key is refused (400), on the single save, the page save and the bulk edit alike.
+Reading is narrower than writing: `_members_only` never appears in an anonymous
+payload.
+
+## Saved views
+
+Named filter sets for the content list — per user, or shared with the creator's
+role. A view only remembers choices; applying one re-runs the list endpoint's
+own site validation, so it cannot widen what the caller may see.
+
+```
+GET    /api/saved-views             auth: own views + those shared with my role
+POST   /api/saved-views             auth: create { name, filters, siteId?, shared? }
+                                    (50 per user; 400 beyond that)
+PUT    /api/saved-views/:id         owner (or admin): rename / re-scope
+DELETE /api/saved-views/:id         owner (or admin)
 ```
 
 ## Forms
@@ -452,6 +512,8 @@ Personal API credentials (per-user, no admin needed). Send them as
 `Authorization: App <token>` instead of a Bearer JWT. `scope` is `full` or
 `read`; a `read` credential is limited to GET/HEAD/OPTIONS and is refused on
 the few mutating GETs (db optimize/backup/backup-full, media download).
+`/api/mcp` is the exception — JSON-RPC is a POST even when it only reads — so
+its scope is decided per tool instead (see below).
 "Log out everywhere" invalidates them too.
 
 ```
@@ -460,6 +522,40 @@ POST   /api/app-passwords              auth: create { name, scope?, expiresInDay
                                        (token returned once)
 POST   /api/app-passwords/:id/revoke   auth: revoke (row kept for the audit trail)
 DELETE /api/app-passwords/:id          auth: delete
+```
+
+## MCP (Model Context Protocol)
+
+`POST /api/mcp` speaks JSON-RPC 2.0, so an external agent (Claude Desktop, an
+IDE, another agent framework) can drive the site with **the same tool registry
+the built-in assistant uses** — same per-tool permissions, same refusal of risky
+calls, same site scoping. It is a transport, not a second implementation.
+
+```
+POST   /api/mcp    initialize | ping | tools/list | tools/call
+GET    /api/mcp    a liveness probe for clients that check before POSTing
+```
+
+Authenticate with an **App password** (`Authorization: App <token>`); a session
+JWT is not accepted, because an MCP client has no browser to log in with.
+
+* `tools/list` returns only what the credential's role may use (`canUseTool`).
+* A `read`-scoped App password may only call tools that cannot change anything
+  (`isReadOnlyTool`, default-deny: an unclassified tool — including a plugin's —
+  needs `full`).
+* A **risky** call (publishing, deleting, theme/site settings) is refused with
+  the same message an unattended task gets. MCP clients cannot show an approval
+  card, so they follow the unattended rule: an operator who wants them enabled
+  sets `ai_allow_unattended_risky` in AI settings.
+
+Client configuration (Claude Desktop, `claude_desktop_config.json`):
+
+```json
+{ "mcpServers": { "mortar": {
+  "type": "http",
+  "url": "https://your-site.example/api/mcp",
+  "headers": { "Authorization": "App <your-app-password>" }
+} } }
 ```
 
 ## Plugin extensions (`/api/ext`)
@@ -511,3 +607,47 @@ The assistant wraps each provider call in an agent loop:
    the user's identity & permissions → results feed back → repeat (max 6-10)
 3. Every tool call is audited to `AiAudit`; generated HTML is sanitized;
    user messages are wrapped to defuse prompt injection
+
+Every call goes through `chatCompleteWithFallback`, which walks the enabled
+providers in order (the default first). It moves to the next one when the
+failure is ABOUT THE PROVIDER — unreachable, 5xx, 401/403/429 — and does not
+retry a request the provider rejected on its merits (a 400 means the payload is
+wrong, and every provider would reject it the same way). Once a streaming
+response has emitted text it is never restarted: the answer is already on the
+user's screen.
+
+### Semantic retrieval
+
+Off until an embedding model is named in AI settings (`ai_embedding_model`; the
+provider is the default one unless `ai_embedding_provider` points elsewhere).
+Vectors come from an OpenAI-compatible `/embeddings` endpoint — the same
+configuration and budget as everything else, and a local Ollama works too.
+
+```
+GET /api/posts/semantic?q=&limit=   public: posts closest in meaning to the query.
+                                    { posts, semantic }. `semantic: false` means
+                                    no model is configured (or the provider
+                                    failed) — fall back to `?search=`.
+GET /api/posts/:id/related          public: related by meaning once the index
+                                    exists, else by category as before.
+```
+
+Vectors are stored one row per post (`PostEmbedding`, base64 Float32Array) and
+compared in-process; the maintenance task `embed_posts` fills the index hourly,
+20 posts per run, skipping any whose text has not changed. Nothing is embedded
+for a post a visitor could not read anyway: a draft, a password-protected post or
+a members-only one is filtered out *after* ranking, so it never occupies a
+result slot.
+
+### Authoring aids
+
+```
+POST   /api/ai/alt-text        ai_use + upload_files|edit_media: describe images
+                               { ids: [] } (max 10 per request). Fills `Media.alt`
+                               through the vision tool; an image that already has
+                               alt text is skipped and never overwritten.
+POST   /api/ai/suggest-terms   ai_use: { title, content } →
+                               { categories: [], tags: [] }. Sees the site's
+                               existing vocabulary so it reuses browsable terms.
+                               Returned, never applied — the author decides.
+```

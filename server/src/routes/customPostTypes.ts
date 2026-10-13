@@ -1,7 +1,13 @@
 import { Router, Response } from 'express';
 import db from '../utils/db';
+import { logger } from '../utils/logger';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { purgeContentCaches } from '../utils/cache';
+import { fieldSchemaForType } from '../utils/fieldSchema';
+
+
+// Anything unexpected is logged, never echoed: the response is text we wrote.
+const GENERIC_ERROR = '操作失败，请稍后重试';
 
 const router = Router();
 
@@ -39,7 +45,17 @@ export function allPostTypeSlugs(): string[] {
 router.get('/', (_req: AuthRequest, res: Response) => {
   try {
     res.json([...BUILTIN_TYPES, ...loadCustomTypes()]);
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { logger.warn({ err }, 'post type request failed'); res.status(500).json({ error: GENERIC_ERROR }); }
+});
+
+// The field schema for a type: what fields it has and what shape their values
+// take, so a headless client can build against it. Definitions only — never
+// values. Public for the same reason the type list is: it is the shape of the
+// API, and the values it describes are already on the public endpoints.
+router.get('/:slug/fields', (req: AuthRequest, res: Response) => {
+  try {
+    res.json({ typeSlug: req.params.slug, fields: fieldSchemaForType(req.params.slug) });
+  } catch (err: any) { logger.warn({ err }, 'post type request failed'); res.status(500).json({ error: GENERIC_ERROR }); }
 });
 
 // Admin: register a new custom post type
@@ -54,7 +70,7 @@ router.post('/', authenticate, requireCap('manage_system'), (req: AuthRequest, r
     saveCustomTypes([...loadCustomTypes(), { slug, label, supports }]);
     purgeContentCaches();
     res.status(201).json({ success: true, slug });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { logger.warn({ err }, 'post type request failed'); res.status(500).json({ error: GENERIC_ERROR }); }
 });
 
 // Admin: edit a registered type's label / supports. The slug is immutable — the
@@ -73,7 +89,7 @@ router.put('/:slug', authenticate, requireCap('manage_system'), (req: AuthReques
     saveCustomTypes(list);
     purgeContentCaches();
     res.json({ success: true, type: list[idx] });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { logger.warn({ err }, 'post type request failed'); res.status(500).json({ error: GENERIC_ERROR }); }
 });
 
 // Admin: unregister a custom post type (its content is kept but no longer listed)
@@ -86,7 +102,7 @@ router.delete('/:slug', authenticate, requireCap('manage_system'), (req: AuthReq
     saveCustomTypes(remaining);
     purgeContentCaches();
     res.json({ success: true });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { logger.warn({ err }, 'post type request failed'); res.status(500).json({ error: GENERIC_ERROR }); }
 });
 
 export { BUILTIN_TYPES, loadCustomTypes };

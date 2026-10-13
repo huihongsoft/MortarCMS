@@ -35,6 +35,8 @@ export default function PostEditor() {
   // away; an existing post overwrites it with its own type once loaded.
   const [postType, setPostType] = useState(() => new URLSearchParams(window.location.search).get('type') || 'post');
   const [fieldDefs, setFieldDefs] = useState<any[]>([]);
+  // Structured tag/category suggestions (the 'tags' AI action), applied as-is.
+  const [aiSuggestions, setAiSuggestions] = useState<{ tags: string[]; categories: string[] } | null>(null);
   const [format, setFormat] = useState('standard');
   const [authorId, setAuthorId] = useState('');
   const [users, setUsers] = useState<any[]>([]);
@@ -99,6 +101,10 @@ export default function PostEditor() {
   const [sites, setSites] = useState<any[]>([]);
   const [allowComments, setAllowComments] = useState(true);
   const [password, setPassword] = useState('');
+  // Members-only: a PostMeta flag that hides the post from anonymous visitors.
+  // The post-expiry plugin sets it automatically; this is the manual switch, and
+  // the only way to put such a post back in front of everyone.
+  const [membersOnly, setMembersOnly] = useState(false);
   // Content language. '' is the site's default language — the one served without
   // a URL prefix, and what every post written before this feature says.
   const [lang, setLang] = useState('');
@@ -149,7 +155,7 @@ export default function PostEditor() {
     api.get('/categories').then(r => setCategories(r.data)); api.get('/media').then(r => setMediaItems(r.data.media || []));
     api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])).catch(() => {});
     if (id) { api.get(`/posts/${id}/translations`).then(r => setTranslations(r.data?.translations || [])).catch(() => {});
-      api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setLang(p.lang || ''); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.categoryId || c.category?.id) || []); setTagNames(p.tags?.map((t: any) => t.name || t.tag?.name) || []); if (p.featured) setFeatured(p.featured); if (p.allowComments !== undefined) setAllowComments(p.allowComments); if (p.password) setPassword(p.password); if (p.siteId) setSiteId(p.siteId); if (p.authorId) setAuthorId(p.authorId); if (p.publishedAt) { const d = new Date(p.publishedAt); const pad = (n: number) => String(n).padStart(2, '0'); setPublishDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`); } if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); if (p.meta?._seo_title) setSeoTitle(p.meta._seo_title); if (p.meta?._seo_desc) setSeoDesc(p.meta._seo_desc); if (p.meta?._seo_noindex) setSeoNoindex(p.meta._seo_noindex === '1'); if (p.meta?._seo_canonical) setSeoCanonical(p.meta._seo_canonical); if (p.meta?._seo_og_image) setSeoOgImage(p.meta._seo_og_image); if (p.meta?._seo_primary_category) setSeoPrimaryCategory(p.meta._seo_primary_category);
+      api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setLang(p.lang || ''); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.categoryId || c.category?.id) || []); setTagNames(p.tags?.map((t: any) => t.name || t.tag?.name) || []); if (p.featured) setFeatured(p.featured); if (p.allowComments !== undefined) setAllowComments(p.allowComments); if (p.password) setPassword(p.password); if (p.siteId) setSiteId(p.siteId); if (p.authorId) setAuthorId(p.authorId); if (p.publishedAt) { const d = new Date(p.publishedAt); const pad = (n: number) => String(n).padStart(2, '0'); setPublishDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`); } if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); if (p.meta?._seo_title) setSeoTitle(p.meta._seo_title); if (p.meta?._seo_desc) setSeoDesc(p.meta._seo_desc); if (p.meta?._seo_noindex) setSeoNoindex(p.meta._seo_noindex === '1'); if (p.meta?._seo_canonical) setSeoCanonical(p.meta._seo_canonical); if (p.meta?._seo_og_image) setSeoOgImage(p.meta._seo_og_image); if (p.meta?._seo_primary_category) setSeoPrimaryCategory(p.meta._seo_primary_category); setMembersOnly(p.meta?._members_only === '1');
       // Custom fields: user-defined keys only. Every `_`-prefixed key is the
       // application's own (`_seo_*`/`_visual_css` have panels; `_members_only`
       // and plugin keys are managed server-side) — loading one here would put it
@@ -213,6 +219,9 @@ export default function PostEditor() {
       payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc, _seo_noindex: seoNoindex ? '1' : '', _seo_canonical: seoCanonical, _seo_og_image: seoOgImage, _seo_primary_category: seoPrimaryCategory };
       // Custom fields (user-defined key/value pairs) ride along in meta
       for (const mf of metaFields) { if (mf.key.trim()) payload.meta[mf.key.trim()] = mf.value; }
+      // The members-only flag is a meta key like the SEO fields, and an empty
+      // string clears it (the API refuses the `_` namespace otherwise).
+      payload.meta._members_only = membersOnly ? '1' : '';
       // A key the post was loaded with and the user has since removed: send it
       // empty so the API deletes that row (it only touches the keys it is sent).
       for (const key of loadedMetaKeysRef.current) { if (!(key in payload.meta)) payload.meta[key] = ''; }
@@ -265,8 +274,21 @@ export default function PostEditor() {
     const needsContent = ['polish', 'continue', 'translate', 'summarize'].includes(action);
     if (needsTitle && !title.trim()) { setAiResult(''); setAiError(t('please enter a title first', getLang())); return; }
     if (needsContent && !content.trim()) { setAiResult(''); setAiError(t('please enter content first', getLang())); return; }
-    setAiLoading(true); setAiError(''); setAiResult('');
+    setAiLoading(true); setAiError(''); setAiResult(''); setAiSuggestions(null);
     try {
+      // Tag suggestions come from a structured endpoint: it sees the site's
+      // existing vocabulary (so it reuses tags people actually browse instead of
+      // inventing synonyms) and returns categories too. Everything else is the
+      // free-text generate call.
+      if (action === 'tags') {
+        const r = await api.post('/ai/suggest-terms', { title, content, excerpt });
+        const tags: string[] = r.data?.tags || [];
+        const cats: string[] = r.data?.categories || [];
+        if (!tags.length && !cats.length) { setAiError(t('ai returned no result', getLang())); return; }
+        setAiSuggestions({ tags, categories: cats });
+        setAiResult([...cats.map(c => '📁 ' + c), ...tags.map(x => '🏷 ' + x)].join('\n'));
+        return;
+      }
       const r = await api.post('/ai/generate', { action, title, content, excerpt, style: aiStyle, language: aiLang });
       const out = r.data.content || '';
       if (!out.trim()) setAiError(t('ai returned no result', getLang()));
@@ -312,6 +334,17 @@ export default function PostEditor() {
   ];
 
   function applyTags() {
+    // Structured suggestions when we have them: no guessing at the model's prose,
+    // and a suggested category is matched against the real list before it is set.
+    if (aiSuggestions) {
+      if (aiSuggestions.tags.length) setTagNames([...new Set([...tagNames, ...aiSuggestions.tags])]);
+      const ids = aiSuggestions.categories
+        .map(name => categories.find((c: any) => c.name === name)?.id)
+        .filter(Boolean) as string[];
+      if (ids.length) setCategoryIds([...new Set([...categoryIds, ...ids])]);
+      setSaveState('dirty');
+      return;
+    }
     // Strip a leading label ("推荐标签：" / "Tags:") and list markers
     const tags = aiResult.replace(/^(推荐标签|Tags?)\s*[:：]\s*/i, '').split(/[,，、\n]/).map((x: string) => x.trim().replace(/^\d+[.、)]\s*/, '')).filter(Boolean);
     if (tags.length) {
@@ -352,6 +385,7 @@ export default function PostEditor() {
           React.createElement('div', { className: 'flex flex-wrap gap-1.5 mt-2' },
             /^SEO/.test(aiResult) ? React.createElement('button', { onClick: applySeoResult, className: 'btn-primary text-xs' }, t('apply seo', getLang()))
             : /^(摘要|Summary)\s*[:：]/i.test(aiResult) && aiResult.length < 400 ? React.createElement('button', { onClick: applySummary, className: 'btn-primary text-xs' }, t('apply as excerpt', getLang()))
+            : aiSuggestions ? React.createElement('button', { onClick: applyTags, className: 'btn-primary text-xs' }, t('apply tags', getLang()))
             : aiResult.split(/[,，、\n]/).length > 2 && aiResult.length < 200 ? React.createElement('button', { onClick: applyTags, className: 'btn-primary text-xs' }, t('apply tags', getLang()))
             : React.createElement(React.Fragment, null,
                 React.createElement('button', { onClick: () => applyAiResult('append'), className: 'btn-secondary text-xs' }, t('insert to end', getLang())),
@@ -450,7 +484,15 @@ export default function PostEditor() {
         React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer' },
           React.createElement('input', { type: 'checkbox', checked: allowComments, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setAllowComments(e.target.checked), className: 'rounded border-gray-300 text-primary-600' }),
           React.createElement('span', { className: 'text-sm text-gray-600' }, t('allow comments', getLang()))
-        )
+        ),
+        // Visibility: hidden from anonymous visitors, still reachable when a
+        // reader is signed in. Set automatically by the post-expiry plugin, so
+        // without this switch there was no way to take such a post back public.
+        React.createElement('label', { className: 'flex items-center gap-2 cursor-pointer mt-3' },
+          React.createElement('input', { type: 'checkbox', checked: membersOnly, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setMembersOnly(e.target.checked), className: 'rounded border-gray-300 text-primary-600' }),
+          React.createElement('span', { className: 'text-sm text-gray-600' }, t('members only', getLang()))
+        ),
+        React.createElement('p', { className: 'text-[11px] text-gray-400 mt-1' }, t('members only hint', getLang()))
       ),
       // SEO panel with Google search preview
       React.createElement('div', { className: 'card p-4' },

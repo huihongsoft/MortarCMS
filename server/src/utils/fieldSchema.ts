@@ -20,6 +20,11 @@ export interface FieldDef {
   default?: string;
   options?: string[];
   hint?: string;
+  // A private field is stored like any other but is stripped from every
+  // anonymous payload (lists and single posts alike) — for an internal SKU, a
+  // cost price, an editorial note. Enforced on output, not on input, so the
+  // value is still there for editors and for a later re-publish.
+  private?: boolean;
 }
 
 export interface FieldGroup {
@@ -46,22 +51,33 @@ export function isValidFieldKey(key: string): boolean {
   return KEY_RE.test(key) && !key.startsWith('_');
 }
 
-// Meta keys a client may write that are not user fields. Anything else starting
-// with '_' is refused by the post/page routes: the underscore namespace is
-// otherwise a way to forge or clear the flags the app itself acts on.
-export const CLIENT_SYSTEM_META_KEYS = new Set([
+// Meta keys the frontend itself reads, so they survive the public filter (see
+// publicShape). Everything else in the `_` namespace is server-side bookkeeping.
+export const PUBLIC_META_KEYS = new Set([
   '_seo_title', '_seo_desc', '_seo_canonical', '_seo_og_image', '_seo_noindex', '_seo_primary_category', '_visual_css',
 ]);
 
+// Meta keys a client may WRITE. Anything else starting with '_' is refused by
+// the post/page routes: the underscore namespace is otherwise a way to set or
+// clear flags the caller never decided to touch.
+//
+// `_members_only` is writable because it is a publishing setting a human has to
+// control — the post-expiry plugin sets it, and clearing it is the only way to
+// put such a post back in front of anonymous visitors. It is deliberately NOT in
+// PUBLIC_META_KEYS: writing it and publishing it are different questions.
+export const CLIENT_SYSTEM_META_KEYS = new Set([...PUBLIC_META_KEYS, '_members_only']);
+
+// Deliberately NOT swallowed: a failed read must not look like "this type has no
+// fields". Validation would stop enforcing, and — worse — private fields would
+// be indistinguishable from public ones and ship to anonymous visitors. Callers
+// either let the request fail (safe) or fail closed (see stripPrivateMeta).
 export function loadFieldGroups(): FieldGroup[] {
-  try {
-    const rows = db.prepare('SELECT * FROM FieldGroup ORDER BY menuOrder ASC, name ASC').all() as any[];
-    return rows.map(r => {
-      let fields: FieldDef[] = [];
-      try { fields = JSON.parse(r.fields || '[]'); } catch { fields = []; }
-      return { ...r, fields: Array.isArray(fields) ? fields : [] };
-    });
-  } catch { return []; }
+  const rows = db.prepare('SELECT * FROM FieldGroup ORDER BY menuOrder ASC, name ASC').all() as any[];
+  return rows.map(r => {
+    let fields: FieldDef[] = [];
+    try { fields = JSON.parse(r.fields || '[]'); } catch { fields = []; }
+    return { ...r, fields: Array.isArray(fields) ? fields : [] };
+  });
 }
 
 // Every field defined for a type, in group then field order. Definitions are
@@ -72,8 +88,59 @@ export function fieldsForType(typeSlug: string): FieldDef[] {
     .flatMap(g => g.fields);
 }
 
-export function fieldKeysForType(typeSlug: string): Set<string> {
-  return new Set(fieldsForType(typeSlug).map(f => f.key));
+export interface PostField { key: string; label: string; type: FieldType; private: boolean; value: string }
+
+// A post's defined fields with their values, in display order. Themes and the
+// [field] shortcode read this instead of guessing keys out of `meta`; it stays
+// in step with the definitions because it is built from them.
+export function buildFields(typeSlug: string, meta: Record<string, string> = {}, defs?: FieldDef[]): PostField[] {
+  // `defs` lets a caller that already read the definitions for this type reuse
+  // them — enrichPosts would otherwise re-read the table once per post.
+  return (defs || fieldsForType(typeSlug)).map(d => ({
+    key: d.key, label: d.label, type: d.type, private: !!d.private,
+    value: meta[d.key] === undefined ? '' : String(meta[d.key]),
+  }));
+}
+
+// Remove what must not leave the server from a public payload: the values of
+// private fields, and `_` keys the frontend does not read (see PUBLIC_META_KEYS).
+// Shared by the post lists, the single post and the page route — one rule, three
+// call sites, so they cannot drift apart.
+export function stripPrivateMeta(meta: unknown, typeSlug: string, privateKeys?: Set<string>): void {
+  if (!meta || typeof meta !== 'object') return;
+  let keys = privateKeys;
+  let readable = true;
+  if (!keys) {
+    try { keys = privateFieldKeys(typeSlug); } catch { keys = new Set(); readable = false; }
+  }
+  const m = meta as Record<string, unknown>;
+  for (const k of Object.keys(m)) {
+    if (keys.has(k)) { delete m[k]; continue; }
+    if (PUBLIC_META_KEYS.has(k)) continue;
+    // A `_` key is never public. And when the definitions could not be read at
+    // all, a private field is indistinguishable from a public one — so nothing
+    // else goes out either. Fail closed: an over-stripped payload is a visible
+    // bug, a leaked one is not.
+    if (k.startsWith('_') || !readable) delete m[k];
+  }
+}
+
+// Keys whose values must never reach an anonymous caller. Definition-driven, so
+// it does not depend on the caller having enriched the post first.
+export function privateFieldKeys(typeSlug: string): Set<string> {
+  return new Set(fieldsForType(typeSlug).filter(f => f.private).map(f => f.key));
+}
+
+// The typed schema for a content type, for a headless client: what fields exist,
+// what shape their values take, and which ones a public read will not include.
+// Definitions only — never values.
+export function fieldSchemaForType(typeSlug: string): { key: string; label: string; type: FieldType; required: boolean; options?: string[]; hint?: string; private?: boolean }[] {
+  return fieldsForType(typeSlug).map(f => ({
+    key: f.key, label: f.label, type: f.type, required: !!f.required,
+    ...(f.options && f.options.length ? { options: f.options } : {}),
+    ...(f.hint ? { hint: f.hint } : {}),
+    ...(f.private ? { private: true } : {}),
+  }));
 }
 
 function asString(v: unknown): string {
@@ -219,6 +286,7 @@ export function normalizeFieldDefs(input: unknown): { ok: true; fields: FieldDef
       default: def,
       options: type === 'select' ? (Array.isArray(f.options) ? f.options.map((o: any) => String(o).slice(0, 200)).filter(Boolean) : []) : undefined,
       hint: f.hint === undefined ? undefined : String(f.hint).slice(0, 300),
+      ...(f.private ? { private: true } : {}),
     });
   }
   return { ok: true, fields: out };

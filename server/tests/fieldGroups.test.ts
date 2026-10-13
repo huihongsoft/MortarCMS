@@ -71,6 +71,19 @@ describe('defining fields', () => {
     expect(other.fields).toEqual([]);
   });
 
+  it('keeps a field marked private through the API, and drops it on request', async () => {
+    const { status, body } = await makeGroup([{ key: 'cost', label: '成本', type: 'number', private: true }]);
+    expect(status).toBe(201);
+    expect(body.group.fields[0].private).toBe(true);
+
+    const forType = await (await fetch(base + '/field-groups/for/post', { headers: asAdmin })).json();
+    expect(forType.fields[0]).toMatchObject({ key: 'cost', private: true });
+
+    // Anything else must stay a normal field — the flag is opt-in.
+    const plain = await makeGroup([{ key: 'price', label: '价格', type: 'number' }], 'page');
+    expect(plain.body.group.fields[0].private).toBeUndefined();
+  });
+
   it('refuses a key that would land in the application\'s namespace', async () => {
     const { status, body } = await makeGroup([{ key: '_members_only', label: 'x', type: 'text' }]);
     expect(status).toBe(400);
@@ -81,6 +94,13 @@ describe('defining fields', () => {
     await makeGroup([{ key: 'price', label: '价格', type: 'number' }]);
     const { status } = await makeGroup([{ key: 'price', label: '价格 2', type: 'text' }]);
     expect(status).toBe(400);
+  });
+
+  it('ignores a siteId: definitions are install-wide, not per site', async () => {
+    const r = await post('/field-groups', { typeSlug: 'post', name: 'g', fields: [{ key: 'price', label: '价格', type: 'number' }], siteId: 'site-b' });
+    expect(r.status).toBe(201);
+    const { group } = await r.json();
+    expect(group.siteId).toBeUndefined();
   });
 
   it('refuses a group bound to a type nobody registered', async () => {
@@ -126,12 +146,25 @@ describe('values are validated against their definition', () => {
     expect((await missing.json()).error).toContain('SKU');
   });
 
-  it('will not let a request write an application flag', async () => {
+  it('will not let a request write an application flag it does not own', async () => {
     await makeGroup();
-    const r = await post('/posts', { title: 'Gated', meta: { _members_only: '1' } });
+    const r = await post('/posts', { title: 'Gated', meta: { _expiry_at: '2030-01-01' } });
     expect(r.status).toBe(400);
-    expect((await r.json()).error).toContain('_members_only');
+    expect((await r.json()).error).toContain('_expiry_at');
     expect((db.prepare('SELECT COUNT(*) as c FROM Post WHERE title = ?').get('Gated') as any).c).toBe(0);
+  });
+
+  it('lets the editor set and clear members-only, which no request could do before', async () => {
+    await makeGroup();
+    const created = await post('/posts', { title: 'Members', status: 'published', meta: { _members_only: '1' } });
+    expect(created.status, JSON.stringify(await created.clone().json())).toBe(201);
+    const id = (await created.json()).id;
+    expect((db.prepare("SELECT value FROM PostMeta WHERE postId = ? AND key = '_members_only'").get(id) as any)?.value).toBe('1');
+
+    // Clearing it (the editor sends '' for an unchecked box) removes the gate —
+    // the post-expiry plugin sets the flag, and this is the only way back.
+    await put('/posts/' + id, { title: 'Members', meta: { _members_only: '' } });
+    expect(db.prepare("SELECT value FROM PostMeta WHERE postId = ? AND key = '_members_only'").get(id)).toBeUndefined();
   });
 
   it('still accepts the SEO keys the editor owns', async () => {

@@ -49,7 +49,7 @@ beforeEach(() => {
   mailOk = true;
   db.prepare('DELETE FROM Subscriber').run();
   db.prepare('DELETE FROM Post').run();
-  db.prepare("DELETE FROM Setting WHERE key IN ('newsletter_last_sent_at','newsletter_frequency')").run();
+  db.prepare("DELETE FROM Setting WHERE key IN ('newsletter_last_sent_at','newsletter_digest_cursor','newsletter_frequency')").run();
 });
 
 function addSubscriber(id: string, email: string) {
@@ -88,6 +88,102 @@ describe('the newsletter digest task', () => {
     addPost('fresh');
     await runTaskNow('newsletter_digest');
     expect(sentTo).toEqual(['reader@test.dev']);
+  });
+
+  it('carries a burst across runs instead of dropping the tail', async () => {
+    // The window is bounded by a LIMIT, so a run that carries the first ten must
+    // leave the rest ahead of the cursor. With the cursor on the send time they
+    // fell outside every later window and were never sent at all.
+    addSubscriber('s1', 'reader@test.dev');
+    const start = Date.now() - 60 * 60_000;
+    for (let i = 0; i < 13; i++) addPost('burst' + i, new Date(start + i * 1000).toISOString());
+
+    await runTaskNow('newsletter_digest');
+    expect(sentTo).toHaveLength(1);
+    sentTo = [];
+    await runTaskNow('newsletter_digest');
+    expect(sentTo).toEqual(['reader@test.dev']);   // the remaining three
+
+    sentTo = [];
+    await runTaskNow('newsletter_digest');
+    expect(sentTo).toEqual([]);                    // and then it is caught up
+  });
+
+  it('advances the content cursor to the newest post it carried, not to the clock', async () => {
+    addSubscriber('s1', 'reader@test.dev');
+    const published = new Date(Date.now() - 3 * 86_400_000).toISOString();
+    addPost('only', published);
+    await runTaskNow('newsletter_digest');
+
+    // A wall-clock cursor lands at "now", which is what made the next post
+    // racy: published in that same millisecond and it was skipped forever.
+    // The stored form is "<publishedAt>|<id>" — the id breaks ties.
+    expect(String(setting('newsletter_digest_cursor')).split('|')[0]).toBe(published);
+    // The throttle keeps its own meaning: when a send happened.
+    expect(Date.parse(String(setting('newsletter_last_sent_at')))).toBeGreaterThan(Date.now() - 60_000);
+  });
+
+  it('does not lose posts that share one publishedAt across the batch limit', async () => {
+    // Identical timestamps are what an import or a bulk publish produces. With a
+    // timestamp-only cursor, the tenth post of such a group becomes the cursor
+    // and `publishedAt > cursor` hides its neighbours forever.
+    addSubscriber('s1', 'reader@test.dev');
+    const same = new Date(Date.now() - 60 * 60_000).toISOString();
+    for (let i = 0; i < 12; i++) addPost('tie' + String(i).padStart(2, '0'), same);
+
+    await runTaskNow('newsletter_digest');
+    expect(sentTo).toHaveLength(1);           // the first ten
+    sentTo = [];
+    await runTaskNow('newsletter_digest');
+    expect(sentTo).toHaveLength(1);           // the last two
+    sentTo = [];
+    await runTaskNow('newsletter_digest');
+    expect(sentTo).toEqual([]);               // caught up
+  });
+
+  it('still understands a cursor written before the post id was added', async () => {
+    // An install upgraded from the timestamp-only format has a bare ISO value.
+    addSubscriber('s1', 'reader@test.dev');
+    const cut = new Date(Date.now() - 2 * 86_400_000).toISOString();
+    const carried = new Date(Date.now() - 60 * 60_000).toISOString();
+    db.prepare("INSERT INTO Setting (id, key, value) VALUES ('newsletter_digest_cursor','newsletter_digest_cursor',?)").run(cut);
+    addPost('before', new Date(Date.now() - 3 * 86_400_000).toISOString());
+    addPost('after', carried);
+
+    await runTaskNow('newsletter_digest');
+    expect(sentTo).toHaveLength(1);
+    // The cursor advanced to the only post past the old value, so nothing before
+    // it was mailed again.
+    expect(String(setting('newsletter_digest_cursor'))).toBe(carried + '|after');
+  });
+
+  it('throttles weekly by the last SEND, not by the content cursor', async () => {
+    // The throttle used to read whatever the cursor held. On a quiet site (or
+    // after backdated content was carried) that value is weeks old, so
+    // "sent more than 7 days ago" was true the moment a send finished — and the
+    // weekly digest mailed every day.
+    db.prepare("INSERT INTO Setting (id, key, value) VALUES ('newsletter_frequency','newsletter_frequency','weekly')").run();
+    db.prepare("INSERT INTO Setting (id, key, value) VALUES ('newsletter_digest_cursor','newsletter_digest_cursor',?)")
+      .run(new Date(Date.now() - 30 * 86_400_000).toISOString());
+    db.prepare("INSERT INTO Setting (id, key, value) VALUES ('newsletter_last_sent_at','newsletter_last_sent_at',?)")
+      .run(new Date(Date.now() - 86_400_000).toISOString());
+    addSubscriber('s1', 'reader@test.dev');
+    addPost('new-one');
+
+    const r = await runTaskNow('newsletter_digest');
+    expect(r.result?.code).toBe('not due yet');
+    expect(sentTo).toEqual([]);
+  });
+
+  it('does not mail a post whose publish date is still in the future', async () => {
+    addSubscriber('s1', 'reader@test.dev');
+    addPost('later', new Date(Date.now() + 3 * 86_400_000).toISOString());
+    const r = await runTaskNow('newsletter_digest');
+    expect(r.result?.code).toBe('no new posts to send');
+    expect(sentTo).toEqual([]);
+    // Belt and braces: the assertion above is what catches a reverted upper
+    // bound; this one only holds because nothing was carried at all.
+    expect(setting('newsletter_digest_cursor')).toBeFalsy();
   });
 
   it('does nothing when nobody has confirmed a subscription', async () => {

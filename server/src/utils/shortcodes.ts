@@ -2,6 +2,7 @@ import db from './db';
 import { currentPlugin } from './pluginApi';
 import { PUBLIC_POST_CONDITIONS } from './publicPosts';
 import { postUrl } from './slug';
+import { sanitizeHtml } from './sanitize';
 
 // Shortcode system: [tag attr="value"]content[/tag]
 type ShortcodeFn = (attrs: Record<string, string>, content: string, ctx: any) => string;
@@ -116,6 +117,31 @@ addShortcode('video', (attrs) => {
   if (!src) return '';
   return '<video controls preload="metadata" style="width:100%;border-radius:8px;"><source src="' + esc(src) + '"></video>';
 }, 'Video player (src=)');
+
+// [field name="price" fallback="—"] -> a custom field of the post being rendered.
+// The value comes from the post's defined fields; a field marked private is
+// NEVER emitted, because this runs while the public HTML is built — before any
+// per-caller filtering could take it back out again.
+addShortcode('field', (attrs, _content, ctx) => {
+  const key = String(attrs.name || '').trim();
+  if (!key) return '';
+  // A text shortcode receives the post itself; a CMS block render passes it
+  // under `post` (that context also carries siteId).
+  const post = ctx && ctx.post ? ctx.post : ctx;
+  const def = Array.isArray(post?.fields) ? post.fields.find((f: any) => f.key === key) : null;
+  // Only a DEFINED field can be output. Falling back to `post.meta[key]` for an
+  // unknown key was a leak: that map is where a private value lives, and a
+  // definition read that failed (definitions unreadable) would have sent one
+  // straight into the page.
+  if (!def || def.private) return attrs.fallback ? esc(attrs.fallback) : '';
+  const value = def.value;
+  if (value === undefined || value === null || value === '') return attrs.fallback ? esc(attrs.fallback) : '';
+  // Sanitised HERE, not on the way in: a field value can arrive by several
+  // paths (the editor, the API, an import, a plugin's own INSERT), and only this
+  // one is common to all of them. Everything that is not richtext is plain text
+  // and is escaped instead.
+  return def.type === 'richtext' ? sanitizeHtml(String(value)) : esc(value);
+}, 'Output a custom field of the current post (name=, fallback=)');
 
 // ---- CMS Data shortcodes (used by VisualEditor dynamic blocks) ----
 
@@ -348,7 +374,7 @@ function siteLang(): string {
 // (e.g. blocks wrapped in sections/columns) are matched correctly.
 export function renderCmsBlocks(html: string, ctx: any = {}): string {
   if (!html) return html;
-  const cmsTypes = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud', 'link-list'];
+  const cmsTypes = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud', 'link-list', 'field'];
   let out = html;
   for (const type of cmsTypes) {
     const sc = shortcodes.get(type);

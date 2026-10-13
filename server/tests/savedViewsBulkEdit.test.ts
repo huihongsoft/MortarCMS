@@ -110,6 +110,17 @@ describe('bulk edit', () => {
     expect(statusOf('b3')).toBe('draft');
   });
 
+  it('blocks any non-draft status for a role without publish_posts, as the single save does', async () => {
+    addPost('b3b');
+    for (const status of ['private', 'pending', 'published']) {
+      const r = await post('/posts/bulk-edit', { ids: ['b3b'], changes: { status } }, asLimited);
+      expect(r.status, status).toBe(403);
+    }
+    expect(statusOf('b3b')).toBe('draft');
+    // Draft is the one status that needs no publish capability.
+    expect((await post('/posts/bulk-edit', { ids: ['b3b'], changes: { status: 'draft' } }, asLimited)).status).toBe(200);
+  });
+
   it('skips a post outside the caller\'s sites instead of touching it', async () => {
     addPost('b4', { siteId: 'site-b' });
     setUserSites('sv-ed', ['site-a']);
@@ -147,11 +158,11 @@ describe('bulk edit', () => {
 
   it('cannot write the application\'s own meta namespace', async () => {
     addPost('b8');
-    const r = await post('/posts/bulk-edit', { ids: ['b8'], changes: { meta: { _members_only: '1' } } }, asEditor);
+    const r = await post('/posts/bulk-edit', { ids: ['b8'], changes: { meta: { _expiry_at: '2030-01-01' } } }, asEditor);
     const body = await r.json();
     expect(body.results[0]).toMatchObject({ status: 'error', reason: 'invalid-meta' });
     expect(body.updated).toBe(0);
-    expect(db.prepare("SELECT COUNT(*) as c FROM PostMeta WHERE postId = 'b8' AND key = '_members_only'").get()).toEqual({ c: 0 });
+    expect(db.prepare("SELECT COUNT(*) as c FROM PostMeta WHERE postId = 'b8' AND key = '_expiry_at'").get()).toEqual({ c: 0 });
   });
 
   it('sets one meta key without tripping a required field on the same type', async () => {

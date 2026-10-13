@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import db, { cuid } from '../utils/db';
+import { logger } from '../utils/logger';
 import { authenticate, AuthRequest } from '../middleware/auth';
 
 // Saved views: a named filter set for the content list ("my drafts", "site B
@@ -12,6 +13,10 @@ import { authenticate, AuthRequest } from '../middleware/auth';
 // the list endpoint's normal validation again (siteScopeForFilter re-checks the
 // caller's site assignments), so a view naming a site the caller cannot see is
 // refused there rather than widening anything here.
+
+// Anything unexpected is logged, never echoed: the response is text we wrote.
+const GENERIC_ERROR = '操作失败，请稍后重试';
+
 const router = Router();
 
 const FILTER_KEYS = ['status', 'type', 'siteId', 'search', 'sortBy', 'sortDir'] as const;
@@ -51,12 +56,16 @@ router.get('/', authenticate, (req: AuthRequest, res: Response) => {
     const rows = db.prepare('SELECT * FROM SavedView WHERE userId = ? OR (shared = 1 AND role = ?) ORDER BY name ASC')
       .all(req.user!.userId, req.user!.role) as any[];
     res.json({ views: rows.map(r => shape(r, req.user!.userId)) });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { logger.warn({ err }, 'saved view request failed'); res.status(500).json({ error: GENERIC_ERROR }); }
 });
 
 router.post('/', authenticate, (req: AuthRequest, res: Response) => {
   try {
     const data = viewSchema.parse(req.body);
+    // Bounded per user: GET returns the whole list (no paging), so an unbounded
+    // pile would be paid for on every open of the content list.
+    const owned = (db.prepare('SELECT COUNT(*) as c FROM SavedView WHERE userId = ?').get(req.user!.userId) as any)?.c || 0;
+    if (owned >= 50) { res.status(400).json({ error: '保存的视图过多（上限 50 个），请先删除一些' }); return; }
     const now = new Date().toISOString();
     const id = cuid();
     db.prepare('INSERT INTO SavedView (id, userId, role, name, siteId, filters, shared, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)')
@@ -65,7 +74,7 @@ router.post('/', authenticate, (req: AuthRequest, res: Response) => {
     res.status(201).json({ view: shape(row, req.user!.userId) });
   } catch (err: any) {
     if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; }
-    res.status(500).json({ error: err.message });
+    logger.warn({ err }, 'saved view request failed'); res.status(500).json({ error: GENERIC_ERROR });
   }
 });
 
@@ -89,7 +98,7 @@ router.put('/:id', authenticate, (req: AuthRequest, res: Response) => {
     res.json({ view: shape(db.prepare('SELECT * FROM SavedView WHERE id = ?').get(req.params.id), req.user!.userId) });
   } catch (err: any) {
     if (err instanceof z.ZodError) { res.status(400).json({ error: err.errors }); return; }
-    res.status(500).json({ error: err.message });
+    logger.warn({ err }, 'saved view request failed'); res.status(500).json({ error: GENERIC_ERROR });
   }
 });
 
@@ -100,7 +109,7 @@ router.delete('/:id', authenticate, (req: AuthRequest, res: Response) => {
     if (existing.userId !== req.user!.userId && req.user!.role !== 'admin') { res.status(403).json({ error: '无权删除该视图' }); return; }
     db.prepare('DELETE FROM SavedView WHERE id = ?').run(req.params.id);
     res.json({ ok: true });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { logger.warn({ err }, 'saved view request failed'); res.status(500).json({ error: GENERIC_ERROR }); }
 });
 
 export default router;

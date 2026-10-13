@@ -57,6 +57,9 @@ export default function AISettings() {
   // but the only way to read it was the raw endpoint.
   const [audit, setAudit] = useState<any[]>([]);
   const [allowUnattendedRisky, setAllowUnattendedRisky] = useState(false);
+  // Semantic retrieval is off until a model is named; the field is the switch.
+  const [embeddingModel, setEmbeddingModel] = useState('');
+  const [embeddingProvider, setEmbeddingProvider] = useState('');
 
   useEffect(() => {
     api.get('/ai/settings').then(r => {
@@ -67,6 +70,8 @@ export default function AISettings() {
       setToolPermissions(r.data.toolPermissions || {});
       setRoles(r.data.roles || []);
       setAllowUnattendedRisky(!!r.data.allowUnattendedRisky);
+      setEmbeddingModel(String(r.data.embeddingModel || ''));
+      setEmbeddingProvider(String(r.data.embeddingProvider || ''));
       api.get('/ai/usage').then(r => setUsage(r.data)).catch(() => {});
       api.get('/ai/memories').then(r => setMemories(r.data.memories || [])).catch(() => {});
       setUsageLimit(r.data?.usageLimit || '');
@@ -375,6 +380,37 @@ export default function AISettings() {
           className: 'mt-0.5 rounded border-gray-300 text-primary-600',
         }),
         React.createElement('span', { className: 'text-sm text-gray-700 dark:text-gray-200' }, t('allow unattended high-risk actions', getLang())))
+    ),
+
+    // Semantic retrieval. Off by default: leaving the model blank keeps keyword
+    // search and category-based related posts, which is what an install without
+    // an embeddings-capable provider should have.
+    React.createElement('div', { className: 'card p-6 mt-6' },
+      React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-2 uppercase tracking-wider' }, t('semantic retrieval', getLang())),
+      React.createElement('p', { className: 'text-xs text-gray-400 mb-3' }, t('semantic retrieval hint', getLang())),
+      React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3' },
+        React.createElement('input', {
+          value: embeddingModel,
+          onChange: (e: React.ChangeEvent<HTMLInputElement>) => setEmbeddingModel(e.target.value),
+          onBlur: async () => {
+            try { await api.put('/ai/settings', { embeddingModel }); toast.toast(t('saved', getLang())); }
+            catch (err: any) { toast.toast(err.response?.data?.error || t('save failed', getLang()), 'error'); }
+          },
+          placeholder: t('embedding model placeholder', getLang()),
+          className: 'input-field text-sm',
+        }),
+        React.createElement('select', {
+          value: embeddingProvider,
+          onChange: async (e: React.ChangeEvent<HTMLSelectElement>) => {
+            const v = e.target.value;
+            setEmbeddingProvider(v);
+            try { await api.put('/ai/settings', { embeddingProvider: v }); toast.toast(t('saved', getLang())); }
+            catch (err: any) { toast.toast(err.response?.data?.error || t('save failed', getLang()), 'error'); }
+          },
+          className: 'input-field text-sm',
+        },
+          React.createElement('option', { value: '' }, t('default provider', getLang())),
+          providers.map((p: any) => React.createElement('option', { key: p.id, value: p.id }, p.name))))
     )
   );
 }

@@ -1083,6 +1083,36 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
       db.exec('CREATE INDEX IF NOT EXISTS idx_fieldgroup_type ON FieldGroup (typeSlug)');
     },
   },
+  {
+    version: 30,
+    name: 'post-embeddings',
+    up: () => {
+      // One vector per post, for semantic related-posts and search. The vector is
+      // base64 of a Float32Array rather than a BLOB: the same column works on
+      // SQLite, MySQL and Postgres, and nothing indexes it (the comparison is a
+      // scan in utils/embeddings.ts).
+      db.exec(`CREATE TABLE IF NOT EXISTS PostEmbedding (
+        postId TEXT PRIMARY KEY,
+        id TEXT NOT NULL,
+        model TEXT NOT NULL DEFAULT '',
+        dims INTEGER NOT NULL DEFAULT 0,
+        vector TEXT NOT NULL,
+        hash TEXT NOT NULL DEFAULT '',
+        createdAt TEXT NOT NULL
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_postembedding_model ON PostEmbedding (model)');
+    },
+  },
+  {
+    version: 29,
+    name: 'drop-fieldgroup-site',
+    up: () => {
+      // FieldGroup.siteId was never read: definitions apply to a type install-wide,
+      // and the API accepted a site id that then had no effect. A stored value that
+      // changes nothing is worse than no column — it reads as a promise.
+      dropColumn('FieldGroup', 'siteId');
+    },
+  },
 ];
 
 function columnExists(table: string, column: string): boolean {

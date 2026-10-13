@@ -18,8 +18,16 @@ export function writePostMeta(postId: string, meta: Record<string, unknown>): vo
   for (const [key, raw] of Object.entries(meta)) {
     const value = String(raw ?? '');
     if (value === '') { db.prepare('DELETE FROM PostMeta WHERE postId = ? AND key = ?').run(postId, key); continue; }
-    const stored = key === '_visual_css' ? sanitizeCssText(value) : normalizeSeoField(key, value);
     db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?) ON CONFLICT(postId, key) DO UPDATE SET value = excluded.value')
-      .run(cuid(), postId, key, stored);
+      .run(cuid(), postId, key, normalizeMetaValue(key, value));
   }
+}
+
+// The one place a value is made safe for its key. Every writer goes through it,
+// including the import path: a restore is a second writer, and skipping this
+// there meant a tampered file could plant an unsanitized `_visual_css` (which is
+// injected into a <style> on the public site) or an `_seo_*` value past its cap.
+export function normalizeMetaValue(key: string, value: string): string {
+  if (key === '_visual_css') return sanitizeCssText(value);
+  return normalizeSeoField(key, value);
 }

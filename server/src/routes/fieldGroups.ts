@@ -1,11 +1,16 @@
 import { Router, Response } from 'express';
 import db, { cuid } from '../utils/db';
+import { logger } from '../utils/logger';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { loadFieldGroups, normalizeFieldDefs, fieldsForType, FieldDef } from '../utils/fieldSchema';
 import { allPostTypeSlugs } from './customPostTypes';
 
 // Field groups: the custom fields attached to a content type. The definition
 // lives here; the values live in PostMeta, keyed by the field's key.
+
+// Anything unexpected is logged, never echoed: the response is text we wrote.
+const GENERIC_ERROR = '操作失败，请稍后重试';
+
 const router = Router();
 
 // Field keys share one namespace per type (they are PostMeta keys), so two groups
@@ -14,7 +19,7 @@ function keyTakenByAnotherGroup(typeSlug: string, key: string, exceptId: string 
   return loadFieldGroups().some(g => g.typeSlug === typeSlug && g.id !== exceptId && g.fields.some(f => f.key === key));
 }
 
-function parseGroup(body: any, existingId: string | null): { ok: true; value: { typeSlug: string; name: string; fields: FieldDef[]; menuOrder: number; siteId: string | null } } | { ok: false; error: string } {
+function parseGroup(body: any, existingId: string | null): { ok: true; value: { typeSlug: string; name: string; fields: FieldDef[]; menuOrder: number } } | { ok: false; error: string } {
   const typeSlug = String(body?.typeSlug || '').trim();
   if (!allPostTypeSlugs().includes(typeSlug)) return { ok: false, error: '未知的内容类型: ' + typeSlug };
   const name = String(body?.name || '').trim().slice(0, 60);
@@ -31,7 +36,6 @@ function parseGroup(body: any, existingId: string | null): { ok: true; value: { 
       name,
       fields: parsed.fields,
       menuOrder: Number.isFinite(Number(body?.menuOrder)) ? Number(body.menuOrder) : 0,
-      siteId: body?.siteId ? String(body.siteId) : null,
     },
   };
 }
@@ -41,14 +45,14 @@ function parseGroup(body: any, existingId: string | null): { ok: true; value: { 
 router.get('/', authenticate, requireCap('edit_posts'), (_req: AuthRequest, res: Response) => {
   try {
     res.json({ groups: loadFieldGroups() });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { logger.warn({ err }, 'field group request failed'); res.status(500).json({ error: GENERIC_ERROR }); }
 });
 
 // The flat field list for one type, in display order — what the editor renders.
 router.get('/for/:type', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
   try {
     res.json({ typeSlug: req.params.type, fields: fieldsForType(req.params.type) });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { logger.warn({ err }, 'field group request failed'); res.status(500).json({ error: GENERIC_ERROR }); }
 });
 
 router.post('/', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
@@ -57,10 +61,12 @@ router.post('/', authenticate, requireCap('manage_system'), (req: AuthRequest, r
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
     const now = new Date().toISOString();
     const id = cuid();
-    db.prepare('INSERT INTO FieldGroup (id, typeSlug, name, fields, menuOrder, siteId, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
-      .run(id, parsed.value.typeSlug, parsed.value.name, JSON.stringify(parsed.value.fields), parsed.value.menuOrder, parsed.value.siteId, now, now);
-    res.status(201).json({ group: loadFieldGroups().find(g => g.id === id) });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+    db.prepare('INSERT INTO FieldGroup (id, typeSlug, name, fields, menuOrder, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, ?, ?)')
+      .run(id, parsed.value.typeSlug, parsed.value.name, JSON.stringify(parsed.value.fields), parsed.value.menuOrder, now, now);
+    // Answered from what was just written, not re-read: a read that failed here
+    // used to report 500 for a group that had already been created.
+    res.status(201).json({ group: { id, ...parsed.value, createdAt: now, updatedAt: now } });
+  } catch (err: any) { logger.warn({ err }, 'field group request failed'); res.status(500).json({ error: GENERIC_ERROR }); }
 });
 
 router.put('/:id', authenticate, requireCap('manage_system'), (req: AuthRequest, res: Response) => {
@@ -69,10 +75,13 @@ router.put('/:id', authenticate, requireCap('manage_system'), (req: AuthRequest,
     if (!existing) { res.status(404).json({ error: '字段分组不存在' }); return; }
     const parsed = parseGroup(req.body, req.params.id);
     if (!parsed.ok) { res.status(400).json({ error: parsed.error }); return; }
-    db.prepare('UPDATE FieldGroup SET typeSlug = ?, name = ?, fields = ?, menuOrder = ?, siteId = ?, updatedAt = ? WHERE id = ?')
-      .run(parsed.value.typeSlug, parsed.value.name, JSON.stringify(parsed.value.fields), parsed.value.menuOrder, parsed.value.siteId, new Date().toISOString(), req.params.id);
-    res.json({ group: loadFieldGroups().find(g => g.id === req.params.id) });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+    const now = new Date().toISOString();
+    db.prepare('UPDATE FieldGroup SET typeSlug = ?, name = ?, fields = ?, menuOrder = ?, updatedAt = ? WHERE id = ?')
+      .run(parsed.value.typeSlug, parsed.value.name, JSON.stringify(parsed.value.fields), parsed.value.menuOrder, now, req.params.id);
+    // Same reason as create: the write is committed, so the response must not
+    // depend on a second read succeeding.
+    res.json({ group: { id: req.params.id, ...parsed.value, updatedAt: now } });
+  } catch (err: any) { logger.warn({ err }, 'field group request failed'); res.status(500).json({ error: GENERIC_ERROR }); }
 });
 
 // Deleting a group removes the definitions, never the values: the PostMeta rows
@@ -83,7 +92,7 @@ router.delete('/:id', authenticate, requireCap('manage_system'), (req: AuthReque
     const r = db.prepare('DELETE FROM FieldGroup WHERE id = ?').run(req.params.id);
     if (!r.changes) { res.status(404).json({ error: '字段分组不存在' }); return; }
     res.json({ success: true });
-  } catch (err: any) { res.status(500).json({ error: err.message }); }
+  } catch (err: any) { logger.warn({ err }, 'field group request failed'); res.status(500).json({ error: GENERIC_ERROR }); }
 });
 
 export default router;

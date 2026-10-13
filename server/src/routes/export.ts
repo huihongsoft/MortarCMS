@@ -4,6 +4,8 @@ import bcrypt from 'bcryptjs';
 import db, { withTransaction } from '../utils/db';
 import { authenticate, requireCap, AuthRequest } from '../middleware/auth';
 import { sanitizeHtml } from '../utils/sanitize';
+import { normalizeFieldDefs } from '../utils/fieldSchema';
+import { normalizeMetaValue } from '../utils/postMeta';
 
 const router = Router();
 
@@ -50,6 +52,11 @@ router.get('/export', authenticate, requireCap('export'), (_req: AuthRequest, re
     data.menus = db.prepare("SELECT * FROM Menu").all();
     data.comments = db.prepare("SELECT * FROM Comment").all();
     data.media = db.prepare("SELECT * FROM Media").all();
+    // Field definitions and the values that go with them. `SELECT * FROM Post`
+    // carries no PostMeta, so a restore used to bring every post back with its
+    // custom fields silently missing.
+    data.fieldGroups = db.prepare("SELECT * FROM FieldGroup").all();
+    data.postMeta = db.prepare("SELECT id, postId, key, value FROM PostMeta").all();
     // Navigation-site link model (links, their categories, post associations, friend links)
     data.links = db.prepare("SELECT * FROM Link").all();
     data.linkCategories = db.prepare("SELECT * FROM LinkCategory").all();
@@ -66,7 +73,7 @@ router.post('/import/preview', authenticate, requireCap('import'), (req: AuthReq
   try {
     const data = req.body || {};
     const counts: Record<string, number> = {};
-    for (const key of ['users', 'categories', 'tags', 'posts', 'menus', 'comments', 'media', 'links', 'linkCategories', 'linkPosts', 'friendLinks']) {
+    for (const key of ['users', 'categories', 'tags', 'posts', 'menus', 'comments', 'media', 'links', 'linkCategories', 'linkPosts', 'friendLinks', 'fieldGroups', 'postMeta']) {
       counts[key] = Array.isArray(data[key]) ? data[key].length : 0;
     }
     // Detect potential slug conflicts
@@ -112,6 +119,48 @@ router.post('/import', authenticate, requireCap('import'), (req: AuthRequest, re
     }
     if (data.comments) for (const cm of data.comments) {
       try { db.prepare('INSERT OR IGNORE INTO Comment (id, content, author, email, website, postId, parentId, status, createdAt, siteId) VALUES (?,?,?,?,?,?,?,?,?,?)').run(cm.id||cuid_import(), sanitizeHtml(cm.content||''), cm.author||'Anonymous', cm.email||'', cm.website||'', cm.postId, cm.parentId||null, cm.status||'pending', cm.createdAt||new Date().toISOString(), cm.siteId||null); count++; } catch {}
+    }
+    if (data.fieldGroups) for (const g of data.fieldGroups) {
+      try {
+        // Only the shape is trusted: a tampered file must not define a field
+        // key in the application's own `_` namespace.
+        const parsed = normalizeFieldDefs((() => { try { return JSON.parse(g.fields || '[]'); } catch { return []; } })());
+        if (!parsed.ok) continue;
+        // The API refuses two groups of a type defining the same key; an import
+        // must not be the way around that, or the editor renders the field twice
+        // and the schema endpoint lists it twice.
+        const typeSlug = String(g.typeSlug || 'post');
+        const existing = db.prepare('SELECT fields FROM FieldGroup WHERE typeSlug = ?').all(typeSlug) as any[];
+        const taken = new Set<string>();
+        for (const row of existing) {
+          try { for (const f of JSON.parse(row.fields || '[]')) taken.add(String(f?.key)); } catch { /* ignore */ }
+        }
+        if (parsed.fields.some(f => taken.has(f.key))) continue;
+        db.prepare('INSERT OR IGNORE INTO FieldGroup (id, typeSlug, name, fields, menuOrder, createdAt, updatedAt) VALUES (?,?,?,?,?,?,?)')
+          .run(g.id || cuid_import(), typeSlug, String(g.name || ''), JSON.stringify(parsed.fields), g.menuOrder || 0, g.createdAt || new Date().toISOString(), g.updatedAt || new Date().toISOString());
+        count++;
+      } catch {}
+    }
+    if (data.postMeta) for (const pm of data.postMeta) {
+      try {
+        const key = String(pm.key || '');
+        if (!pm.postId || !key || key.length > 100) continue;
+        // An empty value means "cleared" on the write path (writePostMeta deletes
+        // the row); storing the empty string instead would leave a junk row.
+        if (String(pm.value ?? '') === '') continue;
+        // The `_` namespace is restored as-is: the flags in it (`_members_only`,
+        // a plugin's `_expiry_at`) are part of the content, and dropping them
+        // would silently re-publish members-only posts and un-schedule expiries.
+        // Import already needs the `import` capability, and none of those keys
+        // carries a credential — the secret Settings are excluded above.
+        //
+        // The VALUE is normalised like any other write: a tampered file must not
+        // be able to plant CSS that the public site injects, or an SEO value past
+        // its cap. Same helper the request path uses, so the two cannot drift.
+        db.prepare('INSERT OR IGNORE INTO PostMeta (id, postId, key, value) VALUES (?,?,?,?)')
+          .run(pm.id || cuid_import(), pm.postId, key, normalizeMetaValue(key, String(pm.value ?? '').slice(0, 200_000)));
+        count++;
+      } catch {}
     }
     if (data.media) for (const md of data.media) {
       try {

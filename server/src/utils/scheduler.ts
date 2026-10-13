@@ -9,6 +9,7 @@ import { postUrl } from './slug';
 import { createBackupArchive, pruneBackups } from './backup';
 import { sharedStore } from './sharedStore';
 import { logger } from './logger';
+import { embedPost, embeddingsEnabled } from './embeddings';
 import { pruneRead } from './notifications';
 
 /**
@@ -437,15 +438,39 @@ export function registerBuiltinTasks(): void {
         const lastRaw = (db.prepare("SELECT value FROM Setting WHERE key = 'newsletter_last_sent_at'").get() as any)?.value || '';
         const lastSent = lastRaw ? new Date(lastRaw).getTime() : 0;
         const nowMs = Date.now();
+        // Two different questions, two different values. The throttle asks "how
+        // long since we mailed", which is a property of the CLOCK; the window
+        // asks "which posts have we already carried", which is a property of the
+        // DATA. One setting cannot answer both: an old newest-post made the
+        // weekly check read "sent more than 7 days ago" on a quiet site, turning
+        // the weekly digest into a daily one.
+        const cursorRaw = (db.prepare("SELECT value FROM Setting WHERE key = 'newsletter_digest_cursor'").get() as any)?.value || '';
         if (freq === 'weekly' && lastSent && nowMs - lastSent < 7 * 86_400_000) return { code: 'not due yet' };
-        // The window is "since the last digest", and the first run has no cursor:
-        // it covers the last week rather than everything ever published, so a site
-        // whose owner clicks "run now" does not mail its whole archive. The cursor
-        // is written only *after* a send, so the guard that used to return when the
-        // cursor was absent meant nothing ever set it — the digest could not send
-        // at all, on any install, while the run still reported success.
-        const since = new Date(lastSent || nowMs - 7 * 86_400_000).toISOString();
-        const posts = db.prepare("SELECT id, title, slug, excerpt FROM Post WHERE type = 'post' AND status = 'published' AND publishedAt > ? ORDER BY publishedAt DESC LIMIT 10").all(since) as any[];
+        // The cursor carries the post id as well as the timestamp: two posts can
+        // share a publishedAt (an import, a bulk publish), and a timestamp-only
+        // cursor would let the older of the pair hide the newer one forever.
+        // Values written before this are a bare timestamp and still work.
+        const [cursorTs, cursorId] = cursorRaw.includes('|') ? cursorRaw.split('|') : [cursorRaw, ''];
+        // The first run has neither value: it covers the last week rather than
+        // everything ever published, so a site whose owner clicks "run now" does
+        // not mail its whole archive. `lastSent` is the pre-cursor install's only
+        // record of where it got to, so it is the fallback.
+        const since = new Date(cursorTs ? new Date(cursorTs).getTime() : (lastSent || nowMs - 7 * 86_400_000)).toISOString();
+        const nowIso = new Date(nowMs).toISOString();
+        // Oldest first, so the cursor can advance to the newest post carried and
+        // the next window starts exactly where this one stopped: a send-time
+        // cursor lost whatever was published between this query and the write,
+        // and with the LIMIT it also dropped everything past the tenth post.
+        //
+        // Bounded above by `now`: a post can be status=published while carrying a
+        // future date (the public routes hide it until then), and mailing a post
+        // nobody can read yet would also shove the cursor into the future and
+        // suppress every later digest.
+        const selectFrom = "SELECT id, title, slug, excerpt, publishedAt FROM Post WHERE type = 'post' AND status = 'published' AND ";
+        const tail = "ORDER BY publishedAt ASC, id ASC LIMIT 10";
+        const posts = (cursorId
+          ? db.prepare(selectFrom + "(publishedAt > ? OR (publishedAt = ? AND id > ?)) AND publishedAt <= ? " + tail).all(since, since, cursorId, nowIso)
+          : db.prepare(selectFrom + "publishedAt > ? AND publishedAt <= ? " + tail).all(since, nowIso)) as any[];
         if (posts.length === 0) return { code: 'no new posts to send' };
         const subs = db.prepare("SELECT id, email, confirmToken FROM Subscriber WHERE status = 'subscribed' AND confirmed = 1 AND email != ''").all() as any[];
         if (subs.length === 0) return { code: 'no confirmed subscribers' };
@@ -455,7 +480,10 @@ export function registerBuiltinTasks(): void {
           url: (db.prepare("SELECT value FROM Setting WHERE key = 'site_url'").get() as any)?.value || '',
         };
         const base = info.url || 'http://localhost:3001';
-        const items = posts.map(p =>
+        // Read newest-first: the query is oldest-first only so the cursor can
+        // advance cleanly (see above), and a digest that opens with the oldest
+        // item of a backlog reads as stale news.
+        const items = [...posts].reverse().map(p =>
           '<div style="margin-bottom:16px;"><a href="' + base + postUrl(p.slug) + '" style="font-size:16px;font-weight:600;color:#2563eb;text-decoration:none;">' + String(p.title).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</a>' +
           (p.excerpt ? '<p style="margin:4px 0 0;font-size:13px;color:#4b5563;">' + String(p.excerpt).substring(0, 200).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>' : '') + '</div>').join('');
         let sent = 0;
@@ -483,7 +511,13 @@ export function registerBuiltinTasks(): void {
           logger.warn({ attempted: subs.length, failed }, 'newsletter digest sent nothing; cursor left unset');
           return { code: 'email delivery failed' };
         }
-        db.prepare("INSERT INTO Setting (id, key, value) VALUES ('newsletter_last_sent_at', 'newsletter_last_sent_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(new Date(nowMs).toISOString());
+        // Advance both: the window to the newest post carried (with its id, so a
+        // same-timestamp neighbour is not skipped), the throttle to now.
+        const lastPost = posts[posts.length - 1];
+        const cursor = String(lastPost.publishedAt || nowIso) + '|' + String(lastPost.id);
+        const setSetting = db.prepare("INSERT INTO Setting (id, key, value) VALUES (?, ?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value");
+        setSetting.run('newsletter_digest_cursor', 'newsletter_digest_cursor', cursor);
+        setSetting.run('newsletter_last_sent_at', 'newsletter_last_sent_at', new Date(nowMs).toISOString());
         // Served by the cached /api/settings.
         try { purgeAllCaches(); } catch { /* cache maintenance must not fail the task */ }
         logger.info({ count: sent, failed }, 'newsletter digest sent');
@@ -492,6 +526,47 @@ export function registerBuiltinTasks(): void {
         // Swallowed before, which is how a digest that never sent anything looked
         // like a task that ran fine.
         logger.warn({ err: err?.message }, 'newsletter digest failed');
+      }
+    },
+  });
+
+  // Semantic index maintenance. Embedding a post costs a provider call, so this
+  // is bounded per run: a site with a large archive drains over several ticks
+  // instead of spending a burst, and unchanged posts cost one hash comparison
+  // (embedPost skips them before calling out).
+  registerTask({
+    id: 'embed_posts',
+    name: 'Content embeddings',
+    desc: 'Keeps the semantic index current for published posts (needs an embedding model in AI settings)',
+    intervalMs: 3_600_000,
+    fn: async () => {
+      try {
+        if (!embeddingsEnabled()) return { code: 'embeddings not configured' };
+        const BATCH = 20;
+        // Stale rows first (a post with no embedding at all is staler than one
+        // whose text merely changed), then most recently edited.
+        const candidates = db.prepare(
+          "SELECT p.id, p.title, p.excerpt, p.content, e.postId AS embedded" +
+          " FROM Post p LEFT JOIN PostEmbedding e ON e.postId = p.id" +
+          " WHERE p.status = 'published' AND p.type = 'post'" +
+          " ORDER BY (e.postId IS NULL) DESC, p.updatedAt DESC LIMIT 200"
+        ).all() as any[];
+        let embedded = 0, failed = 0;
+        for (const c of candidates) {
+          if (embedded >= BATCH) break;
+          try { if (await embedPost(c.id)) embedded++; } catch { failed++; }
+        }
+        // Embeddings of deleted posts are never read again but would keep taking
+        // part in every comparison, so drop them here rather than on each delete
+        // path.
+        let pruned = 0;
+        try {
+          pruned = db.prepare('DELETE FROM PostEmbedding WHERE postId NOT IN (SELECT id FROM Post)').run().changes;
+        } catch { /* best effort */ }
+        if (!embedded && !failed && !pruned) return { code: 'nothing to embed' };
+        return { code: 'embedded posts', count: embedded, failed, pruned } as any;
+      } catch (err: any) {
+        logger.warn({ err: err?.message }, 'embedding pass failed');
       }
     },
   });

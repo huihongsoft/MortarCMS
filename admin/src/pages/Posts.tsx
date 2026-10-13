@@ -5,7 +5,7 @@ import { Plus, Edit2, Trash2, Eye, Pin, Trash, FileText, Languages, Search, X } 
 import EmptyState from '../components/EmptyState';
 import { useToast } from '../lib/toast';
 import api from '../lib/api';
-import { t, getLang } from '../lib/i18n';
+import { t, getLang, serverMessage } from '../lib/i18n';
 import Select from '../components/Select';
 import { dialog } from '../lib/dialog';
 import { useAuth } from '../lib/auth';
@@ -119,7 +119,7 @@ export default function Posts() {
       const r = await api.post('/ai/batch-translate', { ids: Array.from(selected), language: batchLang });
       setBatchResults(r.data.results || []);
       setSelected(new Set());
-    } catch (e: any) { dialog.alert(e.response?.data?.error || t('save failed', getLang())); }
+    } catch (e: any) { dialog.alert(serverMessage(e.response?.data?.error || '', getLang()) || t('save failed', getLang())); }
     finally { setBatchRunning(false); }
   }
 
@@ -155,7 +155,7 @@ export default function Posts() {
       await api.post('/posts/' + id + '/review', { action, reason });
       toast.toast(action === 'approve' ? t('post approved', getLang()) : t('post rejected', getLang()));
       fetchPosts();
-    } catch (e: any) { toast.toast(e?.response?.data?.error || String(e), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e?.response?.data?.error || '', getLang()) || t('request failed', getLang()), 'error'); }
   }
 
   useEffect(() => { api.get('/saved-views').then(r => setViews(r.data.views || [])).catch(() => {}); }, []);
@@ -186,7 +186,7 @@ export default function Posts() {
       setViews(v => [...v, r.data.view].sort((a: any, b: any) => a.name.localeCompare(b.name)));
       setActiveView(r.data.view.id);
       toast.toast(t('view saved', getLang()));
-    } catch (e: any) { toast.toast(e?.response?.data?.error || String(e), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e?.response?.data?.error || '', getLang()) || t('request failed', getLang()), 'error'); }
   }
 
   async function deleteView() {
@@ -196,7 +196,7 @@ export default function Posts() {
       await api.delete('/saved-views/' + activeView);
       setViews(v => v.filter((x: any) => x.id !== activeView));
       setActiveView('');
-    } catch (e: any) { toast.toast(e?.response?.data?.error || String(e), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e?.response?.data?.error || '', getLang()) || t('request failed', getLang()), 'error'); }
   }
 
   // dryRun reports what would change without writing, so a mistyped batch is
@@ -213,7 +213,7 @@ export default function Posts() {
       if (dryRun) { setBulkPreview(r.data.results || []); return; }
       toast.toast(r.data.updated + ' ' + t('posts updated', getLang()) + skipNote(r.data?.skipped));
       setBulkPreview(null); setBulkOpen(false); setSelected(new Set()); fetchPosts();
-    } catch (e: any) { toast.toast(e?.response?.data?.error || String(e), 'error'); }
+    } catch (e: any) { toast.toast(serverMessage(e?.response?.data?.error || '', getLang()) || t('request failed', getLang()), 'error'); }
   }
 
 

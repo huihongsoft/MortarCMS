@@ -7,8 +7,13 @@ import { SiteRequest } from '../middleware/site';
 import { renderShortcode, listShortcodes } from '../utils/shortcodes';
 import { stripDangerousHtml, sanitizeCssText } from '../utils/sanitize';
 import { clampResolvedSite } from '../utils/userSites';
+import { mayTouchPost } from '../utils/postAccess';
+import { buildFields } from '../utils/fieldSchema';
 
-const CMS_TYPES = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud', 'link-list'];
+// `field` is listed so the block can be inserted and previewed like the rest.
+// Its preview renders empty here (no post context), which leaves the canvas
+// placeholder in place instead of showing a value that is not the post's.
+const CMS_TYPES = ['post-list', 'categories', 'comments', 'search', 'archive', 'tag-cloud', 'link-list', 'field'];
 
 const router = Router();
 
@@ -47,7 +52,22 @@ router.get('/preview-cms/:type', authenticate, requireCap('edit_posts'), (req: A
     // Site-scoped preview: same visibility rules as the rendered page
     // Preview renders the same shortcodes the public page will, so it must use a
     // site this editor may read — the Host header is not authority.
-    const html = renderShortcode(type, attrs, { siteId: clampResolvedSite(req, req.user!.userId, req.user!.role) });
+    const ctx: any = { siteId: clampResolvedSite(req, req.user!.userId, req.user!.role) };
+    // A field block is only meaningful with the post it belongs to, so the
+    // editor sends its id. The post is resolved through the same access check
+    // the single-row routes use (utils/postAccess) — an id in a query string is
+    // not authority to read a post.
+    const postId = typeof req.query.postId === 'string' ? req.query.postId : '';
+    delete attrs.postId;
+    if (type === 'field' && postId) {
+      const row = db.prepare('SELECT * FROM Post WHERE id = ?').get(postId) as any;
+      if (mayTouchPost(req.user!, row)) {
+        const meta: Record<string, string> = {};
+        for (const m of db.prepare('SELECT key, value FROM PostMeta WHERE postId = ?').all(postId) as any[]) meta[m.key] = m.value;
+        ctx.post = { ...row, meta, fields: buildFields(row.type || 'post', meta) };
+      }
+    }
+    const html = renderShortcode(type, attrs, ctx);
     res.json({ html });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });

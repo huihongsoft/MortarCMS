@@ -3,7 +3,8 @@ import fs from 'fs';
 import express from 'express';
 import db, { initDB } from '../src/utils/db';
 import postsRouter from '../src/routes/posts';
-import { signToken, signPreviewToken } from '../src/utils/jwt';
+import { signToken, signPreviewToken, verifyPreviewToken } from '../src/utils/jwt';
+import { setUserSites } from '../src/utils/userSites';
 
 // A preview link shows ONE unpublished post on the real theme to a reviewer who
 // has no account. The token is the whole authority, so it has to be narrow: one
@@ -58,6 +59,34 @@ describe('minting a preview link', () => {
     expect(url).toContain('/post/mint-one?preview=');
   });
 
+  it('builds the link from the configured site URL, not from the caller\'s Host', async () => {
+    // A link carries a capability: aiming it at a host the caller chose is how
+    // the token ends up in someone else's logs.
+    db.prepare("INSERT OR REPLACE INTO Setting (id, key, value) VALUES ('site_url','site_url','https://blog.example.com')").run();
+    try {
+      addPost('m9', 'mint-nine', { authorId: 'pv-au' });
+      const { url } = await (await mint('m9', asAuthor)).json();
+      expect(url.startsWith('https://blog.example.com/post/mint-nine?preview=')).toBe(true);
+      expect(url).not.toContain('127.0.0.1');
+    } finally {
+      db.prepare("DELETE FROM Setting WHERE key = 'site_url'").run();
+    }
+  });
+
+  it('stamps the token with the row\'s session version, not the request\'s', async () => {
+    // An app-password session carries no `v`; reading it from the session would
+    // mint a token that "log out everywhere" could never revoke.
+    db.prepare("UPDATE User SET tokenVersion = 3 WHERE id = 'pv-au'").run();
+    try {
+      addPost('m10', 'mint-ten', { authorId: 'pv-au' });
+      const { url } = await (await mint('m10', { authorization: 'Bearer ' + signToken({ userId: 'pv-au', role: 'author' }), 'content-type': 'application/json' })).json();
+      const raw = decodeURIComponent(String(url).split('?preview=')[1]);
+      expect(verifyPreviewToken(raw)?.v).toBe(3);
+    } finally {
+      db.prepare("UPDATE User SET tokenVersion = 0 WHERE id = 'pv-au'").run();
+    }
+  });
+
   it('refuses a post the caller may not edit', async () => {
     addPost('m2', 'mint-two', { authorId: 'pv-au' });
     const r = await mint('m2', asAuthor2);
@@ -68,6 +97,13 @@ describe('minting a preview link', () => {
     addPost('m3', 'mint-three', { authorId: 'pv-au', status: 'trash' });
     const r = await mint('m3', asAuthor);
     expect(r.status).toBe(400);
+  });
+
+  it('refuses a page: the page route has no preview support', async () => {
+    db.prepare("INSERT INTO Post (id, title, slug, content, status, type, authorId) VALUES ('m-pg','A page','a-page','<p>x</p>','draft','page','pv-au')").run();
+    const r = await mint('m-pg', asAuthor);
+    expect(r.status).toBe(400);
+    expect((await r.json()).error).toContain('页面');
   });
 
   it('requires authentication', async () => {
@@ -140,6 +176,25 @@ describe('the preview token is not a session', () => {
 });
 
 describe('preview stays inside its site', () => {
+  it('dies when the viewer loses their site assignment', async () => {
+    // The role did not change, so a check that only re-read the role would keep
+    // honouring the link. Assignments are the authority for "which sites".
+    db.prepare("INSERT OR REPLACE INTO Site (id, name, slug, domain) VALUES ('site-a','A','s-a','a.test')").run();
+    db.prepare("INSERT OR REPLACE INTO Site (id, name, slug, domain) VALUES ('site-b','B','s-b','b.test')").run();
+    addPost('t2', 'tenant-two', { authorId: 'pv-au', siteId: 'site-a' });
+    const token = previewTokenFor('t2');
+    expect((await open('tenant-two', token, { 'x-site': 'site-a' })).status).toBe(200);
+
+    try {
+      setUserSites('pv-au', ['site-b']);
+      expect((await open('tenant-two', token, { 'x-site': 'site-a' })).status).toBe(404);
+    } finally {
+      // Without this a failure here leaves the assignment in place and takes the
+      // NEXT test down with it.
+      setUserSites('pv-au', []);
+    }
+  });
+
   it('refuses when the host resolves to another site', async () => {
     addPost('t1', 'tenant-one', { authorId: 'pv-au', siteId: 'site-a' });
     const token = previewTokenFor('t1');

@@ -61,6 +61,10 @@ export async function sendTelegramMessage(botToken: string, chatId: string, text
     const r = await fetch('https://api.telegram.org/bot' + botToken + '/sendMessage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
+      // Bounded like every other outbound call here: the reply is sent from a
+      // fire-and-forget block after the ack, so a hung platform API would leave
+      // the promise and its socket pending for the life of the process.
+      signal: AbortSignal.timeout(10_000),
       // Telegram caps a message at 4096 characters; truncating beats a 400 that
       // silently loses the whole answer.
       body: JSON.stringify({ chat_id: chatId, text: text.slice(0, 4000), disable_web_page_preview: true }),
@@ -91,6 +95,7 @@ export async function sendSlackMessage(botToken: string, channel: string, text: 
     const r = await fetch('https://slack.com/api/chat.postMessage', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json; charset=utf-8', Authorization: 'Bearer ' + botToken },
+      signal: AbortSignal.timeout(10_000),
       body: JSON.stringify({ channel, text: text.slice(0, 4000) }),
     });
     const d: any = await r.json().catch(() => ({}));

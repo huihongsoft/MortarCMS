@@ -71,7 +71,12 @@ export function userFacingAiError(err: any, fallback = '操作失败，请稍后
 // A failed provider call: the status is the user's business, the body is not.
 export function providerError(status: number, detail: string): Error {
   logAiDetail('ai provider request failed', detail, { status });
-  return new Error('AI 请求失败 (' + status + ')');
+  const e = new Error('AI 请求失败 (' + status + ')');
+  // The status rides on the error so the fallback chain can tell "this provider
+  // is in trouble" from "our request is wrong". The message is unchanged —
+  // userFacingAiError matches on it.
+  (e as any).status = status;
+  return e;
 }
 
 // ---- AI provider configuration (persisted in the Setting table) ----
@@ -371,6 +376,53 @@ async function fetchWithRetry(url: string, init: RequestInit, timeoutMs = 90000)
     if (!res) throw e;
     return res;
   }
+}
+
+// ---- Provider fallback ----
+//
+// A second configured provider is a spare tyre: when the first fails for a
+// reason ABOUT THE PROVIDER (unreachable, 5xx, quota, rejected key) the same
+// request goes to the next one instead of failing outright. A 4xx that is not
+// 401/403/429 is NOT retried — the payload is wrong, and every provider would
+// reject it the same way.
+
+export function getProviderChain(): AIProvider[] {
+  const enabled = getProviders().filter(p => p.enabled);
+  const def = getDefaultProvider();
+  if (!def) return enabled;
+  return [def, ...enabled.filter(p => p.id !== def.id)];
+}
+
+export function isProviderFailure(err: any): boolean {
+  const status = err?.status;
+  if (typeof status === 'number') return status >= 500 || status === 401 || status === 403 || status === 429;
+  return true; // the fetch itself threw — no response at all
+}
+
+export async function chatCompleteWithFallback(
+  messages: AIMessage[],
+  opts: { tools?: AIToolFunction[]; temperature?: number; maxTokens?: number; onDelta?: (text: string) => void } = {},
+): Promise<{ result: ChatResult; provider: AIProvider }> {
+  const chain = getProviderChain();
+  if (chain.length === 0) throw new Error('尚未配置 AI 服务商');
+  let last: any;
+  for (let i = 0; i < chain.length; i++) {
+    const provider = chain[i];
+    // Once a stream has emitted text the answer is already on the user's screen;
+    // restarting it on another provider would duplicate what they can see.
+    let started = false;
+    const onDelta = opts.onDelta ? (text: string) => { started = true; opts.onDelta!(text); } : undefined;
+    try {
+      const result = await chatComplete(provider, messages, { ...opts, onDelta });
+      if (i > 0) logAiDetail('ai provider fell back', provider.name, { failed: chain[i - 1].name });
+      return { result, provider };
+    } catch (err: any) {
+      last = err;
+      if (started || !isProviderFailure(err) || i === chain.length - 1) throw err;
+      logAiDetail('ai provider failed; trying the next', String(err?.message || err), { provider: provider.name });
+    }
+  }
+  throw last;
 }
 
 // Unified chat completion across providers

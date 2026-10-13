@@ -165,6 +165,34 @@ because it is public.
 
 Every 60s: auto-publishes scheduled posts.
 Every 60s: AI scheduler runs interval/daily/weekly agent tasks.
+Daily: the newsletter digest (see below).
+
+### Newsletter digest
+
+Three settings drive it, and they mean different things on purpose:
+
+| Setting | Meaning |
+|---|---|
+| `newsletter_frequency` | `daily` (default) or `weekly` — the throttle |
+| `newsletter_last_sent_at` | when the last digest was **sent** (drives the weekly throttle) |
+| `newsletter_digest_cursor` | `<publishedAt>\|<id>` of the newest post already carried (the window) |
+
+They are separate because one value cannot answer both questions. The throttle
+asks "how long since we mailed" — a property of the clock; the window asks "which
+posts have we carried" — a property of the data. Deriving the throttle from the
+cursor made a weekly digest mail daily on a quiet site, where the newest post is
+older than a week.
+
+The window is `publishedAt > cursor`, bounded above by `now` so a post dated in
+the future is never mailed (it would also push the cursor forward and suppress
+every later digest). Posts are carried oldest-first so the cursor can advance to
+the newest one carried; the email lists them newest-first. Posts sharing a
+`publishedAt` — what an import or a bulk publish produces — are ordered by id and
+the cursor carries that id, so the older of a pair cannot hide the newer.
+
+The cursor only advances after a successful send: if nothing was delivered (SMTP
+down), the same window is retried instead of those posts falling outside every
+later window.
 
 ## Roles and capabilities
 

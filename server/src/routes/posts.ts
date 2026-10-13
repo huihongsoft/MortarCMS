@@ -17,8 +17,12 @@ import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
 import { applyFilters, doAction } from '../utils/hooks';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
 import { writePostMeta } from '../utils/postMeta';
-import { validateAndCoerceMeta, validateMeta } from '../utils/fieldSchema';
+import { validateAndCoerceMeta, validateMeta, buildFields, stripPrivateMeta, privateFieldKeys, fieldsForType } from '../utils/fieldSchema';
 import { siteScopeForFilter, mayWriteSite, userMayAccessSite, assignedSites } from '../utils/userSites';
+import { mayTouchPost } from '../utils/postAccess';
+import { logger } from '../utils/logger';
+import { nearestPosts, searchByVector, embeddingsEnabled } from '../utils/embeddings';
+import { absoluteSiteUrl } from '../utils/absoluteUrl';
 import { trackView } from '../utils/views';
 import { loadCustomTypes } from './customPostTypes';
 import { renderTemplate, sendEmail } from '../utils/mailer';
@@ -59,6 +63,16 @@ const MEMBERS_ONLY_EXCLUDE = " AND NOT EXISTS (SELECT 1 FROM PostMeta pm WHERE p
 // read protected bodies (the single-post route lets them through), so they keep
 // `content`; everyone else loses it until they unlock the post.
 function publicShape(posts: any[], canBypass: boolean): any[] {
+  // Private keys per content type, resolved at most once per response:
+  // privateFieldKeys reads the FieldGroup table, and asking it per post turned a
+  // 100-post list into 100 extra queries. Empty when the caller bypasses, since
+  // nothing is stripped for them.
+  const privByType = new Map<string, Set<string>>();
+  const privFor = (t: string): Set<string> => {
+    let s = privByType.get(t);
+    if (!s) { s = canBypass ? new Set() : privateFieldKeys(t); privByType.set(t, s); }
+    return s;
+  };
   return (posts || []).map((p: any) => {
     const { password, ...rest } = p;
     if (!canBypass && password) delete rest.content;
@@ -67,6 +81,15 @@ function publicShape(posts: any[], canBypass: boolean): any[] {
     if (rest.author && typeof rest.author === 'object' && !canBypass) {
       const { email: _email, ...author } = rest.author;
       rest.author = author;
+    }
+    if (!canBypass) {
+      // Field values marked private, and the application's own `_` keys (bar the
+      // ones the frontend itself reads), never reach an anonymous caller. Both
+      // views are filtered — the same value lives in `fields` and `meta`, so
+      // hiding it in one would leave it one property away.
+      const priv = privFor(p.type || 'post');
+      if (Array.isArray(rest.fields)) rest.fields = rest.fields.filter((f: any) => !f.private);
+      stripPrivateMeta(rest.meta, p.type || 'post', priv);
     }
     return rest;
   });
@@ -114,12 +137,8 @@ function loadBulkPosts(ids: unknown): any[] {
   return rows;
 }
 
-function mayTouchPost(user: { userId: string; role: string }, row: any): boolean {
-  if (!userMayAccessSite(user.userId, user.role, row.siteId || undefined)) return false;
-  // A caller who cannot touch other people's posts is limited to their own.
-  if (!userCan(user, 'edit_others_posts') && row.authorId !== user.userId) return false;
-  return true;
-}
+// mayTouchPost lives in utils/postAccess so the CMS block preview applies the
+// same rule (imported below).
 
 // Trash keeps the status it had, so restore can put the post back online
 // instead of silently downgrading it to a draft. Returns whether anything
@@ -186,6 +205,14 @@ function enrichPosts(posts: any[]): any[] {
   (db.prepare('SELECT postId, COUNT(*) as cnt FROM Revision WHERE postId IN (' + qmarks + ') GROUP BY postId').all(...ids) as any[])
     .forEach((r: any) => revisions.set(r.postId, r.cnt));
 
+  // Field definitions by type, read at most once per distinct type per call.
+  const defsByType = new Map<string, any[]>();
+  const defsFor = (t: string) => {
+    let d = defsByType.get(t);
+    if (!d) { d = fieldsForType(t); defsByType.set(t, d); }
+    return d;
+  };
+
   // Meta fields
   const meta = new Map<string, Record<string, string>>();
   (db.prepare('SELECT postId, key, value FROM PostMeta WHERE postId IN (' + qmarks + ')').all(...ids) as any[])
@@ -206,6 +233,9 @@ function enrichPosts(posts: any[]): any[] {
     p.commentCount = comments.get(p.id) || 0;
     p.revisionCount = revisions.get(p.id) || 0;
     p.meta = meta.get(p.id) || {};
+    // The typed view of the same values, in field-definition order. Definitions
+    // are read from the DB once per distinct type per call, not once per post.
+    p.fields = buildFields(p.type || 'post', p.meta, defsFor(p.type || 'post'));
     const ss = p.featured ? srcsets.get(p.featured) : undefined;
     if (ss) { try { p.srcset = JSON.parse(ss); } catch {} }
   }
@@ -278,7 +308,7 @@ router.get('/', (req: AuthRequest & SiteRequest, res: Response) => {
     if (tag) countParams.push(tag);
     const total = (db.prepare(countSql).get(...countParams) as any)?.cnt || 0;
     const posts = enrichPosts(postsData);
-    posts.forEach((p: any) => { p.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', p.content || '', p), p), { siteId: req.siteId }); });
+    posts.forEach((p: any) => { p.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', p.content || '', p), p), { siteId: req.siteId, post: p }); });
     res.json({ posts: publicShape(posts, mayBypassProtection(req)), total, page, totalPages: Math.ceil(total / limit) });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
@@ -335,17 +365,24 @@ router.get('/suggest', (req: AuthRequest & SiteRequest, res: Response) => {
 // the response, only the URL.
 router.get('/:id/preview-link', authenticate, requireCap('edit_posts'), (req: AuthRequest & SiteRequest, res: Response) => {
   try {
-    const post = db.prepare('SELECT id, slug, lang, status, authorId, siteId FROM Post WHERE id = ?').get(req.params.id) as any;
+    const post = db.prepare('SELECT id, slug, lang, status, type, authorId, siteId FROM Post WHERE id = ?').get(req.params.id) as any;
     if (!post) { res.status(404).json({ error: '文章未找到' }); return; }
     // A trashed post is on its way out; previewing it is never the intent.
     if (post.status === 'trash') { res.status(400).json({ error: '回收站中的文章无法预览' }); return; }
+    // Pages are served by their own route, which has no preview support — minting
+    // here would hand out a link that can only 404.
+    if (post.type === 'page') { res.status(400).json({ error: '页面暂不支持预览链接' }); return; }
     if (!userMayAccessSite(req.user!.userId, req.user!.role, post.siteId || undefined)) { res.status(403).json({ error: '无权预览该站点的内容' }); return; }
     if (post.authorId !== req.user!.userId && !userCan(req.user!, 'edit_others_posts')) { res.status(403).json({ error: '无权预览他人文章' }); return; }
-    const token = signPreviewToken({ userId: req.user!.userId, pid: post.id, sid: post.siteId || null, v: (req.user as any).v });
-    // Built from the request's own origin so the link works on whichever host the
-    // editor is using (a custom domain or localhost) without extra settings.
-    const origin = (req.secure ? 'https' : 'http') + '://' + (req.get('host') || '');
-    res.json({ url: origin + postPathForLang(post.slug, post.lang, getPermalinkPrefix()) + '?preview=' + encodeURIComponent(token) });
+    // The token's `v` is read from the user row, not from the session: a request
+    // authenticated with an app password carries no version, and a token minted
+    // without one could never be revoked by "log out everywhere".
+    const tv = (db.prepare('SELECT tokenVersion FROM User WHERE id = ?').get(req.user!.userId) as any)?.tokenVersion;
+    const token = signPreviewToken({ userId: req.user!.userId, pid: post.id, sid: post.siteId || null, v: tv });
+    // Resolved from the site's own URL/domain rather than the Host header — a
+    // link carrying a capability must not be aimed at a host the caller chose.
+    const url = absoluteSiteUrl(req, postPathForLang(post.slug, post.lang, getPermalinkPrefix()) + '?preview=' + encodeURIComponent(token), post.siteId || undefined);
+    res.json({ url });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -359,7 +396,7 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
     const previewTok = String(req.query.preview || '');
     const preview = previewTok ? verifyPreviewToken(previewTok) : null;
     const viewer = preview ? db.prepare('SELECT id, role, tokenVersion FROM User WHERE id = ?').get(preview.userId) as any : null;
-    if (previewTok && (!preview || !viewer || (preview.v !== undefined && viewer.tokenVersion !== preview.v))) {
+    if (previewTok && (!preview || !viewer || preview.v === undefined || viewer.tokenVersion !== preview.v)) {
       res.status(404).json({ error: 'Post not found' }); return;
     }
     const post = (preview
@@ -378,6 +415,10 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
       // site must all take effect before the link is opened again.
       const stillAllowed = post.status !== 'trash'
         && (!post.siteId || post.siteId === req.siteId)
+        // The caller's site ASSIGNMENTS are re-read too: losing an assignment
+        // must revoke the link the same way a demotion does, and the role may not
+        // have changed at all.
+        && userMayAccessSite(viewer.id, viewer.role, post.siteId || undefined)
         && (post.authorId === viewer.id || userCan({ userId: viewer.id, role: viewer.role }, 'edit_others_posts'));
       if (!stillAllowed) { res.status(404).json({ error: 'Post not found' }); return; }
       // A preview must never be stored by a proxy, nor indexed.
@@ -429,8 +470,11 @@ router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
     // Never expose the protection password to the public API
     enriched.hasPassword = !!post.password;
     delete enriched.password;
-    enriched.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', enriched.content || '', enriched), enriched), { siteId: req.siteId });
-    res.json(enriched);
+    enriched.content = renderCmsBlocks(applyShortcodes(applyFilters('post_content', enriched.content || '', enriched), enriched), { siteId: req.siteId, post: enriched });
+    // Same filter as the lists: private field values and the application's own
+    // `_` meta keys must not ship from here either (this route returned the
+    // enriched row verbatim, so both were one property away).
+    res.json(publicShape([enriched], mayBypassProtection(req))[0]);
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
@@ -872,7 +916,10 @@ router.post('/bulk-edit', authenticate, requireCap('edit_posts'), (req: AuthRequ
     // previous status; accepting it here would be a second, weaker path to it.
     const validStatuses = ['draft', 'published', 'private', 'pending'];
     if (c.status !== undefined && !validStatuses.includes(c.status)) { res.status(400).json({ error: 'invalid status' }); return; }
-    if (c.status === 'published' && !userCan(req.user!, 'publish_posts')) { res.status(403).json({ error: '无权发布文章' }); return; }
+    // Same rule as PUT /:id: without publish_posts, draft is the ONLY status a
+    // caller may set. Gating just `published` let a contributor move a post to
+    // private/pending through the batch where the single-row route refused it.
+    if (c.status !== undefined && c.status !== 'draft' && !userCan(req.user!, 'publish_posts')) { res.status(403).json({ error: '无权修改发布状态（草稿之外的状态需要发布权限）' }); return; }
     if (c.authorId !== undefined && !userCan(req.user!, 'edit_others_posts')) { res.status(403).json({ error: '无权修改文章作者' }); return; }
     const tagMode = ['add', 'remove', 'replace'].includes(c.tagMode) ? c.tagMode : 'add';
     const featuredRaw = c.featured !== undefined ? String(c.featured || '').trim().slice(0, 500) : '';
@@ -935,8 +982,13 @@ router.post('/bulk-edit', authenticate, requireCap('edit_posts'), (req: AuthRequ
         });
         updated++;
         results.push({ id: r.id, status: 'ok', to });
-        doAction('post_updated', r.id, r.type);
-        if (to.status === 'published') doAction('post_published', r.id, r.type);
+        // The row is committed. A listener that throws must not turn a landing
+        // write into a reported failure — the response would then list the same
+        // id as both ok and error.
+        try {
+          doAction('post_updated', r.id, r.type);
+          if (to.status === 'published') doAction('post_published', r.id, r.type);
+        } catch { /* a broken listener is not a failed write */ }
       } catch {
         // The row's savepoint rolled back; its neighbours are unaffected.
         results.push({ id: r.id, status: 'error', reason: 'write-failed' });
@@ -1014,13 +1066,64 @@ router.put('/:id/revisions/:revId/restore', authenticate, requireCap('edit_posts
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
-// Public: related posts (same category)
+// Public: semantic search. Keyword search (FTS/LIKE) answers "posts containing
+// this word"; this answers "posts about this", which is what a reader means when
+// nothing matches. Returns [] when no embedding model is configured, so a caller
+// can fall back to /posts?search=.
+router.get('/semantic', async (req: AuthRequest & SiteRequest, res: Response) => {
+  try {
+    const q = String(req.query.q || '').trim();
+    if (!q) { res.json({ posts: [], semantic: false }); return; }
+    if (!embeddingsEnabled()) { res.json({ posts: [], semantic: false }); return; }
+    const limit = Math.min(20, Math.max(1, parseInt(req.query.limit as string) || 6));
+    // Ranked over everything embedded, then narrowed to what a visitor may see:
+    // the visibility rules must run after the ranking, or a private post would
+    // occupy a slot and silently shorten the result.
+    const ranked = await searchByVector(q, limit * 4);
+    if (ranked.length === 0) { res.json({ posts: [], semantic: true }); return; }
+    const now = new Date().toISOString();
+    const scope = req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '';
+    const rows = db.prepare(
+      'SELECT p.* FROM Post p WHERE p.id IN (' + ranked.map(() => '?').join(',') + ")" +
+      " AND p.status = 'published' AND p.type = 'post' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + scope + PUBLIC_POST_CONDITIONS
+    ).all(...ranked.map(r => r.postId), now, ...(req.siteId ? [req.siteId] : [])) as any[];
+    const byId = new Map(rows.map(r => [r.id, r]));
+    const scored = ranked.map(r => byId.get(r.postId)).filter(Boolean).slice(0, limit);
+    const out = publicShape(enrichPosts(scored), mayBypassProtection(req));
+    res.json({ posts: out, semantic: true });
+  } catch (err: any) {
+    // A query the embedding provider rejects is not an error the visitor can act
+    // on; answer with "no semantic results" and let the caller fall back.
+    logger.warn({ err: err?.message }, 'semantic search failed');
+    res.json({ posts: [], semantic: false });
+  }
+});
+
+// Public: related posts — by meaning when embeddings exist, else by category.
 router.get('/:id/related', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
+    const now = new Date().toISOString();
+    // Semantic first: "related" means related in meaning, which is what a reader
+    // expects, and it does not need the post to share a category with anything.
+    // Falls through to the category list when nothing is embedded yet, so the
+    // endpoint keeps working before (and without) the embedding model.
+    const ranked = nearestPosts(req.params.id, 12);
+    if (ranked.length) {
+      const scope = req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '';
+      const rows = db.prepare(
+        'SELECT p.* FROM Post p WHERE p.id IN (' + ranked.map(() => '?').join(',') + ")" +
+        " AND p.status = 'published' AND p.type = 'post' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + scope + PUBLIC_POST_CONDITIONS
+      ).all(...ranked, now, ...(req.siteId ? [req.siteId] : [])) as any[];
+      // The SQL result is unordered; the RANK is the answer.
+      const byId = new Map(rows.map(r => [r.id, r]));
+      const ordered = ranked.map(id => byId.get(id)).filter(Boolean).slice(0, 4);
+      if (ordered.length) { res.json(publicShape(enrichPosts(ordered), mayBypassProtection(req))); return; }
+    }
+
     const catIds = (db.prepare('SELECT categoryId FROM PostCategory WHERE postId = ?').all(req.params.id) as any[]).map((r: any) => r.categoryId);
     if (catIds.length === 0) { res.json([]); return; }
     const placeholders = catIds.map(() => '?').join(',');
-    const now = new Date().toISOString();
+    // (the visibility conditions above already filter the semantic path)
     // Categories are shared, so without this a site A post listed site B's posts.
     const scopeClause = req.siteId ? ' AND (p.siteId IS NULL OR p.siteId = ?)' : '';
     const scopeArgs: any[] = req.siteId ? [req.siteId] : [];

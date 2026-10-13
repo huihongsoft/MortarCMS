@@ -164,8 +164,8 @@ interface VisualEditorProps {
 
 // --- Block Definitions ---
 
-function cmsPlaceholder(id: string, label: string, desc: string, icon: string): string {
-  return '<div class="cms-' + id + '" data-cms="' + id + '" data-gjs-type="cms-' + id + '">' +
+function cmsPlaceholder(id: string, label: string, desc: string, icon: string, extraAttrs = ''): string {
+  return '<div class="cms-' + id + '" data-cms="' + id + '"' + extraAttrs + ' data-gjs-type="cms-' + id + '">' +
     '<div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding:28px 16px;background:linear-gradient(135deg,#f8fafc,#eef2f7);border:2px dashed #94a3b8;border-radius:12px;text-align:center;">' +
     icon +
     '<span style="font-size:13px;font-weight:600;color:#475569;letter-spacing:.02em;">' + label + '</span>' +
@@ -181,6 +181,9 @@ const CMS_BLOCKS = [
   { id: 'archive', label: 'Archive', category: 'CMS Data', media: WPI.blockDefault, content: cmsPlaceholder('archive', 'Archive', 'Monthly post archive', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg>') },
   { id: 'tag-cloud', label: 'Tag Cloud', category: 'CMS Data', media: WPI.blockDefault, content: cmsPlaceholder('tag-cloud', 'Tag Cloud', 'All site tags by popularity', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>') },
   { id: 'link-list', label: 'Link List', category: 'CMS Data', media: WPI.listBlock, content: cmsPlaceholder('link-list', 'Link List', 'Links of a selected navigation category', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>') },
+  // The field key is set through the block's trait (data-name), which the server
+  // turns into [field name="…"] — see renderCmsBlocks.
+  { id: 'field', label: 'Custom Field', category: 'CMS Data', media: WPI.blockDefault, content: cmsPlaceholder('field', 'Custom Field', 'A custom field of this entry', '<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#64748b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>', ' data-name=""') },
 ];
 
 const LAYOUT_BLOCKS = [
@@ -291,7 +294,10 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       const traits: any[] = isLinkList
         // Link List: pick the navigation category whose links are shown
         ? [{ type: 'select', name: 'data-category', label: t('link categories', getLang()), options: [{ id: '', name: '(' + t('all categories', getLang()) + ')' }] }]
-        : [{ type: 'text', name: 'title', label: t('trait title', getLang()) }];
+        : block.id === 'field'
+          // Custom Field: the key of the field to output (see the Field groups screen)
+          ? [{ type: 'text', name: 'data-name', label: t('field key', getLang()) }]
+          : [{ type: 'text', name: 'title', label: t('trait title', getLang()) }];
       editor.DomComponents.addType(`cms-${block.id}`, {
         model: { defaults: { tagName: 'div', draggable: true, droppable: false, traits } },
         view: {
@@ -303,9 +309,9 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
             // the preview matches what will render (other attribute changes,
             // e.g. drop-assigned ids, keep the cached preview)
             this.model.on('change:attributes', () => {
-              const prev = (this.model.previous('attributes') || {})['data-category'];
-              const cur = (this.model.get('attributes') || {})['data-category'];
-              if (prev !== cur) this.fetchPreview();
+              const prev = this.model.previous('attributes') || {};
+              const cur = this.model.get('attributes') || {};
+              if (prev['data-category'] !== cur['data-category'] || prev['data-name'] !== cur['data-name']) this.fetchPreview();
             });
           },
           fetchPreview() {
@@ -318,6 +324,9 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
             Object.entries(this.model.getAttributes() || {}).forEach(([k, v]) => {
               if (k.startsWith('data-') && k !== 'data-cms' && k !== 'data-gjs-type' && v) qs.set(k.slice(5), String(v));
             });
+            // A field block previews the real value of the entry being edited, so
+            // the server needs to know which entry (it re-checks access itself).
+            if (block.id === 'field' && pageSettings?.postId) qs.set('postId', String(pageSettings.postId));
             const q = qs.toString();
             fetch('/api/editor/preview-cms/' + block.id + (q ? '?' + q : ''), { headers: h })
               .then(r => r.json())
@@ -371,7 +380,7 @@ export default function VisualEditor({ content, css, onChange, height, onSaveSho
       const bg = isDark ? '#111827' : '#fff';
       const fg = isDark ? '#d1d5db' : '#111827';
       const style = canvas.createElement('style');
-      style.textContent = `html,body{margin:0!important;padding:0!important;width:100%!important;max-width:none!important;box-sizing:border-box!important;display:block!important;position:static!important}html{height:100%!important;overflow:visible!important;background:${bg};color-scheme:${isDark ? 'dark' : 'light'}}body{min-height:100%!important;height:auto!important;overflow:visible!important;background:${bg};color:${fg}}${isDark ? '.prose,.prose strong,.prose b,.prose th,.prose blockquote{color:#e5e7eb}.prose a{color:#93c5fd}.prose code{background:rgba(148,163,184,.15);color:#e5e7eb}' : ''}.cms-post-list,.cms-categories,.cms-comments,.cms-search,.cms-archive,.cms-tag-cloud,.cms-link-list{min-height:40px}`;
+      style.textContent = `html,body{margin:0!important;padding:0!important;width:100%!important;max-width:none!important;box-sizing:border-box!important;display:block!important;position:static!important}html{height:100%!important;overflow:visible!important;background:${bg};color-scheme:${isDark ? 'dark' : 'light'}}body{min-height:100%!important;height:auto!important;overflow:visible!important;background:${bg};color:${fg}}${isDark ? '.prose,.prose strong,.prose b,.prose th,.prose blockquote{color:#e5e7eb}.prose a{color:#93c5fd}.prose code{background:rgba(148,163,184,.15);color:#e5e7eb}' : ''}.cms-post-list,.cms-categories,.cms-comments,.cms-search,.cms-archive,.cms-tag-cloud,.cms-link-list,.cms-field{min-height:40px}`;
       canvas.head.appendChild(style);
 
       fetch('/api/settings').then(r => r.json()).then(s => {

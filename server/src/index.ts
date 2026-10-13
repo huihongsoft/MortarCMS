@@ -33,6 +33,7 @@ import activityRoutes, { logActivity } from './routes/activity';
 import appPwRoutes from './routes/appPasswords';
 import savedViewRoutes from './routes/savedViews';
 import fieldGroupRoutes from './routes/fieldGroups';
+import mcpRoutes from './routes/mcp';
 import gdprRoutes from './routes/gdpr';
 import dbToolsRoutes from './routes/dbTools';
 import postTypesRoutes from './routes/customPostTypes';
@@ -133,7 +134,14 @@ app.use(pinoHttp({
   // keeping enough of the request line to be useful.
   serializers: {
     req(req: any) {
-      const url = String(req.url || '').replace(/([?&](?:token|secret|key|password|code)=)[^&]*/gi, '$1[redacted]');
+      // Capabilities travel in a URL in two shapes here, and both are replayable
+      // by anyone who can read the log:
+      //   ?token=… / ?preview=… — a query param (the preview one is namespaced
+      //     under a word the earlier regex did not know);
+      //   /share/ai/<token>, /webhook/<platform>/<token> — the token IS the path.
+      const url = String(req.url || '')
+        .replace(/([?&](?:token|secret|key|api_key|apikey|access_token|password|code|preview)=)[^&]*/gi, '$1[redacted]')
+        .replace(/\/(share\/ai|webhook(?:\/[a-z]+)?)\/[A-Za-z0-9._-]{6,}/gi, '/$1/[redacted]');
       return { id: req.id, method: req.method, url, remoteAddress: req.remoteAddress, remotePort: req.remotePort };
     },
   },
@@ -404,6 +412,8 @@ app.use('/api/activity', activityRoutes);
 app.use('/api/app-passwords', appPwRoutes);
 app.use('/api/saved-views', savedViewRoutes);
 app.use('/api/field-groups', fieldGroupRoutes);
+// Model Context Protocol: the AI tool registry over JSON-RPC, for external agents.
+app.use('/api/mcp', mcpRoutes);
 app.use('/api/gdpr', gdprRoutes);
 app.use('/api/db', dbToolsRoutes);
 app.use('/api/post-types', postTypesRoutes);

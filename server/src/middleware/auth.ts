@@ -62,11 +62,16 @@ export function authenticate(req: AuthRequest, res: Response, next: NextFunction
 // though the HTTP method looks safe.
 const MUTATING_GET_RE = /^\/api\/(?:db\/(?:optimize|backup|backup-full)|media\/[^/]+\/download)\/?$/;
 
+// The MCP endpoint is JSON-RPC over POST even when it only reads, so the method
+// cannot decide its scope — the handler does, per tool (aiTools.isReadOnlyTool).
+const SCOPE_DECIDED_BY_HANDLER = /^\/api\/mcp\/?$/;
+
 // A read-only app password may only perform safe (non-mutating) requests.
 function appScopeAllows(scope: string, method: string, url: string): boolean {
   if (scope !== 'read') return true;
-  if (!(method === 'GET' || method === 'HEAD' || method === 'OPTIONS')) return false;
   const path = String(url || '').split('?')[0];
+  if (SCOPE_DECIDED_BY_HANDLER.test(path)) return true;
+  if (!(method === 'GET' || method === 'HEAD' || method === 'OPTIONS')) return false;
   return !MUTATING_GET_RE.test(path);
 }
 

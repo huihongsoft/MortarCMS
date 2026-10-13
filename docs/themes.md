@@ -158,6 +158,53 @@ const themes = {
 Activation is instant: switch the active theme in the admin (Appearance →
 Themes) and the frontend renders the new templates on the next load.
 
+## Custom fields
+
+Field groups (admin → Custom fields) attach typed fields to a content type.
+Every enriched post carries both views of the same values:
+
+```js
+post.meta    // { price: '19.5' } — raw key → string
+post.fields  // [{ key, label, type, private, value }], in definition order
+```
+
+Render from `fields`: it is built from the group definitions, so the order and
+the labels are the ones the editor showed. `meta` stays handy for a key that has
+no definition (the free-form rows). Both are on the list endpoints and the
+single-post endpoint, and a visitor's payload is the same whether it was
+server-rendered or fetched in the browser — a theme does not have to care which
+it is in. (A signed-in editor who may edit other people's posts also receives
+private fields; see below.)
+
+```jsx
+export default function PostLayout({ post }) {
+  const price = post.fields?.find(f => f.key === 'price');
+  return price?.value ? <p className="price">¥{price.value}</p> : null;
+}
+```
+
+An author can drop a single value into the body with the shortcode instead:
+
+```
+[field name="price" fallback="—"]
+```
+
+It only outputs a **defined** field — an unknown key renders nothing (or the
+fallback), never a raw `meta` value, and a private field is refused outright.
+
+### Private fields
+
+A field marked **private** keeps its value in the database and in the editor, but
+is stripped from every anonymous payload — `post.fields` *and* `post.meta` — and
+`[field]` refuses to emit it. Do not build a layout that depends on one; private
+fields are for internal data (a cost price, an editorial note).
+
+### Schema for a headless front end
+
+`GET /api/post-types/:slug/fields` returns the definitions (key, label, type,
+required, options, private) with no values — enough to build types or a form
+against.
+
 ## How it reaches the frontend
 
 1. `GET /api/themes` — theme list with effective settings
