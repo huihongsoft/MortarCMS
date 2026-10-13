@@ -2142,6 +2142,7 @@ const serverMsgPatterns: [RegExp, string][] = [
   [/^文章已更新$/, 'Post updated'],
   [/^文章已发布$/, 'Post published'],
   [/^文章已保存为草稿$/, 'Post saved as a draft'],
+  [/^已更新同名草稿（未新建）$/, 'Same-title draft updated (no new post)'],
   // the warning runTask prepends when an unattended run had to refuse something
   [/^有 (\d+) 个操作因需要人工确认而未执行（(.*)），请在 AI 对话中发起并确认。$/,
     '$1 action(s) were not executed because they need human confirmation ($2) — start them in the AI chat and confirm there.'],
@@ -2197,6 +2198,7 @@ const serverMsgTailPatterns: [RegExp, string][] = [
   [/：文章已更新$/, ': updated'],
   [/：文章已发布$/, ': published'],
   [/：文章已保存为草稿$/, ': saved as a draft'],
+  [/：已更新同名草稿（未新建）$/, ': same-title draft updated'],
   [/：没有需要更新的字段$/, ': nothing to update'],
   [/：未找到文章$/, ': post not found'],
 ];

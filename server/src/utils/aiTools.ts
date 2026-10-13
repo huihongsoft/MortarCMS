@@ -943,9 +943,9 @@ register('write_post', '撰写并创建一篇新文章。可以给定标题和�
 }, async (args, ctx) => {
   const title = String(args.title || '').trim();
   if (!title) return { error: '标题不能为空' };
-  const allSlugs = (db.prepare("SELECT slug FROM Post WHERE type = 'post'").all() as any[]).map((s: any) => s.slug);
-  const slug = uniqueSlug(title, allSlugs);
-  const id = cuid();
+  let id = cuid();
+  let slug = '';
+  let reused = false;
   // Publishing — now or on a schedule — is a capability, not just a parameter:
   // the HTTP route keeps contributors on drafts, and the tool must not become a
   // way around that.
@@ -969,11 +969,46 @@ register('write_post', '撰写并创建一篇新文章。可以给定标题和�
   const excerpt = String(args.excerpt || '').trim().slice(0, 500) || autoExcerpt(cleanContent);
   const featuredRaw = String(args.featured || '').trim().slice(0, 500);
   const featured = /^(https?:\/\/|\/uploads\/|\/media\/)/i.test(featuredRaw) ? featuredRaw : '';
-  // siteId matters: the public lists filter on `siteId IS NULL OR siteId = ?`,
-  // so a post created without it would show up on every site of a multi-site
-  // install.
-  db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt, featured, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
-    .run(id, title, slug, cleanContent, excerpt, status, 'post', ctx.userId, status === 'published' ? now : scheduledAt, featured || null, ctx.siteId || null);
+  // Idempotency. A model can emit the same write more than once — identical
+  // calls batched into one round, a retried request, or "regenerate" replaying a
+  // turn — and the unconditional INSERT below turned every replay into another
+  // row. uniqueSlug only masked it, suffixing -2/-3, so one request quietly left
+  // several same-title drafts. An existing DRAFT by the same author in the same
+  // site is updated in place instead. Only drafts: a post already published or
+  // scheduled is never silently rewritten by a repeat call.
+  const existing = db.prepare(
+    "SELECT * FROM Post WHERE type = 'post' AND status = 'draft' AND authorId = ? AND title = ? AND " +
+    (ctx.siteId ? 'siteId = ?' : 'siteId IS NULL')
+  ).get(ctx.userId, title, ...(ctx.siteId ? [ctx.siteId] : [])) as any;
+
+  if (existing) {
+    id = existing.id;
+    slug = existing.slug;
+    reused = true;
+    const nextPublishedAt = status === 'published' ? now : scheduledAt;
+    // Only write — and only take a rollback point — when something actually
+    // differs, so a byte-identical replay is a true no-op.
+    const changed = String(existing.content || '') !== cleanContent
+      || String(existing.excerpt || '') !== excerpt
+      || String(existing.featured || '') !== String(featured || '')
+      || String(existing.status || '') !== status
+      || String(existing.publishedAt || '') !== String(nextPublishedAt || '');
+    if (changed) {
+      withTransaction(() => {
+        snapshotRevision(existing); // the draft state this call replaces
+        db.prepare('UPDATE Post SET content = ?, excerpt = ?, featured = ?, status = ?, publishedAt = ?, updatedAt = ? WHERE id = ?')
+          .run(cleanContent, excerpt, featured || null, status, nextPublishedAt, now, id);
+      });
+    }
+  } else {
+    // siteId matters: the public lists filter on `siteId IS NULL OR siteId = ?`,
+    // so a post created without it would show up on every site of a multi-site
+    // install.
+    const allSlugs = (db.prepare("SELECT slug FROM Post WHERE type = 'post'").all() as any[]).map((s: any) => s.slug);
+    slug = uniqueSlug(title, allSlugs);
+    db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, status, type, authorId, publishedAt, featured, siteId) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)')
+      .run(id, title, slug, cleanContent, excerpt, status, 'post', ctx.userId, status === 'published' ? now : scheduledAt, featured || null, ctx.siteId || null);
+  }
   // Invalidate the public content caches: the tool call bypasses the HTTP
   // mutation middleware, so the list/archive/feed must be purged explicitly.
   purgeContentCaches();
@@ -1008,7 +1043,8 @@ register('write_post', '撰写并创建一篇新文章。可以给定标题和�
   return {
     id, title, slug, status, featured: featured || null,
     ...(scheduledAt ? { publishedAt: scheduledAt } : {}),
-    message: status === 'published' ? '文章已发布'
+    message: reused ? '已更新同名草稿（未新建）'
+      : status === 'published' ? '文章已发布'
       : status === 'scheduled' ? '文章已排期，将于 ' + scheduledAt + ' 自动发布'
       : '文章已保存为草稿',
     ...(note ? { note } : {}),
