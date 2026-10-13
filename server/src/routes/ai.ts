@@ -259,8 +259,14 @@ router.post('/assistant', authenticate, requireCap('ai_use'), enforceUsageLimit,
     // instead of another site's data.
     const ctx = { userId: req.user!.userId, role: req.user!.role, siteId: actingSiteId(req) };
     const tools = listToolSchemas(req.user!.role);
+    // Tool-call budget for the interactive turn, counted in rounds rather than
+    // individual calls: one round may return several parallel tool calls.
+    // Declared before the prompt so the model can be told the budget (it plans
+    // very differently when it knows rounds are finite) and reused by the
+    // wrap-up round below.
+    const MAX_ITER = 10;
     const msgs: any[] = [
-      { role: 'system', content: SYSTEM_PROMPT + (includeContext === false ? '' : '\n\n' + buildSiteContext(ctx.siteId) + memoryPrompt(req.user!.userId)) + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') },
+      { role: 'system', content: SYSTEM_PROMPT + (includeContext === false ? '' : '\n\n' + buildSiteContext(ctx.siteId) + memoryPrompt(req.user!.userId)) + (tools.length ? '\n\n可用的工具: ' + tools.map(t => t.function.name).join(', ') + '。需要操作时调用工具。' : '') + (tools.length ? '\n\n注意：一轮对话最多可进行 ' + MAX_ITER + ' 轮工具调用。请尽量在一轮中并行调用多个工具（一次返回多个工具调用），避免多余的确认性调用，把轮次留给真正需要的操作。' : '') },
       ...buildHistoryMessages(history),
       { role: 'user', content: guardUserMessage(String(message)) },
     ];
@@ -278,7 +284,6 @@ router.post('/assistant', authenticate, requireCap('ai_use'), enforceUsageLimit,
     const onDelta = (text: string) => send({ type: 'delta', text });
     let finalText = '';
 
-    const MAX_ITER = 6;
     for (let i = 0; i < MAX_ITER; i++) {
       const result = await chatComplete(provider, msgs, { ...opts, onDelta: i === 0 ? onDelta : undefined });
       finalText = result.content;
@@ -348,7 +353,18 @@ router.post('/assistant', authenticate, requireCap('ai_use'), enforceUsageLimit,
         break;
       }
 
-      if (i === MAX_ITER - 1) finalText = '已达到工具调用次数上限，请简化问题重试。';
+      if (i === MAX_ITER - 1) {
+        // Cap reached with tools still pending. The calls in THIS round already
+        // ran, so ending on a bare "limit reached" hides work that landed and
+        // leaves the user with nothing to act on. Give the model one final round
+        // — tools withheld — to say what it completed and what it did not.
+        // Mirrors the wrap-up runTask already does for background tasks.
+        try {
+          msgs.push({ role: 'system', content: '工具调用次数已达上限。请立即用自然语言总结：已完成的工作、产出（如文章标题/链接/ID）、以及未能完成的部分。不要再调用任何工具。' });
+          const wrap = await chatComplete(provider, msgs, { temperature: opts.temperature, maxTokens: opts.maxTokens, onDelta });
+          finalText = wrap.content || '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。';
+        } catch { finalText = '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。'; }
+      }
     }
 
     recordUsage(req.user!.userId, 'assistant', finalText, provider.model);
@@ -1558,16 +1574,19 @@ async function runWebhookReply(binding: Binding, message: string): Promise<strin
   }
 
   const tools = listToolSchemas(user.role);
+  // Budget for one callback reply, counted in rounds (see the /assistant route).
+  // Declared before the prompt so the model can be told the budget, and reused
+  // by the wrap-up round below.
+  const MAX_ITER = 10;
   // The binding's site scope (if its owner set one) applies to the replies and to
   // the snapshot, exactly as it does for a scheduled job.
   const msgs: any[] = [
-    { role: 'system', content: SYSTEM_PROMPT + ' 当前用户: ' + binding.username + '。\n' + buildSiteContext(binding.siteId || undefined) + memoryPrompt(user.id) + (tools.length ? '\n可用的工具: ' + tools.map(t => t.function.name).join(', ') : '') },
+    { role: 'system', content: SYSTEM_PROMPT + ' 当前用户: ' + binding.username + '。\n' + buildSiteContext(binding.siteId || undefined) + memoryPrompt(user.id) + (tools.length ? '\n可用的工具: ' + tools.map(t => t.function.name).join(', ') : '') + (tools.length ? '\n注意：一条回复最多可进行 ' + MAX_ITER + ' 轮工具调用。请尽量在一轮中并行调用多个工具（一次返回多个工具调用），避免多余的确认性调用，把轮次留给真正需要的操作。' : '') },
     { role: 'user', content: guardUserMessage(message) },
   ];
   const ctx = { userId: user.id, role: user.role, siteId: binding.siteId || undefined };
 
   let reply = '';
-  const MAX_ITER = 6;
   for (let i = 0; i < MAX_ITER; i++) {
     const result = await chatComplete(provider, msgs, { tools });
     reply = result.content;
@@ -1579,7 +1598,15 @@ async function runWebhookReply(binding: Binding, message: string): Promise<strin
       id: tc.id, output: JSON.stringify(await executeToolUnattended(tc.name, tc.args, ctx)),
     })));
     pushToolResults(msgs, results, provider.type);
-    if (i === MAX_ITER - 1) reply = '已达到工具调用次数上限，请简化问题重试。';
+    if (i === MAX_ITER - 1) {
+      // Same as the /assistant wrap-up: the calls in THIS round already ran, so
+      // answer with a summary instead of a bare limit line the bot would relay.
+      try {
+        msgs.push({ role: 'system', content: '工具调用次数已达上限。请立即用自然语言总结：已完成的工作、产出（如文章标题/链接/ID）、以及未能完成的部分。不要再调用任何工具。' });
+        const wrap = await chatComplete(provider, msgs, {});
+        reply = wrap.content || '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。';
+      } catch { reply = '已达到工具调用次数上限，部分工作可能已完成，请拆分任务后重试。'; }
+    }
   }
 
   recordUsage(user.id, 'webhook', reply, provider.model);
