@@ -31,6 +31,10 @@ export default function AIBindings() {
   const [bindings, setBindings] = useState<Binding[]>([]);
   const [users, setUsers] = useState<any[]>([]);
   const [platform, setPlatform] = useState('wechat');
+  // The platform list and each platform's credential fields come from the
+  // server, so a new adapter (Telegram, Slack, …) shows up here with no UI change.
+  const [platforms, setPlatforms] = useState<{ id: string; label: string; credentialFields: { key: string; label: string; secret?: boolean; hint?: string }[] }[]>([]);
+  const [cred, setCred] = useState<Record<string, string>>({});
   const [userId, setUserId] = useState('');
   const [label, setLabel] = useState('');
   const [testMsg, setTestMsg] = useState('');
@@ -55,6 +59,7 @@ export default function AIBindings() {
 
   useEffect(() => {
     api.get('/ai/bindings').then(r => setBindings(r.data.bindings || [])).catch(() => {});
+    api.get('/ai/binding-platforms').then(r => setPlatforms(r.data.platforms || [])).catch(() => {});
     api.get('/users').then(r => setUsers(r.data || [])).catch(() => {});
     api.get('/ai/schedules').then(r => setSchedules(r.data.schedules || [])).catch(() => {});
     // /sites is admin-only: a non-admin gets no options, the selects stay hidden
@@ -62,11 +67,19 @@ export default function AIBindings() {
     api.get('/sites').then(r => setSites(r.data?.sites || r.data || [])).catch(() => {});
   }, []);
 
+  // Fallback so the picker still works before (or if) the metadata request lands.
+  const platformOptions = platforms.length ? platforms
+    : [{ id: 'wechat', label: '微信公众号', credentialFields: [] }, { id: 'dingtalk', label: '钉钉', credentialFields: [] }];
+  const adapterPlatform = platforms.find(p => p.id === platform);
+  const platformLabel = (id: string) => platformOptions.find(p => p.id === id)?.label || id;
+  // Every platform is reached at its own path, so the URL is uniform.
+  const webhookUrl = (b: Binding) => window.location.origin + '/api/ai/webhook/' + b.platform + '/' + b.token;
+
   async function create() {
     try {
-      const r = await api.post('/ai/bindings', { platform, userId, label, siteId: bindingSite || undefined, ...(platform === 'dingtalk' ? dd : {}) });
+      const r = await api.post('/ai/bindings', { platform, userId, label, siteId: bindingSite || undefined, ...(platform === 'dingtalk' ? dd : {}), ...(adapterPlatform ? cred : {}) });
       setBindings([...bindings, r.data.binding]);
-      setPlatform('wechat'); setUserId(''); setLabel(''); setDd({ ddWebhook: '', ddSecret: '', ddToken: '', ddAesKey: '', ddAppKey: '', ddAppSecret: '' });
+      setPlatform('wechat'); setUserId(''); setLabel(''); setCred({}); setDd({ ddWebhook: '', ddSecret: '', ddToken: '', ddAesKey: '', ddAppKey: '', ddAppSecret: '' });
       toast.toast(t('binding created', getLang()));
     } catch (e: any) { toast.toast(e.response?.data?.error || t('save failed', getLang()), 'error'); }
   }
@@ -129,9 +142,8 @@ export default function AIBindings() {
     React.createElement('div', { className: 'card p-6 mb-6' },
       React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-4' }, t('create binding', getLang())),
       React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-4 gap-3' },
-        React.createElement(Select, { value: platform, onChange: (v: string) => setPlatform(v), className: 'input-field' },
-          React.createElement('option', { value: 'wechat' }, '微信 WeChat'),
-          React.createElement('option', { value: 'dingtalk' }, '钉钉 DingTalk')),
+        React.createElement(Select, { value: platform, onChange: (v: string) => { setPlatform(v); setCred({}); }, className: 'input-field' },
+          platformOptions.map(p => React.createElement('option', { key: p.id, value: p.id }, p.label))),
         React.createElement(Select, { value: userId, onChange: (v: string) => setUserId(v), className: 'input-field' },
           React.createElement('option', { value: '' }, t('select user', getLang())),
           users.map(u => React.createElement('option', { key: u.id, value: u.id }, u.username + ' (' + u.role + ')'))),
@@ -157,7 +169,21 @@ export default function AIBindings() {
             React.createElement('input', { value: (dd as any)[k], onChange: (e: React.ChangeEvent<HTMLInputElement>) => setDd({ ...dd, [k]: e.target.value }), placeholder: labels[k], className: 'input-field text-sm', type: k === 'ddAppSecret' || k === 'ddSecret' || k === 'ddAesKey' ? 'password' : 'text' }));
         })
       ),
-      platform === 'dingtalk' && React.createElement('p', { className: 'text-[11px] text-gray-400 mt-2 leading-relaxed' }, t('dingtalk config hint', getLang()))
+      platform === 'dingtalk' && React.createElement('p', { className: 'text-[11px] text-gray-400 mt-2 leading-relaxed' }, t('dingtalk config hint', getLang())),
+      // Adapter platforms render whatever credentials they declare.
+      (adapterPlatform?.credentialFields.length || 0) > 0 && React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-2 gap-3 mt-3' },
+        (adapterPlatform?.credentialFields || []).map(f =>
+          React.createElement('div', { key: f.key },
+            React.createElement('label', { className: 'block text-[11px] text-gray-400 mb-1' }, f.label),
+            React.createElement('input', {
+              value: cred[f.key] || '',
+              onChange: (e: React.ChangeEvent<HTMLInputElement>) => setCred({ ...cred, [f.key]: e.target.value }),
+              placeholder: f.hint || f.label,
+              className: 'input-field text-sm',
+              type: f.secret ? 'password' : 'text',
+            })))),
+      (adapterPlatform?.credentialFields.length || 0) > 0 && React.createElement('p', { className: 'text-[11px] text-gray-400 mt-2 leading-relaxed' },
+        t('chat platform hint', getLang()) + ' ' + window.location.origin + '/api/ai/webhook/' + platform + '/<token>')
     ),
 
     // Binding list
@@ -170,7 +196,7 @@ export default function AIBindings() {
                 React.createElement('div', { className: 'w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ' + (b.platform === 'wechat' ? 'bg-green-50 text-green-600' : 'bg-blue-50 text-blue-600') },
                   React.createElement(b.platform === 'wechat' ? MessageCircle : Bell, { size: 18 })),
                 React.createElement('div', { className: 'min-w-0' },
-                  React.createElement('p', { className: 'font-medium text-gray-900 text-sm' }, b.label + ' (' + (b.platform === 'wechat' ? '微信' : '钉钉') + ')'),
+                  React.createElement('p', { className: 'font-medium text-gray-900 text-sm' }, b.label + ' (' + platformLabel(b.platform) + ')'),
                   React.createElement('p', { className: 'text-xs text-gray-400 mt-0.5' }, t('bound user', getLang()) + ': ' + b.username),
                   // Visible so an operator can tell whether this bot is scoped —
                   // a silent scope change would otherwise be invisible.
@@ -182,12 +208,12 @@ export default function AIBindings() {
               ),
               React.createElement('button', { onClick: () => del(b.id), className: 'p-1.5 text-gray-400 hover:text-red-600', 'aria-label': t('delete', getLang())}, React.createElement(Trash2, { size: 15 }))
             ),
-            // Webhook URL — each platform shows its own protocol endpoint:
-            // generic JSON, WeChat MP or DingTalk enterprise-bot callback
+            // Webhook URL — every platform has its own path, including the
+            // adapter ones, so the same builder works for all of them.
             React.createElement('div', { className: 'mt-3 flex items-center gap-2' },
               React.createElement(KeyRound, { size: 13, className: 'text-gray-400 flex-shrink-0' }),
-              React.createElement('code', { className: 'text-xs bg-gray-50 border border-gray-100 rounded px-2 py-1 truncate flex-1' }, window.location.origin + (b.platform === 'wechat' ? '/api/ai/webhook/wechat/' : b.platform === 'dingtalk' ? '/api/ai/webhook/dingtalk/' : '/api/ai/webhook/') + b.token),
-              React.createElement('button', { onClick: () => copy(window.location.origin + (b.platform === 'wechat' ? '/api/ai/webhook/wechat/' : b.platform === 'dingtalk' ? '/api/ai/webhook/dingtalk/' : '/api/ai/webhook/') + b.token), className: 'p-1.5 text-gray-400 hover:text-primary-600', 'aria-label': t('copy', getLang())}, React.createElement(Copy, { size: 14 }))
+              React.createElement('code', { className: 'text-xs bg-gray-50 border border-gray-100 rounded px-2 py-1 truncate flex-1' }, webhookUrl(b)),
+              React.createElement('button', { onClick: () => copy(webhookUrl(b)), className: 'p-1.5 text-gray-400 hover:text-primary-600', 'aria-label': t('copy', getLang())}, React.createElement(Copy, { size: 14 }))
             ),
             b.platform === 'wechat' && b.wechatToken && React.createElement(React.Fragment, null,
               React.createElement('div', { className: 'mt-2 flex items-center gap-2' },

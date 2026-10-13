@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, UserCircle, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, ShieldAlert, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3, Webhook, ClipboardList, Mail, CalendarDays, ArrowRightLeft, ClipboardCheck } from 'lucide-react';
+import { LayoutDashboard, FileText, Files, Image, MessageSquare, Users, UserCircle, Settings, Menu, Palette, Shapes, Server as ServerIcon, UploadCloud, Puzzle, Network, FolderTree, Tag as TagIcon, Link2, ShieldCheck, ShieldAlert, Bot, Cpu, MessageCircle, Workflow, Code, History, Layers, BarChart3, Webhook, ClipboardList, Mail, CalendarDays, ArrowRightLeft, ClipboardCheck, ListPlus } from 'lucide-react';
 import api from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { t, getLang } from '../lib/i18n';
@@ -40,6 +40,7 @@ const groups: { title: string; items: { to: string; icon: any; label: string; de
       { to: '/menus', icon: Menu, label: t('menus', getLang()) },
       { to: '/widgets', icon: Shapes, label: t('widgets', getLang()) },
       { to: '/post-types', icon: Layers, label: t('custom post types', getLang()) },
+      { to: '/field-groups', icon: ListPlus, label: t('custom fields', getLang()) },
     ],
   },
   {

@@ -73,9 +73,14 @@ export default function PostPage({ settings }: { settings: Record<string, string
     setSubmitted(false);
   }, [slug]);
 
+  // A signed preview link (minted by the post editor) lets a reviewer without an
+  // account see an unpublished post. The token rides in the URL so a reload keeps
+  // working; whether it is valid is the server's call.
+  const preview = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('preview') : null;
+
   useEffect(() => {
     let cancelled = false;
-    api.get('/posts/slug/' + slug).then(r => {
+    api.get('/posts/slug/' + slug + (preview ? '?preview=' + encodeURIComponent(preview) : '')).then(r => {
       if (cancelled) return;
       setPost(r.data);
       api.get('/comments/post/' + r.data.id).then(cr => { if (!cancelled) setComments(cr.data); }).catch(() => {});
@@ -86,7 +91,7 @@ export default function PostPage({ settings }: { settings: Record<string, string
       else setPost({ error: true });
     });
     return () => { cancelled = true; };
-  }, [slug]);
+  }, [slug, preview]);
 
   // When the comment box was last put in front of the reader. Reset after a
   // successful post, so a second comment is timed on its own rather than looking
@@ -147,8 +152,10 @@ export default function PostPage({ settings }: { settings: Record<string, string
     image: cdnUrl(ogImage, settings),
     url: siteOrigin(settings) + postPath(post.slug),
     type: 'article',
-    noindex: post.meta?._seo_noindex === '1',
-    canonical: post.meta?._seo_canonical || undefined,
+    // A preview is never indexed and never advertises a canonical URL: it is
+    // the same post at a URL that must stay out of search results.
+    noindex: preview ? true : post.meta?._seo_noindex === '1',
+    canonical: preview ? undefined : post.meta?._seo_canonical || undefined,
     jsonLd: [
       {
         '@context': 'https://schema.org',

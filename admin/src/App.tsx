@@ -31,6 +31,7 @@ const SystemTasks = React.lazy(() => import('./pages/SystemTasks'));
 const Redirects = React.lazy(() => import('./pages/Redirects'));
 const ReviewQueue = React.lazy(() => import('./pages/ReviewQueue'));
 const CustomTypes = React.lazy(() => import('./pages/CustomTypes'));
+const FieldGroups = React.lazy(() => import('./pages/FieldGroups'));
 const Import = React.lazy(() => import('./pages/Import'));
 const Plugins = React.lazy(() => import('./pages/Plugins'));
 const Widgets = React.lazy(() => import('./pages/Widgets'));
@@ -136,6 +137,7 @@ function AnimatedRoutes() {
       screen('/widgets', React.createElement(Widgets)),
       screen('/appearance', React.createElement(Appearance)),
       screen('/post-types', React.createElement(CustomTypes)),
+      screen('/field-groups', React.createElement(FieldGroups)),
       screen('/settings', React.createElement(Settings)),
       screen('/ai', React.createElement(AIChat)),
       screen('/ai/bindings', React.createElement(AIBindings)),

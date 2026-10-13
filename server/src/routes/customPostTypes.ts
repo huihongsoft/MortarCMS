@@ -29,6 +29,12 @@ function saveCustomTypes(list: CustomPostType[]): void {
   db.prepare('INSERT OR REPLACE INTO Setting (id, key, value) VALUES (?, ?, ?)').run('custom_post_types', 'custom_post_types', JSON.stringify(list));
 }
 
+// Every type slug that exists, for callers that need to reject a field group
+// bound to a type nobody registered — a typo there would define nothing, quietly.
+export function allPostTypeSlugs(): string[] {
+  return [...BUILTIN_TYPES, ...loadCustomTypes()].map(t => t.slug);
+}
+
 // Public: the full type list (built-ins + registered custom types)
 router.get('/', (_req: AuthRequest, res: Response) => {
   try {

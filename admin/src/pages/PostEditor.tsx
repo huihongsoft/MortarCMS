@@ -30,6 +30,11 @@ export default function PostEditor() {
   const [categories, setCategories] = useState<any[]>([]);
   const toast = useToast();
   const [metaFields, setMetaFields] = useState<{key:string,value:string}[]>([]);
+  // The content type drives which custom fields exist. Seeded from the query so
+  // a brand-new entry of a custom type asks for the right definitions straight
+  // away; an existing post overwrites it with its own type once loaded.
+  const [postType, setPostType] = useState(() => new URLSearchParams(window.location.search).get('type') || 'post');
+  const [fieldDefs, setFieldDefs] = useState<any[]>([]);
   const [format, setFormat] = useState('standard');
   const [authorId, setAuthorId] = useState('');
   const [users, setUsers] = useState<any[]>([]);
@@ -38,6 +43,10 @@ export default function PostEditor() {
   const [lastSavedAt, setLastSavedAt] = useState('');
   // Baseline snapshot for autosave dirty-detection (title/content/excerpt)
   const snapshotRef = useRef('');
+  // Custom-field keys this post was loaded with. A save only SENDS the fields
+  // still present, and the API only touches keys it is sent — so a field the
+  // user deleted has to be reported explicitly, or it would silently survive.
+  const loadedMetaKeysRef = useRef<string[]>([]);
 
   // Autosave (WordPress-style): 30s after the last keystroke, silently save
   // drafts that have changed. Published/scheduled posts are never autosaved —
@@ -141,13 +150,36 @@ export default function PostEditor() {
     api.get('/editor/templates').then(r => setTemplates(r.data.templates || [])).catch(() => {});
     if (id) { api.get(`/posts/${id}/translations`).then(r => setTranslations(r.data?.translations || [])).catch(() => {});
       api.get(`/posts/admin?limit=100`).then(r => { const p = r.data.posts.find((x: any) => x.id === id); if (p) { setSlug(p.slug); setLang(p.lang || ''); setTitle(p.title); setContent(p.content); setExcerpt(p.excerpt); setStatus(p.status); setCategoryIds(p.categories?.map((c: any) => c.categoryId || c.category?.id) || []); setTagNames(p.tags?.map((t: any) => t.name || t.tag?.name) || []); if (p.featured) setFeatured(p.featured); if (p.allowComments !== undefined) setAllowComments(p.allowComments); if (p.password) setPassword(p.password); if (p.siteId) setSiteId(p.siteId); if (p.authorId) setAuthorId(p.authorId); if (p.publishedAt) { const d = new Date(p.publishedAt); const pad = (n: number) => String(n).padStart(2, '0'); setPublishDate(`${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`); } if (p.meta?._visual_css) setVisualCss(p.meta._visual_css); if (p.meta?._seo_title) setSeoTitle(p.meta._seo_title); if (p.meta?._seo_desc) setSeoDesc(p.meta._seo_desc); if (p.meta?._seo_noindex) setSeoNoindex(p.meta._seo_noindex === '1'); if (p.meta?._seo_canonical) setSeoCanonical(p.meta._seo_canonical); if (p.meta?._seo_og_image) setSeoOgImage(p.meta._seo_og_image); if (p.meta?._seo_primary_category) setSeoPrimaryCategory(p.meta._seo_primary_category);
-      // Custom fields: load user-defined keys (system keys with _ prefixes are managed by their own panels)
-      const systemKeys = ['_visual_css', '_seo_title', '_seo_desc', '_seo_noindex', '_seo_canonical', '_seo_og_image', '_seo_primary_category'];
-      if (p.meta) setMetaFields(Object.entries(p.meta).filter(([k]) => !systemKeys.includes(k) && k.trim()).map(([key, value]) => ({ key, value: String(value) })));
+      // Custom fields: user-defined keys only. Every `_`-prefixed key is the
+      // application's own (`_seo_*`/`_visual_css` have panels; `_members_only`
+      // and plugin keys are managed server-side) — loading one here would put it
+      // in the save payload, and the API refuses to write that namespace.
+      if (p.meta) {
+        const fields = Object.entries(p.meta).filter(([k]) => !k.startsWith('_') && k.trim()).map(([key, value]) => ({ key, value: String(value) }));
+        setMetaFields(fields);
+        loadedMetaKeysRef.current = fields.map(f => f.key);
+      }
       // Baseline the autosave snapshot AFTER the async load, otherwise the
       // initial empty state looks "changed" and triggers a spurious save
       snapshotRef.current = p.title + '\u0000' + (p.content || '') + '\u0000' + (p.excerpt || '');
+      if (p.type) setPostType(p.type);
     } }); } }, [id]);
+
+  // The typed fields this type defines. Values are not a second source of truth:
+  // they live in the same metaFields list the free-form rows below use.
+  useEffect(() => {
+    api.get('/field-groups/for/' + encodeURIComponent(postType))
+      .then(r => setFieldDefs(r.data.fields || []))
+      .catch(() => setFieldDefs([]));
+  }, [postType]);
+
+  // metaFields is the single list that gets saved; the panel writes into it by
+  // key, creating the entry on first edit.
+  function setMetaValue(key: string, value: string) {
+    const exists = metaFields.some(m => m.key === key);
+    setMetaFields(exists ? metaFields.map(m => m.key === key ? { ...m, value } : m) : [...metaFields, { key, value }]);
+    setSaveState('dirty');
+  }
 
   // stay=false (publish): navigate to the post list; stay=true (draft from the
   // builder): keep editing in place, like WordPress. silent=true skips the
@@ -181,6 +213,9 @@ export default function PostEditor() {
       payload.meta = { _visual_css: visualCss, _seo_title: seoTitle, _seo_desc: seoDesc, _seo_noindex: seoNoindex ? '1' : '', _seo_canonical: seoCanonical, _seo_og_image: seoOgImage, _seo_primary_category: seoPrimaryCategory };
       // Custom fields (user-defined key/value pairs) ride along in meta
       for (const mf of metaFields) { if (mf.key.trim()) payload.meta[mf.key.trim()] = mf.value; }
+      // A key the post was loaded with and the user has since removed: send it
+      // empty so the API deletes that row (it only touches the keys it is sent).
+      for (const key of loadedMetaKeysRef.current) { if (!(key in payload.meta)) payload.meta[key] = ''; }
       const postId = id || createdIdRef.current;
       if (postId) await api.put(`/posts/${postId}`, payload);
       else {
@@ -530,10 +565,48 @@ export default function PostEditor() {
           React.createElement('span', { className: 'text-sm text-gray-700' }, c.name)
         ))
       ),
+      // Typed fields first: these come from the field groups defined for this
+      // content type, so what the author fills in is checked by the server.
+      fieldDefs.length > 0 && React.createElement('div', { className: 'card p-4' },
+        React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('custom fields', getLang())),
+        fieldDefs.map((f: any) => {
+          const value = metaFields.find(m => m.key === f.key)?.value || '';
+          const set = (v: string) => setMetaValue(f.key, v);
+          const common = { className: 'input-field text-sm' };
+          let input;
+          if (f.type === 'boolean') {
+            input = React.createElement('label', { className: 'flex items-center gap-2 text-sm text-gray-600' },
+              React.createElement('input', { type: 'checkbox', checked: value === '1', onChange: (e: React.ChangeEvent<HTMLInputElement>) => set(e.target.checked ? '1' : '') }),
+              f.label);
+          } else if (f.type === 'select') {
+            input = React.createElement('select', { value, onChange: (e: React.ChangeEvent<HTMLSelectElement>) => set(e.target.value), ...common },
+              React.createElement('option', { value: '' }, ''),
+              (f.options || []).map((o: string) => React.createElement('option', { key: o, value: o }, o)));
+          } else if (f.type === 'textarea' || f.type === 'richtext') {
+            input = React.createElement('textarea', { value, onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => set(e.target.value), rows: f.type === 'richtext' ? 6 : 3, ...common });
+          } else if (f.type === 'number') {
+            input = React.createElement('input', { type: 'number', value, onChange: (e: React.ChangeEvent<HTMLInputElement>) => set(e.target.value), ...common });
+          } else if (f.type === 'date') {
+            // Stored as an ISO string; the native picker works in yyyy-mm-dd.
+            input = React.createElement('input', { type: 'date', value: value ? value.slice(0, 10) : '', onChange: (e: React.ChangeEvent<HTMLInputElement>) => set(e.target.value), ...common });
+          } else {
+            input = React.createElement('input', { value, onChange: (e: React.ChangeEvent<HTMLInputElement>) => set(e.target.value), placeholder: f.type === 'media' ? '/uploads/...' : '', ...common });
+          }
+          return React.createElement('div', { key: f.key, className: 'mb-3' },
+            f.type !== 'boolean' && React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, f.label + (f.required ? ' *' : '')),
+            input,
+            f.hint && React.createElement('p', { className: 'text-[11px] text-gray-400 mt-1' }, f.hint));
+        })
+      ),
       React.createElement('div', { className: 'card p-4' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('custom fields', getLang())),
-        metaFields.map((m: any, i: number) => React.createElement('div', { key: i, className: 'flex gap-2 mb-2' },
-          React.createElement('input', { value: m.key, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...metaFields]; n[i].key = e.target.value; setMetaFields(n); }, placeholder: t('key', getLang()), className: 'input-field w-2/5 text-xs' }),
+        // Defined fields are edited in the panel above; showing them here as
+        // raw rows too would mean two controls writing the same key.
+        metaFields.map((m: any, i: number) => !fieldDefs.some((f: any) => f.key === m.key) && React.createElement('div', { key: i, className: 'flex gap-2 mb-2' },
+          // The `_` namespace belongs to the application and the API refuses to
+          // write it, so a leading underscore is stripped here rather than
+          // letting the save fail with a 400.
+          React.createElement('input', { value: m.key, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...metaFields]; n[i].key = e.target.value.replace(/^_+/, ''); setMetaFields(n); }, placeholder: t('key', getLang()), className: 'input-field w-2/5 text-xs' }),
           React.createElement('input', { value: m.value, onChange: (e: React.ChangeEvent<HTMLInputElement>) => { const n = [...metaFields]; n[i].value = e.target.value; setMetaFields(n); }, placeholder: t('value', getLang()), className: 'input-field flex-1 text-xs' }),
           React.createElement('button', { onClick: () => setMetaFields(metaFields.filter((_,j) => j !== i)), className: 'text-red-500 text-xs' }, '×')
         )),
@@ -582,7 +655,23 @@ export default function PostEditor() {
             onStatusChange: (v: string) => { setStatus(v); setSaveState('dirty'); },
             slug,
             permalinkPrefix: permalinkPrefix(permalink),
-            showPreview: () => { if (slug) window.open(postPath(permalink, slug, true), '_blank'); },
+            showPreview: async () => {
+              const postId = id || createdIdRef.current;
+              // A published post has a real public URL. Anything else (draft,
+              // pending, scheduled) does not — ask the server for a signed link
+              // that shows this one post to whoever opens it.
+              if (postId && status !== 'published') {
+                try {
+                  const r = await api.get('/posts/' + postId + '/preview-link');
+                  if (r.data?.url) window.open(r.data.url, '_blank');
+                } catch {
+                  toast.toast(t('preview link failed', getLang()), 'error');
+                }
+                return;
+              }
+              if (slug) window.open(postPath(permalink, slug, true), '_blank');
+              else toast.toast(t('save first then preview', getLang()), 'error');
+            },
             featuredImage: featured || undefined,
             onFeaturedImageChange: (url: string) => { setFeatured(url); setSaveState('dirty'); },
             showMediaPicker: () => setShowMediaPicker(true),

@@ -4,6 +4,7 @@ import rateLimit from 'express-rate-limit';
 import db, { cuid, withTransaction } from '../utils/db';
 import { authenticate, requireCap, resolveOptionalUser, userCan, AuthRequest } from '../middleware/auth';
 import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
+import { signPreviewToken, verifyPreviewToken } from '../utils/jwt';
 import { SiteRequest } from '../middleware/site';
 import { slugify, uniqueSlug, getPermalinkPrefix } from '../utils/slug';
 import { likeContains } from '../utils/sqlLike';
@@ -15,8 +16,8 @@ import { rateLimitStore } from '../utils/rateLimitStore';
 import { PUBLIC_POST_CONDITIONS } from '../utils/publicPosts';
 import { applyFilters, doAction } from '../utils/hooks';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
-import { sanitizeCssText } from '../utils/sanitize';
-import { normalizeSeoField } from '../utils/seoFields';
+import { writePostMeta } from '../utils/postMeta';
+import { validateAndCoerceMeta, validateMeta } from '../utils/fieldSchema';
 import { siteScopeForFilter, mayWriteSite, userMayAccessSite, assignedSites } from '../utils/userSites';
 import { trackView } from '../utils/views';
 import { loadCustomTypes } from './customPostTypes';
@@ -92,15 +93,6 @@ function validPostType(raw: unknown): string | null {
   return loadCustomTypes().some(x => x.slug === t) ? t : null;
 }
 
-// Visual-editor CSS is rendered into a <style> tag on the public site, so
-// dangerous primitives are stripped at write time (defense in depth with the
-// frontend render guard). @import can pull external resources, expression() is
-// an XSS vector in old engines, behavior: is an IE active-content vector.
-// Delegates to the shared CSS guard so the server-side rules stay in sync
-// with the render-time sanitizer (comments, quoted/whitespace schemes, svg).
-function sanitizeVisualCss(css: string): string {
-  return sanitizeCssText(css);
-}
 const postSchema = z.object({ title: z.string().min(1), slug: z.string().max(200).optional(), lang: z.string().max(10).optional(), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'scheduled', 'private', 'trash']).optional(), featured: z.string().optional(), password: z.string().optional(), categoryIds: z.array(z.string()).optional(), tagIds: z.array(z.string()).optional(), tagNames: z.array(z.string()).optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), authorId: z.string().optional(), publishedAt: z.string().optional(), meta: z.record(z.string(), z.string()).optional(), type: z.string().optional() });
 
 // ---- Bulk operations: the same checks the single-row routes apply -------------
@@ -337,48 +329,99 @@ router.get('/suggest', (req: AuthRequest & SiteRequest, res: Response) => {
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 
+// Mint a signed link that shows ONE unpublished post on the real theme, for a
+// reviewer who has no account. The link is the authority, so it is only handed
+// to someone who could already read the post; nothing about the post travels in
+// the response, only the URL.
+router.get('/:id/preview-link', authenticate, requireCap('edit_posts'), (req: AuthRequest & SiteRequest, res: Response) => {
+  try {
+    const post = db.prepare('SELECT id, slug, lang, status, authorId, siteId FROM Post WHERE id = ?').get(req.params.id) as any;
+    if (!post) { res.status(404).json({ error: '文章未找到' }); return; }
+    // A trashed post is on its way out; previewing it is never the intent.
+    if (post.status === 'trash') { res.status(400).json({ error: '回收站中的文章无法预览' }); return; }
+    if (!userMayAccessSite(req.user!.userId, req.user!.role, post.siteId || undefined)) { res.status(403).json({ error: '无权预览该站点的内容' }); return; }
+    if (post.authorId !== req.user!.userId && !userCan(req.user!, 'edit_others_posts')) { res.status(403).json({ error: '无权预览他人文章' }); return; }
+    const token = signPreviewToken({ userId: req.user!.userId, pid: post.id, sid: post.siteId || null, v: (req.user as any).v });
+    // Built from the request's own origin so the link works on whichever host the
+    // editor is using (a custom domain or localhost) without extra settings.
+    const origin = (req.secure ? 'https' : 'http') + '://' + (req.get('host') || '');
+    res.json({ url: origin + postPathForLang(post.slug, post.lang, getPermalinkPrefix()) + '?preview=' + encodeURIComponent(token) });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/slug/:slug', (req: AuthRequest & SiteRequest, res: Response) => {
   try {
     const lang = normalizeLang(req.query.lang) || '';
-    const post = (req.siteId
+    // A signed preview link (see GET /:id/preview-link) shows one unpublished
+    // post to a reviewer who has no account. Bad or stale tokens are answered
+    // exactly like a missing post — the response must not confirm that a hidden
+    // post exists.
+    const previewTok = String(req.query.preview || '');
+    const preview = previewTok ? verifyPreviewToken(previewTok) : null;
+    const viewer = preview ? db.prepare('SELECT id, role, tokenVersion FROM User WHERE id = ?').get(preview.userId) as any : null;
+    if (previewTok && (!preview || !viewer || (preview.v !== undefined && viewer.tokenVersion !== preview.v))) {
+      res.status(404).json({ error: 'Post not found' }); return;
+    }
+    const post = (preview
+      ? db.prepare("SELECT * FROM Post WHERE id = ? AND type <> 'page'").get(preview.pid)
+      : req.siteId
       // Any public content type resolves here; pages have their own route.
       ? db.prepare("SELECT * FROM Post WHERE slug = ? AND type <> 'page' AND lang = ? AND (siteId IS NULL OR siteId = ?)").get(req.params.slug, lang, req.siteId)
       : db.prepare("SELECT * FROM Post WHERE slug = ? AND type <> 'page' AND lang = ?").get(req.params.slug, lang)) as any;
     if (!post) { res.status(404).json({ error: 'Post not found' }); return; }
-    // Scheduled posts (published but publishedAt in the future) are invisible
-    // to anonymous visitors, matching the public lists; logged-in users may
-    // still reach them for preview.
-    if (post.status === 'published' && post.publishedAt && post.publishedAt > new Date().toISOString() && !req.user) {
-      res.status(404).json({ error: 'Post not found' }); return;
+    if (preview) {
+      // The token names the post; the slug in the URL only has to agree, so a
+      // guessed link cannot be edited into a different post's preview.
+      if (post.slug !== req.params.slug) { res.status(404).json({ error: 'Post not found' }); return; }
+      // Re-checked against LIVE state rather than what the token claims: a
+      // demoted role, a logout-everywhere (tokenVersion) or a move to another
+      // site must all take effect before the link is opened again.
+      const stillAllowed = post.status !== 'trash'
+        && (!post.siteId || post.siteId === req.siteId)
+        && (post.authorId === viewer.id || userCan({ userId: viewer.id, role: viewer.role }, 'edit_others_posts'));
+      if (!stillAllowed) { res.status(404).json({ error: 'Post not found' }); return; }
+      // A preview must never be stored by a proxy, nor indexed.
+      res.setHeader('Cache-Control', 'no-store');
+      res.setHeader('Referrer-Policy', 'no-referrer');
     }
-    // WordPress-style password protection: cookie (hashed) unlocks the post.
-    // Callers who may edit other people's posts bypass.
-    if (post.password && (!req.user || !userCan(req.user, 'edit_others_posts'))) {
-      const raw = String(req.headers.cookie || '');
-      const m = raw.match(new RegExp('mortar_post_pass_' + post.id + '=([^;]+)'));
-      const cookieVal = m ? decodeURIComponent(m[1]) : null;
-      if (!contentUnlockMatches(cookieVal, post.id, post.password)) {
-        const safe = { id: post.id, title: post.title, slug: post.slug, status: post.status, protected: true };
-        res.json(safe);
+    // A verified preview skips the visibility gates below on purpose — showing
+    // an unpublished post is the whole point — and is never counted as a view.
+    if (!preview) {
+      // Scheduled posts (published but publishedAt in the future) are invisible
+      // to anonymous visitors, matching the public lists; logged-in users may
+      // still reach them for preview.
+      if (post.status === 'published' && post.publishedAt && post.publishedAt > new Date().toISOString() && !req.user) {
+        res.status(404).json({ error: 'Post not found' }); return;
+      }
+      // WordPress-style password protection: cookie (hashed) unlocks the post.
+      // Callers who may edit other people's posts bypass.
+      if (post.password && (!req.user || !userCan(req.user, 'edit_others_posts'))) {
+        const raw = String(req.headers.cookie || '');
+        const m = raw.match(new RegExp('mortar_post_pass_' + post.id + '=([^;]+)'));
+        const cookieVal = m ? decodeURIComponent(m[1]) : null;
+        if (!contentUnlockMatches(cookieVal, post.id, post.password)) {
+          const safe = { id: post.id, title: post.title, slug: post.slug, status: post.status, protected: true };
+          res.json(safe);
+          return;
+        }
+      }
+      if (post.status !== 'published') {
+        // Non-published posts (draft/private/trash) are only visible to callers
+        // who can edit other people's posts, or to the author themselves — never
+        // to other logged-in users or anonymous visitors.
+        const canView = req.user && (userCan(req.user, 'edit_others_posts') || (req.user.userId && req.user.userId === post.authorId));
+        if (!canView) { res.status(404).json({ error: 'Post not found' }); return; }
+      }
+      // Members-only posts: anonymous visitors get a 403 so the frontend can
+      // show a "log in to view" screen (title/slug only, no content leak)
+      if (post.status === 'published' && isMembersOnly(post.id) && !isLoggedIn(req)) {
+        res.status(403).json({ private: true, membersOnly: true, title: post.title, slug: post.slug });
         return;
       }
+      // batched in memory, flushed periodically; the visitor key keeps one reader
+      // (or one crawler) from inflating the count by reloading
+      trackView(post.id, (req.ip || '') + '|' + String(req.headers['user-agent'] || '').slice(0, 80));
     }
-    if (post.status !== 'published') {
-      // Non-published posts (draft/private/trash) are only visible to callers
-      // who can edit other people's posts, or to the author themselves — never
-      // to other logged-in users or anonymous visitors.
-      const canView = req.user && (userCan(req.user, 'edit_others_posts') || (req.user.userId && req.user.userId === post.authorId));
-      if (!canView) { res.status(404).json({ error: 'Post not found' }); return; }
-    }
-    // Members-only posts: anonymous visitors get a 403 so the frontend can
-    // show a "log in to view" screen (title/slug only, no content leak)
-    if (post.status === 'published' && isMembersOnly(post.id) && !isLoggedIn(req)) {
-      res.status(403).json({ private: true, membersOnly: true, title: post.title, slug: post.slug });
-      return;
-    }
-    // batched in memory, flushed periodically; the visitor key keeps one reader
-    // (or one crawler) from inflating the count by reloading
-    trackView(post.id, (req.ip || '') + '|' + String(req.headers['user-agent'] || '').slice(0, 80));
     const enriched = enrichPost(post);
     // Translations of this post, so the client and the injected head can emit
     // hreflang alternates without a second request.
@@ -598,6 +641,10 @@ router.post('/', authenticate, requireCap('edit_posts'), async (req: AuthRequest
     // before the transaction so a refusal never half-writes.
     const postType = data.type !== undefined ? validPostType(data.type) : 'post';
     if (postType === null) { res.status(400).json({ error: '未知的内容类型: ' + data.type }); return; }
+    // Fields are validated against THIS type's definitions, before the
+    // transaction: a rejected value must not leave a half-written post behind.
+    const metaValues = validateAndCoerceMeta(postType, data.meta, res);
+    if (metaValues === null) return;
     // Store a hash, never the plaintext (see utils/contentPassword).
     const password = data.password ? await hashContentPassword(data.password) : '';
     // The post row and its category/tag/meta rows must land together — a
@@ -613,11 +660,7 @@ router.post('/', authenticate, requireCap('edit_posts'), async (req: AuthRequest
         if (!tag) { const tid = cuid(); db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tid, name, tagSlug); tag = { id: tid }; }
         db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(id, tag.id);
       }
-      if (data.meta) {
-        for (const [key, value] of Object.entries(data.meta)) {
-          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : normalizeSeoField(key, value));
-        }
-      }
+      if (metaValues) writePostMeta(id, metaValues);
     });
     const post = db.prepare('SELECT * FROM Post WHERE id = ?').get(id) as any;
     doAction('post_created', id, status);
@@ -699,18 +742,17 @@ router.put('/:id', authenticate, requireCap('edit_posts'), async (req: AuthReque
     }
     if (data.authorId !== undefined && userCan(req.user!, 'edit_others_posts')) { sets.push('authorId = ?'); vals.push(data.authorId); }
     if (data.publishedAt !== undefined) { sets.push('publishedAt = ?'); vals.push(data.publishedAt); }
+    // Field values are checked against THIS post's type before anything is
+    // written, so a rejected value cannot leave a half-saved post.
+    const metaValues = validateAndCoerceMeta(existing.type, data.meta, res);
+    if (metaValues === null) return;
     // Relation rewrites (delete-then-insert), the pre-save revision and the
     // Post row itself are one unit: a failure mid-way must not leave a post
     // without categories/tags/meta or strand a revision.
     withTransaction(() => {
       if (data.categoryIds) { db.prepare('DELETE FROM PostCategory WHERE postId = ?').run(req.params.id); for (const cid of data.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(req.params.id, cid); }
       if (data.tagIds) { db.prepare('DELETE FROM PostTag WHERE postId = ?').run(req.params.id); for (const tid of data.tagIds) db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(req.params.id, tid); }
-      if (data.meta) {
-        db.prepare('DELETE FROM PostMeta WHERE postId = ?').run(req.params.id);
-        for (const [key, value] of Object.entries(data.meta)) {
-          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, key === '_visual_css' ? sanitizeVisualCss(value) : normalizeSeoField(key, value));
-        }
-      }
+      if (metaValues) writePostMeta(req.params.id, metaValues);
       if (sets.length > 0) {
         const changed = (data.title !== undefined && data.title !== existing.title) || (data.content !== undefined && (data.content || '') !== (existing.content || '')) || (data.excerpt !== undefined && data.excerpt !== (existing.excerpt || ''));
         if (changed) {
@@ -809,6 +851,98 @@ router.post('/bulk-status', authenticate, requireCap('edit_others_posts'), (req:
       }
     });
     res.json({ success: true, updated, skipped: new Set(ids).size - rows.length });
+  } catch (err: any) { res.status(500).json({ error: err.message }); }
+});
+
+// Admin: change a field across many posts at once, with a dry run that reports
+// exactly what would change. Every id goes through the checks the single-row
+// routes make (loadBulkPosts + mayTouchPost), per post, so one id the caller may
+// not touch is reported as skipped instead of failing the batch — and each post
+// commits in its own savepoint, so one bad row cannot roll back its neighbours.
+//
+// Deliberately no title/content here: a bulk body rewrite is the one change
+// nobody can eyeball afterwards, and it needs a revision per post to stay
+// recoverable. Those remain a per-post action.
+router.post('/bulk-edit', authenticate, requireCap('edit_posts'), (req: AuthRequest, res: Response) => {
+  try {
+    const { ids, changes, dryRun } = req.body || {};
+    if (!Array.isArray(ids) || ids.length === 0) { res.status(400).json({ error: 'ids required' }); return; }
+    const c = (changes || {}) as any;
+    // Trash has its own endpoints, with the delete capability and the remembered
+    // previous status; accepting it here would be a second, weaker path to it.
+    const validStatuses = ['draft', 'published', 'private', 'pending'];
+    if (c.status !== undefined && !validStatuses.includes(c.status)) { res.status(400).json({ error: 'invalid status' }); return; }
+    if (c.status === 'published' && !userCan(req.user!, 'publish_posts')) { res.status(403).json({ error: '无权发布文章' }); return; }
+    if (c.authorId !== undefined && !userCan(req.user!, 'edit_others_posts')) { res.status(403).json({ error: '无权修改文章作者' }); return; }
+    const tagMode = ['add', 'remove', 'replace'].includes(c.tagMode) ? c.tagMode : 'add';
+    const featuredRaw = c.featured !== undefined ? String(c.featured || '').trim().slice(0, 500) : '';
+    const featuredVal = /^(https?:\/\/|\/uploads\/|\/media\/)/i.test(featuredRaw) ? featuredRaw : null;
+
+    const rows = loadBulkPosts(ids);
+    const results: any[] = [];
+    let updated = 0;
+    for (const r of rows) {
+      if (!mayTouchPost(req.user!, r)) { results.push({ id: r.id, status: 'skipped', reason: 'no-access' }); continue; }
+      const to: any = {};
+      if (c.status !== undefined && c.status !== r.status) to.status = c.status;
+      if (c.featured !== undefined) to.featured = featuredVal;
+      if (c.authorId !== undefined && c.authorId !== r.authorId) to.authorId = c.authorId;
+      if (c.meta && Object.keys(c.meta).length) to.meta = Object.keys(c.meta);
+      if (c.tagNames) to.tags = tagMode;
+      if (c.categoryIds) to.categories = c.categoryIds.length;
+      if (Object.keys(to).length === 0) { results.push({ id: r.id, status: 'unchanged' }); continue; }
+      if (dryRun) { results.push({ id: r.id, status: 'would-change', from: { status: r.status, authorId: r.authorId }, to }); continue; }
+      // Field values go through the same validation as a single save — a bulk
+      // path must not be a way to write the application's own meta namespace.
+      // Required fields are not swept here: a bulk edit is partial by nature.
+      let metaValues: Record<string, string> | null = null;
+      if (c.meta) {
+        const v = validateMeta(r.type, c.meta, { checkRequired: false });
+        if (!v.ok) { results.push({ id: r.id, status: 'error', reason: 'invalid-meta' }); continue; }
+        metaValues = v.values;
+      }
+      try {
+        withTransaction(() => {
+          const now = new Date().toISOString();
+          if (to.status) {
+            // Same rule as PUT /:id and bulk-status: publishing must not keep a
+            // future publishedAt, or the post is published yet absent everywhere.
+            const sets = ['status = ?', 'previousStatus = NULL', 'updatedAt = ?'];
+            const vals: any[] = [c.status, now];
+            if (c.status === 'published' && (!r.publishedAt || r.publishedAt > now)) { sets.push('publishedAt = ?'); vals.push(now); }
+            vals.push(r.id);
+            db.prepare('UPDATE Post SET ' + sets.join(', ') + ' WHERE id = ?').run(...vals);
+          }
+          if (c.featured !== undefined) db.prepare('UPDATE Post SET featured = ?, updatedAt = ? WHERE id = ?').run(featuredVal, now, r.id);
+          if (c.authorId !== undefined) db.prepare('UPDATE Post SET authorId = ?, updatedAt = ? WHERE id = ?').run(c.authorId, now, r.id);
+          if (c.categoryIds) {
+            db.prepare('DELETE FROM PostCategory WHERE postId = ?').run(r.id);
+            for (const cid of c.categoryIds) db.prepare('INSERT OR IGNORE INTO PostCategory (postId, categoryId) VALUES (?, ?)').run(r.id, cid);
+          }
+          if (c.tagNames) {
+            if (tagMode === 'replace') db.prepare('DELETE FROM PostTag WHERE postId = ?').run(r.id);
+            for (const name of c.tagNames) {
+              const n = String(name).trim();
+              if (!n) continue;
+              const tagSlug = slugify(n);
+              let tag: any = db.prepare('SELECT id FROM Tag WHERE slug = ?').get(tagSlug);
+              if (!tag) { const tid = cuid(); db.prepare('INSERT INTO Tag (id, name, slug) VALUES (?, ?, ?)').run(tid, n, tagSlug); tag = { id: tid }; }
+              if (tagMode === 'remove') db.prepare('DELETE FROM PostTag WHERE postId = ? AND tagId = ?').run(r.id, tag.id);
+              else db.prepare('INSERT OR IGNORE INTO PostTag (postId, tagId) VALUES (?, ?)').run(r.id, tag.id);
+            }
+          }
+          if (metaValues) writePostMeta(r.id, metaValues);
+        });
+        updated++;
+        results.push({ id: r.id, status: 'ok', to });
+        doAction('post_updated', r.id, r.type);
+        if (to.status === 'published') doAction('post_published', r.id, r.type);
+      } catch {
+        // The row's savepoint rolled back; its neighbours are unaffected.
+        results.push({ id: r.id, status: 'error', reason: 'write-failed' });
+      }
+    }
+    res.json({ success: true, updated, skipped: new Set(ids as string[]).size - rows.length, results });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 });
 

@@ -21,6 +21,7 @@ const routeTitles: [string, string][] = [
   ['/widgets', 'widgets'],
   ['/appearance', 'appearance'],
   ['/post-types', 'custom post types'],
+  ['/field-groups', 'custom fields'],
   ['/media', 'media'],
   ['/comments', 'comments'],
   ['/categories', 'categories'],

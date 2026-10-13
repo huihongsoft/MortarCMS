@@ -101,7 +101,22 @@ export default function Dashboard() {
         )
       ))
     ),
-    // Row 1.5: Visit stats (PV/UV chart + top posts)
+    // Row 1.5: Hot tags (ranked by aggregated published-post views), ahead of
+    // the traffic figures so the most-read topics lead the row.
+    hotTags.length > 0 && React.createElement('div', { className: 'card p-5 mb-8' },
+      React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2' }, React.createElement(TagIcon, { size: 15, className: 'text-primary-500' }), t('hot tags', getLang())),
+      React.createElement('div', { className: 'flex flex-wrap gap-2' },
+        hotTags.map((tg, i) =>
+          React.createElement('button', {
+            key: tg.id,
+            onClick: () => navigate('/tags'),
+            className: 'px-2.5 py-1 text-xs rounded-full border ' + (i < 3 ? 'bg-primary-50 border-primary-200 text-primary-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-primary-300'),
+            title: formatNumber(tg._count?.views || 0) + ' ' + t('views', getLang()),
+          }, `#${i + 1} ${tg.name} · ${formatNumber(tg._count?.views || 0)}`)
+        )
+      )
+    ),
+    // Row 2: Visit stats (PV/UV chart + top posts)
     statsData && React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8' },
       React.createElement('div', { className: 'card p-5 lg:col-span-2' },
         React.createElement('div', { className: 'flex items-center justify-between mb-3' },
@@ -141,7 +156,7 @@ export default function Dashboard() {
             ))
       )
     ),
-    // Row 2: Activity (2/3) + Quick draft (1/3)
+    // Row 3: Activity (2/3) + Quick draft (1/3)
     React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8' },
       React.createElement('div', { className: 'card p-5 lg:col-span-2' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('activity', getLang())),
@@ -154,7 +169,7 @@ export default function Dashboard() {
         React.createElement('button', { onClick: quickDraft, disabled: !quickTitle, className: 'btn-primary text-xs w-full justify-center whitespace-nowrap' }, t('save draft', getLang()))
       )
     ),
-    // Row 3: Recent posts (2/3) + Recent comments (1/3)
+    // Row 4: Recent posts (2/3) + Recent comments (1/3)
     React.createElement('div', { className: 'grid grid-cols-1 lg:grid-cols-3 gap-6' },
       React.createElement('div', { className: 'card p-5 lg:col-span-2' },
         React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3' }, t('recent posts', getLang())),
@@ -180,20 +195,6 @@ export default function Dashboard() {
                 React.createElement('p', { className: 'text-xs text-gray-500 mt-1' }, `${c.author} · ${formatDate(c.createdAt)}`)
               )
             ))
-      )
-    ),
-    // Row 4: Hot tags (ranked by aggregated published-post views)
-    hotTags.length > 0 && React.createElement('div', { className: 'card p-5 mt-8' },
-      React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2' }, React.createElement(TagIcon, { size: 15, className: 'text-primary-500' }), t('hot tags', getLang())),
-      React.createElement('div', { className: 'flex flex-wrap gap-2' },
-        hotTags.map((tg, i) =>
-          React.createElement('button', {
-            key: tg.id,
-            onClick: () => navigate('/tags'),
-            className: 'px-2.5 py-1 text-xs rounded-full border ' + (i < 3 ? 'bg-primary-50 border-primary-200 text-primary-700' : 'bg-gray-50 border-gray-200 text-gray-600 hover:border-primary-300'),
-            title: formatNumber(tg._count?.views || 0) + ' ' + t('views', getLang()),
-          }, `#${i + 1} ${tg.name} · ${formatNumber(tg._count?.views || 0)}`)
-        )
       )
     )
   );

@@ -1041,6 +1041,48 @@ const MIGRATIONS: { version: number; name: string; up: () => void }[] = [
       addColumn('Post', 'previousStatus', 'TEXT');
     },
   },
+  {
+    version: 27,
+    name: 'saved-views',
+    up: () => {
+      // Named filter sets for the content list. A table rather than the Setting
+      // blob: a view belongs to a user (or to a role, when shared), and
+      // read-modify-write of one shared JSON value would lose concurrent edits.
+      db.exec(`CREATE TABLE IF NOT EXISTS SavedView (
+        id TEXT PRIMARY KEY,
+        userId TEXT NOT NULL,
+        role TEXT NOT NULL DEFAULT '',
+        name TEXT NOT NULL,
+        siteId TEXT,
+        filters TEXT NOT NULL DEFAULT '{}',
+        shared INTEGER NOT NULL DEFAULT 0,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_savedview_user ON SavedView (userId)');
+    },
+  },
+  {
+    version: 28,
+    name: 'custom-fields',
+    up: () => {
+      // Field definitions attached to a content type. Values deliberately stay
+      // in PostMeta: enrichPosts already batches meta for every list and every
+      // theme reads post.meta, so a second value table would mean a second
+      // hydration path for the one thing that is already hydrated.
+      db.exec(`CREATE TABLE IF NOT EXISTS FieldGroup (
+        id TEXT PRIMARY KEY,
+        typeSlug TEXT NOT NULL,
+        name TEXT NOT NULL,
+        fields TEXT NOT NULL DEFAULT '[]',
+        menuOrder INTEGER NOT NULL DEFAULT 0,
+        siteId TEXT,
+        createdAt TEXT NOT NULL,
+        updatedAt TEXT NOT NULL
+      )`);
+      db.exec('CREATE INDEX IF NOT EXISTS idx_fieldgroup_type ON FieldGroup (typeSlug)');
+    },
+  },
 ];
 
 function columnExists(table: string, column: string): boolean {

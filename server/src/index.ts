@@ -31,6 +31,8 @@ import userRoutes from './routes/users';
 import menuRoutes from './routes/menus';
 import activityRoutes, { logActivity } from './routes/activity';
 import appPwRoutes from './routes/appPasswords';
+import savedViewRoutes from './routes/savedViews';
+import fieldGroupRoutes from './routes/fieldGroups';
 import gdprRoutes from './routes/gdpr';
 import dbToolsRoutes from './routes/dbTools';
 import postTypesRoutes from './routes/customPostTypes';
@@ -206,7 +208,10 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.json({ limit: '10mb' }));
+// Keep the raw bytes alongside the parsed body: Slack's request signature is
+// computed over the exact payload, so re-serialising the parsed object would
+// never reproduce it (see utils/chatAdapters).
+app.use(express.json({ limit: '10mb', verify: (req: any, _res: any, buf: Buffer) => { req.rawBody = buf; } }));
 
 // Production error sanitizer: routes commonly respond with err.message (SQL
 // fragments, file paths, stack traces). In production, any error payload that
@@ -331,6 +336,10 @@ const CACHE_PREFIXES = ['/api/posts', '/api/pages', '/api/menus', '/api/categori
 app.use('/api', (req: any, res: any, next: any) => {
   if (req.method !== 'GET' || req.headers.authorization) { next(); return; }
   if (!CACHE_PREFIXES.some((p: string) => req.originalUrl.startsWith(p))) { next(); return; }
+  // A signed preview returns an unpublished body, so it must never be written to
+  // the shared cache: it is per-token and per-post, and nothing else could ever
+  // legitimately reuse that entry.
+  if (req.query && req.query.preview) { next(); return; }
   // Key includes the Host so per-site overrides are cached separately
   const key = 'GET ' + (req.headers.host || '') + req.originalUrl;
   const cached = cacheGet(key);
@@ -393,6 +402,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/menus', menuRoutes);
 app.use('/api/activity', activityRoutes);
 app.use('/api/app-passwords', appPwRoutes);
+app.use('/api/saved-views', savedViewRoutes);
+app.use('/api/field-groups', fieldGroupRoutes);
 app.use('/api/gdpr', gdprRoutes);
 app.use('/api/db', dbToolsRoutes);
 app.use('/api/post-types', postTypesRoutes);

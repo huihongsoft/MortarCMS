@@ -9,8 +9,8 @@ import { uniqueSlug } from '../utils/slug';
 import { normalizeLang, translationsOf, pagePathForLang } from '../utils/contentLang';
 import { recordMovedPath } from '../utils/redirects';
 import { applyShortcodes, renderCmsBlocks } from '../utils/shortcodes';
-import { sanitizeCssText } from '../utils/sanitize';
-import { normalizeSeoField } from '../utils/seoFields';
+import { writePostMeta } from '../utils/postMeta';
+import { validateAndCoerceMeta } from '../utils/fieldSchema';
 import { siteScopeForFilter, mayWriteSite, userMayAccessSite } from '../utils/userSites';
 import { contentUnlockMatches, contentUnlockToken, verifyContentPassword, hashContentPassword } from '../utils/contentPassword';
 import { doAction } from '../utils/hooks';
@@ -19,12 +19,6 @@ const router = Router();
 // Protected-page password guessing is brute-forced per IP
 const passwordLimiter = rateLimit({ windowMs: 60 * 1000, max: 20, standardHeaders: true, store: rateLimitStore(), message: { error: 'Too many attempts, slow down' } });
 
-// Visual-editor CSS is rendered into a <style> tag on the public site — strip
-// dangerous primitives at write time (mirrors the guard in routes/posts.ts).
-// Delegates to the shared CSS guard (kept in sync with the render-time one).
-function sanitizeVisualCss(css: string): string {
-  return sanitizeCssText(css);
-}
 const pageSchema = z.object({ title: z.string().min(1), slug: z.string().max(200).optional(), lang: z.string().max(10).optional(), content: z.string().optional(), excerpt: z.string().optional(), status: z.enum(['draft', 'published', 'private', 'password', 'trash']).optional(), password: z.string().optional(), featured: z.string().optional(), parentId: z.string().nullable().optional(), menuOrder: z.number().int().optional(), siteId: z.string().nullable().optional(), meta: z.record(z.string(), z.string()).optional() });
 
 // 'password' status means "published but password protected" (WordPress style):
@@ -170,13 +164,12 @@ router.post('/', authenticate, requireCap('edit_pages'), async (req: AuthRequest
     if (data.siteId !== undefined && !mayWriteSite(req.user!.userId, req.user!.role, data.siteId)) {
       res.status(403).json({ error: '无权在该站点创建内容' }); return;
     }
+    // Field values are validated before the transaction, like posts.
+    const metaValues = validateAndCoerceMeta('page', data.meta, res);
+    if (metaValues === null) return;
     withTransaction(() => {
       db.prepare('INSERT INTO Post (id, title, slug, content, excerpt, featured, status, password, type, authorId, parentId, menuOrder, publishedAt, siteId, lang) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').run(id, data.title, slug, data.content || '', data.excerpt || '', data.featured || null, storeStatus, storePassword, 'page', req.user!.userId, data.parentId || null, data.menuOrder || 0, storeStatus === 'published' ? new Date().toISOString() : null, data.siteId || null, normalizeLang(data.lang) || '');
-      if (data.meta) {
-        for (const [key, value] of Object.entries(data.meta)) {
-          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), id, key, key === '_visual_css' ? sanitizeVisualCss(value) : normalizeSeoField(key, value));
-        }
-      }
+      if (metaValues) writePostMeta(id, metaValues);
     });
     const page = db.prepare('SELECT * FROM Post WHERE id = ?').get(id) as any;
     // Pages are posts of type 'page'; the content type travels with the hook so
@@ -240,13 +233,11 @@ router.put('/:id', authenticate, requireCap('edit_pages'), async (req: AuthReque
       if (!mayWriteSite(req.user!.userId, req.user!.role, data.siteId)) { res.status(403).json({ error: '无权移到该站点' }); return; }
       sets.push('siteId = ?'); vals.push(data.siteId || null);
     }
+    // Same as create: checked against the definitions before any write.
+    const metaValues = validateAndCoerceMeta('page', data.meta, res);
+    if (metaValues === null) return;
     withTransaction(() => {
-      if (data.meta) {
-        db.prepare('DELETE FROM PostMeta WHERE postId = ?').run(req.params.id);
-        for (const [key, value] of Object.entries(data.meta)) {
-          db.prepare('INSERT INTO PostMeta (id, postId, key, value) VALUES (?, ?, ?, ?)').run(cuid(), req.params.id, key, key === '_visual_css' ? sanitizeVisualCss(value) : normalizeSeoField(key, value));
-        }
-      }
+      if (metaValues) writePostMeta(req.params.id, metaValues);
       if (sets.length > 0) {
         // Save a snapshot of the previous state as a revision (history system)
         const prevTitle = data.title !== undefined ? existing.title : existing.title;

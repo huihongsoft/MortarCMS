@@ -19,6 +19,8 @@ import { effectiveSetting } from '../utils/siteSettings';
 import { mdToHtml } from '../utils/markdown';
 import { purgeContentCaches } from '../utils/cache';
 import { fetchUrlGuarded } from '../utils/ssrf';
+import { ADAPTERS, PLATFORM_IDS } from '../utils/chatAdapters';
+import { logger } from '../utils/logger';
 import { SiteRequest } from '../middleware/site';
 import { notify, removeForTask } from '../utils/notifications';
 
@@ -1378,7 +1380,7 @@ router.post('/tasks/:id/cancel', authenticate, (req: AuthRequest, res: Response)
 
 interface Binding {
   id: string;
-  platform: string;   // wechat | dingtalk
+  platform: string;   // wechat | dingtalk | telegram | slack
   label: string;
   token: string;      // secret webhook token
   wechatToken?: string; // Token configured on WeChat MP — used for URL verification
@@ -1390,6 +1392,13 @@ interface Binding {
   // DingTalk group custom robot (outbound push)
   ddWebhook?: string;    // group robot webhook URL
   ddSecret?: string;     // group robot signing secret (optional)
+  // Telegram (see utils/chatAdapters): the bot token, and the secret_token the
+  // webhook was registered with (Telegram repeats it in a header).
+  tgToken?: string;
+  tgSecret?: string;
+  // Slack: bot token for chat.postMessage, signing secret for request verification.
+  slackToken?: string;
+  slackSecret?: string;
   // Site the bot's AI replies are scoped to. Absent/null = no scope, i.e. the
   // bot can reach every site on a multi-site install.
   siteId?: string | null;
@@ -1398,6 +1407,14 @@ interface Binding {
   createdAt: string;
   lastUsedAt: string | null;
 }
+
+// Credential fields a client may set on a binding, per platform plus DingTalk's.
+// Read from the adapter registry so adding a platform does not mean editing a
+// second list here — the admin form is rendered from the same source.
+const BINDING_CREDENTIAL_KEYS = [
+  'ddToken', 'ddAesKey', 'ddAppKey', 'ddAppSecret', 'ddWebhook', 'ddSecret',
+  ...Object.values(ADAPTERS).flatMap(a => a.credentialFields.map(f => f.key)),
+];
 
 // Bindings hold third-party credentials (ddAppSecret, wechatToken, ddAesKey,
 // webhook tokens), so they are encrypted at rest with the same cipher as the
@@ -1428,12 +1445,25 @@ router.get('/bindings', authenticate, requireCap('ai_bindings'), (req: AuthReque
   } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
 });
 
+// The platforms a binding can use, with the credential fields each one needs.
+// The admin form renders from this instead of hard-coding a per-platform block,
+// so a new adapter shows up there without a UI change.
+router.get('/binding-platforms', authenticate, requireCap('ai_bindings'), (_req: AuthRequest, res: Response) => {
+  res.json({
+    platforms: [
+      { id: 'wechat', label: '微信公众号', credentialFields: [] },
+      { id: 'dingtalk', label: '钉钉', credentialFields: [] },
+      ...Object.values(ADAPTERS).map(a => ({ id: a.id, label: a.label, credentialFields: a.credentialFields })),
+    ],
+  });
+});
+
 // Create a binding (admin picks the target user; users can bind themselves)
 router.post('/bindings', authenticate, requireCap('ai_bindings'), (req: AuthRequest, res: Response) => {
   try {
     if (!isRoleAllowed(req.user!.role)) { res.status(403).json({ error: 'Insufficient permissions' }); return; }
     const { platform, userId, label, ddToken, ddAesKey, ddAppKey, ddAppSecret, ddWebhook, ddSecret } = req.body || {};
-    if (!['wechat', 'dingtalk'].includes(platform)) { res.status(400).json({ error: 'platform must be wechat or dingtalk' }); return; }
+    if (!PLATFORM_IDS.includes(platform)) { res.status(400).json({ error: 'platform 不支持: ' + String(platform) }); return; }
     let targetUserId = userId;
     if (req.user!.role !== 'admin') targetUserId = req.user!.userId;
     const user = db.prepare('SELECT id, username FROM User WHERE id = ?').get(targetUserId) as any;
@@ -1448,6 +1478,9 @@ router.post('/bindings', authenticate, requireCap('ai_bindings'), (req: AuthRequ
       wechatToken: platform === 'wechat' ? require('crypto').randomBytes(12).toString('hex') : undefined,
       // DingTalk enterprise-bot callback config + group robot (outbound)
       ...(platform === 'dingtalk' ? { ddToken: String(ddToken || ''), ddAesKey: String(ddAesKey || ''), ddAppKey: String(ddAppKey || ''), ddAppSecret: String(ddAppSecret || ''), ddWebhook: String(ddWebhook || ''), ddSecret: String(ddSecret || '') } : {}),
+      // Adapter platforms (telegram/slack): whatever credentials the platform
+      // declares, taken from the request as-is.
+      ...(ADAPTERS[platform] ? Object.fromEntries(ADAPTERS[platform].credentialFields.map(f => [f.key, String((req.body || {})[f.key] || '')])) : {}),
       siteId: resolveJobSite(req, (req.body || {}).siteId),
       userId: user.id,
       username: user.username,
@@ -1470,8 +1503,8 @@ router.put('/bindings/:id', authenticate, (req: AuthRequest, res: Response) => {
     const body = req.body || {};
     const upd: Partial<Binding> = {};
     if (typeof body.label === 'string') upd.label = body.label;
-    for (const k of ['ddToken', 'ddAesKey', 'ddAppKey', 'ddAppSecret', 'ddWebhook', 'ddSecret'] as const) {
-      if (typeof body[k] === 'string') upd[k] = body[k];
+    for (const k of BINDING_CREDENTIAL_KEYS) {
+      if (typeof body[k] === 'string') (upd as any)[k] = body[k];
     }
     // Only a caller who may choose a site can change the scope, and for them an
     // explicit '' clears it. For anyone else the field is IGNORED, not resolved
@@ -1763,6 +1796,44 @@ router.post('/webhook/wechat/:token', webhookLimiter, require('express').text({ 
   } catch {
     res.status(500).type('application/xml').send(buildWechatReplyXml('', '', '服务暂时不可用'));
   }
+});
+
+// ---- Adapter platforms (Telegram, Slack, …) ----
+//
+// One entry point for every platform described in utils/chatAdapters: those
+// differ only in how a delivery is authenticated, how the text and the reply
+// address are found, and how the answer is sent — all of which the adapter
+// owns. Registered AFTER the DingTalk/WeChat routes so those keep their own
+// paths.
+router.post('/webhook/:platform/:token', webhookLimiter, async (req: AuthRequest, res: Response) => {
+  const adapter = ADAPTERS[req.params.platform];
+  if (!adapter) { res.status(404).json({ error: 'unknown platform' }); return; }
+  try {
+    const binding = getBindings().find(b => b.platform === adapter.id && b.token === req.params.token);
+    if (!binding) { res.status(404).json({ error: '无效的绑定令牌' }); return; }
+    // Verify BEFORE answering anything, including the challenge handshake — the
+    // challenge is signed too, and echoing it to an unverified caller would let
+    // anyone confirm the endpoint exists.
+    if (!adapter.verify(binding, req)) { res.status(403).json({ error: '签名校验失败' }); return; }
+    const challenge = adapter.challenge ? adapter.challenge(binding, req) : null;
+    if (challenge) { res.json(challenge); return; }
+    const inbound = adapter.parse(req);
+    if (!inbound) { res.json({ ok: true }); return; }
+
+    // Ack FIRST, then answer: Slack retries anything slower than 3 seconds and
+    // Telegram retries a non-2xx, so a reply generated inline would be delivered
+    // two or three times over.
+    res.json({ ok: true });
+    void (async () => {
+      try {
+        const reply = await runWebhookReply(binding, inbound.message);
+        const sent = await adapter.send(binding, inbound, reply);
+        if (!sent.ok) logger.warn({ platform: adapter.id, err: sent.error }, 'chat reply failed');
+      } catch (err: any) {
+        logger.warn({ platform: adapter.id, err: err?.message }, 'chat reply failed');
+      }
+    })();
+  } catch (err: any) { res.status(500).json({ error: userFacingAiError(err) }); }
 });
 
 export default router;

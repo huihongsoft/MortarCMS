@@ -30,6 +30,17 @@ export default function Posts() {
   const [batchRunning, setBatchRunning] = useState(false);
   const [batchResults, setBatchResults] = useState<any[] | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Saved views: a named filter set the server stores, so it survives a cleared
+  // browser and (when shared) reaches the rest of the role.
+  const [views, setViews] = useState<any[]>([]);
+  const [activeView, setActiveView] = useState('');
+  // Bulk edit: one change applied to the whole selection, previewable first.
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkNewStatus, setBulkNewStatus] = useState('');
+  const [bulkTags, setBulkTags] = useState('');
+  const [bulkTagMode, setBulkTagMode] = useState('add');
+  const [bulkFeatured, setBulkFeatured] = useState('');
+  const [bulkPreview, setBulkPreview] = useState<any[] | null>(null);
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortDir, setSortDir] = useState('desc');
   const [filter, setFilter] = useState(() => new URLSearchParams(window.location.search).get('status') || '');
@@ -147,6 +158,64 @@ export default function Posts() {
     } catch (e: any) { toast.toast(e?.response?.data?.error || String(e), 'error'); }
   }
 
+  useEffect(() => { api.get('/saved-views').then(r => setViews(r.data.views || [])).catch(() => {}); }, []);
+
+  function applyView(v: any) {
+    const f = v.filters || {};
+    setFilter(f.status || '');
+    setTypeFilter(f.type || 'post');
+    setSiteFilter(f.siteId || 'all');
+    setSearchInput(f.search || '');
+    setSearch(f.search || '');
+    setSortBy(f.sortBy || 'createdAt');
+    setSortDir(f.sortDir || 'desc');
+    setPage(1);
+    setActiveView(v.id);
+  }
+
+  // The filter set is stored whole; the server keeps only the keys the list
+  // endpoint understands, so a stale extra key cannot leak into the query.
+  async function saveView() {
+    const name = await dialog.prompt(t('view name prompt', getLang()));
+    if (!name) return;
+    try {
+      const filters: Record<string, string> = { status: filter, type: typeFilter, sortBy, sortDir };
+      if (siteFilter !== 'all') filters.siteId = siteFilter;
+      if (search) filters.search = search;
+      const r = await api.post('/saved-views', { name, filters });
+      setViews(v => [...v, r.data.view].sort((a: any, b: any) => a.name.localeCompare(b.name)));
+      setActiveView(r.data.view.id);
+      toast.toast(t('view saved', getLang()));
+    } catch (e: any) { toast.toast(e?.response?.data?.error || String(e), 'error'); }
+  }
+
+  async function deleteView() {
+    if (!activeView) return;
+    if (!(await dialog.confirm(t('delete this view', getLang()), { danger: true }))) return;
+    try {
+      await api.delete('/saved-views/' + activeView);
+      setViews(v => v.filter((x: any) => x.id !== activeView));
+      setActiveView('');
+    } catch (e: any) { toast.toast(e?.response?.data?.error || String(e), 'error'); }
+  }
+
+  // dryRun reports what would change without writing, so a mistyped batch is
+  // caught before it touches a hundred posts.
+  async function runBulkEdit(dryRun: boolean) {
+    const changes: any = {};
+    if (bulkNewStatus) changes.status = bulkNewStatus;
+    const tags = bulkTags.split(',').map(s => s.trim()).filter(Boolean);
+    if (tags.length) { changes.tagNames = tags; changes.tagMode = bulkTagMode; }
+    if (bulkFeatured.trim()) changes.featured = bulkFeatured.trim();
+    if (Object.keys(changes).length === 0) { toast.toast(t('nothing to change', getLang()), 'error'); return; }
+    try {
+      const r = await api.post('/posts/bulk-edit', { ids: Array.from(selected), changes, dryRun });
+      if (dryRun) { setBulkPreview(r.data.results || []); return; }
+      toast.toast(r.data.updated + ' ' + t('posts updated', getLang()) + skipNote(r.data?.skipped));
+      setBulkPreview(null); setBulkOpen(false); setSelected(new Set()); fetchPosts();
+    } catch (e: any) { toast.toast(e?.response?.data?.error || String(e), 'error'); }
+  }
+
 
   return React.createElement('div', null,
     React.createElement('div', { className: 'flex items-center justify-between mb-6' },
@@ -166,6 +235,7 @@ export default function Posts() {
                 canBulk && React.createElement('button', { onClick: () => bulkStatus('published'), className: 'btn-secondary text-xs' }, t('publish selected', getLang()) + ' (' + selected.size + ')'),
                 canBulk && React.createElement('button', { onClick: () => bulkStatus('draft'), className: 'btn-secondary text-xs' }, t('draft selected', getLang()) + ' (' + selected.size + ')'),
                 canBulkDelete && React.createElement('button', { onClick: bulkTrash, className: 'btn-danger text-xs' }, React.createElement(Trash, { size: 14 }), t('trash selected', getLang()) + ' (' + selected.size + ')'),
+                canBulk && React.createElement('button', { onClick: () => { setBulkOpen(o => !o); setBulkPreview(null); }, className: 'btn-secondary text-xs' }, t('bulk edit', getLang())),
                 React.createElement('div', { className: 'flex items-center gap-1' },
                   React.createElement(Select, { value: batchLang, onChange: (v: string) => setBatchLang(v), className: 'input-field w-28 text-xs' },
                     ['English', '日本語', '한국어', 'Français', 'Deutsch', 'Español', '简体中文'].map(l => React.createElement('option', { key: l, value: l }, l))),
@@ -173,6 +243,32 @@ export default function Posts() {
                     React.createElement(Languages, { size: 13 }), batchRunning ? t('translating', getLang()) + '...' : t('ai translate selected', getLang())))
               )
         )
+      ),
+      // Bulk edit: one change for the whole selection, with a dry run first.
+      bulkOpen && React.createElement('div', { className: 'card p-4 mb-4' },
+        React.createElement('p', { className: 'text-xs font-semibold text-gray-700 dark:text-gray-200 mb-3' }, t('bulk edit', getLang()) + ' (' + selected.size + ')'),
+        React.createElement('div', { className: 'flex flex-wrap items-end gap-3' },
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-[11px] text-gray-500 mb-1' }, t('status', getLang())),
+            React.createElement(Select, { value: bulkNewStatus, onChange: setBulkNewStatus, className: 'input-field w-32 text-sm' },
+              React.createElement('option', { value: '' }, t('leave unchanged', getLang())),
+              ['draft', 'pending', 'private', 'published'].map(s => React.createElement('option', { key: s, value: s }, t(s, getLang()))))),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-[11px] text-gray-500 mb-1' }, t('tags', getLang())),
+            React.createElement('input', { value: bulkTags, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setBulkTags(e.target.value), placeholder: t('comma separated', getLang()), className: 'input-field w-52 text-sm' })),
+          React.createElement(Select, { value: bulkTagMode, onChange: setBulkTagMode, className: 'input-field w-28 text-sm' },
+            ['add', 'remove', 'replace'].map(m => React.createElement('option', { key: m, value: m }, t(m, getLang())))),
+          React.createElement('div', null,
+            React.createElement('label', { className: 'block text-[11px] text-gray-500 mb-1' }, t('featured image', getLang())),
+            React.createElement('input', { value: bulkFeatured, onChange: (e: React.ChangeEvent<HTMLInputElement>) => setBulkFeatured(e.target.value), placeholder: '/uploads/...', className: 'input-field w-56 text-sm' })),
+          React.createElement('button', { onClick: () => runBulkEdit(true), disabled: selected.size === 0, className: 'btn-secondary text-xs' }, t('preview changes', getLang())),
+          React.createElement('button', { onClick: () => runBulkEdit(false), disabled: selected.size === 0, className: 'btn-primary text-xs' }, t('apply', getLang()))
+        ),
+        bulkPreview && React.createElement('div', { className: 'mt-3 space-y-1' },
+          bulkPreview.map((r: any, i: number) => React.createElement('div', { key: i, className: 'text-xs text-gray-600 dark:text-gray-300' },
+            r.status === 'would-change'
+              ? '• ' + r.id + ' → ' + Object.keys(r.to || {}).join(', ')
+              : '• ' + r.id + ' — ' + t(r.status === 'unchanged' ? 'no change' : r.status, getLang()))))
       ),
       batchResults && React.createElement('div', { className: 'card p-4 mb-4 border-primary-200 dark:border-primary-800' },
         React.createElement('p', { className: 'text-xs font-semibold text-gray-700 dark:text-gray-200 mb-2' }, t('translation results', getLang())),
@@ -202,6 +298,20 @@ export default function Posts() {
         onChange: (v: string) => { setTypeFilter(v); setPage(1); },
         className: 'input-field w-40 text-sm',
       }, postTypes.filter((x: any) => x.slug !== 'page').map((x: any) => React.createElement('option', { key: x.slug, value: x.slug }, x.label))),
+      // Saved views: pick one to restore a whole filter set, or store the
+      // current one under a name.
+      React.createElement('div', { className: 'flex items-center gap-1' },
+        React.createElement(Select, {
+          value: activeView,
+          onChange: (v: string) => { const found = views.find((x: any) => x.id === v); if (found) applyView(found); else setActiveView(''); },
+          className: 'input-field w-40 text-sm',
+        },
+          React.createElement('option', { value: '' }, t('saved views', getLang())),
+          views.map((v: any) => React.createElement('option', { key: v.id, value: v.id }, (v.shared ? '👥 ' : '') + v.name))
+        ),
+        React.createElement('button', { onClick: saveView, className: 'btn-secondary text-xs whitespace-nowrap' }, t('save view', getLang())),
+        activeView && React.createElement('button', { onClick: deleteView, className: 'btn-secondary text-xs', title: t('delete this view', getLang()) }, React.createElement(Trash, { size: 13 }))
+      ),
       // Site filter (only when more than one site exists)
       multiSite && React.createElement(Select, {
         value: siteFilter,

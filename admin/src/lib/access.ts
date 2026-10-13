@@ -41,6 +41,9 @@ export const ROUTE_ACCESS: Record<string, AccessRule> = {
   // Widgets and the home-page editor both save through PUT /settings.
   '/widgets': { cap: 'manage_system' },
   '/post-types': { cap: 'manage_system' },
+  // Same gate as post-types: a field definition changes what every entry of a
+  // type stores, so it is an admin action.
+  '/field-groups': { cap: 'manage_system' },
   '/ai': { cap: 'ai_use' },
   '/ai/bindings': { cap: 'ai_bindings' },
   '/ai/settings': { cap: 'ai_manage' },
