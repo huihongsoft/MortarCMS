@@ -609,7 +609,11 @@ The assistant wraps each provider call in an agent loop:
    user messages are wrapped to defuse prompt injection
 
 Every call goes through `chatCompleteWithFallback`, which walks the enabled
-providers in order (the default first). It moves to the next one when the
+providers in order (the default first). A provider may name a `fastModel`: the
+mechanical operations — compressing a conversation, suggesting terms, rating a
+comment — then ask for it with `tier: 'fast'`, while anything that produces
+prose a human reads (writing, translating, asking, tasks) always uses the main
+model. The hint is per attempt, so a fallback provider uses its own fast model. It moves to the next one when the
 failure is ABOUT THE PROVIDER — unreachable, 5xx, 401/403/429 — and does not
 retry a request the provider rejected on its merits (a 400 means the payload is
 wrong, and every provider would reject it the same way). Once a streaming
@@ -632,12 +636,55 @@ GET /api/posts/:id/related          public: related by meaning once the index
                                     exists, else by category as before.
 ```
 
+The assistant reaches it through `search_site_content`, which is now a hybrid:
+the keyword score still runs (an exact term is the most precise signal there is)
+and the semantic ranking is unioned with it, so enabling embeddings can only ADD
+results. Each result carries the post's URL, so an answer can cite what it used —
+the system prompt asks for exactly that, and says to admit it when the site has
+nothing rather than answer from memory. `complete_post`'s "related reading" block
+uses the same ranking, so two articles about one subject link to each other even
+when they share no words.
+
 Vectors are stored one row per post (`PostEmbedding`, base64 Float32Array) and
 compared in-process; the maintenance task `embed_posts` fills the index hourly,
 20 posts per run, skipping any whose text has not changed. Nothing is embedded
 for a post a visitor could not read anyway: a draft, a password-protected post or
 a members-only one is filtered out *after* ranking, so it never occupies a
 result slot.
+
+### The visitor question box
+
+Off by default (AI settings → 访客问答). It is the only AI endpoint an anonymous
+caller can reach, so it is the operator's decision to switch on, it has its own
+per-IP limiter (5/min) on top of the global one, and it obeys the same daily
+budget as everything else.
+
+```
+GET  /api/ai/public-qa   public: { enabled } — the front end asks before
+                         offering the box (the generic settings endpoint hides
+                         every ai_ key from anonymous callers)
+POST /api/ai/ask         public: { question, lang? } → { answer, sources[] }
+                         sources are { title, slug, url }: the slug is what a
+                         localised front end needs to rebuild the link with its
+                         own language prefix
+```
+
+The `lang` a localised visitor sends restricts retrieval to that edition, so an
+English reader is not answered from the Chinese edition of a post.
+
+Retrieval for this one path is restricted to what a VISITOR may read —
+published, not password-protected, not members-only, not noindex — never a
+draft. The answer is generated only from the retrieved passages, cites them as
+`[n]`, and says the site has nothing rather than answering from the model's own
+knowledge. The passages are labelled as data, not instructions, so text inside a
+post cannot hijack the answer.
+
+**Residual, deliberately accepted:** a post's text is untrusted, and a prompt
+that says "this is data" is a mitigation, not a proof. Someone who can publish
+can try to make the box speak in the site's voice (an off-topic or defamatory
+answer). What they cannot do is escape the answer's text rendering, add a link
+to the clickable source list (those are built server-side from the retrieved
+rows), or reach any credential — the prompt holds none.
 
 ### Authoring aids
 

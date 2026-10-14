@@ -2,6 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import db, { cuid, withTransaction } from './db';
 import { slugify, uniqueSlug, postUrl } from './slug';
+import { embeddingsEnabled, searchByVector, nearestPosts } from './embeddings';
+import { PUBLIC_POST_CONDITIONS } from './publicPosts';
 import { currentPlugin } from './pluginApi';
 import { mdToHtml, parseFrontmatter } from './markdown';
 import { getDefaultProvider, userFacingAiError, logAiDetail } from './ai';
@@ -343,26 +345,47 @@ register('list_posts', '列出文章，可按状态/关键词过滤，返回标�
 
 // --- Full-site content search (lightweight RAG): keyword search over
 // posts/pages with snippet extraction so the AI can cite site content ---
-register('search_site_content', '在全站文章中检索内容，返回匹配文章和关键片段。适合回答"我的站里有没有写过XX"、引用站内观点等。', {
-  type: 'object',
-  properties: {
-    query: { type: 'string', description: '检索关键词或短语（必填）' },
-    limit: { type: 'number', description: '返回条数，默认 3，最大 8' },
-  },
-  required: ['query'],
-}, async (args, ctx) => {
-  const q = String(args.query || '').trim();
-  if (!q) return { error: '查询词不能为空' };
-  const limit = Math.min(parseInt(args.limit) || 3, 8);
+// Retrieval for the assistant and for anything else that answers questions from
+// site content. Keyword scoring still runs (an exact term is the most precise
+// signal there is), and the semantic ranking is UNIONED with it — so enabling
+// embeddings can only add results, never replace a keyword hit the caller
+// expected. Without an embedding model, or when the provider fails, this is the
+// keyword search it always was.
+export async function retrieveSiteContent(
+  query: string,
+  ctx: ToolContext,
+  limit: number,
+  // `publicOnly` is for callers with no identity — the visitor-facing question
+  // box. It swaps the "what may this user see" rule for "what may a visitor
+  // read", which is strictly narrower: published, not password-protected, not
+  // members-only, not noindex.
+  opts: { publicOnly?: boolean; lang?: string } = {},
+): Promise<any[]> {
+  const q = String(query || '').trim();
+  if (!q) return [];
   const terms = q.split(/\s+/).filter(Boolean).map((t: string) => t.replace(/[%_]/g, ''));
   // Site-scoped, trash excluded, and limited to what the caller could otherwise
   // see: searching all sites would surface other sites' drafts and private posts.
-  const scope = siteWhere('Post', ctx);
-  let sql = "SELECT id, title, slug, content, excerpt, status FROM Post WHERE type IN ('post','page') AND status != 'trash'" + scope.clause;
-  const params: any[] = [...scope.params];
-  if (ownPostsOnly(ctx)) { sql += ' AND authorId = ?'; params.push(ctx.userId); }
-  sql += ' ORDER BY createdAt DESC LIMIT 200';
-  const rows = db.prepare(sql).all(...params) as any[];
+  let rows: any[];
+  if (opts.publicOnly) {
+    const pScope = siteWhere('p', ctx);
+    // Language, when the caller is on a localised path: a reader asking in
+    // English should not be answered from the Chinese edition of a post.
+    const langClause = opts.lang ? ' AND p.lang = ?' : '';
+    const langArgs = opts.lang ? [opts.lang] : [];
+    rows = db.prepare(
+      "SELECT p.id, p.title, p.slug, p.content, p.excerpt, p.status FROM Post p WHERE p.type IN ('post','page')" +
+      " AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + pScope.clause + langClause + PUBLIC_POST_CONDITIONS +
+      ' ORDER BY p.createdAt DESC LIMIT 200'
+    ).all(new Date().toISOString(), ...pScope.params, ...langArgs) as any[];
+  } else {
+    const scope = siteWhere('Post', ctx);
+    let sql = "SELECT id, title, slug, content, excerpt, status FROM Post WHERE type IN ('post','page') AND status != 'trash'" + scope.clause;
+    const params: any[] = [...scope.params];
+    if (ownPostsOnly(ctx)) { sql += ' AND authorId = ?'; params.push(ctx.userId); }
+    sql += ' ORDER BY createdAt DESC LIMIT 200';
+    rows = db.prepare(sql).all(...params) as any[];
+  }
 
   // Score by term hits in title/content/excerpt
   const scored = rows.map((p: any) => {
@@ -376,20 +399,57 @@ register('search_site_content', '在全站文章中检索内容，返回匹配�
       score += Math.min(cnt, 5);
     }
     return { p, score };
-  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score).slice(0, limit);
+  }).filter(x => x.score > 0).sort((a, b) => b.score - a.score);
 
-  return scored.map(({ p, score }) => {
-    // Extract a snippet around the first match
+  const picked: any[] = scored.slice(0, limit).map(x => x.p);
+  const seen = new Set(picked.map((p: any) => p.id));
+
+  // Everything keyword matching missed, in order of meaning.
+  if (embeddingsEnabled()) {
+    try {
+      const ranked = await searchByVector(q, limit * 3);
+      const byId = new Map(rows.map((r: any) => [r.id, r]));
+      for (const r of ranked) {
+        if (picked.length >= limit) break;
+        const p = byId.get(r.postId);
+        // Rows the caller may not see never entered `rows`, so this is also the
+        // visibility check for the semantic half.
+        if (!p || seen.has(p.id)) continue;
+        seen.add(p.id);
+        picked.push(p);
+      }
+    } catch { /* keyword results stand on their own */ }
+  }
+
+  return picked.map((p: any) => {
+    // Extract a snippet around the first match; without a keyword hit, lead with
+    // the excerpt — the reason this post was picked is its meaning, not a word.
     let snippet: string;
     const lower = (p.content || '').toLowerCase();
     const idx = terms.map(t => lower.indexOf(t.toLowerCase())).filter(i => i >= 0).sort((a, b) => a - b)[0];
     if (idx !== undefined && p.content) {
       snippet = p.content.slice(Math.max(0, idx - 60), idx + 180).replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim();
     } else {
-      snippet = (p.excerpt || '').slice(0, 200);
+      snippet = (p.excerpt || String(p.content || '').replace(/<[^>]*>/g, '')).replace(/\s+/g, ' ').slice(0, 200);
     }
-    return { title: p.title, url: postUrl(p.slug), status: p.status, relevance: score, snippet: snippet + (snippet.length >= 180 ? '…' : '') };
+    // `slug` travels with the url so a localised front end can build the link
+    // with its own language prefix.
+    return { id: p.id, title: p.title, slug: p.slug, url: postUrl(p.slug), status: p.status, snippet: snippet + (snippet.length >= 180 ? '…' : '') };
   });
+}
+
+register('search_site_content', '在全站文章中按含义或关键词检索，返回匹配文章、关键片段和可引用的链接。适合回答"我的站里有没有写过XX"、引用站内观点等。回答时请给出所引用文章的链接。', {
+  type: 'object',
+  properties: {
+    query: { type: 'string', description: '检索内容（必填）：可以是关键词，也可以是一句描述' },
+    limit: { type: 'number', description: '返回条数，默认 3，最大 8' },
+  },
+  required: ['query'],
+}, async (args, ctx) => {
+  const q = String(args.query || '').trim();
+  if (!q) return { error: '查询词不能为空' };
+  const limit = Math.min(parseInt(args.limit) || 3, 8);
+  return retrieveSiteContent(q, ctx, limit);
 });
 
 // Repair unclosed / re-opened HTML tags that models sometimes emit directly
@@ -1407,22 +1467,39 @@ register('complete_post', '完善一篇文章：自动生成摘要、SEO 标题/
   // is about to change.
   const related: any[] = [];
   try {
-    const titleWords = (post.title || '').toLowerCase().split(/[\s，。、,]+/).filter((w: string) => w.length >= 2);
-    // Site-scoped, and only posts that are actually public right now: a link to
-    // another site's post would leak its title/slug into this site's body, and a
-    // scheduled post is not visible to the reader clicking the link.
-    const others = db.prepare(
-      "SELECT id, title, slug FROM Post WHERE type = 'post' AND status = 'published' AND (publishedAt IS NULL OR publishedAt <= ?) AND id != ?" +
-      scope.clause + ' ORDER BY publishedAt DESC LIMIT 30'
-    ).all(new Date().toISOString(), post.id, ...scope.params) as any[];
-    const scored = others.map((o: any) => {
-      const ot = (o.title || '').toLowerCase();
-      let score = 0;
-      for (const w of titleWords) if (ot.includes(w)) score++;
-      return { o, score };
-    }).filter(x => x.score > 0).sort((a, b) => b.score - a.score).slice(0, 2);
-    related.push(...scored.map(x => x.o));
+    const nowIso = new Date().toISOString();
+    // Aliased as `p` because PUBLIC_POST_CONDITIONS is written against that
+    // alias — without it the query throws and the catch below turns the whole
+    // interlinking step into a silent no-op.
+    const pScope = siteWhere('p', ctx);
+    const visClause = " AND p.type = 'post' AND p.status = 'published' AND (p.publishedAt IS NULL OR p.publishedAt <= ?)" + pScope.clause + PUBLIC_POST_CONDITIONS;
+
+    // Meaning first: the keyword scan below only looks at the last 30 posts and
+    // only matches words that appear in the title, so two articles about the same
+    // subject written in different words never linked to each other.
+    const ranked = nearestPosts(post.id, 8);
+    if (ranked.length) {
+      const rows = db.prepare('SELECT p.id, p.title, p.slug FROM Post p WHERE p.id IN (' + ranked.map(() => '?').join(',') + ')' + visClause)
+        .all(...ranked, nowIso, ...pScope.params) as any[];
+      const byId = new Map(rows.map((r: any) => [r.id, r]));
+      related.push(...ranked.map((id: string) => byId.get(id)).filter(Boolean).slice(0, 2));
+    }
+    // Keyword matching tops up (and covers an install with no embedding model).
+    if (related.length < 2) {
+      const titleWords = (post.title || '').toLowerCase().split(/[\s，。、,]+/).filter((w: string) => w.length >= 2);
+      const have = new Set(related.map((r: any) => r.id));
+      const others = db.prepare('SELECT p.id, p.title, p.slug FROM Post p WHERE p.id != ?' + visClause + ' ORDER BY p.publishedAt DESC LIMIT 30')
+        .all(post.id, nowIso, ...pScope.params) as any[];
+      const scored = others.map((o: any) => {
+        const ot = (o.title || '').toLowerCase();
+        let score = 0;
+        for (const w of titleWords) if (ot.includes(w)) score++;
+        return { o, score };
+      }).filter(x => x.score > 0 && !have.has(x.o.id)).sort((a, b) => b.score - a.score).slice(0, 2 - related.length);
+      related.push(...scored.map(x => x.o));
+    }
   } catch {}
+
   // Append once, not once per call: the block is part of the stored content now,
   // so a second complete_post on the same post would otherwise stack a duplicate
   // "相关阅读" section every time.

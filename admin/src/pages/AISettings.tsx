@@ -19,6 +19,7 @@ interface Provider {
   hasKey?: boolean;
   keyHint?: string;
   vision?: boolean;
+  fastModel?: string;
   imageGen?: boolean;
 }
 
@@ -60,6 +61,7 @@ export default function AISettings() {
   // Semantic retrieval is off until a model is named; the field is the switch.
   const [embeddingModel, setEmbeddingModel] = useState('');
   const [embeddingProvider, setEmbeddingProvider] = useState('');
+  const [publicQa, setPublicQa] = useState(false);
 
   useEffect(() => {
     api.get('/ai/settings').then(r => {
@@ -72,6 +74,7 @@ export default function AISettings() {
       setAllowUnattendedRisky(!!r.data.allowUnattendedRisky);
       setEmbeddingModel(String(r.data.embeddingModel || ''));
       setEmbeddingProvider(String(r.data.embeddingProvider || ''));
+      setPublicQa(!!r.data.publicQa);
       api.get('/ai/usage').then(r => setUsage(r.data)).catch(() => {});
       api.get('/ai/memories').then(r => setMemories(r.data.memories || [])).catch(() => {});
       setUsageLimit(r.data?.usageLimit || '');
@@ -185,6 +188,11 @@ export default function AISettings() {
               React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('model', getLang())),
               React.createElement('input', { value: p.model, onChange: e => updateProvider(p.id, { model: e.target.value }), className: 'input-field text-xs' })),
           ),
+          React.createElement('div', { className: 'grid grid-cols-1 md:grid-cols-3 gap-3 mt-2' },
+            React.createElement('div', null,
+              React.createElement('label', { className: 'block text-xs text-gray-500 mb-1' }, t('fast model', getLang())),
+              React.createElement('input', { value: p.fastModel || '', placeholder: t('fast model placeholder', getLang()), onChange: e => updateProvider(p.id, { fastModel: e.target.value }), className: 'input-field text-xs' }))),
+          React.createElement('p', { className: 'text-[11px] text-gray-400 mt-1' }, t('fast model hint', getLang())),
           React.createElement('div', { className: 'flex items-center gap-4 mt-2' },
             React.createElement('label', { className: 'flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer' },
               React.createElement('input', { type: 'checkbox', checked: !!p.vision, onChange: e => updateProvider(p.id, { vision: e.target.checked }), className: 'rounded border-gray-300 text-primary-600' }),
@@ -380,6 +388,26 @@ export default function AISettings() {
           className: 'mt-0.5 rounded border-gray-300 text-primary-600',
         }),
         React.createElement('span', { className: 'text-sm text-gray-700 dark:text-gray-200' }, t('allow unattended high-risk actions', getLang())))
+    ),
+
+    // The visitor-facing question box. Off by default — it is the only AI
+    // endpoint an anonymous caller can reach, and every question costs tokens.
+    React.createElement('div', { className: 'card p-6 mt-6' },
+      React.createElement('h3', { className: 'text-sm font-semibold text-gray-900 mb-2 uppercase tracking-wider' }, t('public question box', getLang())),
+      React.createElement('p', { className: 'text-xs text-gray-400 mb-3' }, t('public question box hint', getLang())),
+      React.createElement('label', { className: 'flex items-start gap-2 cursor-pointer' },
+        React.createElement('input', {
+          type: 'checkbox',
+          checked: publicQa,
+          onChange: async (e: any) => {
+            const v = !!e.target.checked;
+            setPublicQa(v);
+            try { await api.put('/ai/settings', { publicQa: v }); toast.toast(t('saved', getLang())); }
+            catch (err: any) { setPublicQa(!v); toast.toast(err.response?.data?.error || t('save failed', getLang()), 'error'); }
+          },
+          className: 'mt-0.5 rounded border-gray-300 text-primary-600',
+        }),
+        React.createElement('span', { className: 'text-sm text-gray-700 dark:text-gray-200' }, t('enable public question box', getLang())))
     ),
 
     // Semantic retrieval. Off by default: leaving the model blank keeps keyword

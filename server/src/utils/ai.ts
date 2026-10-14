@@ -91,6 +91,11 @@ export interface AIProvider {
   enabled: boolean;
   vision?: boolean;   // supports image input (e.g. gpt-4o)
   imageGen?: boolean; // supports /images/generations (e.g. dall-e-3, gpt-image-1)
+  // A cheaper model for the operations that do not need the capable one —
+  // compressing a conversation, suggesting terms, rating a comment. Model names
+  // belong to a provider, which is why this lives here and not in a global
+  // setting. Empty = those calls use `model` like everything else.
+  fastModel?: string;
 }
 
 export interface AIMessage {
@@ -401,13 +406,18 @@ export function isProviderFailure(err: any): boolean {
 
 export async function chatCompleteWithFallback(
   messages: AIMessage[],
-  opts: { tools?: AIToolFunction[]; temperature?: number; maxTokens?: number; onDelta?: (text: string) => void } = {},
+  // `tier: 'fast'` asks for the provider's cheap model. It is a hint, not a
+  // requirement: a provider without a `fastModel` (or a task that turns out to
+  // need the good one) simply uses the normal model.
+  opts: { tools?: AIToolFunction[]; temperature?: number; maxTokens?: number; onDelta?: (text: string) => void; tier?: 'fast' | 'strong' } = {},
 ): Promise<{ result: ChatResult; provider: AIProvider }> {
   const chain = getProviderChain();
   if (chain.length === 0) throw new Error('尚未配置 AI 服务商');
   let last: any;
   for (let i = 0; i < chain.length; i++) {
-    const provider = chain[i];
+    const base = chain[i];
+    // Routing happens per attempt, so a fallback provider uses ITS fast model.
+    const provider = opts.tier === 'fast' && base.fastModel ? { ...base, model: base.fastModel } : base;
     // Once a stream has emitted text the answer is already on the user's screen;
     // restarting it on another provider would duplicate what they can see.
     let started = false;

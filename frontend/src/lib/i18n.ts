@@ -2,6 +2,12 @@
 // Visitors can override per-browser via localStorage (mortar_lang).
 
 const zh: Record<string, string> = {
+  // Visitor-facing question box (shown above search results when enabled)
+  'ask ai about this': '让 AI 依据站内文章回答',
+  'ask hint': '回答只依据本站已公开文章，并给出出处',
+  'ask failed': '暂时无法回答，请稍后再试',
+  'thinking': '思考中',
+  'sources': '出处',
   'your homepage displays': '首页显示',
   'your latest posts': '你的最新文章',
   'a static page': '一个静态页面',

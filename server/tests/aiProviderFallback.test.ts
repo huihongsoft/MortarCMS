@@ -20,6 +20,8 @@ let goodSrv: http.Server;
 let goodBase = '';
 let goodCalls = 0;
 let goodReply = '来自备份服务商的摘要';
+// Which model each request asked for, so routing is observable.
+let askedModels: string[] = [];
 // A provider that is emphatically not there.
 const DEAD_BASE = 'http://127.0.0.1:9/v1';
 
@@ -37,10 +39,15 @@ function admin() {
 
 beforeAll(async () => {
   initDB();
-  goodSrv = http.createServer((_req, res) => {
+  goodSrv = http.createServer((req, res) => {
     goodCalls++;
+    let raw = '';
+    req.on('data', c => { raw += c; });
+    req.on('end', () => {
+    try { askedModels.push(String(JSON.parse(raw || '{}').model || '')); } catch { /* ignore */ }
     res.writeHead(200, { 'content-type': 'application/json' });
     res.end(JSON.stringify({ choices: [{ message: { role: 'assistant', content: goodReply } }], model: 'good-model' }));
+    });
   });
   await new Promise<void>(r => goodSrv.listen(0, '127.0.0.1', () => r()));
   goodBase = 'http://127.0.0.1:' + (goodSrv.address() as any).port + '/v1';
@@ -68,7 +75,7 @@ afterAll(() => {
   for (const s of ['', '-wal', '-shm']) { try { fs.unlinkSync(DB_FILE + s); } catch {} }
 });
 
-beforeEach(() => { goodCalls = 0; badCalls = 0; goodReply = '来自备份服务商的摘要'; db.prepare('DELETE FROM AiUsage').run(); });
+beforeEach(() => { goodCalls = 0; badCalls = 0; askedModels = []; goodReply = '来自备份服务商的摘要'; db.prepare('DELETE FROM AiUsage').run(); });
 
 const summarize = (headers: any) => fetch(base + '/summarize', { method: 'POST', headers, body: JSON.stringify({ text: '这是一段需要压缩的对话内容' }) });
 
@@ -101,6 +108,25 @@ describe('provider fallback', () => {
     saveProviders([{ id: 'good', name: 'Good', type: 'openai', baseUrl: goodBase, model: 'good-model', apiKey: 'k', enabled: true } as any]);
     expect((await summarize(admin())).status).toBe(200);
     expect(goodCalls).toBe(1);
+  });
+
+  it('routes a mechanical operation to the fast model', async () => {
+    saveProviders([{ id: 'good', name: 'Good', type: 'openai', baseUrl: goodBase, model: 'strong-model', fastModel: 'cheap-model', apiKey: 'k', enabled: true } as any]);
+    await summarize(admin());                       // summarize is a 'fast' operation
+    expect(askedModels).toEqual(['cheap-model']);
+  });
+
+  it('leaves the answer-bearing operations on the main model', async () => {
+    saveProviders([{ id: 'good', name: 'Good', type: 'openai', baseUrl: goodBase, model: 'strong-model', fastModel: 'cheap-model', apiKey: 'k', enabled: true } as any]);
+    // /chat is a user-facing answer, not a mechanical rewrite.
+    await fetch(base + '/chat', { method: 'POST', headers: admin(), body: JSON.stringify({ messages: [{ role: 'user', content: 'hi' }] }) });
+    expect(askedModels).toEqual(['strong-model']);
+  });
+
+  it('uses the main model when no fast model is configured', async () => {
+    saveProviders([{ id: 'good', name: 'Good', type: 'openai', baseUrl: goodBase, model: 'strong-model', apiKey: 'k', enabled: true } as any]);
+    await summarize(admin());
+    expect(askedModels).toEqual(['strong-model']);
   });
 
   it('reports a dead chain instead of hanging', async () => {

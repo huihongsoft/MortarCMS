@@ -1041,6 +1041,10 @@ const zh: Record<string, string> = {
 // Saved views (content list filter sets)
 'saved views': '保存的视图',
 'chat platform hint': '在平台侧把这个地址填为回调 / Webhook 地址（含令牌，请勿外泄）：',
+// Public question box
+'public question box': '访客问答',
+'public question box hint': '在站点前台提供一个「问本站」入口：访客提问，只依据已公开文章回答并给出出处。默认关闭——这是唯一允许匿名访问的 AI 接口，每个问题都会消耗 token；开启后按 IP 限速（每分钟 5 次），并受每日总量上限约束。',
+'enable public question box': '启用访客问答',
 // Semantic retrieval
 'semantic retrieval': '语义检索',
 // Scheduled task: content embeddings (server/src/utils/scheduler.ts)
@@ -1052,6 +1056,10 @@ const zh: Record<string, string> = {
 'semantic retrieval hint': '填一个向量模型名即可开启：文章发布后会异步建立向量索引，用于「相关文章」（按含义而非分类）与语义搜索。留空则保持原来的关键词搜索与按分类的相关文章。OpenAI 兼容的 /embeddings 接口均可，如 text-embedding-3-small；本地 Ollama 用 nomic-embed-text。',
 'embedding model placeholder': '向量模型名，如 text-embedding-3-small（留空=关闭）',
 'default provider': '默认服务商',
+// Model routing
+'fast model': '快速模型（可选）',
+'fast model placeholder': '如 gpt-4o-mini / qwen-turbo（留空=统一用上面的模型）',
+'fast model hint': '只用于对质量不敏感的机械操作：压缩会话、建议标签分类、评论审核。撰写、翻译、任务与助手对话始终使用上面的主模型。',
 // Media / AI assistance
 'ai describe images': 'AI 生成描述',
 'ai describe hint': '为选中的图片生成 alt 描述；已有描述的不会被覆盖，单次最多 10 张。',
